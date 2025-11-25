@@ -1,0 +1,4 @@
+htop.o: htop.c /usr/include/stdc-predef.h config.h CommandLine.h
+/usr/include/stdc-predef.h:
+config.h:
+CommandLine.h:
