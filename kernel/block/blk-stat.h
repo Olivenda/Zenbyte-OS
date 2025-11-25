@@ -148,7 +148,7 @@ static inline void blk_stat_activate_nsecs(struct blk_stat_callback *cb,
 
 static inline void blk_stat_deactivate(struct blk_stat_callback *cb)
 {
-	timer_delete_sync(&cb->timer);
+	del_timer_sync(&cb->timer);
 }
 
 /**

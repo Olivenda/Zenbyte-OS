@@ -14,7 +14,6 @@ description: |
   domains on Qualcomm SoCs.
 
   See also::
-    include/dt-bindings/clock/qcom,sm6350-videocc.h
     include/dt-bindings/clock/qcom,videocc-sc7180.h
     include/dt-bindings/clock/qcom,videocc-sc7280.h
     include/dt-bindings/clock/qcom,videocc-sdm845.h
@@ -27,7 +26,6 @@ properties:
       - qcom,sc7180-videocc
       - qcom,sc7280-videocc
       - qcom,sdm845-videocc
-      - qcom,sm6350-videocc
       - qcom,sm8150-videocc
       - qcom,sm8250-videocc
 
@@ -88,24 +86,6 @@ allOf:
           items:
             - const: bi_tcxo
             - const: bi_tcxo_ao
-
-  - if:
-      properties:
-        compatible:
-          enum:
-            - qcom,sm6350-videocc
-    then:
-      properties:
-        clocks:
-          items:
-            - description: Video AHB clock from GCC
-            - description: Board XO source
-            - description: Sleep Clock source
-        clock-names:
-          items:
-            - const: iface
-            - const: bi_tcxo
-            - const: sleep_clk
 
   - if:
       properties:

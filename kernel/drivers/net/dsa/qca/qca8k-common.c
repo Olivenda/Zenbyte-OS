@@ -557,6 +557,13 @@ exit:
 	return ret;
 }
 
+int qca8k_get_mac_eee(struct dsa_switch *ds, int port,
+		      struct ethtool_keee *e)
+{
+	/* Nothing to do on the port's MAC */
+	return 0;
+}
+
 static int qca8k_port_configure_learning(struct dsa_switch *ds, int port,
 					 bool learning)
 {

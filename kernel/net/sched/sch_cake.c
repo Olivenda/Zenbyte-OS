@@ -484,14 +484,13 @@ static bool cobalt_queue_empty(struct cobalt_vars *vars,
 /* Call this with a freshly dequeued packet for possible congestion marking.
  * Returns true as an instruction to drop the packet, false for delivery.
  */
-static enum skb_drop_reason cobalt_should_drop(struct cobalt_vars *vars,
-					       struct cobalt_params *p,
-					       ktime_t now,
-					       struct sk_buff *skb,
-					       u32 bulk_flows)
+static bool cobalt_should_drop(struct cobalt_vars *vars,
+			       struct cobalt_params *p,
+			       ktime_t now,
+			       struct sk_buff *skb,
+			       u32 bulk_flows)
 {
-	enum skb_drop_reason reason = SKB_NOT_DROPPED_YET;
-	bool next_due, over_target;
+	bool next_due, over_target, drop = false;
 	ktime_t schedule;
 	u64 sojourn;
 
@@ -534,8 +533,7 @@ static enum skb_drop_reason cobalt_should_drop(struct cobalt_vars *vars,
 
 	if (next_due && vars->dropping) {
 		/* Use ECN mark if possible, otherwise drop */
-		if (!(vars->ecn_marked = INET_ECN_set_ce(skb)))
-			reason = SKB_DROP_REASON_QDISC_CONGESTED;
+		drop = !(vars->ecn_marked = INET_ECN_set_ce(skb));
 
 		vars->count++;
 		if (!vars->count)
@@ -558,17 +556,16 @@ static enum skb_drop_reason cobalt_should_drop(struct cobalt_vars *vars,
 	}
 
 	/* Simple BLUE implementation.  Lack of ECN is deliberate. */
-	if (vars->p_drop && reason == SKB_NOT_DROPPED_YET &&
-	    get_random_u32() < vars->p_drop)
-		reason = SKB_DROP_REASON_CAKE_FLOOD;
+	if (vars->p_drop)
+		drop |= (get_random_u32() < vars->p_drop);
 
 	/* Overload the drop_next field as an activity timeout */
 	if (!vars->count)
 		vars->drop_next = ktime_add_ns(now, p->interval);
-	else if (ktime_to_ns(schedule) > 0 && reason == SKB_NOT_DROPPED_YET)
+	else if (ktime_to_ns(schedule) > 0 && !drop)
 		vars->drop_next = now;
 
-	return reason;
+	return drop;
 }
 
 static bool cake_update_flowkeys(struct flow_keys *keys,
@@ -1407,10 +1404,7 @@ static u32 cake_overhead(struct cake_sched_data *q, const struct sk_buff *skb)
 		return cake_calc_overhead(q, len, off);
 
 	/* borrowed from qdisc_pkt_len_init() */
-	if (!skb->encapsulation)
-		hdr_len = skb_transport_offset(skb);
-	else
-		hdr_len = skb_inner_transport_offset(skb);
+	hdr_len = skb_transport_offset(skb);
 
 	/* + transport layer */
 	if (likely(shinfo->gso_type & (SKB_GSO_TCPV4 |
@@ -1591,11 +1585,12 @@ static unsigned int cake_drop(struct Qdisc *sch, struct sk_buff **to_free)
 
 	flow->dropped++;
 	b->tin_dropped++;
+	sch->qstats.drops++;
 
 	if (q->rate_flags & CAKE_FLAG_INGRESS)
 		cake_advance_shaper(q, b, skb, now, true);
 
-	qdisc_drop_reason(skb, sch, to_free, SKB_DROP_REASON_QDISC_OVERLIMIT);
+	__qdisc_drop(skb, to_free);
 	sch->q.qlen--;
 	qdisc_tree_reduce_backlog(sch, 1, len);
 
@@ -1980,14 +1975,13 @@ static void cake_clear_tin(struct Qdisc *sch, u16 tin)
 	q->cur_tin = tin;
 	for (q->cur_flow = 0; q->cur_flow < CAKE_QUEUES; q->cur_flow++)
 		while (!!(skb = cake_dequeue_one(sch)))
-			kfree_skb_reason(skb, SKB_DROP_REASON_QUEUE_PURGE);
+			kfree_skb(skb);
 }
 
 static struct sk_buff *cake_dequeue(struct Qdisc *sch)
 {
 	struct cake_sched_data *q = qdisc_priv(sch);
 	struct cake_tin_data *b = &q->tins[q->cur_tin];
-	enum skb_drop_reason reason;
 	ktime_t now = ktime_get();
 	struct cake_flow *flow;
 	struct list_head *head;
@@ -2169,12 +2163,12 @@ retry:
 			goto begin;
 		}
 
-		reason = cobalt_should_drop(&flow->cvars, &b->cparams, now, skb,
-					    (b->bulk_flow_count *
-					     !!(q->rate_flags &
-						CAKE_FLAG_INGRESS)));
 		/* Last packet in queue may be marked, shouldn't be dropped */
-		if (reason == SKB_NOT_DROPPED_YET || !flow->head)
+		if (!cobalt_should_drop(&flow->cvars, &b->cparams, now, skb,
+					(b->bulk_flow_count *
+					 !!(q->rate_flags &
+					    CAKE_FLAG_INGRESS))) ||
+		    !flow->head)
 			break;
 
 		/* drop this packet, get another one */
@@ -2188,7 +2182,7 @@ retry:
 		b->tin_dropped++;
 		qdisc_tree_reduce_backlog(sch, 1, qdisc_pkt_len(skb));
 		qdisc_qstats_drop(sch);
-		kfree_skb_reason(skb, reason);
+		kfree_skb(skb);
 		if (q->rate_flags & CAKE_FLAG_INGRESS)
 			goto retry;
 	}

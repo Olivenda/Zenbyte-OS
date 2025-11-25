@@ -11,7 +11,7 @@
 #ifndef _XTENSA_CMPXCHG_H
 #define _XTENSA_CMPXCHG_H
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/bits.h>
 #include <linux/stringify.h>
@@ -220,6 +220,6 @@ __arch_xchg(unsigned long x, volatile void * ptr, int size)
 	}
 }
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 
 #endif /* _XTENSA_CMPXCHG_H */

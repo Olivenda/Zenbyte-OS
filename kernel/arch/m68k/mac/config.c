@@ -15,6 +15,7 @@
 #include <linux/reboot.h>
 #include <linux/types.h>
 #include <linux/mm.h>
+#include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/interrupt.h>
 /* keyb */
@@ -22,6 +23,7 @@
 #include <linux/delay.h>
 /* keyb */
 #include <linux/init.h>
+#include <linux/vt_kern.h>
 #include <linux/platform_device.h>
 #include <linux/ata_platform.h>
 #include <linux/adb.h>

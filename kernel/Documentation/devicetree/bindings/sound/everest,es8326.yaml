@@ -24,10 +24,6 @@ properties:
     items:
       - const: mclk
 
-  interrupts:
-    maxItems: 1
-    description: interrupt output for headset detection
-
   "#sound-dai-cells":
     const: 0
 

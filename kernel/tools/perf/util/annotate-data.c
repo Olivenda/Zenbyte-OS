@@ -314,40 +314,6 @@ static void delete_members(struct annotated_member *member)
 	}
 }
 
-static int fill_member_name(char *buf, size_t sz, struct annotated_member *m,
-			    int offset, bool first)
-{
-	struct annotated_member *child;
-
-	if (list_empty(&m->children))
-		return 0;
-
-	list_for_each_entry(child, &m->children, node) {
-		int len;
-
-		if (offset < child->offset || offset >= child->offset + child->size)
-			continue;
-
-		/* It can have anonymous struct/union members */
-		if (child->var_name) {
-			len = scnprintf(buf, sz, "%s%s",
-					first ? "" : ".", child->var_name);
-			first = false;
-		} else {
-			len = 0;
-		}
-
-		return fill_member_name(buf + len, sz - len, child, offset, first) + len;
-	}
-	return 0;
-}
-
-int annotated_data_type__get_member_name(struct annotated_data_type *adt,
-					 char *buf, size_t sz, int member_offset)
-{
-	return fill_member_name(buf, sz, &adt->self, member_offset, /*first=*/true);
-}
-
 static struct annotated_data_type *dso__findnew_data_type(struct dso *dso,
 							  Dwarf_Die *type_die)
 {
@@ -864,7 +830,7 @@ static void update_var_state(struct type_state *state, struct data_loc_info *dlo
 		if (!dwarf_offdie(dloc->di->dbg, var->die_off, &mem_die))
 			continue;
 
-		if (var->reg == DWARF_REG_FB || var->reg == fbreg || var->reg == state->stack_reg) {
+		if (var->reg == DWARF_REG_FB || var->reg == fbreg) {
 			int offset = var->offset;
 			struct type_state_stack *stack;
 
@@ -879,13 +845,8 @@ static void update_var_state(struct type_state *state, struct data_loc_info *dlo
 			findnew_stack_state(state, offset, TSR_KIND_TYPE,
 					    &mem_die);
 
-			if (var->reg == state->stack_reg) {
-				pr_debug_dtp("var [%"PRIx64"] %#x(reg%d)",
-					     insn_offset, offset, state->stack_reg);
-			} else {
-				pr_debug_dtp("var [%"PRIx64"] -%#x(stack)",
-					     insn_offset, -offset);
-			}
+			pr_debug_dtp("var [%"PRIx64"] -%#x(stack)",
+				     insn_offset, -offset);
 			pr_debug_type_name(&mem_die, TSR_KIND_TYPE);
 		} else if (has_reg_type(state, var->reg) && var->offset == 0) {
 			struct type_state_reg *reg;
@@ -1166,10 +1127,10 @@ again:
 	}
 
 check_non_register:
-	if (reg == dloc->fbreg || reg == state->stack_reg) {
+	if (reg == dloc->fbreg) {
 		struct type_state_stack *stack;
 
-		pr_debug_dtp("%s", reg == dloc->fbreg ? "fbreg" : "stack");
+		pr_debug_dtp("fbreg");
 
 		stack = find_stack_state(state, dloc->type_offset);
 		if (stack == NULL) {

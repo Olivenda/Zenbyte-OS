@@ -70,9 +70,6 @@ struct tb_ctl {
 #define tb_ctl_dbg(ctl, format, arg...) \
 	dev_dbg(&(ctl)->nhi->pdev->dev, format, ## arg)
 
-#define tb_ctl_dbg_once(ctl, format, arg...) \
-	dev_dbg_once(&(ctl)->nhi->pdev->dev, format, ## arg)
-
 static DECLARE_WAIT_QUEUE_HEAD(tb_cfg_request_cancel_queue);
 /* Serializes access to request kref_get/put */
 static DEFINE_MUTEX(tb_cfg_request_lock);
@@ -273,7 +270,7 @@ static struct tb_cfg_result parse_header(const struct ctl_pkg *pkg, u32 len,
 	return res;
 }
 
-static void tb_cfg_print_error(struct tb_ctl *ctl, enum tb_cfg_space space,
+static void tb_cfg_print_error(struct tb_ctl *ctl,
 			       const struct tb_cfg_result *res)
 {
 	WARN_ON(res->err != 1);
@@ -287,8 +284,8 @@ static void tb_cfg_print_error(struct tb_ctl *ctl, enum tb_cfg_space space,
 		 * Invalid cfg_space/offset/length combination in
 		 * cfg_read/cfg_write.
 		 */
-		tb_ctl_dbg_once(ctl, "%llx:%x: invalid config space (%u) or offset\n",
-				res->response_route, res->response_port, space);
+		tb_ctl_dbg(ctl, "%llx:%x: invalid config space or offset\n",
+			   res->response_route, res->response_port);
 		return;
 	case TB_CFG_ERROR_NO_SUCH_PORT:
 		/*
@@ -317,7 +314,7 @@ static void tb_cfg_print_error(struct tb_ctl *ctl, enum tb_cfg_space space,
 
 static __be32 tb_crc(const void *data, size_t len)
 {
-	return cpu_to_be32(~crc32c(~0, data, len));
+	return cpu_to_be32(~__crc32c_le(~0, data, len));
 }
 
 static void tb_ctl_pkg_free(struct ctl_pkg *pkg)
@@ -1080,7 +1077,7 @@ static int tb_cfg_get_error(struct tb_ctl *ctl, enum tb_cfg_space space,
 	    res->tb_error == TB_CFG_ERROR_INVALID_CONFIG_SPACE)
 		return -ENODEV;
 
-	tb_cfg_print_error(ctl, space, res);
+	tb_cfg_print_error(ctl, res);
 
 	if (res->tb_error == TB_CFG_ERROR_LOCK)
 		return -EACCES;

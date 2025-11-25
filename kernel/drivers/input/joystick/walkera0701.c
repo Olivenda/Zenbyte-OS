@@ -232,7 +232,8 @@ static void walkera0701_attach(struct parport *pp)
 		goto err_unregister_device;
 	}
 
-	hrtimer_setup(&w->timer, timer_handler, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	hrtimer_init(&w->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	w->timer.function = timer_handler;
 
 	w->input_dev = input_allocate_device();
 	if (!w->input_dev) {

@@ -4,7 +4,11 @@
 #include <bpf/bpf_helpers.h>
 #include "bpf_misc.h"
 
-#ifdef CAN_USE_GOTOL
+#if (defined(__TARGET_ARCH_arm64) || defined(__TARGET_ARCH_x86) || \
+	(defined(__TARGET_ARCH_riscv) && __riscv_xlen == 64) || \
+	defined(__TARGET_ARCH_arm) || defined(__TARGET_ARCH_s390) || \
+	defined(__TARGET_ARCH_loongarch)) && \
+	__clang_major__ >= 18
 
 SEC("socket")
 __description("gotol, small_imm")

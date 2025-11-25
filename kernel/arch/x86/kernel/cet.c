@@ -2,7 +2,6 @@
 
 #include <linux/ptrace.h>
 #include <asm/bugs.h>
-#include <asm/msr.h>
 #include <asm/traps.h>
 
 enum cp_error_code {
@@ -56,7 +55,7 @@ static void do_user_cp_fault(struct pt_regs *regs, unsigned long error_code)
 	 * will be whatever is live in userspace. So read the SSP before enabling
 	 * interrupts so locking the fpregs to do it later is not required.
 	 */
-	rdmsrq(MSR_IA32_PL3_SSP, ssp);
+	rdmsrl(MSR_IA32_PL3_SSP, ssp);
 
 	cond_local_irq_enable(regs);
 

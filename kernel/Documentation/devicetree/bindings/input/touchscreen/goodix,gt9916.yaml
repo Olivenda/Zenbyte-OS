@@ -19,7 +19,6 @@ allOf:
 properties:
   compatible:
     enum:
-      - goodix,gt9897
       - goodix,gt9916
 
   reg:

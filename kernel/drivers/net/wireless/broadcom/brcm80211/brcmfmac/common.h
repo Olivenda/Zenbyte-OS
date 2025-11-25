@@ -20,7 +20,7 @@
  */
 
 /**
- * struct brcmf_mp_global_t - Global module parameters.
+ * struct brcmf_mp_global_t - Global module paramaters.
  *
  * @firmware_path: Alternative firmware path.
  */
@@ -31,7 +31,7 @@ struct brcmf_mp_global_t {
 extern struct brcmf_mp_global_t brcmf_mp_global;
 
 /**
- * struct brcmf_mp_device - Device module parameters.
+ * struct brcmf_mp_device - Device module paramaters.
  *
  * @p2p_enable: Legacy P2P0 enable (old wpa_supplicant).
  * @feature_disable: Feature_disable bitmask.

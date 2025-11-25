@@ -14,15 +14,10 @@ properties:
     pattern: "^can-phy"
 
   compatible:
-    oneOf:
-      - items:
-          - enum:
-              - microchip,ata6561
-          - const: ti,tcan1042
-      - enum:
-          - ti,tcan1042
-          - ti,tcan1043
-          - nxp,tjr1443
+    enum:
+      - nxp,tjr1443
+      - ti,tcan1042
+      - ti,tcan1043
 
   '#phy-cells':
     const: 0

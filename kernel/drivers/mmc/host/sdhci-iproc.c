@@ -379,7 +379,7 @@ static int sdhci_iproc_probe(struct platform_device *pdev)
 
 	ret = mmc_of_parse(host->mmc);
 	if (ret)
-		return ret;
+		goto err;
 
 	sdhci_get_property(pdev);
 
@@ -387,8 +387,10 @@ static int sdhci_iproc_probe(struct platform_device *pdev)
 
 	if (dev->of_node) {
 		pltfm_host->clk = devm_clk_get_enabled(dev, NULL);
-		if (IS_ERR(pltfm_host->clk))
-			return PTR_ERR(pltfm_host->clk);
+		if (IS_ERR(pltfm_host->clk)) {
+			ret = PTR_ERR(pltfm_host->clk);
+			goto err;
+		}
 	}
 
 	if (iproc_host->data->missing_caps) {
@@ -397,7 +399,15 @@ static int sdhci_iproc_probe(struct platform_device *pdev)
 				  &iproc_host->data->caps1);
 	}
 
-	return sdhci_add_host(host);
+	ret = sdhci_add_host(host);
+	if (ret)
+		goto err;
+
+	return 0;
+
+err:
+	sdhci_pltfm_free(pdev);
+	return ret;
 }
 
 static void sdhci_iproc_shutdown(struct platform_device *pdev)
@@ -414,7 +424,7 @@ static struct platform_driver sdhci_iproc_driver = {
 		.pm = &sdhci_pltfm_pmops,
 	},
 	.probe = sdhci_iproc_probe,
-	.remove = sdhci_pltfm_remove,
+	.remove_new = sdhci_pltfm_remove,
 	.shutdown = sdhci_iproc_shutdown,
 };
 module_platform_driver(sdhci_iproc_driver);

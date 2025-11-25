@@ -13,7 +13,6 @@
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
-#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
@@ -423,8 +422,12 @@ static void st_i2c_wr_fill_tx_fifo(struct st_i2c_dev *i2c_dev)
 	tx_fstat = readl_relaxed(i2c_dev->base + SSC_TX_FSTAT);
 	tx_fstat &= SSC_TX_FSTAT_STATUS;
 
-	for (i = min(c->count, SSC_TXFIFO_SIZE - tx_fstat);
-	     i > 0; i--, c->count--, c->buf++)
+	if (c->count < (SSC_TXFIFO_SIZE - tx_fstat))
+		i = c->count;
+	else
+		i = SSC_TXFIFO_SIZE - tx_fstat;
+
+	for (; i > 0; i--, c->count--, c->buf++)
 		st_i2c_write_tx_fifo(i2c_dev, *c->buf);
 }
 
@@ -436,7 +439,7 @@ static void st_i2c_wr_fill_tx_fifo(struct st_i2c_dev *i2c_dev)
  * This functions fills the Tx FIFO with fixed pattern when
  * in read mode to trigger clock.
  */
-static void st_i2c_rd_fill_tx_fifo(struct st_i2c_dev *i2c_dev, u32 max)
+static void st_i2c_rd_fill_tx_fifo(struct st_i2c_dev *i2c_dev, int max)
 {
 	struct st_i2c_client *c = &i2c_dev->client;
 	u32 tx_fstat, sta;
@@ -449,8 +452,12 @@ static void st_i2c_rd_fill_tx_fifo(struct st_i2c_dev *i2c_dev, u32 max)
 	tx_fstat = readl_relaxed(i2c_dev->base + SSC_TX_FSTAT);
 	tx_fstat &= SSC_TX_FSTAT_STATUS;
 
-	for (i = min(max, SSC_TXFIFO_SIZE - tx_fstat);
-	     i > 0; i--, c->xfered++)
+	if (max < (SSC_TXFIFO_SIZE - tx_fstat))
+		i = max;
+	else
+		i = SSC_TXFIFO_SIZE - tx_fstat;
+
+	for (; i > 0; i--, c->xfered++)
 		st_i2c_write_tx_fifo(i2c_dev, 0xff);
 }
 
@@ -886,7 +893,7 @@ static struct platform_driver st_i2c_driver = {
 		.pm = pm_sleep_ptr(&st_i2c_pm),
 	},
 	.probe = st_i2c_probe,
-	.remove = st_i2c_remove,
+	.remove_new = st_i2c_remove,
 };
 
 module_platform_driver(st_i2c_driver);

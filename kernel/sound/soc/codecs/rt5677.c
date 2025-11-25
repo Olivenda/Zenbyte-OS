@@ -4377,10 +4377,10 @@ static int rt5677_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	unsigned int reg_val = 0;
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBP_CFP:
+	case SND_SOC_DAIFMT_CBM_CFM:
 		rt5677->master[dai->id] = 1;
 		break;
-	case SND_SOC_DAIFMT_CBC_CFC:
+	case SND_SOC_DAIFMT_CBS_CFS:
 		reg_val |= RT5677_I2S_MS_S;
 		rt5677->master[dai->id] = 0;
 		break;
@@ -4725,14 +4725,13 @@ static int rt5677_update_gpio_bits(struct rt5677_priv *rt5677, unsigned offset, 
 }
 
 #ifdef CONFIG_GPIOLIB
-static int rt5677_gpio_set(struct gpio_chip *chip, unsigned int offset,
-			   int value)
+static void rt5677_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
 {
 	struct rt5677_priv *rt5677 = gpiochip_get_data(chip);
 	int level = value ? RT5677_GPIOx_OUT_HI : RT5677_GPIOx_OUT_LO;
 	int m = RT5677_GPIOx_OUT_MASK;
 
-	return rt5677_update_gpio_bits(rt5677, offset, m, level);
+	rt5677_update_gpio_bits(rt5677, offset, m, level);
 }
 
 static int rt5677_gpio_direction_out(struct gpio_chip *chip,
@@ -5202,7 +5201,6 @@ static const struct of_device_id rt5677_of_match[] = {
 MODULE_DEVICE_TABLE(of, rt5677_of_match);
 
 static const struct acpi_device_id rt5677_acpi_match[] = {
-	{ "10EC5677", RT5677 },
 	{ "RT5677CE", RT5677 },
 	{ }
 };

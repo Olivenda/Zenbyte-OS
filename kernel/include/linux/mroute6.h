@@ -31,7 +31,6 @@ extern int ip6_mroute_getsockopt(struct sock *, int, sockptr_t, sockptr_t);
 extern int ip6_mr_input(struct sk_buff *skb);
 extern int ip6mr_compat_ioctl(struct sock *sk, unsigned int cmd, void __user *arg);
 extern int ip6_mr_init(void);
-extern int ip6_mr_output(struct net *net, struct sock *sk, struct sk_buff *skb);
 extern void ip6_mr_cleanup(void);
 int ip6mr_ioctl(struct sock *sk, int cmd, void *arg);
 #else
@@ -57,12 +56,6 @@ int ip6mr_ioctl(struct sock *sk, int cmd, void *arg)
 static inline int ip6_mr_init(void)
 {
 	return 0;
-}
-
-static inline int
-ip6_mr_output(struct net *net, struct sock *sk, struct sk_buff *skb)
-{
-	return ip6_output(net, sk, skb);
 }
 
 static inline void ip6_mr_cleanup(void)

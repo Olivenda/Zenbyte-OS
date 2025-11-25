@@ -403,11 +403,10 @@ static const struct iio_info ti_ads7950_info = {
 	.update_scan_mode	= ti_ads7950_update_scan_mode,
 };
 
-static int ti_ads7950_set(struct gpio_chip *chip, unsigned int offset,
-			  int value)
+static void ti_ads7950_set(struct gpio_chip *chip, unsigned int offset,
+			   int value)
 {
 	struct ti_ads7950_state *st = gpiochip_get_data(chip);
-	int ret;
 
 	mutex_lock(&st->slock);
 
@@ -417,11 +416,9 @@ static int ti_ads7950_set(struct gpio_chip *chip, unsigned int offset,
 		st->cmd_settings_bitmask &= ~BIT(offset);
 
 	st->single_tx = TI_ADS7950_MAN_CMD_SETTINGS(st);
-	ret = spi_sync(st->spi, &st->scan_single_msg);
+	spi_sync(st->spi, &st->scan_single_msg);
 
 	mutex_unlock(&st->slock);
-
-	return ret;
 }
 
 static int ti_ads7950_get(struct gpio_chip *chip, unsigned int offset)
@@ -502,11 +499,7 @@ static int ti_ads7950_direction_input(struct gpio_chip *chip,
 static int ti_ads7950_direction_output(struct gpio_chip *chip,
 				       unsigned int offset, int value)
 {
-	int ret;
-
-	ret = ti_ads7950_set(chip, offset, value);
-	if (ret)
-		return ret;
+	ti_ads7950_set(chip, offset, value);
 
 	return _ti_ads7950_set_direction(chip, offset, 0);
 }

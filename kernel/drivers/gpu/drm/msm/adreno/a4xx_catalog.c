@@ -45,3 +45,6 @@ static const struct adreno_info a4xx_gpus[] = {
 	}
 };
 DECLARE_ADRENO_GPULIST(a4xx);
+
+MODULE_FIRMWARE("qcom/a420_pm4.fw");
+MODULE_FIRMWARE("qcom/a420_pfp.fw");

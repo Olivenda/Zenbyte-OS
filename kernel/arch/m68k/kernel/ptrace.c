@@ -319,7 +319,7 @@ enum m68k_regset {
 
 static const struct user_regset m68k_user_regsets[] = {
 	[REGSET_GPR] = {
-		USER_REGSET_NOTE_TYPE(PRSTATUS),
+		.core_note_type = NT_PRSTATUS,
 		.n = ELF_NGREG,
 		.size = sizeof(u32),
 		.align = sizeof(u16),
@@ -327,7 +327,7 @@ static const struct user_regset m68k_user_regsets[] = {
 	},
 #ifdef CONFIG_FPU
 	[REGSET_FPU] = {
-		USER_REGSET_NOTE_TYPE(PRFPREG),
+		.core_note_type = NT_PRFPREG,
 		.n = sizeof(struct user_m68kfp_struct) / sizeof(u32),
 		.size = sizeof(u32),
 		.align = sizeof(u32),

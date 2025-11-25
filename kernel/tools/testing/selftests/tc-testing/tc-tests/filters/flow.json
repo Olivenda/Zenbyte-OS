@@ -507,7 +507,7 @@
     },
     {
         "id": "4341",
-        "name": "Add flow filter with multiple ops",
+        "name": "Add flow filter with muliple ops",
         "category": [
             "filter",
             "flow"

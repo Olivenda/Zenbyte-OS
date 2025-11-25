@@ -12,10 +12,6 @@
 
 #include <linux/usb.h>
 
-#define DRV_NAME_RTSX_USB		"rtsx_usb"
-#define DRV_NAME_RTSX_USB_SDMMC		"rtsx_usb_sdmmc"
-#define DRV_NAME_RTSX_USB_MS		"rtsx_usb_ms"
-
 /* related module names */
 #define RTSX_USB_SD_CARD	0
 #define RTSX_USB_MS_CARD	1

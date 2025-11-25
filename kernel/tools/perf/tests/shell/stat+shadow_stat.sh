@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # perf stat metrics (shadow stat) test
 # SPDX-License-Identifier: GPL-2.0
 

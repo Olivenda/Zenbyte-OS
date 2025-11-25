@@ -72,7 +72,7 @@ struct perf_thread_map *thread_map__new_by_tid(pid_t tid)
 	return threads;
 }
 
-static struct perf_thread_map *thread_map__new_all_cpus(void)
+static struct perf_thread_map *__thread_map__new_all_cpus(uid_t uid)
 {
 	DIR *proc;
 	int max_threads = 32, items, i;
@@ -97,6 +97,15 @@ static struct perf_thread_map *thread_map__new_all_cpus(void)
 
 		if (*end) /* only interested in proper numerical dirents */
 			continue;
+
+		snprintf(path, sizeof(path), "/proc/%s", dirent->d_name);
+
+		if (uid != UINT_MAX) {
+			struct stat st;
+
+			if (stat(path, &st) != 0 || st.st_uid != uid)
+				continue;
+		}
 
 		snprintf(path, sizeof(path), "/proc/%d/task", pid);
 		items = scandir(path, &namelist, filter, NULL);
@@ -148,10 +157,23 @@ out_free_namelist:
 	goto out_closedir;
 }
 
-struct perf_thread_map *thread_map__new(pid_t pid, pid_t tid)
+struct perf_thread_map *thread_map__new_all_cpus(void)
+{
+	return __thread_map__new_all_cpus(UINT_MAX);
+}
+
+struct perf_thread_map *thread_map__new_by_uid(uid_t uid)
+{
+	return __thread_map__new_all_cpus(uid);
+}
+
+struct perf_thread_map *thread_map__new(pid_t pid, pid_t tid, uid_t uid)
 {
 	if (pid != -1)
 		return thread_map__new_by_pid(pid);
+
+	if (tid == -1 && uid != UINT_MAX)
+		return thread_map__new_by_uid(uid);
 
 	return thread_map__new_by_tid(tid);
 }
@@ -267,10 +289,14 @@ out_free_threads:
 	goto out;
 }
 
-struct perf_thread_map *thread_map__new_str(const char *pid, const char *tid, bool all_threads)
+struct perf_thread_map *thread_map__new_str(const char *pid, const char *tid,
+				       uid_t uid, bool all_threads)
 {
 	if (pid)
 		return thread_map__new_by_pid_str(pid);
+
+	if (!tid && uid != UINT_MAX)
+		return thread_map__new_by_uid(uid);
 
 	if (all_threads)
 		return thread_map__new_all_cpus();

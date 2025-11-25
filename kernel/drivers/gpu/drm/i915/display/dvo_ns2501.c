@@ -26,8 +26,7 @@
  *
  */
 
-#include <drm/drm_print.h>
-
+#include "i915_drv.h"
 #include "intel_display_types.h"
 #include "intel_dvo_dev.h"
 
@@ -519,13 +518,13 @@ static enum drm_connector_status ns2501_detect(struct intel_dvo_device *dvo)
 	 * Even if not, the detection bit of the 2501 is unreliable as
 	 * it only works for some display types.
 	 * It is even more unreliable as the PLL must be active for
-	 * allowing reading from the chip.
+	 * allowing reading from the chiop.
 	 */
 	return connector_status_connected;
 }
 
 static enum drm_mode_status ns2501_mode_valid(struct intel_dvo_device *dvo,
-					      const struct drm_display_mode *mode)
+					      struct drm_display_mode *mode)
 {
 	DRM_DEBUG_KMS
 	    ("is mode valid (hdisplay=%d,htotal=%d,vdisplay=%d,vtotal=%d)\n",

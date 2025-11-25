@@ -382,12 +382,23 @@ static const struct address_space_operations kvm_gmem_aops = {
 #endif
 };
 
+static int kvm_gmem_getattr(struct mnt_idmap *idmap, const struct path *path,
+			    struct kstat *stat, u32 request_mask,
+			    unsigned int query_flags)
+{
+	struct inode *inode = path->dentry->d_inode;
+
+	generic_fillattr(idmap, request_mask, inode, stat);
+	return 0;
+}
+
 static int kvm_gmem_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 			    struct iattr *attr)
 {
 	return -EINVAL;
 }
 static const struct inode_operations kvm_gmem_iops = {
+	.getattr	= kvm_gmem_getattr,
 	.setattr	= kvm_gmem_setattr,
 };
 
@@ -612,8 +623,7 @@ static struct folio *__kvm_gmem_get_pfn(struct file *file,
 }
 
 int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
-		     gfn_t gfn, kvm_pfn_t *pfn, struct page **page,
-		     int *max_order)
+		     gfn_t gfn, kvm_pfn_t *pfn, int *max_order)
 {
 	pgoff_t index = kvm_gmem_get_index(slot, gfn);
 	struct file *file = kvm_gmem_get_file(slot);
@@ -634,10 +644,7 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 		r = kvm_gmem_prepare_folio(kvm, slot, gfn, folio);
 
 	folio_unlock(folio);
-
-	if (!r)
-		*page = folio_file_page(folio, index);
-	else
+	if (r < 0)
 		folio_put(folio);
 
 out:

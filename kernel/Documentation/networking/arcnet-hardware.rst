@@ -3152,7 +3152,7 @@ Tiara
 (model unknown)
 ---------------
 
-  - from Christoph Lameter <cl@gentwo.org>
+  - from Christoph Lameter <christoph@lameter.com>
 
 
 Here is information about my card as far as I could figure it out::

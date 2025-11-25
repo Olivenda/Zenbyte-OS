@@ -42,8 +42,6 @@
 
 &slpi_pil {
 	firmware-name = "qcom/msm8996/oneplus3t/slpi.mbn";
-	px-supply = <&vreg_lvs2a>;
-
 	status = "okay";
 };
 

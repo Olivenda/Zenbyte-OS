@@ -4,7 +4,6 @@
 
 #include <linux/types.h>
 #include <linux/stringify.h>
-#include <linux/objtool.h>
 #include <asm/asm.h>
 #include <asm/bug.h>
 
@@ -16,7 +15,7 @@
 #define ALT_DIRECT_CALL(feature) ((ALT_FLAG_DIRECT_CALL << ALT_FLAGS_SHIFT) | (feature))
 #define ALT_CALL_ALWAYS		ALT_DIRECT_CALL(X86_FEATURE_ALWAYS)
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/stddef.h>
 
@@ -49,12 +48,22 @@
 		".popsection\n"				\
 		"671:"
 
-#define LOCK_PREFIX LOCK_PREFIX_HERE "\n\tlock "
+#define LOCK_PREFIX LOCK_PREFIX_HERE "\n\tlock; "
 
 #else /* ! CONFIG_SMP */
 #define LOCK_PREFIX_HERE ""
 #define LOCK_PREFIX ""
 #endif
+
+/*
+ * objtool annotation to ignore the alternatives and only consider the original
+ * instruction(s).
+ */
+#define ANNOTATE_IGNORE_ALTERNATIVE				\
+	"999:\n\t"						\
+	".pushsection .discard.ignore_alts\n\t"			\
+	".long 999b\n\t"					\
+	".popsection\n\t"
 
 /*
  * The patching flags are part of the upper bits of the @ft_flags parameter when
@@ -83,12 +92,6 @@ struct alt_instr {
 
 extern struct alt_instr __alt_instructions[], __alt_instructions_end[];
 
-extern s32 __retpoline_sites[], __retpoline_sites_end[];
-extern s32 __return_sites[],	__return_sites_end[];
-extern s32 __cfi_sites[],	__cfi_sites_end[];
-extern s32 __ibt_endbr_seal[],	__ibt_endbr_seal_end[];
-extern s32 __smp_locks[],	__smp_locks_end[];
-
 /*
  * Debug flag that can be tested to see whether alternative
  * instructions were patched in already:
@@ -107,6 +110,7 @@ struct module;
 
 struct callthunk_sites {
 	s32				*call_start, *call_end;
+	struct alt_instr		*alt_start, *alt_end;
 };
 
 #ifdef CONFIG_CALL_THUNKS
@@ -274,12 +278,10 @@ static inline int alternatives_text_reserved(void *start, void *end)
  * references: i.e., if used for a function, it would add the PLT
  * suffix.
  */
-#define alternative_call(oldfunc, newfunc, ft_flags, output, input, clobbers...)	\
+#define alternative_call(oldfunc, newfunc, ft_flags, output, input...)			\
 	asm_inline volatile(ALTERNATIVE("call %c[old]", "call %c[new]", ft_flags)	\
 		: ALT_OUTPUT_SP(output)							\
-		: [old] "i" (oldfunc), [new] "i" (newfunc)				\
-		  COMMA(input)								\
-		: clobbers)
+		: [old] "i" (oldfunc), [new] "i" (newfunc), ## input)
 
 /*
  * Like alternative_call, but there are two features and respective functions.
@@ -288,14 +290,24 @@ static inline int alternatives_text_reserved(void *start, void *end)
  * Otherwise, old function is used.
  */
 #define alternative_call_2(oldfunc, newfunc1, ft_flags1, newfunc2, ft_flags2,		\
-			   output, input, clobbers...)					\
+			   output, input...)						\
 	asm_inline volatile(ALTERNATIVE_2("call %c[old]", "call %c[new1]", ft_flags1,	\
 		"call %c[new2]", ft_flags2)						\
 		: ALT_OUTPUT_SP(output)							\
 		: [old] "i" (oldfunc), [new1] "i" (newfunc1),				\
-		  [new2] "i" (newfunc2)							\
-		  COMMA(input)								\
-		: clobbers)
+		  [new2] "i" (newfunc2), ## input)
+
+/*
+ * use this macro(s) if you need more than one output parameter
+ * in alternative_io
+ */
+#define ASM_OUTPUT2(a...) a
+
+/*
+ * use this macro if you need clobbers but no inputs in
+ * alternative_{input,io,call}()
+ */
+#define ASM_NO_INPUT_CLOBBER(clbr...) "i" (0) : clbr
 
 #define ALT_OUTPUT_SP(...) ASM_CALL_CONSTRAINT, ## __VA_ARGS__
 
@@ -315,7 +327,7 @@ static inline int alternatives_text_reserved(void *start, void *end)
 void BUG_func(void);
 void nop_func(void);
 
-#else /* __ASSEMBLER__ */
+#else /* __ASSEMBLY__ */
 
 #ifdef CONFIG_SMP
 	.macro LOCK_PREFIX
@@ -329,6 +341,17 @@ void nop_func(void);
 	.macro LOCK_PREFIX
 	.endm
 #endif
+
+/*
+ * objtool annotation to ignore the alternatives and only consider the original
+ * instruction(s).
+ */
+.macro ANNOTATE_IGNORE_ALTERNATIVE
+	.Lannotate_\@:
+	.pushsection .discard.ignore_alts
+	.long .Lannotate_\@
+	.popsection
+.endm
 
 /*
  * Issue one struct alt_instr descriptor entry (need to put it into
@@ -373,6 +396,11 @@ void nop_func(void);
 	__ALTERNATIVE(\oldinstr, \newinstr, \ft_flags)
 .endm
 
+#define old_len			141b-140b
+#define new_len1		144f-143f
+#define new_len2		145f-144f
+#define new_len3		146f-145f
+
 /*
  * Same as ALTERNATIVE macro above but for two alternatives. If CPU
  * has @feature1, it replaces @oldinstr with @newinstr1. If CPU has
@@ -393,6 +421,6 @@ void nop_func(void);
 	ALTERNATIVE_2 oldinstr, newinstr_no, X86_FEATURE_ALWAYS,	\
 	newinstr_yes, ft_flags
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_ALTERNATIVE_H */

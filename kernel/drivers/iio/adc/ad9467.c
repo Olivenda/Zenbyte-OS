@@ -813,18 +813,6 @@ static int ad9467_read_raw(struct iio_dev *indio_dev,
 	}
 }
 
-static int __ad9467_update_clock(struct ad9467_state *st, long r_clk)
-{
-	int ret;
-
-	ret = clk_set_rate(st->clk, r_clk);
-	if (ret)
-		return ret;
-
-	guard(mutex)(&st->lock);
-	return ad9467_calibrate(st);
-}
-
 static int ad9467_write_raw(struct iio_dev *indio_dev,
 			    struct iio_chan_spec const *chan,
 			    int val, int val2, long mask)
@@ -854,11 +842,14 @@ static int ad9467_write_raw(struct iio_dev *indio_dev,
 		if (sample_rate == r_clk)
 			return 0;
 
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		iio_device_claim_direct_scoped(return -EBUSY, indio_dev) {
+			ret = clk_set_rate(st->clk, r_clk);
+			if (ret)
+				return ret;
 
-		ret = __ad9467_update_clock(st, r_clk);
-		iio_device_release_direct(indio_dev);
+			guard(mutex)(&st->lock);
+			ret = ad9467_calibrate(st);
+		}
 		return ret;
 	default:
 		return -EINVAL;
@@ -904,20 +895,12 @@ static int ad9467_update_scan_mode(struct iio_dev *indio_dev,
 	return 0;
 }
 
-static const struct iio_info ad9467_info = {
+static struct iio_info ad9467_info = {
 	.read_raw = ad9467_read_raw,
 	.write_raw = ad9467_write_raw,
 	.update_scan_mode = ad9467_update_scan_mode,
 	.debugfs_reg_access = ad9467_reg_access,
 	.read_avail = ad9467_read_avail,
-};
-
-/* Same as above, but without .read_avail */
-static const struct iio_info ad9467_info_no_read_avail = {
-	.read_raw = ad9467_read_raw,
-	.write_raw = ad9467_write_raw,
-	.update_scan_mode = ad9467_update_scan_mode,
-	.debugfs_reg_access = ad9467_reg_access,
 };
 
 static int ad9467_scale_fill(struct ad9467_state *st)
@@ -1231,12 +1214,11 @@ static int ad9467_probe(struct spi_device *spi)
 	}
 
 	if (st->info->num_scales > 1)
-		indio_dev->info = &ad9467_info;
-	else
-		indio_dev->info = &ad9467_info_no_read_avail;
+		ad9467_info.read_avail = ad9467_read_avail;
 	indio_dev->name = st->info->name;
 	indio_dev->channels = st->info->channels;
 	indio_dev->num_channels = st->info->num_channels;
+	indio_dev->info = &ad9467_info;
 
 	ret = ad9467_iio_backend_get(st);
 	if (ret)
@@ -1298,4 +1280,4 @@ module_spi_driver(ad9467_driver);
 MODULE_AUTHOR("Michael Hennerich <michael.hennerich@analog.com>");
 MODULE_DESCRIPTION("Analog Devices AD9467 ADC driver");
 MODULE_LICENSE("GPL v2");
-MODULE_IMPORT_NS("IIO_BACKEND");
+MODULE_IMPORT_NS(IIO_BACKEND);

@@ -108,10 +108,12 @@ int ps2_sendbyte(struct ps2dev *ps2dev, u8 byte, unsigned int timeout)
 {
 	int retval;
 
-	guard(serio_pause_rx)(ps2dev->serio);
+	serio_pause_rx(ps2dev->serio);
 
 	retval = ps2_do_sendbyte(ps2dev, byte, timeout, 1);
 	dev_dbg(&ps2dev->serio->dev, "%02x - %x\n", byte, ps2dev->nak);
+
+	serio_continue_rx(ps2dev->serio);
 
 	return retval;
 }
@@ -160,10 +162,10 @@ void ps2_drain(struct ps2dev *ps2dev, size_t maxbytes, unsigned int timeout)
 
 	ps2_begin_command(ps2dev);
 
-	scoped_guard(serio_pause_rx, ps2dev->serio) {
-		ps2dev->flags = PS2_FLAG_CMD;
-		ps2dev->cmdcnt = maxbytes;
-	}
+	serio_pause_rx(ps2dev->serio);
+	ps2dev->flags = PS2_FLAG_CMD;
+	ps2dev->cmdcnt = maxbytes;
+	serio_continue_rx(ps2dev->serio);
 
 	wait_event_timeout(ps2dev->wait,
 			   !(ps2dev->flags & PS2_FLAG_CMD),
@@ -222,9 +224,9 @@ static int ps2_adjust_timeout(struct ps2dev *ps2dev,
 		 * use alternative probe to detect it.
 		 */
 		if (ps2dev->cmdbuf[1] == 0xaa) {
-			scoped_guard(serio_pause_rx, ps2dev->serio)
-				ps2dev->flags = 0;
-
+			serio_pause_rx(ps2dev->serio);
+			ps2dev->flags = 0;
+			serio_continue_rx(ps2dev->serio);
 			timeout = 0;
 		}
 
@@ -233,9 +235,9 @@ static int ps2_adjust_timeout(struct ps2dev *ps2dev,
 		 * won't be 2nd byte of ID response.
 		 */
 		if (!ps2_is_keyboard_id(ps2dev->cmdbuf[1])) {
-			scoped_guard(serio_pause_rx, ps2dev->serio)
-				ps2dev->flags = ps2dev->cmdcnt = 0;
-
+			serio_pause_rx(ps2dev->serio);
+			ps2dev->flags = ps2dev->cmdcnt = 0;
+			serio_continue_rx(ps2dev->serio);
 			timeout = 0;
 		}
 		break;
@@ -281,10 +283,6 @@ int __ps2_command(struct ps2dev *ps2dev, u8 *param, unsigned int command)
 
 	memcpy(send_param, param, send);
 
-	/*
-	 * Not using guard notation because we need to break critical
-	 * section below while waiting for the response.
-	 */
 	serio_pause_rx(ps2dev->serio);
 
 	ps2dev->cmdcnt = receive;

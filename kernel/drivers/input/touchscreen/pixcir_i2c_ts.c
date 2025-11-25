@@ -44,7 +44,7 @@ enum pixcir_power_mode {
 
 /*
  * Interrupt modes:
- * periodical: interrupt is asserted periodically
+ * periodical: interrupt is asserted periodicaly
  * diff coordinates: interrupt is asserted when coordinates change
  * level on touch: interrupt level asserted during touch
  * pulse on touch: interrupt pulse asserted during touch

@@ -1499,11 +1499,18 @@ static int sdhci_esdhc_probe(struct platform_device *pdev)
 	/* call to generic mmc_of_parse to support additional capabilities */
 	ret = mmc_of_parse(host->mmc);
 	if (ret)
-		return ret;
+		goto err;
 
 	mmc_of_parse_voltage(host->mmc, &host->ocr_mask);
 
-	return sdhci_add_host(host);
+	ret = sdhci_add_host(host);
+	if (ret)
+		goto err;
+
+	return 0;
+ err:
+	sdhci_pltfm_free(pdev);
+	return ret;
 }
 
 static struct platform_driver sdhci_esdhc_driver = {
@@ -1514,7 +1521,7 @@ static struct platform_driver sdhci_esdhc_driver = {
 		.pm = &esdhc_of_dev_pm_ops,
 	},
 	.probe = sdhci_esdhc_probe,
-	.remove = sdhci_pltfm_remove,
+	.remove_new = sdhci_pltfm_remove,
 };
 
 module_platform_driver(sdhci_esdhc_driver);

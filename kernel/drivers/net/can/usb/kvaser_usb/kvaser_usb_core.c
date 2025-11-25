@@ -364,13 +364,10 @@ resubmit_urb:
 	err = usb_submit_urb(urb, GFP_ATOMIC);
 	if (err == -ENODEV) {
 		for (i = 0; i < dev->nchannels; i++) {
-			struct kvaser_usb_net_priv *priv;
-
-			priv = dev->nets[i];
-			if (!priv)
+			if (!dev->nets[i])
 				continue;
 
-			netif_device_detach(priv->netdev);
+			netif_device_detach(dev->nets[i]->netdev);
 		}
 	} else if (err) {
 		dev_err(&dev->intf->dev,
@@ -595,7 +592,7 @@ static int kvaser_usb_set_data_bittiming(struct net_device *netdev)
 	struct kvaser_usb_net_priv *priv = netdev_priv(netdev);
 	struct kvaser_usb *dev = priv->dev;
 	const struct kvaser_usb_dev_ops *ops = dev->driver_info->ops;
-	struct can_bittiming *dbt = &priv->can.fd.data_bittiming;
+	struct can_bittiming *dbt = &priv->can.data_bittiming;
 	struct kvaser_usb_busparams busparams;
 	int tseg1 = dbt->prop_seg + dbt->phase_seg1;
 	int tseg2 = dbt->phase_seg2;
@@ -756,31 +753,6 @@ freeurb:
 	return ret;
 }
 
-static int kvaser_usb_set_phys_id(struct net_device *netdev,
-				  enum ethtool_phys_id_state state)
-{
-	struct kvaser_usb_net_priv *priv = netdev_priv(netdev);
-	const struct kvaser_usb_dev_ops *ops = priv->dev->driver_info->ops;
-
-	switch (state) {
-	case ETHTOOL_ID_ACTIVE:
-		return 3; /* 3 On/Off cycles per second */
-
-	case ETHTOOL_ID_ON:
-		return ops->dev_set_led(priv, KVASER_USB_LED_ON, 1000);
-
-	case ETHTOOL_ID_OFF:
-		return ops->dev_set_led(priv, KVASER_USB_LED_OFF, 1000);
-
-	case ETHTOOL_ID_INACTIVE:
-		/* Turn LED off and restore standard function after 1ms */
-		return ops->dev_set_led(priv, KVASER_USB_LED_OFF, 1);
-
-	default:
-		return -EINVAL;
-	}
-}
-
 static const struct net_device_ops kvaser_usb_netdev_ops = {
 	.ndo_open = kvaser_usb_open,
 	.ndo_stop = kvaser_usb_close,
@@ -791,35 +763,30 @@ static const struct net_device_ops kvaser_usb_netdev_ops = {
 
 static const struct ethtool_ops kvaser_usb_ethtool_ops = {
 	.get_ts_info = can_ethtool_op_get_ts_info_hwts,
-	.set_phys_id = kvaser_usb_set_phys_id,
 };
 
 static void kvaser_usb_remove_interfaces(struct kvaser_usb *dev)
 {
 	const struct kvaser_usb_dev_ops *ops = dev->driver_info->ops;
 	int i;
-	struct kvaser_usb_net_priv *priv;
 
 	for (i = 0; i < dev->nchannels; i++) {
-		priv = dev->nets[i];
-		if (!priv)
+		if (!dev->nets[i])
 			continue;
 
-		unregister_candev(priv->netdev);
+		unregister_candev(dev->nets[i]->netdev);
 	}
 
 	kvaser_usb_unlink_all_urbs(dev);
 
 	for (i = 0; i < dev->nchannels; i++) {
-		priv = dev->nets[i];
-		if (!priv)
+		if (!dev->nets[i])
 			continue;
 
 		if (ops->dev_remove_channel)
-			ops->dev_remove_channel(priv);
+			ops->dev_remove_channel(dev->nets[i]);
 
-		kvaser_usb_devlink_port_unregister(priv);
-		free_candev(priv->netdev);
+		free_candev(dev->nets[i]->netdev);
 	}
 }
 
@@ -851,8 +818,7 @@ static int kvaser_usb_init_one(struct kvaser_usb *dev, int channel)
 	init_completion(&priv->stop_comp);
 	init_completion(&priv->flush_comp);
 	init_completion(&priv->get_busparams_comp);
-	priv->can.ctrlmode_supported = CAN_CTRLMODE_CC_LEN8_DLC |
-				       CAN_CTRLMODE_BERR_REPORTING;
+	priv->can.ctrlmode_supported = CAN_CTRLMODE_CC_LEN8_DLC;
 
 	priv->dev = dev;
 	priv->netdev = netdev;
@@ -875,8 +841,8 @@ static int kvaser_usb_init_one(struct kvaser_usb *dev, int channel)
 	priv->can.ctrlmode_supported |= dev->card_data.ctrlmode_supported;
 
 	if (priv->can.ctrlmode_supported & CAN_CTRLMODE_FD) {
-		priv->can.fd.data_bittiming_const = dev->cfg->data_bittiming_const;
-		priv->can.fd.do_set_data_bittiming = kvaser_usb_set_data_bittiming;
+		priv->can.data_bittiming_const = dev->cfg->data_bittiming_const;
+		priv->can.do_set_data_bittiming = kvaser_usb_set_data_bittiming;
 	}
 
 	netdev->flags |= IFF_ECHO;
@@ -892,28 +858,20 @@ static int kvaser_usb_init_one(struct kvaser_usb *dev, int channel)
 	if (ops->dev_init_channel) {
 		err = ops->dev_init_channel(priv);
 		if (err)
-			goto candev_free;
-	}
-
-	err = kvaser_usb_devlink_port_register(priv);
-	if (err) {
-		dev_err(&dev->intf->dev, "Failed to register devlink port\n");
-		goto candev_free;
+			goto err;
 	}
 
 	err = register_candev(netdev);
 	if (err) {
 		dev_err(&dev->intf->dev, "Failed to register CAN device\n");
-		goto unregister_devlink_port;
+		goto err;
 	}
 
 	netdev_dbg(netdev, "device registered\n");
 
 	return 0;
 
-unregister_devlink_port:
-	kvaser_usb_devlink_port_unregister(priv);
-candev_free:
+err:
 	free_candev(netdev);
 	dev->nets[channel] = NULL;
 	return err;
@@ -923,7 +881,6 @@ static int kvaser_usb_probe(struct usb_interface *intf,
 			    const struct usb_device_id *id)
 {
 	struct kvaser_usb *dev;
-	struct devlink *devlink;
 	int err;
 	int i;
 	const struct kvaser_usb_driver_info *driver_info;
@@ -933,20 +890,17 @@ static int kvaser_usb_probe(struct usb_interface *intf,
 	if (!driver_info)
 		return -ENODEV;
 
-	devlink = devlink_alloc(&kvaser_usb_devlink_ops, sizeof(*dev), &intf->dev);
-	if (!devlink)
+	dev = devm_kzalloc(&intf->dev, sizeof(*dev), GFP_KERNEL);
+	if (!dev)
 		return -ENOMEM;
 
-	dev = devlink_priv(devlink);
 	dev->intf = intf;
 	dev->driver_info = driver_info;
 	ops = driver_info->ops;
 
 	err = ops->dev_setup_endpoints(dev);
-	if (err) {
-		dev_err_probe(&intf->dev, err, "Cannot get usb endpoint(s)");
-		goto free_devlink;
-	}
+	if (err)
+		return dev_err_probe(&intf->dev, err, "Cannot get usb endpoint(s)");
 
 	dev->udev = interface_to_usbdev(intf);
 
@@ -957,66 +911,55 @@ static int kvaser_usb_probe(struct usb_interface *intf,
 	dev->card_data.ctrlmode_supported = 0;
 	dev->card_data.capabilities = 0;
 	err = ops->dev_init_card(dev);
-	if (err) {
-		dev_err_probe(&intf->dev, err,
-			      "Failed to initialize card\n");
-		goto free_devlink;
-	}
+	if (err)
+		return dev_err_probe(&intf->dev, err,
+				     "Failed to initialize card\n");
 
 	err = ops->dev_get_software_info(dev);
-	if (err) {
-		dev_err_probe(&intf->dev, err,
-			      "Cannot get software info\n");
-		goto free_devlink;
-	}
+	if (err)
+		return dev_err_probe(&intf->dev, err,
+				     "Cannot get software info\n");
 
 	if (ops->dev_get_software_details) {
 		err = ops->dev_get_software_details(dev);
-		if (err) {
-			dev_err_probe(&intf->dev, err,
-				      "Cannot get software details\n");
-			goto free_devlink;
-		}
+		if (err)
+			return dev_err_probe(&intf->dev, err,
+					     "Cannot get software details\n");
 	}
 
-	if (WARN_ON(!dev->cfg)) {
-		err = -ENODEV;
-		goto free_devlink;
-	}
+	if (WARN_ON(!dev->cfg))
+		return -ENODEV;
+
+	dev_dbg(&intf->dev, "Firmware version: %d.%d.%d\n",
+		((dev->fw_version >> 24) & 0xff),
+		((dev->fw_version >> 16) & 0xff),
+		(dev->fw_version & 0xffff));
 
 	dev_dbg(&intf->dev, "Max outstanding tx = %d URBs\n", dev->max_tx_urbs);
 
 	err = ops->dev_get_card_info(dev);
-	if (err) {
-		dev_err_probe(&intf->dev, err,
-			      "Cannot get card info\n");
-		goto free_devlink;
-	}
+	if (err)
+		return dev_err_probe(&intf->dev, err,
+				     "Cannot get card info\n");
 
 	if (ops->dev_get_capabilities) {
 		err = ops->dev_get_capabilities(dev);
 		if (err) {
-			dev_err_probe(&intf->dev, err,
-				      "Cannot get capabilities\n");
-			goto remove_interfaces;
+			kvaser_usb_remove_interfaces(dev);
+			return dev_err_probe(&intf->dev, err,
+					     "Cannot get capabilities\n");
 		}
 	}
 
 	for (i = 0; i < dev->nchannels; i++) {
 		err = kvaser_usb_init_one(dev, i);
-		if (err)
-			goto remove_interfaces;
+		if (err) {
+			kvaser_usb_remove_interfaces(dev);
+			return err;
+		}
 	}
-	devlink_register(devlink);
 
 	return 0;
-
-remove_interfaces:
-	kvaser_usb_remove_interfaces(dev);
-free_devlink:
-	devlink_free(devlink);
-
-	return err;
 }
 
 static void kvaser_usb_disconnect(struct usb_interface *intf)
@@ -1029,8 +972,6 @@ static void kvaser_usb_disconnect(struct usb_interface *intf)
 		return;
 
 	kvaser_usb_remove_interfaces(dev);
-	devlink_unregister(priv_to_devlink(dev));
-	devlink_free(priv_to_devlink(dev));
 }
 
 static struct usb_driver kvaser_usb_driver = {

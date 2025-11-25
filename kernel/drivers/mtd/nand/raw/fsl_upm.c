@@ -259,7 +259,7 @@ static struct platform_driver of_fun_driver = {
 		.of_match_table = of_fun_match,
 	},
 	.probe		= fun_probe,
-	.remove		= fun_remove,
+	.remove_new	= fun_remove,
 };
 
 module_platform_driver(of_fun_driver);

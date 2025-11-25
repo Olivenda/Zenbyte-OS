@@ -512,17 +512,19 @@ static int iic_xfer_bytes(struct ibm_iic_private* dev, struct i2c_msg* pm,
 static inline void iic_address(struct ibm_iic_private* dev, struct i2c_msg* msg)
 {
 	volatile struct iic_regs __iomem *iic = dev->vaddr;
+	u16 addr = msg->addr;
 
 	DBG2("%d: iic_address, 0x%03x (%d-bit)\n", dev->idx,
-		msg->addr, msg->flags & I2C_M_TEN ? 10 : 7);
+		addr, msg->flags & I2C_M_TEN ? 10 : 7);
 
-	if (msg->flags & I2C_M_TEN) {
+	if (msg->flags & I2C_M_TEN){
 	    out_8(&iic->cntl, CNTL_AMD);
-	    out_8(&iic->lmadr, i2c_10bit_addr_lo_from_msg(msg));
-	    out_8(&iic->hmadr, i2c_10bit_addr_hi_from_msg(msg) & ~I2C_M_RD);
-	} else {
+	    out_8(&iic->lmadr, addr);
+	    out_8(&iic->hmadr, 0xf0 | ((addr >> 7) & 0x06));
+	}
+	else {
 	    out_8(&iic->cntl, 0);
-	    out_8(&iic->lmadr, i2c_8bit_addr_from_msg(msg) & ~I2C_M_RD);
+	    out_8(&iic->lmadr, addr << 1);
 	}
 }
 
@@ -788,7 +790,7 @@ static struct platform_driver ibm_iic_driver = {
 		.of_match_table = ibm_iic_match,
 	},
 	.probe	= iic_probe,
-	.remove = iic_remove,
+	.remove_new = iic_remove,
 };
 
 module_platform_driver(ibm_iic_driver);

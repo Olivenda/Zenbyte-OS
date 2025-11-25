@@ -115,7 +115,7 @@ allOf:
         honeywell,pmin-pascal: false
         honeywell,pmax-pascal: false
 
-unevaluatedProperties: false
+additionalProperties: false
 
 examples:
   - |

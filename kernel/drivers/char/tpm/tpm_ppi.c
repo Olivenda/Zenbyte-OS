@@ -52,7 +52,7 @@ static ssize_t tpm_show_ppi_version(struct device *dev,
 {
 	struct tpm_chip *chip = to_tpm_chip(dev);
 
-	return sysfs_emit(buf, "%s\n", chip->ppi_version);
+	return scnprintf(buf, PAGE_SIZE, "%s\n", chip->ppi_version);
 }
 
 static ssize_t tpm_show_ppi_request(struct device *dev,
@@ -87,10 +87,12 @@ static ssize_t tpm_show_ppi_request(struct device *dev,
 		else {
 			req = obj->package.elements[1].integer.value;
 			if (tpm_ppi_req_has_parameter(req))
-				size = sysfs_emit(buf, "%llu %llu\n", req,
-						  obj->package.elements[2].integer.value);
+				size = scnprintf(buf, PAGE_SIZE,
+				    "%llu %llu\n", req,
+				    obj->package.elements[2].integer.value);
 			else
-				size = sysfs_emit(buf, "%llu\n", req);
+				size = scnprintf(buf, PAGE_SIZE,
+						"%llu\n", req);
 		}
 	} else if (obj->package.count == 2 &&
 	    obj->package.elements[0].type == ACPI_TYPE_INTEGER &&
@@ -98,8 +100,8 @@ static ssize_t tpm_show_ppi_request(struct device *dev,
 		if (obj->package.elements[0].integer.value)
 			size = -EFAULT;
 		else
-			size = sysfs_emit(buf, "%llu\n",
-					  obj->package.elements[1].integer.value);
+			size = scnprintf(buf, PAGE_SIZE, "%llu\n",
+				 obj->package.elements[1].integer.value);
 	}
 
 	ACPI_FREE(obj);
@@ -209,10 +211,10 @@ static ssize_t tpm_show_ppi_transition_action(struct device *dev,
 	}
 
 	if (ret < ARRAY_SIZE(info) - 1)
-		status = sysfs_emit(buf, "%d: %s\n", ret, info[ret]);
+		status = scnprintf(buf, PAGE_SIZE, "%d: %s\n", ret, info[ret]);
 	else
-		status = sysfs_emit(buf, "%d: %s\n", ret,
-				    info[ARRAY_SIZE(info) - 1]);
+		status = scnprintf(buf, PAGE_SIZE, "%d: %s\n", ret,
+				   info[ARRAY_SIZE(info)-1]);
 	return status;
 }
 
@@ -253,23 +255,23 @@ static ssize_t tpm_show_ppi_response(struct device *dev,
 	res = ret_obj[2].integer.value;
 	if (req) {
 		if (res == 0)
-			status = sysfs_emit(buf, "%llu %s\n", req,
-					    "0: Success");
+			status = scnprintf(buf, PAGE_SIZE, "%llu %s\n", req,
+					   "0: Success");
 		else if (res == 0xFFFFFFF0)
-			status = sysfs_emit(buf, "%llu %s\n", req,
-					    "0xFFFFFFF0: User Abort");
+			status = scnprintf(buf, PAGE_SIZE, "%llu %s\n", req,
+					   "0xFFFFFFF0: User Abort");
 		else if (res == 0xFFFFFFF1)
-			status = sysfs_emit(buf, "%llu %s\n", req,
-					    "0xFFFFFFF1: BIOS Failure");
+			status = scnprintf(buf, PAGE_SIZE, "%llu %s\n", req,
+					   "0xFFFFFFF1: BIOS Failure");
 		else if (res >= 1 && res <= 0x00000FFF)
-			status = sysfs_emit(buf, "%llu %llu: %s\n",
-					    req, res, "Corresponding TPM error");
+			status = scnprintf(buf, PAGE_SIZE, "%llu %llu: %s\n",
+					   req, res, "Corresponding TPM error");
 		else
-			status = sysfs_emit(buf, "%llu %llu: %s\n",
-					    req, res, "Error");
+			status = scnprintf(buf, PAGE_SIZE, "%llu %llu: %s\n",
+					   req, res, "Error");
 	} else {
-		status = sysfs_emit(buf, "%llu: %s\n",
-				    req, "No Recent Request");
+		status = scnprintf(buf, PAGE_SIZE, "%llu: %s\n",
+				   req, "No Recent Request");
 	}
 
 cleanup:
@@ -282,7 +284,7 @@ static ssize_t show_ppi_operations(acpi_handle dev_handle, char *buf, u32 start,
 {
 	int i;
 	u32 ret;
-	int len = 0;
+	char *str = buf;
 	union acpi_object *obj, tmp;
 	union acpi_object argv = ACPI_INIT_DSM_ARGV4(1, &tmp);
 
@@ -312,11 +314,11 @@ static ssize_t show_ppi_operations(acpi_handle dev_handle, char *buf, u32 start,
 		}
 
 		if (ret > 0 && ret < ARRAY_SIZE(info))
-			len += sysfs_emit_at(buf, len, "%d %d: %s\n",
-					     i, ret, info[ret]);
+			str += scnprintf(str, PAGE_SIZE, "%d %d: %s\n",
+					 i, ret, info[ret]);
 	}
 
-	return len;
+	return str - buf;
 }
 
 static ssize_t tpm_show_ppi_tcg_operations(struct device *dev,

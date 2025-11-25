@@ -2991,8 +2991,7 @@ static int ov8865_probe(struct i2c_client *client)
 
 	handle = fwnode_graph_get_next_endpoint(dev_fwnode(dev), NULL);
 	if (!handle)
-		return dev_err_probe(dev, -EPROBE_DEFER,
-				     "waiting for fwnode graph endpoint\n");
+		return -EPROBE_DEFER;
 
 	sensor->endpoint.bus_type = V4L2_MBUS_CSI2_DPHY;
 

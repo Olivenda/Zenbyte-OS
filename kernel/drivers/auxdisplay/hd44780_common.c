@@ -351,28 +351,20 @@ int hd44780_common_redefine_char(struct charlcd *lcd, char *esc)
 }
 EXPORT_SYMBOL_GPL(hd44780_common_redefine_char);
 
-struct charlcd *hd44780_common_alloc(void)
+struct hd44780_common *hd44780_common_alloc(void)
 {
-	struct hd44780_common *hdc;
-	struct charlcd *lcd;
+	struct hd44780_common *hd;
 
-	lcd = charlcd_alloc(sizeof(*hdc));
-	if (!lcd)
+	hd = kzalloc(sizeof(*hd), GFP_KERNEL);
+	if (!hd)
 		return NULL;
 
-	hdc = lcd->drvdata;
-	hdc->ifwidth = 8;
-	hdc->bwidth = DEFAULT_LCD_BWIDTH;
-	hdc->hwidth = DEFAULT_LCD_HWIDTH;
-	return lcd;
+	hd->ifwidth = 8;
+	hd->bwidth = DEFAULT_LCD_BWIDTH;
+	hd->hwidth = DEFAULT_LCD_HWIDTH;
+	return hd;
 }
 EXPORT_SYMBOL_GPL(hd44780_common_alloc);
-
-void hd44780_common_free(struct charlcd *lcd)
-{
-	charlcd_free(lcd);
-}
-EXPORT_SYMBOL_GPL(hd44780_common_free);
 
 MODULE_DESCRIPTION("Common functions for HD44780 (and compatibles) LCD displays");
 MODULE_LICENSE("GPL");

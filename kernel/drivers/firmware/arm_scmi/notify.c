@@ -318,9 +318,6 @@ struct scmi_registered_events_desc {
  *	    customized event report
  * @num_sources: The number of possible sources for this event as stated at
  *		 events' registration time
- * @not_supported_by_platform: A flag to indicate that not even one source was
- *			       found to be supported by the platform for this
- *			       event
  * @sources: A reference to a dynamically allocated array used to refcount the
  *	     events' enable requests for all the existing sources
  * @sources_mtx: A mutex to serialize the access to @sources
@@ -337,7 +334,6 @@ struct scmi_registered_event {
 	const struct scmi_event	*evt;
 	void		*report;
 	u32		num_sources;
-	bool		not_supported_by_platform;
 	refcount_t	*sources;
 	/* locking to serialize the access to sources */
 	struct mutex	sources_mtx;
@@ -815,19 +811,10 @@ int scmi_register_protocol_events(const struct scmi_handle *handle, u8 proto_id,
 		if (!r_evt->report)
 			return -ENOMEM;
 
-		if (ee->ops->is_notify_supported) {
-			int supported = 0;
-
-			for (id = 0; id < r_evt->num_sources; id++) {
-				if (!ee->ops->is_notify_supported(ph, r_evt->evt->id, id))
-					refcount_set(&r_evt->sources[id], NOTIF_UNSUPP);
-				else
-					supported++;
-			}
-
-			/* Not even one source has been found to be supported */
-			r_evt->not_supported_by_platform = !supported;
-		}
+		for (id = 0; id < r_evt->num_sources; id++)
+			if (ee->ops->is_notify_supported &&
+			    !ee->ops->is_notify_supported(ph, r_evt->evt->id, id))
+				refcount_set(&r_evt->sources[id], NOTIF_UNSUPP);
 
 		pd->registered_events[i] = r_evt;
 		/* Ensure events are updated */
@@ -949,11 +936,6 @@ static inline int scmi_bind_event_handler(struct scmi_notify_instance *ni,
 	 * of protocol instance.
 	 */
 	hash_del(&hndl->hash);
-
-	/* Bailout if event is not supported at all */
-	if (r_evt->not_supported_by_platform)
-		return -EOPNOTSUPP;
-
 	/*
 	 * Acquire protocols only for NON pending handlers, so as NOT to trigger
 	 * protocol initialization when a notifier is registered against a still
@@ -1078,9 +1060,6 @@ __scmi_event_handler_get_ops(struct scmi_notify_instance *ni,
 	r_evt = SCMI_GET_REVT(ni, KEY_XTRACT_PROTO_ID(evt_key),
 			      KEY_XTRACT_EVT_ID(evt_key));
 
-	if (r_evt && r_evt->not_supported_by_platform)
-		return ERR_PTR(-EOPNOTSUPP);
-
 	mutex_lock(&ni->pending_mtx);
 	/* Search registered events at first ... if possible at all */
 	if (r_evt) {
@@ -1108,7 +1087,7 @@ __scmi_event_handler_get_ops(struct scmi_notify_instance *ni,
 				hndl->key);
 			/* this hndl can be only a pending one */
 			scmi_put_handler_unlocked(ni, hndl);
-			hndl = ERR_PTR(-EINVAL);
+			hndl = NULL;
 		}
 	}
 	mutex_unlock(&ni->pending_mtx);
@@ -1391,8 +1370,8 @@ static int scmi_notifier_register(const struct scmi_handle *handle,
 	evt_key = MAKE_HASH_KEY(proto_id, evt_id,
 				src_id ? *src_id : SRC_ID_MASK);
 	hndl = scmi_get_or_create_handler(ni, evt_key);
-	if (IS_ERR(hndl))
-		return PTR_ERR(hndl);
+	if (!hndl)
+		return -EINVAL;
 
 	blocking_notifier_chain_register(&hndl->chain, nb);
 
@@ -1437,8 +1416,8 @@ static int scmi_notifier_unregister(const struct scmi_handle *handle,
 	evt_key = MAKE_HASH_KEY(proto_id, evt_id,
 				src_id ? *src_id : SRC_ID_MASK);
 	hndl = scmi_get_handler(ni, evt_key);
-	if (IS_ERR(hndl))
-		return PTR_ERR(hndl);
+	if (!hndl)
+		return -EINVAL;
 
 	/*
 	 * Note that this chain unregistration call is safe on its own

@@ -9,6 +9,24 @@
 #include <linux/uio.h>
 #include "internal.h"
 
+static void netfs_cleanup_dio_write(struct netfs_io_request *wreq)
+{
+	struct inode *inode = wreq->inode;
+	unsigned long long end = wreq->start + wreq->transferred;
+
+	if (wreq->error || end <= i_size_read(inode))
+		return;
+
+	spin_lock(&inode->i_lock);
+	if (end > i_size_read(inode)) {
+		if (wreq->netfs_ops->update_i_size)
+			wreq->netfs_ops->update_i_size(inode, end);
+		else
+			i_size_write(inode, end);
+	}
+	spin_unlock(&inode->i_lock);
+}
+
 /*
  * Perform an unbuffered write where we may have to do an RMW operation on an
  * encrypted file.  This can also be used for direct I/O writes.
@@ -54,12 +72,12 @@ ssize_t netfs_unbuffered_write_iter_locked(struct kiocb *iocb, struct iov_iter *
 		 * request.
 		 */
 		if (user_backed_iter(iter)) {
-			n = netfs_extract_user_iter(iter, len, &wreq->buffer.iter, 0);
+			n = netfs_extract_user_iter(iter, len, &wreq->iter, 0);
 			if (n < 0) {
 				ret = n;
-				goto error_put;
+				goto out;
 			}
-			wreq->direct_bv = (struct bio_vec *)wreq->buffer.iter.bvec;
+			wreq->direct_bv = (struct bio_vec *)wreq->iter.bvec;
 			wreq->direct_bv_count = n;
 			wreq->direct_bv_unpin = iov_iter_extract_will_pin(iter);
 		} else {
@@ -68,13 +86,13 @@ ssize_t netfs_unbuffered_write_iter_locked(struct kiocb *iocb, struct iov_iter *
 			 * (eg. a bio_vec array) will persist till the end of
 			 * the op.
 			 */
-			wreq->buffer.iter = *iter;
+			wreq->iter = *iter;
 		}
+
+		wreq->io_iter = wreq->iter;
 	}
 
 	__set_bit(NETFS_RREQ_USE_IO_ITER, &wreq->flags);
-	if (async)
-		__set_bit(NETFS_RREQ_OFFLOAD_COLLECTION, &wreq->flags);
 
 	/* Copy the data into the bounce buffer and encrypt it. */
 	// TODO
@@ -83,7 +101,8 @@ ssize_t netfs_unbuffered_write_iter_locked(struct kiocb *iocb, struct iov_iter *
 	__set_bit(NETFS_RREQ_UPLOAD_TO_SERVER, &wreq->flags);
 	if (async)
 		wreq->iocb = iocb;
-	wreq->len = iov_iter_count(&wreq->buffer.iter);
+	wreq->len = iov_iter_count(&wreq->io_iter);
+	wreq->cleanup = netfs_cleanup_dio_write;
 	ret = netfs_unbuffered_write(wreq, is_sync_kiocb(iocb), wreq->len);
 	if (ret < 0) {
 		_debug("begin = %zd", ret);
@@ -91,19 +110,21 @@ ssize_t netfs_unbuffered_write_iter_locked(struct kiocb *iocb, struct iov_iter *
 	}
 
 	if (!async) {
-		ret = netfs_wait_for_write(wreq);
-		if (ret > 0)
+		trace_netfs_rreq(wreq, netfs_rreq_trace_wait_ip);
+		wait_on_bit(&wreq->flags, NETFS_RREQ_IN_PROGRESS,
+			    TASK_UNINTERRUPTIBLE);
+		smp_rmb(); /* Read error/transferred after RIP flag */
+		ret = wreq->error;
+		if (ret == 0) {
+			ret = wreq->transferred;
 			iocb->ki_pos += ret;
+		}
 	} else {
 		ret = -EIOCBQUEUED;
 	}
 
 out:
-	netfs_put_request(wreq, netfs_rreq_trace_put_return);
-	return ret;
-
-error_put:
-	netfs_put_failed_request(wreq);
+	netfs_put_request(wreq, false, netfs_rreq_trace_put_return);
 	return ret;
 }
 EXPORT_SYMBOL(netfs_unbuffered_write_iter_locked);

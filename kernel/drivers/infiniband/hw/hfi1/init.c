@@ -635,11 +635,12 @@ void hfi1_init_pportdata(struct pci_dev *pdev, struct hfi1_pportdata *ppd,
 	spin_lock_init(&ppd->cca_timer_lock);
 
 	for (i = 0; i < OPA_MAX_SLS; i++) {
+		hrtimer_init(&ppd->cca_timer[i].hrtimer, CLOCK_MONOTONIC,
+			     HRTIMER_MODE_REL);
 		ppd->cca_timer[i].ppd = ppd;
 		ppd->cca_timer[i].sl = i;
 		ppd->cca_timer[i].ccti = 0;
-		hrtimer_setup(&ppd->cca_timer[i].hrtimer, cca_timer_fn, CLOCK_MONOTONIC,
-			      HRTIMER_MODE_REL);
+		ppd->cca_timer[i].hrtimer.function = cca_timer_fn;
 	}
 
 	ppd->cc_max_table_entries = IB_CC_TABLE_CAP_DEFAULT;
@@ -985,7 +986,7 @@ static void stop_timers(struct hfi1_devdata *dd)
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
 		if (ppd->led_override_timer.function) {
-			timer_delete_sync(&ppd->led_override_timer);
+			del_timer_sync(&ppd->led_override_timer);
 			atomic_set(&ppd->led_override_timer_active, 0);
 		}
 	}

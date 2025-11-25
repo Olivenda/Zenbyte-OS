@@ -564,7 +564,7 @@ struct platform_driver tegra_nvdec_driver = {
 		.pm = &nvdec_pm_ops
 	},
 	.probe = nvdec_probe,
-	.remove = nvdec_remove,
+	.remove_new = nvdec_remove,
 };
 
 #if IS_ENABLED(CONFIG_ARCH_TEGRA_210_SOC)

@@ -53,7 +53,7 @@
 #define SR_TEMP2	2
 #define SR_USER		3
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 
 #ifdef CONFIG_64BIT
 #define LDREG	ldd
@@ -582,5 +582,5 @@
 	.previous
 
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 #endif

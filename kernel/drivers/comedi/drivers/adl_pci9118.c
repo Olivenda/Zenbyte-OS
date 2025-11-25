@@ -32,7 +32,7 @@
  * ranges).
  *
  * There are some hardware limitations:
- * a) You can't use mixture of unipolar/bipolar ranges or differential/single
+ * a) You cann't use mixture of unipolar/bipoar ranges or differencial/single
  *  ended inputs.
  * b) DMA transfers must have the length aligned to two samples (32 bit),
  *  so there is some problems if cmd->chanlist_len is odd. This driver tries
@@ -227,7 +227,7 @@ struct pci9118_private {
 	struct pci9118_dmabuf dmabuf[2];
 	int softsshdelay;		/*
 					 * >0 use software S&H,
-					 * number is requested delay in ns
+					 * numer is requested delay in ns
 					 */
 	unsigned char softsshsample;	/*
 					 * polarity of S&H signal

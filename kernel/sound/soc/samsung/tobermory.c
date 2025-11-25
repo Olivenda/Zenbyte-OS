@@ -7,6 +7,7 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/jack.h>
+#include <linux/gpio.h>
 #include <linux/module.h>
 
 #include "../codecs/wm8962.h"
@@ -91,6 +92,8 @@ static int tobermory_set_bias_level_post(struct snd_soc_card *card,
 		break;
 	}
 
+	dapm->bias_level = level;
+
 	return 0;
 }
 
@@ -116,7 +119,7 @@ static struct snd_soc_dai_link tobermory_dai[] = {
 		.name = "CPU",
 		.stream_name = "CPU",
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF
-				| SND_SOC_DAIFMT_CBP_CFP,
+				| SND_SOC_DAIFMT_CBM_CFM,
 		.ops = &tobermory_ops,
 		SND_SOC_DAILINK_REG(cpu),
 	},

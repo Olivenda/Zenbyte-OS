@@ -103,9 +103,6 @@ extern struct cpupower_cpu_info cpupower_cpu_info;
 
 /* cpuid and cpuinfo helpers  **************************/
 
-int cpufreq_has_generic_boost_support(bool *active);
-int cpupower_set_turbo_boost(int turbo_boost);
-
 /* X86 ONLY ****************************************/
 #if defined(__i386__) || defined(__x86_64__)
 
@@ -121,6 +118,7 @@ extern unsigned long long msr_intel_get_turbo_ratio(unsigned int cpu);
 
 extern int cpupower_set_epp(unsigned int cpu, char *epp);
 extern int cpupower_set_amd_pstate_mode(char *mode);
+extern int cpupower_set_turbo_boost(int turbo_boost);
 
 /* Read/Write msr ****************************/
 
@@ -141,8 +139,8 @@ extern int decode_pstates(unsigned int cpu, int boost_states,
 
 /* AMD HW pstate decoding **************************/
 
-int cpufreq_has_x86_boost_support(unsigned int cpu, int *support,
-				  int *active, int *states);
+extern int cpufreq_has_boost_support(unsigned int cpu, int *support,
+				     int *active, int * states);
 
 /* AMD P-State stuff **************************/
 bool cpupower_amd_pstate_enabled(void);
@@ -183,11 +181,13 @@ static inline int cpupower_set_epp(unsigned int cpu, char *epp)
 { return -1; };
 static inline int cpupower_set_amd_pstate_mode(char *mode)
 { return -1; };
+static inline int cpupower_set_turbo_boost(int turbo_boost)
+{ return -1; };
 
 /* Read/Write msr ****************************/
 
-static inline int cpufreq_has_x86_boost_support(unsigned int cpu, int *support,
-						int *active, int *states)
+static inline int cpufreq_has_boost_support(unsigned int cpu, int *support,
+					    int *active, int * states)
 { return -1; }
 
 static inline bool cpupower_amd_pstate_enabled(void)

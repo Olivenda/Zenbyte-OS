@@ -23,21 +23,12 @@ enum elv_merge {
 struct blk_mq_alloc_data;
 struct blk_mq_hw_ctx;
 
-struct elevator_tags {
-	/* num. of hardware queues for which tags are allocated */
-	unsigned int nr_hw_queues;
-	/* depth used while allocating tags */
-	unsigned int nr_requests;
-	/* shared tag is stored at index 0 */
-	struct blk_mq_tags *tags[];
-};
-
 struct elevator_mq_ops {
-	int (*init_sched)(struct request_queue *, struct elevator_queue *);
+	int (*init_sched)(struct request_queue *, struct elevator_type *);
 	void (*exit_sched)(struct elevator_queue *);
 	int (*init_hctx)(struct blk_mq_hw_ctx *, unsigned int);
 	void (*exit_hctx)(struct blk_mq_hw_ctx *, unsigned int);
-	void (*depth_updated)(struct request_queue *);
+	void (*depth_updated)(struct blk_mq_hw_ctx *);
 
 	bool (*allow_merge)(struct request_queue *, struct request *, struct bio *);
 	bool (*bio_merge)(struct request_queue *, struct bio *, unsigned int);
@@ -80,7 +71,7 @@ struct elevator_type
 
 	size_t icq_size;	/* see iocontext.h */
 	size_t icq_align;	/* ditto */
-	const struct elv_fs_entry *elevator_attrs;
+	struct elv_fs_entry *elevator_attrs;
 	const char *elevator_name;
 	const char *elevator_alias;
 	struct module *elevator_owner;
@@ -122,7 +113,6 @@ struct request *elv_rqhash_find(struct request_queue *q, sector_t offset);
 struct elevator_queue
 {
 	struct elevator_type *type;
-	struct elevator_tags *et;
 	void *elevator_data;
 	struct kobject kobj;
 	struct mutex sysfs_lock;
@@ -131,8 +121,7 @@ struct elevator_queue
 };
 
 #define ELEVATOR_FLAG_REGISTERED	0
-#define ELEVATOR_FLAG_DYING		1
-#define ELEVATOR_FLAG_ENABLE_WBT_ON_EXIT	2
+#define ELEVATOR_FLAG_DISABLE_WBT	1
 
 /*
  * block elevator interface
@@ -159,11 +148,13 @@ extern void elv_unregister(struct elevator_type *);
  * io scheduler sysfs switching
  */
 ssize_t elv_iosched_show(struct gendisk *disk, char *page);
+int elv_iosched_load_module(struct gendisk *disk, const char *page,
+			    size_t count);
 ssize_t elv_iosched_store(struct gendisk *disk, const char *page, size_t count);
 
 extern bool elv_bio_merge_ok(struct request *, struct bio *);
-struct elevator_queue *elevator_alloc(struct request_queue *,
-		struct elevator_type *, struct elevator_tags *);
+extern struct elevator_queue *elevator_alloc(struct request_queue *,
+					struct elevator_type *);
 
 /*
  * Helper functions.
@@ -192,8 +183,5 @@ extern struct request *elv_rb_find(struct rb_root *, sector_t);
 
 #define rq_entry_fifo(ptr)	list_entry((ptr), struct request, queuelist)
 #define rq_fifo_clear(rq)	list_del_init(&(rq)->queuelist)
-
-void blk_mq_sched_reg_debugfs(struct request_queue *q);
-void blk_mq_sched_unreg_debugfs(struct request_queue *q);
 
 #endif /* _ELEVATOR_H */

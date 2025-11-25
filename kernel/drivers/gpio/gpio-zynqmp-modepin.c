@@ -57,8 +57,8 @@ static int modepin_gpio_get_value(struct gpio_chip *chip, unsigned int pin)
  *
  * Return:	None.
  */
-static int modepin_gpio_set_value(struct gpio_chip *chip, unsigned int pin,
-				  int state)
+static void modepin_gpio_set_value(struct gpio_chip *chip, unsigned int pin,
+				   int state)
 {
 	u32 bootpin_val = 0;
 	int ret;
@@ -77,8 +77,6 @@ static int modepin_gpio_set_value(struct gpio_chip *chip, unsigned int pin,
 	ret = zynqmp_pm_bootmode_write(bootpin_val);
 	if (ret)
 		pr_err("modepin: set value error %d for pin %d\n", ret, pin);
-
-	return ret;
 }
 
 /**
@@ -104,7 +102,7 @@ static int modepin_gpio_dir_in(struct gpio_chip *chip, unsigned int pin)
 static int modepin_gpio_dir_out(struct gpio_chip *chip, unsigned int pin,
 				int state)
 {
-	return modepin_gpio_set_value(chip, pin, state);
+	return 0;
 }
 
 /**

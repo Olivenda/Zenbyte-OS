@@ -121,7 +121,6 @@ bool page_counter_try_charge(struct page_counter *counter,
 {
 	struct page_counter *c;
 	bool protection = track_protection(counter);
-	bool track_failcnt = counter->track_failcnt;
 
 	for (c = counter; c; c = c->parent) {
 		long new;
@@ -147,8 +146,7 @@ bool page_counter_try_charge(struct page_counter *counter,
 			 * inaccuracy in the failcnt which is only used
 			 * to report stats.
 			 */
-			if (track_failcnt)
-				data_race(c->failcnt++);
+			data_race(c->failcnt++);
 			*fail = c;
 			goto failed;
 		}
@@ -290,7 +288,7 @@ int page_counter_memparse(const char *buf, const char *max,
 }
 
 
-#if IS_ENABLED(CONFIG_MEMCG) || IS_ENABLED(CONFIG_CGROUP_DMEM)
+#ifdef CONFIG_MEMCG
 /*
  * This function calculates an individual page counter's effective
  * protection which is derived from its own memory.min/low, its
@@ -462,4 +460,4 @@ void page_counter_calculate_protection(struct page_counter *root,
 			atomic_long_read(&parent->children_low_usage),
 			recursive_protection));
 }
-#endif /* CONFIG_MEMCG || CONFIG_CGROUP_DMEM */
+#endif /* CONFIG_MEMCG */

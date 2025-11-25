@@ -60,7 +60,7 @@ static void enc401_dp_set_odm_combine(
 }
 
 /* setup stream encoder in dvi mode */
-void enc401_stream_encoder_dvi_set_stream_attribute(
+static void enc401_stream_encoder_dvi_set_stream_attribute(
 	struct stream_encoder *enc,
 	struct dc_crtc_timing *crtc_timing,
 	bool is_dual_link)
@@ -100,7 +100,7 @@ void enc401_stream_encoder_dvi_set_stream_attribute(
 }
 
 /* setup stream encoder in hdmi mode */
-void enc401_stream_encoder_hdmi_set_stream_attribute(
+static void enc401_stream_encoder_hdmi_set_stream_attribute(
 	struct stream_encoder *enc,
 	struct dc_crtc_timing *crtc_timing,
 	int actual_pix_clk_khz,
@@ -229,7 +229,7 @@ void enc401_stream_encoder_hdmi_set_stream_attribute(
 	REG_UPDATE(HDMI_GC, HDMI_GC_AVMUTE, 0);
 }
 
-void enc401_set_dig_input_mode(struct stream_encoder *enc, unsigned int pix_per_container)
+static void enc401_set_dig_input_mode(struct stream_encoder *enc, unsigned int pix_per_container)
 {
 	struct dcn10_stream_encoder *enc1 = DCN10STRENC_FROM_STRENC(enc);
 
@@ -260,7 +260,7 @@ static bool is_two_pixels_per_containter(const struct dc_crtc_timing *timing)
 	return two_pix;
 }
 
-void enc401_stream_encoder_dp_unblank(
+static void enc401_stream_encoder_dp_unblank(
 		struct dc_link *link,
 		struct stream_encoder *enc,
 		const struct encoder_unblank_param *param)
@@ -376,7 +376,7 @@ void enc401_stream_encoder_dp_unblank(
 /* this function read dsc related register fields to be logged later in dcn10_log_hw_state
  * into a dcn_dsc_state struct.
  */
-void enc401_read_state(struct stream_encoder *enc, struct enc_state *s)
+static void enc401_read_state(struct stream_encoder *enc, struct enc_state *s)
 {
 	struct dcn10_stream_encoder *enc1 = DCN10STRENC_FROM_STRENC(enc);
 
@@ -394,7 +394,7 @@ void enc401_read_state(struct stream_encoder *enc, struct enc_state *s)
 	}
 }
 
-void enc401_stream_encoder_enable(
+static void enc401_stream_encoder_enable(
 	struct stream_encoder *enc,
 	enum signal_type signal,
 	bool enable)
@@ -447,6 +447,7 @@ void enc401_stream_encoder_dp_set_stream_attribute(
 	uint32_t misc1 = 0;
 	uint32_t h_blank;
 	uint32_t h_back_porch;
+	uint8_t synchronous_clock = 0; /* asynchronous mode */
 	uint8_t colorimetry_bpc;
 	uint8_t dp_pixel_encoding = 0;
 	uint8_t dp_component_depth = 0;
@@ -602,6 +603,7 @@ void enc401_stream_encoder_dp_set_stream_attribute(
 		break;
 	}
 
+	misc0 = misc0 | synchronous_clock;
 	misc0 = colorimetry_bpc << 5;
 
 	switch (output_color_space) {
@@ -705,7 +707,7 @@ void enc401_stream_encoder_dp_set_stream_attribute(
 		DP_SST_SDP_SPLITTING, enable_sdp_splitting);
 }
 
-void enc401_stream_encoder_map_to_link(
+static void enc401_stream_encoder_map_to_link(
 		struct stream_encoder *enc,
 		uint32_t stream_enc_inst,
 		uint32_t link_enc_inst)

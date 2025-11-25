@@ -175,16 +175,12 @@ static int ichx_gpio_direction_input(struct gpio_chip *gpio, unsigned int nr)
 static int ichx_gpio_direction_output(struct gpio_chip *gpio, unsigned int nr,
 					int val)
 {
-	int ret;
-
 	/* Disable blink hardware which is available for GPIOs from 0 to 31. */
 	if (nr < 32 && ichx_priv.desc->have_blink)
 		ichx_write_bit(GPO_BLINK, nr, 0, 0);
 
 	/* Set GPIO output value. */
-	ret = ichx_write_bit(GPIO_LVL, nr, val, 0);
-	if (ret)
-		return ret;
+	ichx_write_bit(GPIO_LVL, nr, val, 0);
 
 	/*
 	 * Try setting pin as an output and verify it worked since many pins
@@ -256,9 +252,9 @@ static int ich6_gpio_request(struct gpio_chip *chip, unsigned int nr)
 	return ichx_gpio_request(chip, nr);
 }
 
-static int ichx_gpio_set(struct gpio_chip *chip, unsigned int nr, int val)
+static void ichx_gpio_set(struct gpio_chip *chip, unsigned int nr, int val)
 {
-	return ichx_write_bit(GPIO_LVL, nr, val, 0);
+	ichx_write_bit(GPIO_LVL, nr, val, 0);
 }
 
 static void ichx_gpiolib_setup(struct gpio_chip *chip)

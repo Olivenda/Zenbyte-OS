@@ -1,25 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2022 - 2025 Intel Corporation
+ * Copyright (C) 2022 - 2024 Intel Corporation
  */
 #include "mvm.h"
 
 static void iwl_mvm_mld_set_he_support(struct iwl_mvm *mvm,
 				       struct ieee80211_vif *vif,
-				       struct iwl_mac_config_cmd *cmd,
-				       int cmd_ver)
+				       struct iwl_mac_config_cmd *cmd)
 {
-	if (vif->type == NL80211_IFTYPE_AP) {
-		if (cmd_ver == 2)
-			cmd->wifi_gen_v2.he_ap_support = cpu_to_le16(1);
-		else
-			cmd->wifi_gen.he_ap_support = 1;
-	} else {
-		if (cmd_ver == 2)
-			cmd->wifi_gen_v2.he_support = cpu_to_le16(1);
-		else
-			cmd->wifi_gen.he_support = 1;
-	}
+	if (vif->type == NL80211_IFTYPE_AP)
+		cmd->he_ap_support = cpu_to_le16(1);
+	else
+		cmd->he_support = cpu_to_le16(1);
 }
 
 static void iwl_mvm_mld_mac_ctxt_cmd_common(struct iwl_mvm *mvm,
@@ -30,12 +22,6 @@ static void iwl_mvm_mld_mac_ctxt_cmd_common(struct iwl_mvm *mvm,
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	struct ieee80211_bss_conf *link_conf;
 	unsigned int link_id;
-	int cmd_ver = iwl_fw_lookup_cmd_ver(mvm->fw,
-					    WIDE_ID(MAC_CONF_GROUP,
-						    MAC_CONFIG_CMD), 1);
-
-	if (WARN_ON(cmd_ver > 3))
-		return;
 
 	cmd->id_and_color = cpu_to_le32(mvmvif->id);
 	cmd->action = cpu_to_le32(action);
@@ -44,8 +30,8 @@ static void iwl_mvm_mld_mac_ctxt_cmd_common(struct iwl_mvm *mvm,
 
 	memcpy(cmd->local_mld_addr, vif->addr, ETH_ALEN);
 
-	cmd->wifi_gen_v2.he_support = 0;
-	cmd->wifi_gen_v2.eht_support = 0;
+	cmd->he_support = 0;
+	cmd->eht_support = 0;
 
 	/* should be set by specific context type handler */
 	cmd->filter_flags = 0;
@@ -65,11 +51,8 @@ static void iwl_mvm_mld_mac_ctxt_cmd_common(struct iwl_mvm *mvm,
 	 * and enable both when we have MLO.
 	 */
 	if (ieee80211_vif_is_mld(vif)) {
-		iwl_mvm_mld_set_he_support(mvm, vif, cmd, cmd_ver);
-		if (cmd_ver == 2)
-			cmd->wifi_gen_v2.eht_support = cpu_to_le32(1);
-		else
-			cmd->wifi_gen.eht_support = 1;
+		iwl_mvm_mld_set_he_support(mvm, vif, cmd);
+		cmd->eht_support = cpu_to_le32(1);
 		return;
 	}
 
@@ -80,19 +63,16 @@ static void iwl_mvm_mld_mac_ctxt_cmd_common(struct iwl_mvm *mvm,
 			continue;
 
 		if (link_conf->he_support)
-			iwl_mvm_mld_set_he_support(mvm, vif, cmd, cmd_ver);
+			iwl_mvm_mld_set_he_support(mvm, vif, cmd);
 
-		/* It's not reasonable to have EHT without HE and FW API doesn't
+		/* it's not reasonable to have EHT without HE and FW API doesn't
 		 * support it. Ignore EHT in this case.
 		 */
 		if (!link_conf->he_support && link_conf->eht_support)
 			continue;
 
 		if (link_conf->eht_support) {
-			if (cmd_ver == 2)
-				cmd->wifi_gen_v2.eht_support = cpu_to_le32(1);
-			else
-				cmd->wifi_gen.eht_support = 1;
+			cmd->eht_support = cpu_to_le32(1);
 			break;
 		}
 	}
@@ -282,6 +262,9 @@ int iwl_mvm_mld_mac_ctxt_add(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	int ret;
 
+	if (WARN_ON_ONCE(vif->type == NL80211_IFTYPE_NAN))
+		return -EOPNOTSUPP;
+
 	if (WARN_ONCE(mvmvif->uploaded, "Adding active MAC %pM/%d\n",
 		      vif->addr, ieee80211_vif_type_p2p(vif)))
 		return -EIO;
@@ -304,6 +287,9 @@ int iwl_mvm_mld_mac_ctxt_changed(struct iwl_mvm *mvm,
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 
+	if (WARN_ON_ONCE(vif->type == NL80211_IFTYPE_NAN))
+		return -EOPNOTSUPP;
+
 	if (WARN_ONCE(!mvmvif->uploaded, "Changing inactive MAC %pM/%d\n",
 		      vif->addr, ieee80211_vif_type_p2p(vif)))
 		return -EIO;
@@ -320,6 +306,9 @@ int iwl_mvm_mld_mac_ctxt_remove(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 		.id_and_color = cpu_to_le32(mvmvif->id),
 	};
 	int ret;
+
+	if (WARN_ON_ONCE(vif->type == NL80211_IFTYPE_NAN))
+		return -EOPNOTSUPP;
 
 	if (WARN_ONCE(!mvmvif->uploaded, "Removing inactive MAC %pM/%d\n",
 		      vif->addr, ieee80211_vif_type_p2p(vif)))

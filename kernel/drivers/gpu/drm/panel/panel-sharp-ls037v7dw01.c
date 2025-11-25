@@ -138,10 +138,9 @@ static int ls037v7dw01_probe(struct platform_device *pdev)
 {
 	struct ls037v7dw01_panel *lcd;
 
-	lcd = devm_drm_panel_alloc(&pdev->dev, struct ls037v7dw01_panel, panel,
-				   &ls037v7dw01_funcs, DRM_MODE_CONNECTOR_DPI);
-	if (IS_ERR(lcd))
-		return PTR_ERR(lcd);
+	lcd = devm_kzalloc(&pdev->dev, sizeof(*lcd), GFP_KERNEL);
+	if (!lcd)
+		return -ENOMEM;
 
 	platform_set_drvdata(pdev, lcd);
 	lcd->pdev = pdev;
@@ -182,6 +181,9 @@ static int ls037v7dw01_probe(struct platform_device *pdev)
 		return PTR_ERR(lcd->ud_gpio);
 	}
 
+	drm_panel_init(&lcd->panel, &pdev->dev, &ls037v7dw01_funcs,
+		       DRM_MODE_CONNECTOR_DPI);
+
 	drm_panel_add(&lcd->panel);
 
 	return 0;
@@ -205,7 +207,7 @@ MODULE_DEVICE_TABLE(of, ls037v7dw01_of_match);
 
 static struct platform_driver ls037v7dw01_driver = {
 	.probe		= ls037v7dw01_probe,
-	.remove		= ls037v7dw01_remove,
+	.remove_new	= ls037v7dw01_remove,
 	.driver		= {
 		.name = "panel-sharp-ls037v7dw01",
 		.of_match_table = ls037v7dw01_of_match,

@@ -21,7 +21,6 @@
 #include <linux/mutex.h>
 #include <linux/buffer_head.h>
 #include <linux/blkdev.h>
-#include <linux/fs_context.h>
 #include "hfsplus_raw.h"
 
 #define DBG_BNODE_REFS	0x00000001
@@ -473,10 +472,8 @@ extern const struct address_space_operations hfsplus_aops;
 extern const struct address_space_operations hfsplus_btree_aops;
 extern const struct dentry_operations hfsplus_dentry_operations;
 
-int hfsplus_write_begin(const struct kiocb *iocb,
-			struct address_space *mapping,
-			loff_t pos, unsigned len, struct folio **foliop,
-			void **fsdata);
+int hfsplus_write_begin(struct file *file, struct address_space *mapping,
+		loff_t pos, unsigned len, struct folio **foliop, void **fsdata);
 struct inode *hfsplus_new_inode(struct super_block *sb, struct inode *dir,
 				umode_t mode);
 void hfsplus_delete_inode(struct inode *inode);
@@ -491,16 +488,17 @@ int hfsplus_getattr(struct mnt_idmap *idmap, const struct path *path,
 		    unsigned int query_flags);
 int hfsplus_file_fsync(struct file *file, loff_t start, loff_t end,
 		       int datasync);
-int hfsplus_fileattr_get(struct dentry *dentry, struct file_kattr *fa);
+int hfsplus_fileattr_get(struct dentry *dentry, struct fileattr *fa);
 int hfsplus_fileattr_set(struct mnt_idmap *idmap,
-			 struct dentry *dentry, struct file_kattr *fa);
+			 struct dentry *dentry, struct fileattr *fa);
 
 /* ioctl.c */
 long hfsplus_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 
 /* options.c */
 void hfsplus_fill_defaults(struct hfsplus_sb_info *opts);
-int hfsplus_parse_param(struct fs_context *fc, struct fs_parameter *param);
+int hfsplus_parse_options_remount(char *input, int *force);
+int hfsplus_parse_options(char *input, struct hfsplus_sb_info *sbi);
 int hfsplus_show_options(struct seq_file *seq, struct dentry *root);
 
 /* part_tbl.c */
@@ -521,12 +519,8 @@ int hfsplus_strcasecmp(const struct hfsplus_unistr *s1,
 		       const struct hfsplus_unistr *s2);
 int hfsplus_strcmp(const struct hfsplus_unistr *s1,
 		   const struct hfsplus_unistr *s2);
-int hfsplus_uni2asc_str(struct super_block *sb,
-			const struct hfsplus_unistr *ustr, char *astr,
-			int *len_p);
-int hfsplus_uni2asc_xattr_str(struct super_block *sb,
-			      const struct hfsplus_attr_unistr *ustr,
-			      char *astr, int *len_p);
+int hfsplus_uni2asc(struct super_block *sb, const struct hfsplus_unistr *ustr,
+		    char *astr, int *len_p);
 int hfsplus_asc2uni(struct super_block *sb, struct hfsplus_unistr *ustr,
 		    int max_unistr_len, const char *astr, int len);
 int hfsplus_hash_dentry(const struct dentry *dentry, struct qstr *str);

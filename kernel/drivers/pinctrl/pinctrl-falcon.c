@@ -505,7 +505,7 @@ static struct platform_driver pinctrl_falcon_driver = {
 	},
 };
 
-static int __init pinctrl_falcon_init(void)
+int __init pinctrl_falcon_init(void)
 {
 	return platform_driver_register(&pinctrl_falcon_driver);
 }

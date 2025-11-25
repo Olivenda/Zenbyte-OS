@@ -144,7 +144,7 @@ static void rpckbd_remove(struct platform_device *dev)
 
 static struct platform_driver rpckbd_driver = {
 	.probe		= rpckbd_probe,
-	.remove		= rpckbd_remove,
+	.remove_new	= rpckbd_remove,
 	.driver		= {
 		.name	= "kart",
 	},

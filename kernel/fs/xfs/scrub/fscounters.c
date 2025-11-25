@@ -19,7 +19,6 @@
 #include "xfs_rtbitmap.h"
 #include "xfs_inode.h"
 #include "xfs_icache.h"
-#include "xfs_rtgroup.h"
 #include "scrub/scrub.h"
 #include "scrub/common.h"
 #include "scrub/trace.h"
@@ -75,9 +74,10 @@ xchk_fscount_warmup(
 	struct xfs_buf		*agi_bp = NULL;
 	struct xfs_buf		*agf_bp = NULL;
 	struct xfs_perag	*pag = NULL;
+	xfs_agnumber_t		agno;
 	int			error = 0;
 
-	while ((pag = xfs_perag_next(mp, pag))) {
+	for_each_perag(mp, agno, pag) {
 		if (xchk_should_terminate(sc, &error))
 			break;
 		if (xfs_perag_initialised_agi(pag) &&
@@ -123,7 +123,7 @@ xchk_fsfreeze(
 {
 	int			error;
 
-	error = freeze_super(sc->mp->m_super, FREEZE_HOLDER_KERNEL, NULL);
+	error = freeze_super(sc->mp->m_super, FREEZE_HOLDER_KERNEL);
 	trace_xchk_fsfreeze(sc, error);
 	return error;
 }
@@ -135,7 +135,7 @@ xchk_fsthaw(
 	int			error;
 
 	/* This should always succeed, we have a kernel freeze */
-	error = thaw_super(sc->mp->m_super, FREEZE_HOLDER_KERNEL, NULL);
+	error = thaw_super(sc->mp->m_super, FREEZE_HOLDER_KERNEL);
 	trace_xchk_fsthaw(sc, error);
 	return error;
 }
@@ -237,8 +237,7 @@ xchk_setup_fscounters(
 			return error;
 	}
 
-	xchk_trans_alloc_empty(sc);
-	return 0;
+	return xchk_trans_alloc_empty(sc);
 }
 
 /*
@@ -296,8 +295,9 @@ xchk_fscount_aggregate_agcounts(
 	struct xchk_fscounters	*fsc)
 {
 	struct xfs_mount	*mp = sc->mp;
-	struct xfs_perag	*pag = NULL;
+	struct xfs_perag	*pag;
 	uint64_t		delayed;
+	xfs_agnumber_t		agno;
 	int			tries = 8;
 	int			error = 0;
 
@@ -306,7 +306,7 @@ retry:
 	fsc->ifree = 0;
 	fsc->fdblocks = 0;
 
-	while ((pag = xfs_perag_next(mp, pag))) {
+	for_each_perag(mp, agno, pag) {
 		if (xchk_should_terminate(sc, &error))
 			break;
 
@@ -327,7 +327,7 @@ retry:
 		if (xfs_has_lazysbcount(sc->mp)) {
 			fsc->fdblocks += pag->pagf_btreeblks;
 		} else {
-			error = xchk_fscount_btreeblks(sc, fsc, pag_agno(pag));
+			error = xchk_fscount_btreeblks(sc, fsc, agno);
 			if (error)
 				break;
 		}
@@ -351,7 +351,7 @@ retry:
 	 * The global incore space reservation is taken from the incore
 	 * counters, so leave that out of the computation.
 	 */
-	fsc->fdblocks -= mp->m_free[XC_FREE_BLOCKS].res_avail;
+	fsc->fdblocks -= mp->m_resblks_avail;
 
 	/*
 	 * Delayed allocation reservations are taken out of the incore counters
@@ -388,7 +388,7 @@ retry:
 #ifdef CONFIG_XFS_RT
 STATIC int
 xchk_fscount_add_frextent(
-	struct xfs_rtgroup		*rtg,
+	struct xfs_mount		*mp,
 	struct xfs_trans		*tp,
 	const struct xfs_rtalloc_rec	*rec,
 	void				*priv)
@@ -409,34 +409,26 @@ xchk_fscount_count_frextents(
 	struct xchk_fscounters	*fsc)
 {
 	struct xfs_mount	*mp = sc->mp;
-	struct xfs_rtgroup	*rtg = NULL;
 	int			error;
 
 	fsc->frextents = 0;
 	fsc->frextents_delayed = 0;
-
-	/*
-	 * Don't bother verifying and repairing the fs counters for zoned file
-	 * systems as they don't track an on-disk frextents count, and the
-	 * in-memory percpu counter also includes reservations.
-	 */
-	if (!xfs_has_realtime(mp) || xfs_has_zoned(mp))
+	if (!xfs_has_realtime(mp))
 		return 0;
 
-	while ((rtg = xfs_rtgroup_next(mp, rtg))) {
-		xfs_rtgroup_lock(rtg, XFS_RTGLOCK_BITMAP_SHARED);
-		error = xfs_rtalloc_query_all(rtg, sc->tp,
-				xchk_fscount_add_frextent, fsc);
-		xfs_rtgroup_unlock(rtg, XFS_RTGLOCK_BITMAP_SHARED);
-		if (error) {
-			xchk_set_incomplete(sc);
-			xfs_rtgroup_rele(rtg);
-			return error;
-		}
+	xfs_rtbitmap_lock_shared(sc->mp, XFS_RBMLOCK_BITMAP);
+	error = xfs_rtalloc_query_all(sc->mp, sc->tp,
+			xchk_fscount_add_frextent, fsc);
+	if (error) {
+		xchk_set_incomplete(sc);
+		goto out_unlock;
 	}
 
 	fsc->frextents_delayed = percpu_counter_sum(&mp->m_delalloc_rtextents);
-	return 0;
+
+out_unlock:
+	xfs_rtbitmap_unlock_shared(sc->mp, XFS_RBMLOCK_BITMAP);
+	return error;
 }
 #else
 STATIC int
@@ -520,8 +512,8 @@ xchk_fscounters(
 	/* Snapshot the percpu counters. */
 	icount = percpu_counter_sum(&mp->m_icount);
 	ifree = percpu_counter_sum(&mp->m_ifree);
-	fdblocks = xfs_sum_freecounter_raw(mp, XC_FREE_BLOCKS);
-	frextents = xfs_sum_freecounter_raw(mp, XC_FREE_RTEXTENTS);
+	fdblocks = percpu_counter_sum(&mp->m_fdblocks);
+	frextents = percpu_counter_sum(&mp->m_frextents);
 
 	/* No negative values, please! */
 	if (icount < 0 || ifree < 0)
@@ -596,17 +588,15 @@ xchk_fscounters(
 			try_again = true;
 	}
 
-	if (!xchk_fscount_within_range(sc, fdblocks,
-			&mp->m_free[XC_FREE_BLOCKS].count, fsc->fdblocks)) {
+	if (!xchk_fscount_within_range(sc, fdblocks, &mp->m_fdblocks,
+			fsc->fdblocks)) {
 		if (fsc->frozen)
 			xchk_set_corrupt(sc);
 		else
 			try_again = true;
 	}
 
-	if (!xfs_has_zoned(mp) &&
-	    !xchk_fscount_within_range(sc, frextents,
-			&mp->m_free[XC_FREE_RTEXTENTS].count,
+	if (!xchk_fscount_within_range(sc, frextents, &mp->m_frextents,
 			fsc->frextents - fsc->frextents_delayed)) {
 		if (fsc->frozen)
 			xchk_set_corrupt(sc);

@@ -104,8 +104,6 @@
 		};
 
 		serial@3110000 {
-			/delete-property/ dmas;
-			/delete-property/ dma-names;
 			status = "okay";
 		};
 

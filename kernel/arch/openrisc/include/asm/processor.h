@@ -39,7 +39,7 @@
  */
 #define TASK_UNMAPPED_BASE      (TASK_SIZE / 8 * 3)
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 struct task_struct;
 
@@ -78,5 +78,5 @@ void show_registers(struct pt_regs *regs);
 
 #define cpu_relax()     barrier()
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 #endif /* __ASM_OPENRISC_PROCESSOR_H */

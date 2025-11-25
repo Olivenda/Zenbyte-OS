@@ -179,7 +179,7 @@ int snd_dice_create_hwdep(struct snd_dice *dice)
 	err = snd_hwdep_new(dice->card, "DICE", 0, &hwdep);
 	if (err < 0)
 		return err;
-	strscpy(hwdep->name, "DICE");
+	strcpy(hwdep->name, "DICE");
 	hwdep->iface = SNDRV_HWDEP_IFACE_FW_DICE;
 	hwdep->ops = ops;
 	hwdep->private_data = dice;

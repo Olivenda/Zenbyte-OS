@@ -416,7 +416,8 @@ static int ec_bhf_open(struct net_device *net_dev)
 
 	netif_start_queue(net_dev);
 
-	hrtimer_setup(&priv->hrtimer, ec_bhf_timer_fun, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	hrtimer_init(&priv->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	priv->hrtimer.function = ec_bhf_timer_fun;
 	hrtimer_start(&priv->hrtimer, polling_frequency, HRTIMER_MODE_REL);
 
 	return 0;

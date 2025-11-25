@@ -9,7 +9,6 @@
 #include <linux/const.h>
 
 #include <asm/asm.h>
-#include <asm/msr.h>
 #include <asm/trapnr.h>
 
 /*
@@ -33,7 +32,7 @@
 #define FRED_CONFIG_INT_STKLVL(l)	(_AT(unsigned long, l) << 9)
 #define FRED_CONFIG_ENTRYPOINT(p)	_AT(unsigned long, (p))
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #ifdef CONFIG_X86_FRED
 #include <linux/kernel.h>
@@ -114,6 +113,6 @@ static inline void fred_entry_from_kvm(unsigned int type, unsigned int vector) {
 static inline void fred_sync_rsp0(unsigned long rsp0) { }
 static inline void fred_update_rsp0(void) { }
 #endif /* CONFIG_X86_FRED */
-#endif /* !__ASSEMBLER__ */
+#endif /* !__ASSEMBLY__ */
 
 #endif /* ASM_X86_FRED_H */

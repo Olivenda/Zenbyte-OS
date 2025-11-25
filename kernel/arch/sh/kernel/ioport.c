@@ -23,3 +23,8 @@ void __iomem *ioport_map(unsigned long port, unsigned int nr)
 	return (void __iomem *)(port + sh_io_port_base);
 }
 EXPORT_SYMBOL(ioport_map);
+
+void ioport_unmap(void __iomem *addr)
+{
+}
+EXPORT_SYMBOL(ioport_unmap);

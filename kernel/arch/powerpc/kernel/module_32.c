@@ -18,7 +18,7 @@
 #include <linux/bug.h>
 #include <linux/sort.h>
 #include <asm/setup.h>
-#include <asm/text-patching.h>
+#include <asm/code-patching.h>
 
 /* Count how many different relocations (different symbol, different
    addend) */

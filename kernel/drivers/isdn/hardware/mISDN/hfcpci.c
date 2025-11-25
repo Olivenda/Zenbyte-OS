@@ -39,13 +39,12 @@
 
 #include "hfc_pci.h"
 
-static void hfcpci_softirq(struct timer_list *unused);
 static const char *hfcpci_revision = "2.0";
 
 static int HFC_cnt;
 static uint debug;
 static uint poll, tics;
-static DEFINE_TIMER(hfc_tl, hfcpci_softirq);
+static struct timer_list hfc_tl;
 static unsigned long hfc_jiffies;
 
 MODULE_AUTHOR("Karsten Keil");
@@ -159,7 +158,7 @@ release_io_hfcpci(struct hfc_pci *hc)
 {
 	/* disable memory mapped ports + busmaster */
 	pci_write_config_word(hc->pdev, PCI_COMMAND, 0);
-	timer_delete(&hc->hw.timer);
+	del_timer(&hc->hw.timer);
 	dma_free_coherent(&hc->pdev->dev, 0x8000, hc->hw.fifos,
 			  hc->hw.dmahandle);
 	iounmap(hc->hw.pci_io);
@@ -292,7 +291,7 @@ reset_hfcpci(struct hfc_pci *hc)
 static void
 hfcpci_Timer(struct timer_list *t)
 {
-	struct hfc_pci *hc = timer_container_of(hc, t, hw.timer);
+	struct hfc_pci *hc = from_timer(hc, t, hw.timer);
 	hc->hw.timer.expires = jiffies + 75;
 	/* WD RESET */
 /*
@@ -1088,7 +1087,7 @@ hfc_l1callback(struct dchannel *dch, u_int cmd)
 		}
 		test_and_clear_bit(FLG_TX_BUSY, &dch->Flags);
 		if (test_and_clear_bit(FLG_BUSY_TIMER, &dch->Flags))
-			timer_delete(&dch->timer);
+			del_timer(&dch->timer);
 		break;
 	case HW_POWERUP_REQ:
 		Write_hfc(hc, HFCPCI_STATES, HFCPCI_DO_ACTION);
@@ -1217,7 +1216,7 @@ hfcpci_int(int intno, void *dev_id)
 		receive_dmsg(hc);
 	if (val & 0x04) {	/* D tx */
 		if (test_and_clear_bit(FLG_BUSY_TIMER, &hc->dch.Flags))
-			timer_delete(&hc->dch.timer);
+			del_timer(&hc->dch.timer);
 		tx_dirq(&hc->dch);
 	}
 	spin_unlock(&hc->lock);
@@ -1636,7 +1635,7 @@ hfcpci_l2l1D(struct mISDNchannel *ch, struct sk_buff *skb)
 			}
 			test_and_clear_bit(FLG_TX_BUSY, &dch->Flags);
 			if (test_and_clear_bit(FLG_BUSY_TIMER, &dch->Flags))
-				timer_delete(&dch->timer);
+				del_timer(&dch->timer);
 #ifdef FIXME
 			if (test_and_clear_bit(FLG_L1_BUSY, &dch->Flags))
 				dchannel_sched_event(&hc->dch, D_CLEARBUSY);
@@ -2065,7 +2064,7 @@ release_card(struct hfc_pci *hc) {
 	mode_hfcpci(&hc->bch[0], 1, ISDN_P_NONE);
 	mode_hfcpci(&hc->bch[1], 2, ISDN_P_NONE);
 	if (hc->dch.timer.function != NULL) {
-		timer_delete(&hc->dch.timer);
+		del_timer(&hc->dch.timer);
 		hc->dch.timer.function = NULL;
 	}
 	spin_unlock_irqrestore(&hc->lock, flags);
@@ -2306,7 +2305,8 @@ hfcpci_softirq(struct timer_list *unused)
 		hfc_jiffies = jiffies + 1;
 	else
 		hfc_jiffies += tics;
-	mod_timer(&hfc_tl, hfc_jiffies);
+	hfc_tl.expires = hfc_jiffies;
+	add_timer(&hfc_tl);
 }
 
 static int __init
@@ -2332,15 +2332,17 @@ HFC_init(void)
 	if (poll != HFCPCI_BTRANS_THRESHOLD) {
 		printk(KERN_INFO "%s: Using alternative poll value of %d\n",
 		       __func__, poll);
-		hfc_jiffies = jiffies + tics;
-		mod_timer(&hfc_tl, hfc_jiffies);
+		timer_setup(&hfc_tl, hfcpci_softirq, 0);
+		hfc_tl.expires = jiffies + tics;
+		hfc_jiffies = hfc_tl.expires;
+		add_timer(&hfc_tl);
 	} else
 		tics = 0; /* indicate the use of controller's timer */
 
 	err = pci_register_driver(&hfc_driver);
 	if (err) {
 		if (timer_pending(&hfc_tl))
-			timer_delete(&hfc_tl);
+			del_timer(&hfc_tl);
 	}
 
 	return err;
@@ -2349,7 +2351,7 @@ HFC_init(void)
 static void __exit
 HFC_cleanup(void)
 {
-	timer_delete_sync(&hfc_tl);
+	del_timer_sync(&hfc_tl);
 
 	pci_unregister_driver(&hfc_driver);
 }

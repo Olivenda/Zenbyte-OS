@@ -20,18 +20,18 @@ MODULE_PARM_DESC(polling_pipe, "polling pipe (0: ctl, 1: bulk)");
 
 static const struct mfd_cell rtsx_usb_cells[] = {
 	[RTSX_USB_SD_CARD] = {
-		.name = DRV_NAME_RTSX_USB_SDMMC,
+		.name = "rtsx_usb_sdmmc",
 		.pdata_size = 0,
 	},
 	[RTSX_USB_MS_CARD] = {
-		.name = DRV_NAME_RTSX_USB_MS,
+		.name = "rtsx_usb_ms",
 		.pdata_size = 0,
 	},
 };
 
 static void rtsx_usb_sg_timed_out(struct timer_list *t)
 {
-	struct rtsx_ucr *ucr = timer_container_of(ucr, t, sg_timer);
+	struct rtsx_ucr *ucr = from_timer(ucr, t, sg_timer);
 
 	dev_dbg(&ucr->pusb_intf->dev, "%s: sg transfer timed out", __func__);
 	usb_sg_cancel(&ucr->current_sg);
@@ -53,7 +53,7 @@ static int rtsx_usb_bulk_transfer_sglist(struct rtsx_ucr *ucr,
 	ucr->sg_timer.expires = jiffies + msecs_to_jiffies(timeout);
 	add_timer(&ucr->sg_timer);
 	usb_sg_wait(&ucr->current_sg);
-	if (!timer_delete_sync(&ucr->sg_timer))
+	if (!del_timer_sync(&ucr->sg_timer))
 		ret = -ETIMEDOUT;
 	else
 		ret = ucr->current_sg.status;
@@ -782,7 +782,7 @@ static const struct usb_device_id rtsx_usb_usb_ids[] = {
 MODULE_DEVICE_TABLE(usb, rtsx_usb_usb_ids);
 
 static struct usb_driver rtsx_usb_driver = {
-	.name			= DRV_NAME_RTSX_USB,
+	.name			= "rtsx_usb",
 	.probe			= rtsx_usb_probe,
 	.disconnect		= rtsx_usb_disconnect,
 	.suspend		= rtsx_usb_suspend,

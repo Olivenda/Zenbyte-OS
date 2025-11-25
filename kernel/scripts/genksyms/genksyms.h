@@ -12,10 +12,7 @@
 #ifndef MODUTILS_GENKSYMS_H
 #define MODUTILS_GENKSYMS_H 1
 
-#include <stdbool.h>
 #include <stdio.h>
-
-#include <list_types.h>
 
 enum symbol_type {
 	SYM_NORMAL, SYM_TYPEDEF, SYM_ENUM, SYM_STRUCT, SYM_UNION,
@@ -34,7 +31,7 @@ struct string_list {
 };
 
 struct symbol {
-	struct hlist_node hnode;
+	struct symbol *hash_next;
 	char *name;
 	enum symbol_type type;
 	struct string_list *defn;
@@ -66,8 +63,6 @@ struct string_list *copy_list_range(struct string_list *start,
 
 int yylex(void);
 int yyparse(void);
-
-extern bool dont_want_type_specifier;
 
 void error_with_pos(const char *, ...) __attribute__ ((format(printf, 1, 2)));
 

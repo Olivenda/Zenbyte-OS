@@ -8,7 +8,6 @@
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/stop_machine.h>
-#include <linux/cpufeature.h>
 #include <linux/bitops.h>
 #include <linux/kernel.h>
 #include <linux/random.h>
@@ -20,7 +19,6 @@
 #include <linux/cpu.h>
 #include <linux/smp.h>
 #include <asm/text-patching.h>
-#include <asm/machine.h>
 #include <asm/diag.h>
 #include <asm/facility.h>
 #include <asm/elf.h>
@@ -74,7 +72,7 @@ void notrace stop_machine_yield(const struct cpumask *cpumask)
 	this_cpu = smp_processor_id();
 	if (__this_cpu_inc_return(cpu_relax_retry) >= spin_retry) {
 		__this_cpu_write(cpu_relax_retry, 0);
-		cpu = cpumask_next_wrap(this_cpu, cpumask);
+		cpu = cpumask_next_wrap(this_cpu, cpumask, this_cpu, false);
 		if (cpu >= nr_cpu_ids)
 			return;
 		if (arch_vcpu_is_preempted(cpu))
@@ -211,14 +209,14 @@ static int __init setup_hwcaps(void)
 		elf_hwcap |= HWCAP_DFP;
 
 	/* huge page support */
-	if (cpu_has_edat1())
+	if (MACHINE_HAS_EDAT1)
 		elf_hwcap |= HWCAP_HPAGE;
 
 	/* 64-bit register support for 31-bit processes */
 	elf_hwcap |= HWCAP_HIGH_GPRS;
 
 	/* transactional execution */
-	if (machine_has_tx())
+	if (MACHINE_HAS_TE)
 		elf_hwcap |= HWCAP_TE;
 
 	/* vector */
@@ -246,10 +244,10 @@ static int __init setup_hwcaps(void)
 		elf_hwcap |= HWCAP_NNPA;
 
 	/* guarded storage */
-	if (cpu_has_gs())
+	if (MACHINE_HAS_GS)
 		elf_hwcap |= HWCAP_GS;
 
-	if (test_machine_feature(MFEATURE_PCI_MIO))
+	if (MACHINE_HAS_PCI_MIO)
 		elf_hwcap |= HWCAP_PCI_MIO;
 
 	/* virtualization support */
@@ -268,35 +266,31 @@ static int __init setup_elf_platform(void)
 	add_device_randomness(&cpu_id, sizeof(cpu_id));
 	switch (cpu_id.machine) {
 	default:	/* Use "z10" as default. */
-		strscpy(elf_platform, "z10");
+		strcpy(elf_platform, "z10");
 		break;
 	case 0x2817:
 	case 0x2818:
-		strscpy(elf_platform, "z196");
+		strcpy(elf_platform, "z196");
 		break;
 	case 0x2827:
 	case 0x2828:
-		strscpy(elf_platform, "zEC12");
+		strcpy(elf_platform, "zEC12");
 		break;
 	case 0x2964:
 	case 0x2965:
-		strscpy(elf_platform, "z13");
+		strcpy(elf_platform, "z13");
 		break;
 	case 0x3906:
 	case 0x3907:
-		strscpy(elf_platform, "z14");
+		strcpy(elf_platform, "z14");
 		break;
 	case 0x8561:
 	case 0x8562:
-		strscpy(elf_platform, "z15");
+		strcpy(elf_platform, "z15");
 		break;
 	case 0x3931:
 	case 0x3932:
-		strscpy(elf_platform, "z16");
-		break;
-	case 0x9175:
-	case 0x9176:
-		strscpy(elf_platform, "z17");
+		strcpy(elf_platform, "z16");
 		break;
 	}
 	return 0;

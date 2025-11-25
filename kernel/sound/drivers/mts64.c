@@ -11,7 +11,6 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
-#include <linux/string.h>
 #include <sound/core.h>
 #include <sound/initval.h>
 #include <sound/rawmidi.h>
@@ -764,7 +763,7 @@ static int snd_mts64_rawmidi_create(struct snd_card *card)
 		return err;
 
 	rmidi->private_data = mts;
-	strscpy(rmidi->name, CARD_NAME);
+	strcpy(rmidi->name, CARD_NAME);
 	rmidi->info_flags = SNDRV_RAWMIDI_INFO_OUTPUT |
 		            SNDRV_RAWMIDI_INFO_INPUT |
                             SNDRV_RAWMIDI_INFO_DUPLEX;
@@ -792,7 +791,7 @@ static int snd_mts64_rawmidi_create(struct snd_card *card)
 		mts->midi_input_substream[substream->number] = substream;
 		switch(substream->number) {
 		case MTS64_SMPTE_SUBSTREAM:
-			strscpy(substream->name, "Miditerminal SMPTE");
+			strcpy(substream->name, "Miditerminal SMPTE");
 			break;
 		default:
 			sprintf(substream->name,
@@ -930,8 +929,8 @@ static int snd_mts64_probe(struct platform_device *pdev)
 		dev_dbg(&pdev->dev, "Cannot create card\n");
 		return err;
 	}
-	strscpy(card->driver, DRIVER_NAME);
-	strscpy(card->shortname, "ESI " CARD_NAME);
+	strcpy(card->driver, DRIVER_NAME);
+	strcpy(card->shortname, "ESI " CARD_NAME);
 	sprintf(card->longname,  "%s at 0x%lx, irq %i", 
 		card->shortname, p->base, p->irq);
 
@@ -1009,7 +1008,7 @@ static void snd_mts64_remove(struct platform_device *pdev)
 
 static struct platform_driver snd_mts64_driver = {
 	.probe  = snd_mts64_probe,
-	.remove = snd_mts64_remove,
+	.remove_new = snd_mts64_remove,
 	.driver = {
 		.name = PLATFORM_DRIVER,
 	}

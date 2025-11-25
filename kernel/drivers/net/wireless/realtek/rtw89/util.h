@@ -6,11 +6,13 @@
 
 #include "core.h"
 
+#define RTW89_LINEAR_FRAC_BITS 3
+
 #define rtw89_iterate_vifs_bh(rtwdev, iterator, data)                          \
 	ieee80211_iterate_active_interfaces_atomic((rtwdev)->hw,               \
 			IEEE80211_IFACE_ITER_NORMAL, iterator, data)
 
-/* call this function with wiphy mutex is held */
+/* call this function with rtwdev->mutex is held */
 #define rtw89_for_each_rtwvif(rtwdev, rtwvif)				       \
 	list_for_each_entry(rtwvif, &(rtwdev)->rtwvifs_list, list)
 
@@ -23,7 +25,7 @@ static inline bool rtw89_rtwvif_in_list(struct rtw89_dev *rtwdev,
 {
 	struct rtw89_vif *rtwvif;
 
-	lockdep_assert_wiphy(rtwdev->hw->wiphy);
+	lockdep_assert_held(&rtwdev->mutex);
 
 	rtw89_for_each_rtwvif(rtwdev, rtwvif)
 		if (rtwvif == new)
@@ -73,10 +75,7 @@ static inline void ether_addr_copy_mask(u8 *dst, const u8 *src, u8 mask)
 	}
 }
 
-s32 rtw89_linear_to_db_quarter(u64 val);
-s32 rtw89_linear_to_db(u64 val);
-u64 rtw89_db_quarter_to_linear(s32 db);
-u64 rtw89_db_to_linear(s32 db);
-void rtw89_might_trailing_ellipsis(char *buf, size_t size, ssize_t used);
+u32 rtw89_linear_2_db(u64 linear);
+u64 rtw89_db_2_linear(u32 db);
 
 #endif

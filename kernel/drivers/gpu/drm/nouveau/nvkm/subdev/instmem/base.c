@@ -182,11 +182,9 @@ nvkm_instmem_fini(struct nvkm_subdev *subdev, bool suspend)
 	int ret;
 
 	if (suspend) {
-		if (imem->func->suspend) {
-			ret = imem->func->suspend(imem);
-			if (ret)
-				return ret;
-		}
+		ret = imem->func->suspend(imem);
+		if (ret)
+			return ret;
 
 		imem->suspend = true;
 	}

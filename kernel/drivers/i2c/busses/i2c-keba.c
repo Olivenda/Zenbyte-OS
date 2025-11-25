@@ -464,8 +464,12 @@ static void ki2c_unregister_devices(struct ki2c *ki2c)
 {
 	int i;
 
-	for (i = 0; i < ki2c->client_size; i++)
-		i2c_unregister_device(ki2c->client[i]);
+	for (i = 0; i < ki2c->client_size; i++) {
+		struct i2c_client *client = ki2c->client[i];
+
+		if (client)
+			i2c_unregister_device(client);
+	}
 }
 
 static int ki2c_register_devices(struct ki2c *ki2c)
@@ -500,7 +504,7 @@ static u32 ki2c_func(struct i2c_adapter *adap)
 }
 
 static const struct i2c_algorithm ki2c_algo = {
-	.xfer = ki2c_xfer,
+	.master_xfer   = ki2c_xfer,
 	.functionality = ki2c_func,
 };
 

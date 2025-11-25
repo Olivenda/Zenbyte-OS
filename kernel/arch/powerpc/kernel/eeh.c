@@ -1209,16 +1209,16 @@ int eeh_dev_open(struct pci_dev *pdev)
 	struct eeh_dev *edev;
 	int ret = -ENODEV;
 
-	guard(mutex)(&eeh_dev_mutex);
+	mutex_lock(&eeh_dev_mutex);
 
 	/* No PCI device ? */
 	if (!pdev)
-		return ret;
+		goto out;
 
 	/* No EEH device or PE ? */
 	edev = pci_dev_to_eeh_dev(pdev);
 	if (!edev || !edev->pe)
-		return ret;
+		goto out;
 
 	/*
 	 * The PE might have been put into frozen state, but we
@@ -1228,12 +1228,16 @@ int eeh_dev_open(struct pci_dev *pdev)
 	 */
 	ret = eeh_pe_change_owner(edev->pe);
 	if (ret)
-		return ret;
+		goto out;
 
 	/* Increase PE's pass through count */
 	atomic_inc(&edev->pe->pass_dev_cnt);
+	mutex_unlock(&eeh_dev_mutex);
 
 	return 0;
+out:
+	mutex_unlock(&eeh_dev_mutex);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(eeh_dev_open);
 
@@ -1249,20 +1253,22 @@ void eeh_dev_release(struct pci_dev *pdev)
 {
 	struct eeh_dev *edev;
 
-	guard(mutex)(&eeh_dev_mutex);
+	mutex_lock(&eeh_dev_mutex);
 
 	/* No PCI device ? */
 	if (!pdev)
-		return;
+		goto out;
 
 	/* No EEH device ? */
 	edev = pci_dev_to_eeh_dev(pdev);
 	if (!edev || !edev->pe || !eeh_pe_passed(edev->pe))
-		return;
+		goto out;
 
 	/* Decrease PE's pass through count */
 	WARN_ON(atomic_dec_if_positive(&edev->pe->pass_dev_cnt) < 0);
 	eeh_pe_change_owner(edev->pe);
+out:
+	mutex_unlock(&eeh_dev_mutex);
 }
 EXPORT_SYMBOL(eeh_dev_release);
 

@@ -78,10 +78,13 @@ struct btrfs_inode_extref *btrfs_find_name_in_ext_backref(
 }
 
 /* Returns NULL if no extref found */
-struct btrfs_inode_extref *btrfs_lookup_inode_extref(struct btrfs_root *root,
-						     struct btrfs_path *path,
-						     const struct fscrypt_str *name,
-						     u64 inode_objectid, u64 ref_objectid)
+struct btrfs_inode_extref *
+btrfs_lookup_inode_extref(struct btrfs_trans_handle *trans,
+			  struct btrfs_root *root,
+			  struct btrfs_path *path,
+			  const struct fscrypt_str *name,
+			  u64 inode_objectid, u64 ref_objectid, int ins_len,
+			  int cow)
 {
 	int ret;
 	struct btrfs_key key;
@@ -90,7 +93,7 @@ struct btrfs_inode_extref *btrfs_lookup_inode_extref(struct btrfs_root *root,
 	key.type = BTRFS_INODE_EXTREF_KEY;
 	key.offset = btrfs_extref_hash(ref_objectid, name->name, name->len);
 
-	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
+	ret = btrfs_search_slot(trans, root, &key, path, ins_len, cow);
 	if (ret < 0)
 		return ERR_PTR(ret);
 	if (ret > 0)
@@ -106,7 +109,7 @@ static int btrfs_del_inode_extref(struct btrfs_trans_handle *trans,
 				  u64 inode_objectid, u64 ref_objectid,
 				  u64 *index)
 {
-	BTRFS_PATH_AUTO_FREE(path);
+	struct btrfs_path *path;
 	struct btrfs_key key;
 	struct btrfs_inode_extref *extref;
 	struct extent_buffer *leaf;
@@ -126,9 +129,9 @@ static int btrfs_del_inode_extref(struct btrfs_trans_handle *trans,
 
 	ret = btrfs_search_slot(trans, root, &key, path, -1, 1);
 	if (ret > 0)
-		return -ENOENT;
+		ret = -ENOENT;
 	if (ret < 0)
-		return ret;
+		goto out;
 
 	/*
 	 * Sanity check - did we find the right item for this name?
@@ -139,7 +142,8 @@ static int btrfs_del_inode_extref(struct btrfs_trans_handle *trans,
 						ref_objectid, name);
 	if (!extref) {
 		btrfs_abort_transaction(trans, -ENOENT);
-		return -ENOENT;
+		ret = -ENOENT;
+		goto out;
 	}
 
 	leaf = path->nodes[0];
@@ -148,8 +152,12 @@ static int btrfs_del_inode_extref(struct btrfs_trans_handle *trans,
 		*index = btrfs_inode_extref_index(leaf, extref);
 
 	if (del_len == item_size) {
-		/* Common case only one ref in the item, remove the whole item. */
-		return btrfs_del_item(trans, root, path);
+		/*
+		 * Common case only one ref in the item, remove the
+		 * whole item.
+		 */
+		ret = btrfs_del_item(trans, root, path);
+		goto out;
 	}
 
 	ptr = (unsigned long)extref;
@@ -159,6 +167,9 @@ static int btrfs_del_inode_extref(struct btrfs_trans_handle *trans,
 			      item_size - (ptr + del_len - item_start));
 
 	btrfs_truncate_item(trans, path, item_size - del_len, 1);
+
+out:
+	btrfs_free_path(path);
 
 	return ret;
 }
@@ -180,8 +191,8 @@ int btrfs_del_inode_ref(struct btrfs_trans_handle *trans,
 	int del_len = name->len + sizeof(*ref);
 
 	key.objectid = inode_objectid;
-	key.type = BTRFS_INODE_REF_KEY;
 	key.offset = ref_objectid;
+	key.type = BTRFS_INODE_REF_KEY;
 
 	path = btrfs_alloc_path();
 	if (!path)
@@ -249,7 +260,7 @@ static int btrfs_insert_inode_extref(struct btrfs_trans_handle *trans,
 	int ret;
 	int ins_len = name->len + sizeof(*extref);
 	unsigned long ptr;
-	BTRFS_PATH_AUTO_FREE(path);
+	struct btrfs_path *path;
 	struct btrfs_key key;
 	struct extent_buffer *leaf;
 
@@ -268,13 +279,13 @@ static int btrfs_insert_inode_extref(struct btrfs_trans_handle *trans,
 						   path->slots[0],
 						   ref_objectid,
 						   name))
-			return ret;
+			goto out;
 
 		btrfs_extend_item(trans, path, ins_len);
 		ret = 0;
 	}
 	if (ret < 0)
-		return ret;
+		goto out;
 
 	leaf = path->nodes[0];
 	ptr = (unsigned long)btrfs_item_ptr(leaf, path->slots[0], char);
@@ -287,8 +298,11 @@ static int btrfs_insert_inode_extref(struct btrfs_trans_handle *trans,
 
 	ptr = (unsigned long)&extref->name;
 	write_extent_buffer(path->nodes[0], name->name, ptr, name->len);
+	btrfs_mark_buffer_dirty(trans, path->nodes[0]);
 
-	return 0;
+out:
+	btrfs_free_path(path);
+	return ret;
 }
 
 /* Will return 0, -ENOMEM, -EMLINK, or -EEXIST or anything from the CoW path */
@@ -305,8 +319,8 @@ int btrfs_insert_inode_ref(struct btrfs_trans_handle *trans,
 	int ins_len = name->len + sizeof(*ref);
 
 	key.objectid = inode_objectid;
-	key.type = BTRFS_INODE_REF_KEY;
 	key.offset = ref_objectid;
+	key.type = BTRFS_INODE_REF_KEY;
 
 	path = btrfs_alloc_path();
 	if (!path)
@@ -349,6 +363,8 @@ int btrfs_insert_inode_ref(struct btrfs_trans_handle *trans,
 		ptr = (unsigned long)(ref + 1);
 	}
 	write_extent_buffer(path->nodes[0], name->name, ptr, name->len);
+	btrfs_mark_buffer_dirty(trans, path->nodes[0]);
+
 out:
 	btrfs_free_path(path);
 
@@ -481,8 +497,8 @@ int btrfs_truncate_inode_items(struct btrfs_trans_handle *trans,
 	path->reada = READA_BACK;
 
 	key.objectid = control->ino;
-	key.type = (u8)-1;
 	key.offset = (u64)-1;
+	key.type = (u8)-1;
 
 search_again:
 	/*
@@ -574,6 +590,7 @@ search_again:
 				num_dec = (orig_num_bytes - extent_num_bytes);
 				if (extent_start != 0)
 					control->sub_bytes += num_dec;
+				btrfs_mark_buffer_dirty(trans, leaf);
 			} else {
 				extent_num_bytes =
 					btrfs_file_extent_disk_num_bytes(leaf, fi);
@@ -717,12 +734,13 @@ delete:
 	}
 out:
 	if (ret >= 0 && pending_del_nr) {
-		int ret2;
+		int err;
 
-		ret2 = btrfs_del_items(trans, root, path, pending_del_slot, pending_del_nr);
-		if (ret2) {
-			btrfs_abort_transaction(trans, ret2);
-			ret = ret2;
+		err = btrfs_del_items(trans, root, path, pending_del_slot,
+				      pending_del_nr);
+		if (err) {
+			btrfs_abort_transaction(trans, err);
+			ret = err;
 		}
 	}
 

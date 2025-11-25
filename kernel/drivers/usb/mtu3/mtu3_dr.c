@@ -7,7 +7,6 @@
  * Author: Chunfeng Yun <chunfeng.yun@mediatek.com>
  */
 
-#include <linux/string_choices.h>
 #include "mtu3.h"
 #include "mtu3_dr.h"
 #include "mtu3_debug.h"
@@ -110,7 +109,7 @@ int ssusb_set_vbus(struct otg_switch_mtk *otg_sx, int is_on)
 	if (!vbus)
 		return 0;
 
-	dev_dbg(ssusb->dev, "%s: turn %s\n", __func__, str_on_off(is_on));
+	dev_dbg(ssusb->dev, "%s: turn %s\n", __func__, is_on ? "on" : "off");
 
 	if (is_on) {
 		ret = regulator_enable(vbus);

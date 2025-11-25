@@ -5,7 +5,6 @@
 #include <asm/cpufeature.h>
 #include <asm/fpu/xstate.h>
 #include <asm/fpu/xcr.h>
-#include <asm/msr.h>
 
 #ifdef CONFIG_X86_64
 DECLARE_PER_CPU(u64, xfd_state);
@@ -23,7 +22,7 @@ static inline void xstate_init_xcomp_bv(struct xregs_state *xsave, u64 mask)
 
 static inline u64 xstate_get_group_perm(bool guest)
 {
-	struct fpu *fpu = x86_task_fpu(current->group_leader);
+	struct fpu *fpu = &current->group_leader->thread.fpu;
 	struct fpu_state_perm *perm;
 
 	/* Pairs with WRITE_ONCE() in xstate_request_perm() */
@@ -105,33 +104,30 @@ static inline int update_pkru_in_sigframe(struct xregs_state __user *buf, u32 pk
 /* XSAVE/XRSTOR wrapper functions */
 
 #ifdef CONFIG_X86_64
-#define REX_SUFFIX	"64"
+#define REX_PREFIX	"0x48, "
 #else
-#define REX_SUFFIX
+#define REX_PREFIX
 #endif
 
-#define XSAVE		"xsave" REX_SUFFIX " %[xa]"
-#define XSAVEOPT	"xsaveopt" REX_SUFFIX " %[xa]"
-#define XSAVEC		"xsavec" REX_SUFFIX " %[xa]"
-#define XSAVES		"xsaves" REX_SUFFIX " %[xa]"
-#define XRSTOR		"xrstor" REX_SUFFIX " %[xa]"
-#define XRSTORS		"xrstors" REX_SUFFIX " %[xa]"
+/* These macros all use (%edi)/(%rdi) as the single memory argument. */
+#define XSAVE		".byte " REX_PREFIX "0x0f,0xae,0x27"
+#define XSAVEOPT	".byte " REX_PREFIX "0x0f,0xae,0x37"
+#define XSAVEC		".byte " REX_PREFIX "0x0f,0xc7,0x27"
+#define XSAVES		".byte " REX_PREFIX "0x0f,0xc7,0x2f"
+#define XRSTOR		".byte " REX_PREFIX "0x0f,0xae,0x2f"
+#define XRSTORS		".byte " REX_PREFIX "0x0f,0xc7,0x1f"
 
 /*
  * After this @err contains 0 on success or the trap number when the
  * operation raises an exception.
- *
- * The [xa] input parameter below represents the struct xregs_state pointer
- * and the asm symbolic name for the argument used in the XSAVE/XRSTOR insns
- * above.
  */
 #define XSTATE_OP(op, st, lmask, hmask, err)				\
 	asm volatile("1:" op "\n\t"					\
 		     "xor %[err], %[err]\n"				\
-		     "2:\n"						\
+		     "2:\n\t"						\
 		     _ASM_EXTABLE_TYPE(1b, 2b, EX_TYPE_FAULT_MCE_SAFE)	\
 		     : [err] "=a" (err)					\
-		     : [xa] "m" (*(st)), "a" (lmask), "d" (hmask)	\
+		     : "D" (st), "m" (*st), "a" (lmask), "d" (hmask)	\
 		     : "memory")
 
 /*
@@ -151,12 +147,12 @@ static inline int update_pkru_in_sigframe(struct xregs_state __user *buf, u32 pk
 				   XSAVEOPT, X86_FEATURE_XSAVEOPT,	\
 				   XSAVEC,   X86_FEATURE_XSAVEC,	\
 				   XSAVES,   X86_FEATURE_XSAVES)	\
-		     "\n\t"						\
+		     "\n"						\
 		     "xor %[err], %[err]\n"				\
 		     "3:\n"						\
 		     _ASM_EXTABLE_TYPE_REG(1b, 3b, EX_TYPE_EFAULT_REG, %[err]) \
 		     : [err] "=r" (err)					\
-		     : [xa] "m" (*(st)), "a" (lmask), "d" (hmask)	\
+		     : "D" (st), "m" (*st), "a" (lmask), "d" (hmask)	\
 		     : "memory")
 
 /*
@@ -170,7 +166,7 @@ static inline int update_pkru_in_sigframe(struct xregs_state __user *buf, u32 pk
 		     "3:\n"						\
 		     _ASM_EXTABLE_TYPE(1b, 3b, EX_TYPE_FPU_RESTORE)	\
 		     :							\
-		     : [xa] "m" (*(st)), "a" (lmask), "d" (hmask)	\
+		     : "D" (st), "m" (*st), "a" (lmask), "d" (hmask)	\
 		     : "memory")
 
 #if defined(CONFIG_X86_64) && defined(CONFIG_X86_DEBUG_FPU)
@@ -182,7 +178,7 @@ static inline void xfd_validate_state(struct fpstate *fpstate, u64 mask, bool rs
 #ifdef CONFIG_X86_64
 static inline void xfd_set_state(u64 xfd)
 {
-	wrmsrq(MSR_IA32_XFD, xfd);
+	wrmsrl(MSR_IA32_XFD, xfd);
 	__this_cpu_write(xfd_state, xfd);
 }
 
@@ -299,7 +295,7 @@ static inline int xsave_to_user_sigframe(struct xregs_state __user *buf, u32 pkr
 	 * internally, e.g. PKRU. That's user space ABI and also required
 	 * to allow the signal handler to modify PKRU.
 	 */
-	struct fpstate *fpstate = x86_task_fpu(current)->fpstate;
+	struct fpstate *fpstate = current->thread.fpu.fpstate;
 	u64 mask = fpstate->user_xfeatures;
 	u32 lmask;
 	u32 hmask;
@@ -333,7 +329,7 @@ static inline int xrstor_from_user_sigframe(struct xregs_state __user *buf, u64 
 	u32 hmask = mask >> 32;
 	int err;
 
-	xfd_validate_state(x86_task_fpu(current)->fpstate, mask, true);
+	xfd_validate_state(current->thread.fpu.fpstate, mask, true);
 
 	stac();
 	XSTATE_OP(XRSTOR, xstate, lmask, hmask, err);

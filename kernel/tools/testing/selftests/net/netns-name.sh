@@ -7,12 +7,10 @@ set -o pipefail
 DEV=dummy-dev0
 DEV2=dummy-dev1
 ALT_NAME=some-alt-name
-NSIM_ADDR=2025
 
 RET_CODE=0
 
 cleanup() {
-    cleanup_netdevsim $NSIM_ADDR
     cleanup_ns $NS $test_ns
 }
 
@@ -27,15 +25,12 @@ setup_ns NS test_ns
 
 #
 # Test basic move without a rename
-# Use netdevsim because it has extra asserts for notifiers.
 #
-
-nsim=$(create_netdevsim $NSIM_ADDR $NS)
-ip -netns $NS link set dev $nsim netns $test_ns ||
+ip -netns $NS link add name $DEV type dummy || fail
+ip -netns $NS link set dev $DEV netns $test_ns ||
     fail "Can't perform a netns move"
-ip -netns $test_ns link show dev $nsim >> /dev/null ||
-    fail "Device not found after move"
-cleanup_netdevsim $NSIM_ADDR
+ip -netns $test_ns link show dev $DEV >> /dev/null || fail "Device not found after move"
+ip -netns $test_ns link del $DEV || fail
 
 #
 # Test move with a conflict
@@ -81,16 +76,6 @@ ip -netns $NS link set dev $DEV netns $test_ns || fail
 ip -netns $test_ns link show dev $ALT_NAME >> /dev/null || fail "Can't find alt-name after move"
 ip -netns $NS link show dev $ALT_NAME 2> /dev/null &&
     fail "Can still find alt-name after move"
-ip -netns $test_ns link del $DEV || fail
-
-#
-# Test no conflict of the same name/ifindex in different netns
-#
-ip -netns $NS link add name $DEV index 100 type dummy || fail
-ip -netns $NS link add netns $test_ns name $DEV index 100 type dummy ||
-    fail "Can create in netns without moving"
-ip -netns $test_ns link show dev $DEV >> /dev/null || fail "Device not found"
-ip -netns $NS link del $DEV || fail
 ip -netns $test_ns link del $DEV || fail
 
 echo -ne "$(basename $0) \t\t\t\t"

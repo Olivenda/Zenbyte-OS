@@ -199,6 +199,7 @@
 		ti,nand-ecc-opt = "bch8";
 		ti,nand-xfer-type = "prefetch-dma";
 
+		gpmc,device-nand = "true";
 		gpmc,device-width = <1>;
 		gpmc,sync-clk-ps = <0>;
 		gpmc,cs-on-ns = <0>;
@@ -250,7 +251,7 @@
 		pinctrl-0 = <&tps65910_pins>;
 	};
 
-	eeprom@50 {
+	at24@50 {
 		compatible = "atmel,24c02";
 		pagesize = <8>;
 		reg = <0x50>;

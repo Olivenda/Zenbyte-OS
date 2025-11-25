@@ -2000,8 +2000,7 @@ static struct mvumi_instance_template mvumi_instance_9580 = {
 	.reset_host = mvumi_reset_host_9580,
 };
 
-static int mvumi_sdev_configure(struct scsi_device *sdev,
-				struct queue_limits *lim)
+static int mvumi_slave_configure(struct scsi_device *sdev)
 {
 	struct mvumi_hba *mhba;
 	unsigned char bitcount = sizeof(unsigned char) * 8;
@@ -2173,7 +2172,7 @@ static const struct scsi_host_template mvumi_template = {
 
 	.module = THIS_MODULE,
 	.name = "Marvell Storage Controller",
-	.sdev_configure = mvumi_sdev_configure,
+	.slave_configure = mvumi_slave_configure,
 	.queuecommand = mvumi_queue_command,
 	.eh_timed_out = mvumi_timed_out,
 	.eh_host_reset_handler = mvumi_host_reset,

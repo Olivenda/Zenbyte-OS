@@ -6,20 +6,14 @@
 #include <subcmd/parse-options.h>
 #include <string.h>
 #include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/stat.h>
-#include <sys/sendfile.h>
 #include <objtool/builtin.h>
 #include <objtool/objtool.h>
-#include <objtool/warn.h>
 
-#define ORIG_SUFFIX ".orig"
+#define ERROR(format, ...)				\
+	fprintf(stderr,					\
+		"error: objtool: " format "\n",		\
+		##__VA_ARGS__)
 
-int orig_argc;
-static char **orig_argv;
-const char *objname;
 struct opts opts;
 
 static const char * const check_usage[] = {
@@ -77,7 +71,7 @@ static const struct option check_options[] = {
 	OPT_BOOLEAN('i', "ibt", &opts.ibt, "validate and annotate IBT"),
 	OPT_BOOLEAN('m', "mcount", &opts.mcount, "annotate mcount/fentry calls for ftrace"),
 	OPT_BOOLEAN('n', "noinstr", &opts.noinstr, "validate noinstr rules"),
-	OPT_BOOLEAN(0,   "orc", &opts.orc, "generate ORC metadata"),
+	OPT_BOOLEAN('o', "orc", &opts.orc, "generate ORC metadata"),
 	OPT_BOOLEAN('r', "retpoline", &opts.retpoline, "validate and annotate retpoline usage"),
 	OPT_BOOLEAN(0,   "rethunk", &opts.rethunk, "validate and annotate rethunk usage"),
 	OPT_BOOLEAN(0,   "unret", &opts.unret, "validate entry unret placement"),
@@ -90,17 +84,16 @@ static const struct option check_options[] = {
 	OPT_CALLBACK_OPTARG(0, "dump", NULL, NULL, "orc", "dump metadata", parse_dump),
 
 	OPT_GROUP("Options:"),
-	OPT_BOOLEAN(0,   "backtrace", &opts.backtrace, "unwind on error"),
-	OPT_BOOLEAN(0,   "dry-run", &opts.dryrun, "don't write modifications"),
-	OPT_BOOLEAN(0,   "link", &opts.link, "object is a linked object"),
-	OPT_BOOLEAN(0,   "module", &opts.module, "object is part of a kernel module"),
-	OPT_BOOLEAN(0,   "mnop", &opts.mnop, "nop out mcount call sites"),
-	OPT_BOOLEAN(0,   "no-unreachable", &opts.no_unreachable, "skip 'unreachable instruction' warnings"),
-	OPT_STRING('o',  "output", &opts.output, "file", "output file name"),
-	OPT_BOOLEAN(0,   "sec-address", &opts.sec_address, "print section addresses in warnings"),
-	OPT_BOOLEAN(0,   "stats", &opts.stats, "print statistics"),
+	OPT_BOOLEAN(0, "backtrace", &opts.backtrace, "unwind on error"),
+	OPT_BOOLEAN(0, "backup", &opts.backup, "create .orig files before modification"),
+	OPT_BOOLEAN(0, "dry-run", &opts.dryrun, "don't write modifications"),
+	OPT_BOOLEAN(0, "link", &opts.link, "object is a linked object"),
+	OPT_BOOLEAN(0, "module", &opts.module, "object is part of a kernel module"),
+	OPT_BOOLEAN(0, "mnop", &opts.mnop, "nop out mcount call sites"),
+	OPT_BOOLEAN(0, "no-unreachable", &opts.no_unreachable, "skip 'unreachable instruction' warnings"),
+	OPT_BOOLEAN(0, "sec-address", &opts.sec_address, "print section addresses in warnings"),
+	OPT_BOOLEAN(0, "stats", &opts.stats, "print statistics"),
 	OPT_BOOLEAN('v', "verbose", &opts.verbose, "verbose warnings"),
-	OPT_BOOLEAN(0,   "Werror", &opts.werror, "return error on warnings"),
 
 	OPT_END(),
 };
@@ -138,26 +131,6 @@ int cmd_parse_options(int argc, const char **argv, const char * const usage[])
 
 static bool opts_valid(void)
 {
-	if (opts.mnop && !opts.mcount) {
-		ERROR("--mnop requires --mcount");
-		return false;
-	}
-
-	if (opts.noinstr && !opts.link) {
-		ERROR("--noinstr requires --link");
-		return false;
-	}
-
-	if (opts.ibt && !opts.link) {
-		ERROR("--ibt requires --link");
-		return false;
-	}
-
-	if (opts.unret && !opts.link) {
-		ERROR("--unret requires --link");
-		return false;
-	}
-
 	if (opts.hack_jump_label	||
 	    opts.hack_noinstr		||
 	    opts.ibt			||
@@ -178,6 +151,11 @@ static bool opts_valid(void)
 		return true;
 	}
 
+	if (opts.unret && !opts.rethunk) {
+		ERROR("--unret requires --rethunk");
+		return false;
+	}
+
 	if (opts.dump_orc)
 		return true;
 
@@ -185,150 +163,76 @@ static bool opts_valid(void)
 	return false;
 }
 
-static int copy_file(const char *src, const char *dst)
+static bool mnop_opts_valid(void)
 {
-	size_t to_copy, copied;
-	int dst_fd, src_fd;
-	struct stat stat;
-	off_t offset = 0;
-
-	src_fd = open(src, O_RDONLY);
-	if (src_fd == -1) {
-		ERROR("can't open %s for reading: %s", src, strerror(errno));
-		return 1;
+	if (opts.mnop && !opts.mcount) {
+		ERROR("--mnop requires --mcount");
+		return false;
 	}
 
-	dst_fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0400);
-	if (dst_fd == -1) {
-		ERROR("can't open %s for writing: %s", dst, strerror(errno));
-		return 1;
-	}
-
-	if (fstat(src_fd, &stat) == -1) {
-		ERROR_GLIBC("fstat");
-		return 1;
-	}
-
-	if (fchmod(dst_fd, stat.st_mode) == -1) {
-		ERROR_GLIBC("fchmod");
-		return 1;
-	}
-
-	for (to_copy = stat.st_size; to_copy > 0; to_copy -= copied) {
-		copied = sendfile(dst_fd, src_fd, &offset, to_copy);
-		if (copied == -1) {
-			ERROR_GLIBC("sendfile");
-			return 1;
-		}
-	}
-
-	close(dst_fd);
-	close(src_fd);
-	return 0;
+	return true;
 }
 
-static void save_argv(int argc, const char **argv)
+static bool link_opts_valid(struct objtool_file *file)
 {
-	orig_argv = calloc(argc, sizeof(char *));
-	if (!orig_argv) {
-		ERROR_GLIBC("calloc");
-		exit(1);
+	if (opts.link)
+		return true;
+
+	if (has_multiple_files(file->elf)) {
+		ERROR("Linked object detected, forcing --link");
+		opts.link = true;
+		return true;
 	}
 
-	for (int i = 0; i < argc; i++) {
-		orig_argv[i] = strdup(argv[i]);
-		if (!orig_argv[i]) {
-			ERROR_GLIBC("strdup(%s)", argv[i]);
-			exit(1);
-		}
-	};
-}
-
-void print_args(void)
-{
-	char *backup = NULL;
-
-	if (opts.output || opts.dryrun)
-		goto print;
-
-	/*
-	 * Make a backup before kbuild deletes the file so the error
-	 * can be recreated without recompiling or relinking.
-	 */
-	backup = malloc(strlen(objname) + strlen(ORIG_SUFFIX) + 1);
-	if (!backup) {
-		ERROR_GLIBC("malloc");
-		goto print;
+	if (opts.noinstr) {
+		ERROR("--noinstr requires --link");
+		return false;
 	}
 
-	strcpy(backup, objname);
-	strcat(backup, ORIG_SUFFIX);
-	if (copy_file(objname, backup)) {
-		backup = NULL;
-		goto print;
+	if (opts.ibt) {
+		ERROR("--ibt requires --link");
+		return false;
 	}
 
-print:
-	/*
-	 * Print the cmdline args to make it easier to recreate.  If '--output'
-	 * wasn't used, add it to the printed args with the backup as input.
-	 */
-	fprintf(stderr, "%s", orig_argv[0]);
-
-	for (int i = 1; i < orig_argc; i++) {
-		char *arg = orig_argv[i];
-
-		if (backup && !strcmp(arg, objname))
-			fprintf(stderr, " %s -o %s", backup, objname);
-		else
-			fprintf(stderr, " %s", arg);
+	if (opts.unret) {
+		ERROR("--unret requires --link");
+		return false;
 	}
 
-	fprintf(stderr, "\n");
+	return true;
 }
 
 int objtool_run(int argc, const char **argv)
 {
+	const char *objname;
 	struct objtool_file *file;
-	int ret = 0;
+	int ret;
 
-	orig_argc = argc;
-	save_argv(argc, argv);
-
-	cmd_parse_options(argc, argv, check_usage);
+	argc = cmd_parse_options(argc, argv, check_usage);
+	objname = argv[0];
 
 	if (!opts_valid())
 		return 1;
 
-	objname = argv[0];
-
 	if (opts.dump_orc)
 		return orc_dump(objname);
-
-	if (!opts.dryrun && opts.output) {
-		/* copy original .o file to output file */
-		if (copy_file(objname, opts.output))
-			return 1;
-
-		/* from here on, work directly on the output file */
-		objname = opts.output;
-	}
 
 	file = objtool_open_read(objname);
 	if (!file)
 		return 1;
 
-	if (!opts.link && has_multiple_files(file->elf)) {
-		ERROR("Linked object requires --link");
+	if (!mnop_opts_valid())
 		return 1;
-	}
+
+	if (!link_opts_valid(file))
+		return 1;
 
 	ret = check(file);
 	if (ret)
 		return ret;
 
-	if (!opts.dryrun && file->elf->changed && elf_write(file->elf))
-		return 1;
+	if (file->elf->changed)
+		return elf_write(file->elf);
 
 	return 0;
 }

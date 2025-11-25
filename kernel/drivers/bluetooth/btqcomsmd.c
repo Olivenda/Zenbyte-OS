@@ -117,7 +117,7 @@ static int btqcomsmd_setup(struct hci_dev *hdev)
 	/* Devices do not have persistent storage for BD address. Retrieve
 	 * it from the firmware node property.
 	 */
-	hci_set_quirk(hdev, HCI_QUIRK_USE_BDADDR_PROPERTY);
+	set_bit(HCI_QUIRK_USE_BDADDR_PROPERTY, &hdev->quirks);
 
 	return 0;
 }
@@ -216,7 +216,7 @@ MODULE_DEVICE_TABLE(of, btqcomsmd_of_match);
 
 static struct platform_driver btqcomsmd_driver = {
 	.probe = btqcomsmd_probe,
-	.remove = btqcomsmd_remove,
+	.remove_new = btqcomsmd_remove,
 	.driver  = {
 		.name  = "btqcomsmd",
 		.of_match_table = btqcomsmd_of_match,

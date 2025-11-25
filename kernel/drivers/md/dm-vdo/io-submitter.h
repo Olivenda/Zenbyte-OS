@@ -8,7 +8,6 @@
 
 #include <linux/bio.h>
 
-#include "constants.h"
 #include "types.h"
 
 struct io_submitter;
@@ -27,25 +26,14 @@ void vdo_submit_data_vio(struct data_vio *data_vio);
 
 void __submit_metadata_vio(struct vio *vio, physical_block_number_t physical,
 			   bio_end_io_t callback, vdo_action_fn error_handler,
-			   blk_opf_t operation, char *data, int size);
+			   blk_opf_t operation, char *data);
 
 static inline void vdo_submit_metadata_vio(struct vio *vio, physical_block_number_t physical,
 					   bio_end_io_t callback, vdo_action_fn error_handler,
 					   blk_opf_t operation)
 {
 	__submit_metadata_vio(vio, physical, callback, error_handler,
-			      operation, vio->data, vio->block_count * VDO_BLOCK_SIZE);
-}
-
-static inline void vdo_submit_metadata_vio_with_size(struct vio *vio,
-						     physical_block_number_t physical,
-						     bio_end_io_t callback,
-						     vdo_action_fn error_handler,
-						     blk_opf_t operation,
-						     int size)
-{
-	__submit_metadata_vio(vio, physical, callback, error_handler,
-			      operation, vio->data, size);
+			      operation, vio->data);
 }
 
 static inline void vdo_submit_flush_vio(struct vio *vio, bio_end_io_t callback,
@@ -53,7 +41,7 @@ static inline void vdo_submit_flush_vio(struct vio *vio, bio_end_io_t callback,
 {
 	/* FIXME: Can we just use REQ_OP_FLUSH? */
 	__submit_metadata_vio(vio, 0, callback, error_handler,
-			      REQ_OP_WRITE | REQ_PREFLUSH, NULL, 0);
+			      REQ_OP_WRITE | REQ_PREFLUSH, NULL);
 }
 
 #endif /* VDO_IO_SUBMITTER_H */

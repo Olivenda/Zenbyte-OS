@@ -17,13 +17,13 @@ xfs_ioc_swapext(
 extern int
 xfs_fileattr_get(
 	struct dentry		*dentry,
-	struct file_kattr	*fa);
+	struct fileattr		*fa);
 
 extern int
 xfs_fileattr_set(
 	struct mnt_idmap	*idmap,
 	struct dentry		*dentry,
-	struct file_kattr	*fa);
+	struct fileattr		*fa);
 
 extern long
 xfs_file_ioctl(

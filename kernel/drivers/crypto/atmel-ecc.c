@@ -379,7 +379,7 @@ MODULE_DEVICE_TABLE(of, atmel_ecc_dt_ids);
 #endif
 
 static const struct i2c_device_id atmel_ecc_id[] = {
-	{ "atecc508a" },
+	{ "atecc508a", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, atmel_ecc_id);

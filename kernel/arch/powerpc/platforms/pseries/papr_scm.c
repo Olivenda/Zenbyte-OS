@@ -6,7 +6,6 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/ioport.h>
-#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/ndctl.h>
 #include <linux/sched.h>
@@ -544,7 +543,7 @@ static int drc_pmem_query_health(struct papr_scm_priv *p)
 
 	/* Jiffies offset for which the health data is assumed to be same */
 	cache_timeout = p->lasthealth_jiffies +
-		secs_to_jiffies(MIN_HEALTH_QUERY_INTERVAL);
+		msecs_to_jiffies(MIN_HEALTH_QUERY_INTERVAL * 1000);
 
 	/* Fetch new health info is its older than MIN_HEALTH_QUERY_INTERVAL */
 	if (time_after(jiffies, cache_timeout))

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # perf list tests
 # SPDX-License-Identifier: GPL-2.0
 
@@ -24,11 +24,8 @@ trap trap_cleanup EXIT TERM INT
 
 test_list_json() {
   echo "Json output test"
-  # Generate perf list json output into list_output file.
   perf list -j -o "${list_output}"
-  # Validate the json using python, redirect the json copy to /dev/null as
-  # otherwise the test may block writing to stdout.
-  $PYTHON -m json.tool "${list_output}" /dev/null
+  $PYTHON -m json.tool "${list_output}"
   echo "Json output test [Success]"
 }
 

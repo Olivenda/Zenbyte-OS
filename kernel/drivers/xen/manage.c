@@ -11,7 +11,6 @@
 #include <linux/reboot.h>
 #include <linux/sysrq.h>
 #include <linux/stop_machine.h>
-#include <linux/suspend.h>
 #include <linux/freezer.h>
 #include <linux/syscore_ops.h>
 #include <linux/export.h>
@@ -52,6 +51,12 @@ void xen_resume_notifier_register(struct notifier_block *nb)
 	raw_notifier_chain_register(&xen_resume_notifier, nb);
 }
 EXPORT_SYMBOL_GPL(xen_resume_notifier_register);
+
+void xen_resume_notifier_unregister(struct notifier_block *nb)
+{
+	raw_notifier_chain_unregister(&xen_resume_notifier, nb);
+}
+EXPORT_SYMBOL_GPL(xen_resume_notifier_unregister);
 
 #ifdef CONFIG_HIBERNATE_CALLBACKS
 static int xen_suspend(void *data)
@@ -96,16 +101,10 @@ static void do_suspend(void)
 
 	shutting_down = SHUTDOWN_SUSPEND;
 
-	if (!mutex_trylock(&system_transition_mutex))
-	{
-		pr_err("%s: failed to take system_transition_mutex\n", __func__);
-		goto out;
-	}
-
 	err = freeze_processes();
 	if (err) {
 		pr_err("%s: freeze processes failed %d\n", __func__, err);
-		goto out_unlock;
+		goto out;
 	}
 
 	err = freeze_kernel_threads();
@@ -162,8 +161,6 @@ out_resume_end:
 
 out_thaw:
 	thaw_processes();
-out_unlock:
-	mutex_unlock(&system_transition_mutex);
 out:
 	shutting_down = SHUTDOWN_INVALID;
 }

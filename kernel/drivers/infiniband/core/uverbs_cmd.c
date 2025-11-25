@@ -42,7 +42,6 @@
 
 #include <rdma/uverbs_types.h>
 #include <rdma/uverbs_std_types.h>
-#include <rdma/ib_ucaps.h>
 #include "rdma_core.h"
 
 #include "uverbs.h"
@@ -193,7 +192,7 @@ _ib_uverbs_lookup_comp_file(s32 fd, struct uverbs_attr_bundle *attrs)
 					       fd, attrs);
 
 	if (IS_ERR(uobj))
-		return ERR_CAST(uobj);
+		return (void *)uobj;
 
 	uverbs_uobject_get(uobj);
 	uobj_put_read(uobj);
@@ -233,8 +232,6 @@ int ib_init_ucontext(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_ucontext *ucontext = attrs->context;
 	struct ib_uverbs_file *file = attrs->ufile;
-	int *fd_array;
-	int fd_count;
 	int ret;
 
 	if (!down_read_trylock(&file->hw_destroy_rwsem))
@@ -249,22 +246,6 @@ int ib_init_ucontext(struct uverbs_attr_bundle *attrs)
 				   RDMACG_RESOURCE_HCA_HANDLE);
 	if (ret)
 		goto err;
-
-	if (uverbs_attr_is_valid(attrs, UVERBS_ATTR_GET_CONTEXT_FD_ARR)) {
-		fd_count = uverbs_attr_ptr_get_array_size(attrs,
-							  UVERBS_ATTR_GET_CONTEXT_FD_ARR,
-							  sizeof(int));
-		if (fd_count < 0) {
-			ret = fd_count;
-			goto err_uncharge;
-		}
-
-		fd_array = uverbs_attr_get_alloced_ptr(attrs,
-						       UVERBS_ATTR_GET_CONTEXT_FD_ARR);
-		ret = ib_get_ucaps(fd_array, fd_count, &ucontext->enabled_caps);
-		if (ret)
-			goto err_uncharge;
-	}
 
 	ret = ucontext->device->ops.alloc_ucontext(ucontext,
 						   &attrs->driver_udata);
@@ -603,7 +584,7 @@ static int ib_uverbs_open_xrcd(struct uverbs_attr_bundle *attrs)
 	if (cmd.fd != -1) {
 		/* search for file descriptor */
 		f = fdget(cmd.fd);
-		if (fd_empty(f)) {
+		if (!fd_file(f)) {
 			ret = -EBADF;
 			goto err_tree_mutex_unlock;
 		}
@@ -651,7 +632,8 @@ static int ib_uverbs_open_xrcd(struct uverbs_attr_bundle *attrs)
 		atomic_inc(&xrcd->usecnt);
 	}
 
-	fdput(f);
+	if (fd_file(f))
+		fdput(f);
 
 	mutex_unlock(&ibudev->xrcd_tree_mutex);
 	uobj_finalize_uobj_create(&obj->uobject, attrs);
@@ -666,7 +648,8 @@ err:
 	uobj_alloc_abort(&obj->uobject, attrs);
 
 err_tree_mutex_unlock:
-	fdput(f);
+	if (fd_file(f))
+		fdput(f);
 
 	mutex_unlock(&ibudev->xrcd_tree_mutex);
 
@@ -741,7 +724,7 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	}
 
 	mr = pd->device->ops.reg_user_mr(pd, cmd.start, cmd.length, cmd.hca_va,
-					 cmd.access_flags, NULL,
+					 cmd.access_flags,
 					 &attrs->driver_udata);
 	if (IS_ERR(mr)) {
 		ret = PTR_ERR(mr);
@@ -1312,9 +1295,9 @@ static int create_qp(struct uverbs_attr_bundle *attrs,
 
 	switch (cmd->qp_type) {
 	case IB_QPT_RAW_PACKET:
-		if (!rdma_uattrs_has_raw_cap(attrs))
+		if (!capable(CAP_NET_RAW))
 			return -EPERM;
-		fallthrough;
+		break;
 	case IB_QPT_RC:
 	case IB_QPT_UC:
 	case IB_QPT_UD:
@@ -1451,7 +1434,7 @@ static int create_qp(struct uverbs_attr_bundle *attrs,
 	}
 
 	if (attr.create_flags & IB_QP_CREATE_SOURCE_QPN) {
-		if (!rdma_uattrs_has_raw_cap(attrs)) {
+		if (!capable(CAP_NET_RAW)) {
 			ret = -EPERM;
 			goto err_put;
 		}
@@ -1877,8 +1860,7 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 		attr->path_mig_state = cmd->base.path_mig_state;
 	if (cmd->base.attr_mask & IB_QP_QKEY) {
 		if (cmd->base.qkey & IB_QP_SET_QKEY &&
-		    !(rdma_nl_get_privileged_qkey() ||
-		      rdma_uattrs_has_raw_cap(attrs))) {
+		    !rdma_nl_get_privileged_qkey()) {
 			ret = -EPERM;
 			goto release_qp;
 		}
@@ -3226,7 +3208,7 @@ static int ib_uverbs_ex_create_flow(struct uverbs_attr_bundle *attrs)
 	if (cmd.comp_mask)
 		return -EINVAL;
 
-	if (!rdma_uattrs_has_raw_cap(attrs))
+	if (!capable(CAP_NET_RAW))
 		return -EPERM;
 
 	if (cmd.flow_attr.flags >= IB_FLOW_ATTR_FLAGS_RESERVED)

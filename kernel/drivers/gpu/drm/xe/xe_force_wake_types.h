@@ -48,7 +48,7 @@ enum xe_force_wake_domains {
 	XE_FW_MEDIA_VEBOX2	= BIT(XE_FW_DOMAIN_ID_MEDIA_VEBOX2),
 	XE_FW_MEDIA_VEBOX3	= BIT(XE_FW_DOMAIN_ID_MEDIA_VEBOX3),
 	XE_FW_GSC		= BIT(XE_FW_DOMAIN_ID_GSC),
-	XE_FORCEWAKE_ALL	= BIT(XE_FW_DOMAIN_ID_COUNT)
+	XE_FORCEWAKE_ALL	= BIT(XE_FW_DOMAIN_ID_COUNT) - 1
 };
 
 /**
@@ -78,9 +78,7 @@ struct xe_force_wake {
 	/** @lock: protects everything force wake struct */
 	spinlock_t lock;
 	/** @awake_domains: mask of all domains awake */
-	unsigned int awake_domains;
-	/** @initialized_domains: mask of all initialized domains */
-	unsigned int initialized_domains;
+	enum xe_force_wake_domains awake_domains;
 	/** @domains: force wake domains */
 	struct xe_force_wake_domain domains[XE_FW_DOMAIN_ID_COUNT];
 };

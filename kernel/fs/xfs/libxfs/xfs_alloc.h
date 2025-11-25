@@ -79,8 +79,9 @@ int xfs_alloc_put_freelist(struct xfs_perag *pag, struct xfs_trans *tp,
 		struct xfs_buf *agfbp, struct xfs_buf *agflbp,
 		xfs_agblock_t bno, int btreeblk);
 int xfs_free_ag_extent(struct xfs_trans *tp, struct xfs_buf *agbp,
-		xfs_agblock_t bno, xfs_extlen_t len,
-		const struct xfs_owner_info *oinfo, enum xfs_ag_resv_type type);
+		xfs_agnumber_t agno, xfs_agblock_t bno,
+		xfs_extlen_t len, const struct xfs_owner_info *oinfo,
+		enum xfs_ag_resv_type type);
 
 /*
  * Compute and fill in value of m_alloc_maxlevels.
@@ -237,11 +238,7 @@ int xfs_free_extent_later(struct xfs_trans *tp, xfs_fsblock_t bno,
 /* Don't issue a discard for the blocks freed. */
 #define XFS_FREE_EXTENT_SKIP_DISCARD	(1U << 0)
 
-/* Free blocks on the realtime device. */
-#define XFS_FREE_EXTENT_REALTIME	(1U << 1)
-
-#define XFS_FREE_EXTENT_ALL_FLAGS	(XFS_FREE_EXTENT_SKIP_DISCARD | \
-					 XFS_FREE_EXTENT_REALTIME)
+#define XFS_FREE_EXTENT_ALL_FLAGS	(XFS_FREE_EXTENT_SKIP_DISCARD)
 
 /*
  * List of extents to be free "later".
@@ -252,7 +249,7 @@ struct xfs_extent_free_item {
 	uint64_t		xefi_owner;
 	xfs_fsblock_t		xefi_startblock;/* starting fs block number */
 	xfs_extlen_t		xefi_blockcount;/* number of blocks in extent */
-	struct xfs_group	*xefi_group;
+	struct xfs_perag	*xefi_pag;
 	unsigned int		xefi_flags;
 	enum xfs_ag_resv_type	xefi_agresv;
 };
@@ -261,12 +258,6 @@ struct xfs_extent_free_item {
 #define XFS_EFI_ATTR_FORK	(1U << 1) /* freeing attr fork block */
 #define XFS_EFI_BMBT_BLOCK	(1U << 2) /* freeing bmap btree block */
 #define XFS_EFI_CANCELLED	(1U << 3) /* dont actually free the space */
-#define XFS_EFI_REALTIME	(1U << 4) /* freeing realtime extent */
-
-static inline bool xfs_efi_is_realtime(const struct xfs_extent_free_item *xefi)
-{
-	return xefi->xefi_flags & XFS_EFI_REALTIME;
-}
 
 struct xfs_alloc_autoreap {
 	struct xfs_defer_pending	*dfp;

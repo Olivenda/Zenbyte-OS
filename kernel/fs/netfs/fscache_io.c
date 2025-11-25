@@ -9,6 +9,7 @@
 #include <linux/uio.h>
 #include <linux/bvec.h>
 #include <linux/slab.h>
+#include <linux/uio.h>
 #include "internal.h"
 
 /**
@@ -192,7 +193,8 @@ EXPORT_SYMBOL(__fscache_clear_page_bits);
 /*
  * Deal with the completion of writing the data to the cache.
  */
-static void fscache_wreq_done(void *priv, ssize_t transferred_or_error)
+static void fscache_wreq_done(void *priv, ssize_t transferred_or_error,
+			      bool was_async)
 {
 	struct fscache_write_request *wreq = priv;
 
@@ -201,7 +203,8 @@ static void fscache_wreq_done(void *priv, ssize_t transferred_or_error)
 					wreq->set_bits);
 
 	if (wreq->term_func)
-		wreq->term_func(wreq->term_func_priv, transferred_or_error);
+		wreq->term_func(wreq->term_func_priv, transferred_or_error,
+				was_async);
 	fscache_end_operation(&wreq->cache_resources);
 	kfree(wreq);
 }
@@ -253,14 +256,14 @@ void __fscache_write_to_cache(struct fscache_cookie *cookie,
 	return;
 
 abandon_end:
-	return fscache_wreq_done(wreq, ret);
+	return fscache_wreq_done(wreq, ret, false);
 abandon_free:
 	kfree(wreq);
 abandon:
 	if (using_pgpriv2)
 		fscache_clear_page_bits(mapping, start, len, cond);
 	if (term_func)
-		term_func(term_func_priv, ret);
+		term_func(term_func_priv, ret, false);
 }
 EXPORT_SYMBOL(__fscache_write_to_cache);
 

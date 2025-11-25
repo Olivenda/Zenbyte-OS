@@ -246,7 +246,7 @@
 	status = "okay";
 
 	flash@0 {
-		compatible = "jedec,spi-nor";
+		compatible = "micron,mt25qu512a", "jedec,spi-nor";
 		reg = <0>;
 		m25p,fast-read;
 		spi-max-frequency = <50000000>;
@@ -258,18 +258,11 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
-			partition@0 {
-				label = "bl2";
-				reg = <0x00000000 0x0001d000>;
+			boot@0 {
+				reg = <0x00000000 0x2000000>;
+				read-only;
 			};
-
-			partition@1d000 { /* fip is at offset 0x200 */
-				label = "fip";
-				reg = <0x0001d000 0x1fe3000>;
-			};
-
-			partition@2000000 {
-				label = "user";
+			user@2000000 {
 				reg = <0x2000000 0x2000000>;
 			};
 		};

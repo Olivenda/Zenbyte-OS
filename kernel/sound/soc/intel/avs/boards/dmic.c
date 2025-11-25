@@ -10,7 +10,6 @@
 #include <linux/module.h>
 #include <sound/soc.h>
 #include <sound/soc-acpi.h>
-#include "../utils.h"
 
 SND_SOC_DAILINK_DEF(dmic_pin, DAILINK_COMP_ARRAY(COMP_CPU("DMIC Pin")));
 SND_SOC_DAILINK_DEF(dmic_wov_pin, DAILINK_COMP_ARRAY(COMP_CPU("DMIC WoV Pin")));
@@ -23,7 +22,7 @@ static struct snd_soc_dai_link card_dai_links[] = {
 	{
 		.name = "DMIC",
 		.id = 0,
-		.capture_only = 1,
+		.dpcm_capture = 1,
 		.nonatomic = 1,
 		.no_pcm = 1,
 		SND_SOC_DAILINK_REG(dmic_pin, dmic_codec, platform),
@@ -31,7 +30,7 @@ static struct snd_soc_dai_link card_dai_links[] = {
 	{
 		.name = "DMIC WoV",
 		.id = 1,
-		.capture_only = 1,
+		.dpcm_capture = 1,
 		.nonatomic = 1,
 		.no_pcm = 1,
 		.ignore_suspend = 1,
@@ -50,24 +49,17 @@ static const struct snd_soc_dapm_route card_routes[] = {
 static int avs_dmic_probe(struct platform_device *pdev)
 {
 	struct snd_soc_acpi_mach *mach;
-	struct avs_mach_pdata *pdata;
 	struct snd_soc_card *card;
 	struct device *dev = &pdev->dev;
 	int ret;
 
 	mach = dev_get_platdata(dev);
-	pdata = mach->pdata;
 
 	card = devm_kzalloc(dev, sizeof(*card), GFP_KERNEL);
 	if (!card)
 		return -ENOMEM;
 
-	if (pdata->obsolete_card_names) {
-		card->name = "avs_dmic";
-	} else {
-		card->driver_name = "avs_dmic";
-		card->long_name = card->name = "AVS DMIC";
-	}
+	card->name = "avs_dmic";
 	card->dev = dev;
 	card->owner = THIS_MODULE;
 	card->dai_link = card_dai_links;
@@ -82,7 +74,7 @@ static int avs_dmic_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	return devm_snd_soc_register_deferrable_card(dev, card);
+	return devm_snd_soc_register_card(dev, card);
 }
 
 static const struct platform_device_id avs_dmic_driver_ids[] = {

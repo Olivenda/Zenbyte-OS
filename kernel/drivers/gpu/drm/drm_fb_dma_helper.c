@@ -17,9 +17,7 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_panic.h>
 #include <drm/drm_plane.h>
-
 #include <linux/dma-mapping.h>
-#include <linux/export.h>
 #include <linux/module.h>
 
 /**
@@ -180,7 +178,7 @@ int drm_fb_dma_get_scanout_buffer(struct drm_plane *plane,
 	dma_obj = drm_fb_dma_get_gem_obj(fb, 0);
 
 	/* Buffer should be accessible from the CPU */
-	if (drm_gem_is_imported(&dma_obj->base))
+	if (dma_obj->base.import_attach)
 		return -ENODEV;
 
 	/* Buffer should be already mapped to CPU */

@@ -2,9 +2,6 @@
 /*
  * Copyright © 2023 Intel Corporation
  */
-
-#include <linux/export.h>
-
 #include <drm/ttm/ttm_tt.h>
 
 #include "ttm_kunit_helpers.h"

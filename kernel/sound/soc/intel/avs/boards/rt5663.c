@@ -65,8 +65,7 @@ static int avs_rt5663_codec_init(struct snd_soc_pcm_runtime *runtime)
 	jack = &priv->jack;
 	num_pins = ARRAY_SIZE(card_headset_pins);
 
-	pins = devm_kmemdup_array(card->dev, card_headset_pins, num_pins,
-				  sizeof(card_headset_pins[0]), GFP_KERNEL);
+	pins = devm_kmemdup(card->dev, card_headset_pins, sizeof(*pins) * num_pins, GFP_KERNEL);
 	if (!pins)
 		return -ENOMEM;
 
@@ -172,6 +171,8 @@ static int avs_create_dai_link(struct device *dev, const char *platform_name, in
 	dl->be_hw_params_fixup = avs_rt5663_be_fixup;
 	dl->nonatomic = 1;
 	dl->no_pcm = 1;
+	dl->dpcm_capture = 1;
+	dl->dpcm_playback = 1;
 	dl->ops = &avs_rt5663_ops;
 
 	*dai_link = dl;
@@ -198,7 +199,6 @@ static int avs_rt5663_probe(struct platform_device *pdev)
 {
 	struct snd_soc_dai_link *dai_link;
 	struct snd_soc_acpi_mach *mach;
-	struct avs_mach_pdata *pdata;
 	struct snd_soc_card *card;
 	struct rt5663_private *priv;
 	struct device *dev = &pdev->dev;
@@ -207,7 +207,6 @@ static int avs_rt5663_probe(struct platform_device *pdev)
 
 	mach = dev_get_platdata(dev);
 	pname = mach->mach_params.platform;
-	pdata = mach->pdata;
 
 	ret = avs_mach_get_ssp_tdm(dev, mach, &ssp_port, &tdm_slot);
 	if (ret)
@@ -224,12 +223,7 @@ static int avs_rt5663_probe(struct platform_device *pdev)
 	if (!priv || !card)
 		return -ENOMEM;
 
-	if (pdata->obsolete_card_names) {
-		card->name = "avs_rt5663";
-	} else {
-		card->driver_name = "avs_rt5663";
-		card->long_name = card->name = "AVS I2S ALC5663";
-	}
+	card->name = "avs_rt5663";
 	card->dev = dev;
 	card->owner = THIS_MODULE;
 	card->suspend_pre = avs_card_suspend_pre;
@@ -249,7 +243,7 @@ static int avs_rt5663_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	return devm_snd_soc_register_deferrable_card(dev, card);
+	return devm_snd_soc_register_card(dev, card);
 }
 
 static const struct platform_device_id avs_rt5663_driver_ids[] = {

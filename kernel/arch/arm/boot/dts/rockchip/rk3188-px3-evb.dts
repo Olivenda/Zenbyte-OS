@@ -39,7 +39,7 @@
 		};
 	};
 
-	vcc_sys: regulator-vsys {
+	vcc_sys: vsys-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vsys";
 		regulator-min-microvolt = <5000000>;

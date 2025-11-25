@@ -426,16 +426,16 @@ static int bh1745_read_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		iio_device_claim_direct_scoped(return -EBUSY, indio_dev) {
+			ret = regmap_bulk_read(data->regmap, chan->address,
+					       &value, 2);
+			if (ret)
+				return ret;
+			*val = value;
 
-		ret = regmap_bulk_read(data->regmap, chan->address, &value, 2);
-		iio_device_release_direct(indio_dev);
-		if (ret)
-			return ret;
-		*val = value;
-
-		return IIO_VAL_INT;
+			return IIO_VAL_INT;
+		}
+		unreachable();
 
 	case IIO_CHAN_INFO_SCALE: {
 			guard(mutex)(&data->lock);
@@ -638,42 +638,46 @@ static int bh1745_read_event_config(struct iio_dev *indio_dev,
 static int bh1745_write_event_config(struct iio_dev *indio_dev,
 				     const struct iio_chan_spec *chan,
 				     enum iio_event_type type,
-				     enum iio_event_direction dir, bool state)
+				     enum iio_event_direction dir, int state)
 {
 	struct bh1745_data *data = iio_priv(indio_dev);
 	int value;
 
-	if (!state)
+	if (state == 0)
 		return regmap_clear_bits(data->regmap,
 					 BH1745_INTR, BH1745_INTR_ENABLE);
 
-	/* Latch is always enabled when enabling interrupt */
-	value = BH1745_INTR_ENABLE;
+	if (state == 1) {
+		/* Latch is always enabled when enabling interrupt */
+		value = BH1745_INTR_ENABLE;
 
-	switch (chan->channel2) {
-	case IIO_MOD_LIGHT_RED:
-		return regmap_write(data->regmap, BH1745_INTR,
-				    value | FIELD_PREP(BH1745_INTR_SOURCE_MASK,
-						       BH1745_INTR_SOURCE_RED));
+		switch (chan->channel2) {
+		case IIO_MOD_LIGHT_RED:
+			return regmap_write(data->regmap, BH1745_INTR,
+					    value | FIELD_PREP(BH1745_INTR_SOURCE_MASK,
+							       BH1745_INTR_SOURCE_RED));
 
-	case IIO_MOD_LIGHT_GREEN:
-		return regmap_write(data->regmap, BH1745_INTR,
-				    value | FIELD_PREP(BH1745_INTR_SOURCE_MASK,
-						       BH1745_INTR_SOURCE_GREEN));
+		case IIO_MOD_LIGHT_GREEN:
+			return regmap_write(data->regmap, BH1745_INTR,
+					    value | FIELD_PREP(BH1745_INTR_SOURCE_MASK,
+							       BH1745_INTR_SOURCE_GREEN));
 
-	case IIO_MOD_LIGHT_BLUE:
-		return regmap_write(data->regmap, BH1745_INTR,
-				    value | FIELD_PREP(BH1745_INTR_SOURCE_MASK,
-						       BH1745_INTR_SOURCE_BLUE));
+		case IIO_MOD_LIGHT_BLUE:
+			return regmap_write(data->regmap, BH1745_INTR,
+					    value | FIELD_PREP(BH1745_INTR_SOURCE_MASK,
+							       BH1745_INTR_SOURCE_BLUE));
 
-	case IIO_MOD_LIGHT_CLEAR:
-		return regmap_write(data->regmap, BH1745_INTR,
-				    value | FIELD_PREP(BH1745_INTR_SOURCE_MASK,
-						       BH1745_INTR_SOURCE_CLEAR));
+		case IIO_MOD_LIGHT_CLEAR:
+			return regmap_write(data->regmap, BH1745_INTR,
+					    value | FIELD_PREP(BH1745_INTR_SOURCE_MASK,
+							       BH1745_INTR_SOURCE_CLEAR));
 
-	default:
-		return -EINVAL;
+		default:
+			return -EINVAL;
+		}
 	}
+
+	return -EINVAL;
 }
 
 static int bh1745_read_avail(struct iio_dev *indio_dev,
@@ -740,11 +744,13 @@ static irqreturn_t bh1745_trigger_handler(int interrupt, void *p)
 	struct {
 		u16 chans[4];
 		aligned_s64 timestamp;
-	} scan = { };
+	} scan;
 	u16 value;
 	int ret;
 	int i;
 	int j = 0;
+
+	memset(&scan, 0, sizeof(scan));
 
 	iio_for_each_active_channel(indio_dev, i) {
 		ret = regmap_bulk_read(data->regmap, BH1745_RED_LSB + 2 * i,
@@ -899,4 +905,4 @@ module_i2c_driver(bh1745_driver);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Mudit Sharma <muditsharma.info@gmail.com>");
 MODULE_DESCRIPTION("BH1745 colour sensor driver");
-MODULE_IMPORT_NS("IIO_GTS_HELPER");
+MODULE_IMPORT_NS(IIO_GTS_HELPER);

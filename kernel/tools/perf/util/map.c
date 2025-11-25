@@ -120,8 +120,8 @@ static void map__init(struct map *map, u64 start, u64 end, u64 pgoff,
 }
 
 struct map *map__new(struct machine *machine, u64 start, u64 len,
-		     u64 pgoff, const struct dso_id *id,
-		     u32 prot, u32 flags,
+		     u64 pgoff, struct dso_id *id,
+		     u32 prot, u32 flags, struct build_id *bid,
 		     char *filename, struct thread *thread)
 {
 	struct map *result;
@@ -132,7 +132,7 @@ struct map *map__new(struct machine *machine, u64 start, u64 len,
 	map = zalloc(sizeof(*map));
 	if (ADD_RC_CHK(result, map)) {
 		char newfilename[PATH_MAX];
-		struct dso *dso;
+		struct dso *dso, *header_bid_dso;
 		int anon, no_dso, vdso, android;
 
 		android = is_android_lib(filename);
@@ -189,15 +189,16 @@ struct map *map__new(struct machine *machine, u64 start, u64 len,
 		dso__set_nsinfo(dso, nsi);
 		mutex_unlock(dso__lock(dso));
 
-		if (!build_id__is_defined(&id->build_id)) {
+		if (build_id__is_defined(bid)) {
+			dso__set_build_id(dso, bid);
+		} else {
 			/*
 			 * If the mmap event had no build ID, search for an existing dso from the
 			 * build ID header by name. Otherwise only the dso loaded at the time of
 			 * reading the header will have the build ID set and all future mmaps will
 			 * have it missing.
 			 */
-			struct dso *header_bid_dso = dsos__find(&machine->dsos, filename, false);
-
+			header_bid_dso = dsos__find(&machine->dsos, filename, false);
 			if (header_bid_dso && dso__header_build_id(header_bid_dso)) {
 				dso__set_build_id(dso, dso__bid(header_bid_dso));
 				dso__set_header_build_id(dso, 1);
@@ -353,7 +354,7 @@ int map__load(struct map *map)
 		if (dso__has_build_id(dso)) {
 			char sbuild_id[SBUILD_ID_SIZE];
 
-			build_id__snprintf(dso__bid(dso), sbuild_id, sizeof(sbuild_id));
+			build_id__sprintf(dso__bid(dso), sbuild_id);
 			pr_debug("%s with build id %s not found", name, sbuild_id);
 		} else
 			pr_debug("Failed to open %s", name);

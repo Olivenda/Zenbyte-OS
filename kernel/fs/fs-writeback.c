@@ -65,7 +65,7 @@ struct wb_writeback_work {
  * timestamps written to disk after 12 hours, but in the worst case a
  * few inodes might not their timestamps updated for 24 hours.
  */
-static unsigned int dirtytime_expire_interval = 12 * 60 * 60;
+unsigned int dirtytime_expire_interval = 12 * 60 * 60;
 
 static inline struct inode *wb_inode(struct list_head *head)
 {
@@ -290,6 +290,7 @@ void __inode_attach_wb(struct inode *inode, struct folio *folio)
 	if (unlikely(cmpxchg(&inode->i_wb, NULL, wb)))
 		wb_put(wb);
 }
+EXPORT_SYMBOL_GPL(__inode_attach_wb);
 
 /**
  * inode_cgwb_move_to_attached - put the inode onto wb->b_attached list
@@ -740,9 +741,8 @@ bool cleanup_offline_cgwb(struct bdi_writeback *wb)
  * writeback completion, wbc_detach_inode() should be called.  This is used
  * to track the cgroup writeback context.
  */
-static void wbc_attach_and_unlock_inode(struct writeback_control *wbc,
-		struct inode *inode)
-	__releases(&inode->i_lock)
+void wbc_attach_and_unlock_inode(struct writeback_control *wbc,
+				 struct inode *inode)
 {
 	if (!inode_cgwb_enabled(inode)) {
 		spin_unlock(&inode->i_lock);
@@ -772,24 +772,7 @@ static void wbc_attach_and_unlock_inode(struct writeback_control *wbc,
 	if (unlikely(wb_dying(wbc->wb) && !css_is_dying(wbc->wb->memcg_css)))
 		inode_switch_wbs(inode, wbc->wb_id);
 }
-
-/**
- * wbc_attach_fdatawrite_inode - associate wbc and inode for fdatawrite
- * @wbc: writeback_control of interest
- * @inode: target inode
- *
- * This function is to be used by __filemap_fdatawrite_range(), which is an
- * alternative entry point into writeback code, and first ensures @inode is
- * associated with a bdi_writeback and attaches it to @wbc.
- */
-void wbc_attach_fdatawrite_inode(struct writeback_control *wbc,
-		struct inode *inode)
-{
-	spin_lock(&inode->i_lock);
-	inode_attach_wb(inode, NULL);
-	wbc_attach_and_unlock_inode(wbc, inode);
-}
-EXPORT_SYMBOL_GPL(wbc_attach_fdatawrite_inode);
+EXPORT_SYMBOL_GPL(wbc_attach_and_unlock_inode);
 
 /**
  * wbc_detach_inode - disassociate wbc from inode and perform foreign detection
@@ -1250,13 +1233,6 @@ static void bdi_split_work_to_wbs(struct backing_dev_info *bdi,
 		base_work->auto_free = 0;
 		wb_queue_work(&bdi->wb, base_work);
 	}
-}
-
-static inline void wbc_attach_and_unlock_inode(struct writeback_control *wbc,
-					       struct inode *inode)
-	__releases(&inode->i_lock)
-{
-	spin_unlock(&inode->i_lock);
 }
 
 #endif	/* CONFIG_CGROUP_WRITEBACK */
@@ -2445,7 +2421,14 @@ static void wakeup_dirtytime_writeback(struct work_struct *w)
 	schedule_delayed_work(&dirtytime_work, dirtytime_expire_interval * HZ);
 }
 
-static int dirtytime_interval_handler(const struct ctl_table *table, int write,
+static int __init start_dirtytime_writeback(void)
+{
+	schedule_delayed_work(&dirtytime_work, dirtytime_expire_interval * HZ);
+	return 0;
+}
+__initcall(start_dirtytime_writeback);
+
+int dirtytime_interval_handler(const struct ctl_table *table, int write,
 			       void *buffer, size_t *lenp, loff_t *ppos)
 {
 	int ret;
@@ -2455,25 +2438,6 @@ static int dirtytime_interval_handler(const struct ctl_table *table, int write,
 		mod_delayed_work(system_wq, &dirtytime_work, 0);
 	return ret;
 }
-
-static const struct ctl_table vm_fs_writeback_table[] = {
-	{
-		.procname	= "dirtytime_expire_seconds",
-		.data		= &dirtytime_expire_interval,
-		.maxlen		= sizeof(dirtytime_expire_interval),
-		.mode		= 0644,
-		.proc_handler	= dirtytime_interval_handler,
-		.extra1		= SYSCTL_ZERO,
-	},
-};
-
-static int __init start_dirtytime_writeback(void)
-{
-	schedule_delayed_work(&dirtytime_work, dirtytime_expire_interval * HZ);
-	register_sysctl_init("vm", vm_fs_writeback_table);
-	return 0;
-}
-__initcall(start_dirtytime_writeback);
 
 /**
  * __mark_inode_dirty -	internal function to mark an inode dirty

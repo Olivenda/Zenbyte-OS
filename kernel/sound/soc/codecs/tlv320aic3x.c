@@ -1821,8 +1821,10 @@ int aic3x_probe(struct device *dev, struct regmap *regmap, kernel_ulong_t driver
 
 	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(aic3x->supplies),
 				      aic3x->supplies);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to request supplies\n");
+	if (ret) {
+		dev_err(dev, "Failed to request supplies: %d\n", ret);
+		return ret;
+	}
 
 	aic3x_configure_ocmv(dev, aic3x);
 

@@ -70,7 +70,7 @@ static void __intel_breadcrumbs_disarm_irq(struct intel_breadcrumbs *b)
 	if (!--b->irq_enabled)
 		b->irq_disable(b);
 
-	WRITE_ONCE(b->irq_armed, NULL);
+	WRITE_ONCE(b->irq_armed, 0);
 	intel_gt_pm_put_async(b->irq_engine->gt, wakeref);
 }
 

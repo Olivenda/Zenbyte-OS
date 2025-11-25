@@ -368,10 +368,6 @@ int mlx5_core_get_caps_mode(struct mlx5_core_dev *dev, enum mlx5_cap_type cap_ty
 	u16 opmod = (cap_type << 1) | (cap_mode & 0x01);
 	int err;
 
-	if (WARN_ON(!dev->caps.hca[cap_type]))
-		/* this cap_type must be added to mlx5_hca_caps_alloc() */
-		return -EINVAL;
-
 	memset(in, 0, sizeof(in));
 	out = kzalloc(out_sz, GFP_KERNEL);
 	if (!out)
@@ -668,10 +664,6 @@ static int handle_hca_cap(struct mlx5_core_dev *dev, void *set_ctx)
 		MLX5_SET(cmd_hca_cap, set_hca_cap, log_max_current_uc_list,
 			 ilog2(max_uc_list));
 
-	/* enable absolute native port num */
-	if (MLX5_CAP_GEN_MAX(dev, abs_native_port_num))
-		MLX5_SET(cmd_hca_cap, set_hca_cap, abs_native_port_num, 1);
-
 	return set_caps(dev, set_ctx, MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE);
 }
 
@@ -949,7 +941,9 @@ static int mlx5_pci_init(struct mlx5_core_dev *dev, struct pci_dev *pdev,
 
 	mlx5_pci_vsc_init(dev);
 
-	pci_enable_ptm(pdev, NULL);
+	err = pci_enable_ptm(pdev, NULL);
+	if (err)
+		mlx5_core_info(dev, "PTM is not supported by PCIe\n");
 
 	return 0;
 
@@ -1038,11 +1032,7 @@ static int mlx5_init_once(struct mlx5_core_dev *dev)
 
 	mlx5_init_reserved_gids(dev);
 
-	err = mlx5_init_clock(dev);
-	if (err) {
-		mlx5_core_err(dev, "failed to initialize hardware clock\n");
-		goto err_tables_cleanup;
-	}
+	mlx5_init_clock(dev);
 
 	dev->vxlan = mlx5_vxlan_create(dev);
 	dev->geneve = mlx5_geneve_create(dev);
@@ -1050,7 +1040,7 @@ static int mlx5_init_once(struct mlx5_core_dev *dev)
 	err = mlx5_init_rl_table(dev);
 	if (err) {
 		mlx5_core_err(dev, "Failed to init rate limiting\n");
-		goto err_clock_cleanup;
+		goto err_tables_cleanup;
 	}
 
 	err = mlx5_mpfs_init(dev);
@@ -1102,7 +1092,6 @@ static int mlx5_init_once(struct mlx5_core_dev *dev)
 	}
 
 	dev->dm = mlx5_dm_create(dev);
-	dev->st = mlx5_st_create(dev);
 	dev->tracer = mlx5_fw_tracer_create(dev);
 	dev->hv_vhca = mlx5_hv_vhca_create(dev);
 	dev->rsc_dump = mlx5_rsc_dump_create(dev);
@@ -1125,11 +1114,10 @@ err_mpfs_cleanup:
 	mlx5_mpfs_cleanup(dev);
 err_rl_cleanup:
 	mlx5_cleanup_rl_table(dev);
-err_clock_cleanup:
+err_tables_cleanup:
 	mlx5_geneve_destroy(dev->geneve);
 	mlx5_vxlan_destroy(dev->vxlan);
 	mlx5_cleanup_clock(dev);
-err_tables_cleanup:
 	mlx5_cleanup_reserved_gids(dev);
 	mlx5_cq_debugfs_cleanup(dev);
 	mlx5_fw_reset_cleanup(dev);
@@ -1151,7 +1139,6 @@ static void mlx5_cleanup_once(struct mlx5_core_dev *dev)
 	mlx5_rsc_dump_destroy(dev);
 	mlx5_hv_vhca_destroy(dev->hv_vhca);
 	mlx5_fw_tracer_destroy(dev->tracer);
-	mlx5_st_destroy(dev);
 	mlx5_dm_cleanup(dev);
 	mlx5_fs_core_free(dev);
 	mlx5_sf_table_cleanup(dev);
@@ -1209,24 +1196,24 @@ static int mlx5_function_enable(struct mlx5_core_dev *dev, bool boot, u64 timeou
 	dev->caps.embedded_cpu = mlx5_read_embedded_cpu(dev);
 	mlx5_cmd_set_state(dev, MLX5_CMDIF_STATE_UP);
 
+	mlx5_start_health_poll(dev);
+
 	err = mlx5_core_enable_hca(dev, 0);
 	if (err) {
 		mlx5_core_err(dev, "enable hca failed\n");
-		goto err_cmd_cleanup;
+		goto stop_health_poll;
 	}
-
-	mlx5_start_health_poll(dev);
 
 	err = mlx5_core_set_issi(dev);
 	if (err) {
 		mlx5_core_err(dev, "failed to set issi\n");
-		goto stop_health_poll;
+		goto err_disable_hca;
 	}
 
 	err = mlx5_satisfy_startup_pages(dev, 1);
 	if (err) {
 		mlx5_core_err(dev, "failed to allocate boot pages\n");
-		goto stop_health_poll;
+		goto err_disable_hca;
 	}
 
 	err = mlx5_tout_query_dtor(dev);
@@ -1239,9 +1226,10 @@ static int mlx5_function_enable(struct mlx5_core_dev *dev, bool boot, u64 timeou
 
 reclaim_boot_pages:
 	mlx5_reclaim_startup_pages(dev);
+err_disable_hca:
+	mlx5_core_disable_hca(dev, 0);
 stop_health_poll:
 	mlx5_stop_health_poll(dev, boot);
-	mlx5_core_disable_hca(dev, 0);
 err_cmd_cleanup:
 	mlx5_cmd_set_state(dev, MLX5_CMDIF_STATE_DOWN);
 	mlx5_cmd_disable(dev);
@@ -1252,8 +1240,8 @@ err_cmd_cleanup:
 static void mlx5_function_disable(struct mlx5_core_dev *dev, bool boot)
 {
 	mlx5_reclaim_startup_pages(dev);
-	mlx5_stop_health_poll(dev, boot);
 	mlx5_core_disable_hca(dev, 0);
+	mlx5_stop_health_poll(dev, boot);
 	mlx5_cmd_set_state(dev, MLX5_CMDIF_STATE_DOWN);
 	mlx5_cmd_disable(dev);
 }
@@ -1340,9 +1328,10 @@ static int mlx5_load(struct mlx5_core_dev *dev)
 {
 	int err;
 
-	err = mlx5_alloc_bfreg(dev, &dev->priv.bfreg, false, false);
-	if (err) {
-		mlx5_core_err(dev, "Failed allocating bfreg, %d\n", err);
+	dev->priv.uar = mlx5_get_uars_page(dev);
+	if (IS_ERR(dev->priv.uar)) {
+		mlx5_core_err(dev, "Failed allocating uar, aborting\n");
+		err = PTR_ERR(dev->priv.uar);
 		return err;
 	}
 
@@ -1360,8 +1349,6 @@ static int mlx5_load(struct mlx5_core_dev *dev)
 		mlx5_core_err(dev, "Failed to create EQs\n");
 		goto err_eq_table;
 	}
-
-	mlx5_clock_load(dev);
 
 	err = mlx5_fw_tracer_init(dev->tracer);
 	if (err) {
@@ -1446,14 +1433,13 @@ err_fpga_start:
 	mlx5_hv_vhca_cleanup(dev->hv_vhca);
 	mlx5_fw_reset_events_stop(dev);
 	mlx5_fw_tracer_cleanup(dev->tracer);
-	mlx5_clock_unload(dev);
 	mlx5_eq_table_destroy(dev);
 err_eq_table:
 	mlx5_irq_table_destroy(dev);
 err_irq_table:
 	mlx5_pagealloc_stop(dev);
 	mlx5_events_stop(dev);
-	mlx5_free_bfreg(dev, &dev->priv.bfreg);
+	mlx5_put_uars_page(dev, dev->priv.uar);
 	return err;
 }
 
@@ -1473,12 +1459,11 @@ static void mlx5_unload(struct mlx5_core_dev *dev)
 	mlx5_hv_vhca_cleanup(dev->hv_vhca);
 	mlx5_fw_reset_events_stop(dev);
 	mlx5_fw_tracer_cleanup(dev->tracer);
-	mlx5_clock_unload(dev);
 	mlx5_eq_table_destroy(dev);
 	mlx5_irq_table_destroy(dev);
 	mlx5_pagealloc_stop(dev);
 	mlx5_events_stop(dev);
-	mlx5_free_bfreg(dev, &dev->priv.bfreg);
+	mlx5_put_uars_page(dev, dev->priv.uar);
 }
 
 int mlx5_init_one_devl_locked(struct mlx5_core_dev *dev)
@@ -1800,8 +1785,6 @@ static const int types[] = {
 	MLX5_CAP_MACSEC,
 	MLX5_CAP_ADV_VIRTUALIZATION,
 	MLX5_CAP_CRYPTO,
-	MLX5_CAP_SHAMPO,
-	MLX5_CAP_ADV_RDMA,
 };
 
 static void mlx5_hca_caps_free(struct mlx5_core_dev *dev)

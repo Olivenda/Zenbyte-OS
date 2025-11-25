@@ -11,7 +11,6 @@
 
 #include <linux/fs.h>
 #include <linux/audit.h>
-#include <linux/security.h>
 #include <linux/skbuff.h>
 #include <uapi/linux/mqueue.h>
 #include <linux/tty.h>
@@ -82,7 +81,7 @@ struct audit_names {
 	kuid_t			uid;
 	kgid_t			gid;
 	dev_t			rdev;
-	struct lsm_prop		oprop;
+	u32			osid;
 	struct audit_cap_data	fcap;
 	unsigned int		fcap_ver;
 	unsigned char		type;		/* record type */
@@ -144,7 +143,7 @@ struct audit_context {
 	kuid_t		    target_auid;
 	kuid_t		    target_uid;
 	unsigned int	    target_sessionid;
-	struct lsm_prop	    target_ref;
+	u32		    target_sid;
 	char		    target_comm[TASK_COMM_LEN];
 
 	struct audit_tree_refs *trees, *first_trees;
@@ -161,7 +160,7 @@ struct audit_context {
 			kuid_t			uid;
 			kgid_t			gid;
 			umode_t			mode;
-			struct lsm_prop		oprop;
+			u32			osid;
 			int			has_perm;
 			uid_t			perm_uid;
 			gid_t			perm_gid;

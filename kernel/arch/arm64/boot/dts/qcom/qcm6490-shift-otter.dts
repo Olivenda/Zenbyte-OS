@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
  * Copyright (c) 2023, Luca Weiss <luca.weiss@fairphone.com>
- * Copyright (c) 2024, Casey Connolly <casey.connolly@linaro.org>
+ * Copyright (c) 2024, Caleb Connolly <caleb@postmarketos.org>
  */
 
 /dts-v1/;
@@ -953,7 +953,7 @@
 };
 
 &wifi {
-	qcom,calibration-variant = "SHIFTphone_8";
+	qcom,ath11k-calibration-variant = "SHIFTphone_8";
 
 	status = "okay";
 };

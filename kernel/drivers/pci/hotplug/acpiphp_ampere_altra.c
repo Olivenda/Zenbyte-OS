@@ -119,7 +119,7 @@ static struct platform_driver altra_led_driver = {
 		.acpi_match_table = altra_led_ids,
 	},
 	.probe = altra_led_probe,
-	.remove = altra_led_remove,
+	.remove_new = altra_led_remove,
 };
 module_platform_driver(altra_led_driver);
 

@@ -64,7 +64,7 @@ static const char* host_info(struct Scsi_Host *host)
 	return us->scsi_name;
 }
 
-static int sdev_init (struct scsi_device *sdev)
+static int slave_alloc (struct scsi_device *sdev)
 {
 	struct us_data *us = host_to_us(sdev->host);
 
@@ -88,7 +88,7 @@ static int sdev_init (struct scsi_device *sdev)
 	return 0;
 }
 
-static int sdev_configure(struct scsi_device *sdev, struct queue_limits *lim)
+static int device_configure(struct scsi_device *sdev, struct queue_limits *lim)
 {
 	struct us_data *us = host_to_us(sdev->host);
 	struct device *dev = us->pusb_dev->bus->sysdev;
@@ -127,7 +127,7 @@ static int sdev_configure(struct scsi_device *sdev, struct queue_limits *lim)
 		lim->max_hw_sectors, dma_max_mapping_size(dev) >> SECTOR_SHIFT);
 
 	/*
-	 * We can't put these settings in sdev_init() because that gets
+	 * We can't put these settings in slave_alloc() because that gets
 	 * called before the device type is known.  Consequently these
 	 * settings can't be overridden via the scsi devinfo mechanism.
 	 */
@@ -592,9 +592,12 @@ static ssize_t max_sectors_store(struct device *dev, struct device_attribute *at
 	if (sscanf(buf, "%hu", &ms) <= 0)
 		return -EINVAL;
 
+	blk_mq_freeze_queue(sdev->request_queue);
 	lim = queue_limits_start_update(sdev->request_queue);
 	lim.max_hw_sectors = ms;
-	ret = queue_limits_commit_update_frozen(sdev->request_queue, &lim);
+	ret = queue_limits_commit_update(sdev->request_queue, &lim);
+	blk_mq_unfreeze_queue(sdev->request_queue);
+
 	if (ret)
 		return ret;
 	return count;
@@ -634,8 +637,8 @@ static const struct scsi_host_template usb_stor_host_template = {
 	/* unknown initiator id */
 	.this_id =			-1,
 
-	.sdev_init =			sdev_init,
-	.sdev_configure =		sdev_configure,
+	.slave_alloc =			slave_alloc,
+	.device_configure =		device_configure,
 	.target_alloc =			target_alloc,
 
 	/* lots of sg segments can be handled */

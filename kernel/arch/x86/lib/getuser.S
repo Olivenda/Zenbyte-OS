@@ -28,7 +28,6 @@
 
 #include <linux/export.h>
 #include <linux/linkage.h>
-#include <linux/objtool.h>
 #include <asm/page_types.h>
 #include <asm/errno.h>
 #include <asm/asm-offsets.h>
@@ -60,7 +59,6 @@
 
 	.text
 SYM_FUNC_START(__get_user_1)
-	ANNOTATE_NOENDBR
 	check_range size=1
 	ASM_STAC
 	UACCESS movzbl (%_ASM_AX),%edx
@@ -71,7 +69,6 @@ SYM_FUNC_END(__get_user_1)
 EXPORT_SYMBOL(__get_user_1)
 
 SYM_FUNC_START(__get_user_2)
-	ANNOTATE_NOENDBR
 	check_range size=2
 	ASM_STAC
 	UACCESS movzwl (%_ASM_AX),%edx
@@ -82,7 +79,6 @@ SYM_FUNC_END(__get_user_2)
 EXPORT_SYMBOL(__get_user_2)
 
 SYM_FUNC_START(__get_user_4)
-	ANNOTATE_NOENDBR
 	check_range size=4
 	ASM_STAC
 	UACCESS movl (%_ASM_AX),%edx
@@ -93,7 +89,6 @@ SYM_FUNC_END(__get_user_4)
 EXPORT_SYMBOL(__get_user_4)
 
 SYM_FUNC_START(__get_user_8)
-	ANNOTATE_NOENDBR
 #ifndef CONFIG_X86_64
 	xor %ecx,%ecx
 #endif
@@ -113,7 +108,6 @@ EXPORT_SYMBOL(__get_user_8)
 
 /* .. and the same for __get_user, just without the range checks */
 SYM_FUNC_START(__get_user_nocheck_1)
-	ANNOTATE_NOENDBR
 	ASM_STAC
 	ASM_BARRIER_NOSPEC
 	UACCESS movzbl (%_ASM_AX),%edx
@@ -124,7 +118,6 @@ SYM_FUNC_END(__get_user_nocheck_1)
 EXPORT_SYMBOL(__get_user_nocheck_1)
 
 SYM_FUNC_START(__get_user_nocheck_2)
-	ANNOTATE_NOENDBR
 	ASM_STAC
 	ASM_BARRIER_NOSPEC
 	UACCESS movzwl (%_ASM_AX),%edx
@@ -135,7 +128,6 @@ SYM_FUNC_END(__get_user_nocheck_2)
 EXPORT_SYMBOL(__get_user_nocheck_2)
 
 SYM_FUNC_START(__get_user_nocheck_4)
-	ANNOTATE_NOENDBR
 	ASM_STAC
 	ASM_BARRIER_NOSPEC
 	UACCESS movl (%_ASM_AX),%edx
@@ -146,7 +138,6 @@ SYM_FUNC_END(__get_user_nocheck_4)
 EXPORT_SYMBOL(__get_user_nocheck_4)
 
 SYM_FUNC_START(__get_user_nocheck_8)
-	ANNOTATE_NOENDBR
 	ASM_STAC
 	ASM_BARRIER_NOSPEC
 #ifdef CONFIG_X86_64

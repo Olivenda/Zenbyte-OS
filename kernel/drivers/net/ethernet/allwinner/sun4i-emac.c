@@ -1142,7 +1142,7 @@ static struct platform_driver emac_driver = {
 		.of_match_table = emac_of_match,
 	},
 	.probe = emac_probe,
-	.remove = emac_remove,
+	.remove_new = emac_remove,
 	.suspend = emac_suspend,
 	.resume = emac_resume,
 };

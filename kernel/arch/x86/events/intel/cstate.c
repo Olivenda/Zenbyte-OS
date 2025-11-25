@@ -111,7 +111,6 @@
 #include <linux/nospec.h>
 #include <asm/cpu_device_id.h>
 #include <asm/intel-family.h>
-#include <asm/msr.h>
 #include "../perf_event.h"
 #include "../probe.h"
 
@@ -321,7 +320,7 @@ static inline u64 cstate_pmu_read_counter(struct perf_event *event)
 {
 	u64 val;
 
-	rdmsrq(event->hw.event_base, val);
+	rdmsrl(event->hw.event_base, val);
 	return val;
 }
 

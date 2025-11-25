@@ -16,10 +16,9 @@ properties:
         items:
           - const: xlnx,xuartps
           - const: cdns,uart-r1p8
-      - items:
-          - enum:
-              - axiado,ax3000-uart
-              - xlnx,zynqmp-uart
+      - description: UART controller for Zynq Ultrascale+ MPSoC
+        items:
+          - const: xlnx,zynqmp-uart
           - const: cdns,uart-r1p12
 
   reg:

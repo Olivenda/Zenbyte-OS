@@ -107,7 +107,7 @@ match_fps:
 			break;
 	}
 	if (i == fan->fps_count) {
-		dev_dbg(&device->dev, "No matching fps control value\n");
+		dev_dbg(&device->dev, "Invalid control value returned\n");
 		return -EINVAL;
 	}
 
@@ -475,7 +475,7 @@ static const struct dev_pm_ops acpi_fan_pm = {
 
 static struct platform_driver acpi_fan_driver = {
 	.probe = acpi_fan_probe,
-	.remove = acpi_fan_remove,
+	.remove_new = acpi_fan_remove,
 	.driver = {
 		.name = "acpi-fan",
 		.acpi_match_table = fan_device_ids,

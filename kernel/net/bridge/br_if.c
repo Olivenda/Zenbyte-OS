@@ -669,8 +669,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev,
 		/* Ask for permission to use this MAC address now, even if we
 		 * don't end up choosing it below.
 		 */
-		err = netif_pre_changeaddr_notify(br->dev, dev->dev_addr,
-						  extack);
+		err = dev_pre_changeaddr_notify(br->dev, dev->dev_addr, extack);
 		if (err)
 			goto err6;
 	}

@@ -150,7 +150,9 @@ static u64 block_rsv_release_bytes(struct btrfs_fs_info *fs_info,
 			spin_unlock(&dest->lock);
 		}
 		if (num_bytes)
-			btrfs_space_info_free_bytes_may_use(space_info, num_bytes);
+			btrfs_space_info_free_bytes_may_use(fs_info,
+							    space_info,
+							    num_bytes);
 	}
 	if (qgroup_to_release_ret)
 		*qgroup_to_release_ret = qgroup_to_release;
@@ -381,11 +383,13 @@ void btrfs_update_global_block_rsv(struct btrfs_fs_info *fs_info)
 
 	if (block_rsv->reserved < block_rsv->size) {
 		num_bytes = block_rsv->size - block_rsv->reserved;
-		btrfs_space_info_update_bytes_may_use(sinfo, num_bytes);
+		btrfs_space_info_update_bytes_may_use(fs_info, sinfo,
+						      num_bytes);
 		block_rsv->reserved = block_rsv->size;
 	} else if (block_rsv->reserved > block_rsv->size) {
 		num_bytes = block_rsv->reserved - block_rsv->size;
-		btrfs_space_info_update_bytes_may_use(sinfo, -num_bytes);
+		btrfs_space_info_update_bytes_may_use(fs_info, sinfo,
+						      -num_bytes);
 		block_rsv->reserved = block_rsv->size;
 		btrfs_try_granting_tickets(fs_info, sinfo);
 	}
@@ -418,9 +422,6 @@ void btrfs_init_root_block_rsv(struct btrfs_root *root)
 	case BTRFS_CHUNK_TREE_OBJECTID:
 		root->block_rsv = &fs_info->chunk_block_rsv;
 		break;
-	case BTRFS_TREE_LOG_OBJECTID:
-		root->block_rsv = &fs_info->treelog_rsv;
-		break;
 	default:
 		root->block_rsv = NULL;
 		break;
@@ -440,14 +441,6 @@ void btrfs_init_global_block_rsv(struct btrfs_fs_info *fs_info)
 	fs_info->empty_block_rsv.space_info = space_info;
 	fs_info->delayed_block_rsv.space_info = space_info;
 	fs_info->delayed_refs_rsv.space_info = space_info;
-
-	/* The treelog_rsv uses a dedicated space_info on the zoned mode. */
-	if (!btrfs_is_zoned(fs_info)) {
-		fs_info->treelog_rsv.space_info = space_info;
-	} else {
-		ASSERT(space_info->sub_group[0]->subgroup_id == BTRFS_SUB_GROUP_TREELOG);
-		fs_info->treelog_rsv.space_info = space_info->sub_group[0];
-	}
 
 	btrfs_update_global_block_rsv(fs_info);
 }

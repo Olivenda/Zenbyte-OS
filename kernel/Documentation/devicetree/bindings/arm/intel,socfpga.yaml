@@ -25,7 +25,6 @@ properties:
         items:
           - enum:
               - intel,socfpga-agilex5-socdk
-              - intel,socfpga-agilex5-socdk-nand
           - const: intel,socfpga-agilex5
 
 additionalProperties: true

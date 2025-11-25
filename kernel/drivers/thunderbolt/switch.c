@@ -3069,7 +3069,7 @@ static int tb_switch_asym_disable(struct tb_switch *sw)
  * @width: The new link width
  *
  * Set device router link width to @width from router upstream port
- * perspective. Supports also asymmetric links if the routers both side
+ * perspective. Supports also asymmetric links if the routers boths side
  * of the link supports it.
  *
  * Does nothing for host router.
@@ -3599,7 +3599,6 @@ void tb_switch_suspend(struct tb_switch *sw, bool runtime)
 		flags |= TB_WAKE_ON_USB4;
 		flags |= TB_WAKE_ON_USB3 | TB_WAKE_ON_PCIE | TB_WAKE_ON_DP;
 	} else if (device_may_wakeup(&sw->dev)) {
-		flags |= TB_WAKE_ON_CONNECT | TB_WAKE_ON_DISCONNECT;
 		flags |= TB_WAKE_ON_USB4 | TB_WAKE_ON_USB3 | TB_WAKE_ON_PCIE;
 	}
 

@@ -685,7 +685,6 @@ struct flow_cls_common_offload {
 	u32 chain_index;
 	__be16 protocol;
 	u32 prio;
-	bool skip_sw;
 	struct netlink_ext_ack *extack;
 };
 

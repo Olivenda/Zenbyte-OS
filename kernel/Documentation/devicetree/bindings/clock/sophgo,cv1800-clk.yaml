@@ -11,18 +11,10 @@ maintainers:
 
 properties:
   compatible:
-    oneOf:
-      - enum:
-          - sophgo,cv1800b-clk
-          - sophgo,cv1812h-clk
-          - sophgo,sg2000-clk
-      - items:
-          - const: sophgo,sg2002-clk
-          - const: sophgo,sg2000-clk
-      - const: sophgo,cv1800-clk
-        deprecated: true
-      - const: sophgo,cv1810-clk
-        deprecated: true
+    enum:
+      - sophgo,cv1800-clk
+      - sophgo,cv1810-clk
+      - sophgo,sg2000-clk
 
   reg:
     maxItems: 1

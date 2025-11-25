@@ -394,8 +394,8 @@ static struct dentry *ecryptfs_lookup(struct inode *ecryptfs_dir_inode,
 	char *encrypted_and_encoded_name = NULL;
 	struct ecryptfs_mount_crypt_stat *mount_crypt_stat;
 	struct dentry *lower_dir_dentry, *lower_dentry;
-	struct qstr qname = QSTR_INIT(ecryptfs_dentry->d_name.name,
-				      ecryptfs_dentry->d_name.len);
+	const char *name = ecryptfs_dentry->d_name.name;
+	size_t len = ecryptfs_dentry->d_name.len;
 	struct dentry *res;
 	int rc = 0;
 
@@ -404,25 +404,23 @@ static struct dentry *ecryptfs_lookup(struct inode *ecryptfs_dir_inode,
 	mount_crypt_stat = &ecryptfs_superblock_to_private(
 				ecryptfs_dentry->d_sb)->mount_crypt_stat;
 	if (mount_crypt_stat->flags & ECRYPTFS_GLOBAL_ENCRYPT_FILENAMES) {
-		size_t len = qname.len;
 		rc = ecryptfs_encrypt_and_encode_filename(
 			&encrypted_and_encoded_name, &len,
-			mount_crypt_stat, qname.name, len);
+			mount_crypt_stat, name, len);
 		if (rc) {
 			printk(KERN_ERR "%s: Error attempting to encrypt and encode "
 			       "filename; rc = [%d]\n", __func__, rc);
 			return ERR_PTR(rc);
 		}
-		qname.name = encrypted_and_encoded_name;
-		qname.len = len;
+		name = encrypted_and_encoded_name;
 	}
 
-	lower_dentry = lookup_noperm_unlocked(&qname, lower_dir_dentry);
+	lower_dentry = lookup_one_len_unlocked(name, lower_dir_dentry, len);
 	if (IS_ERR(lower_dentry)) {
-		ecryptfs_printk(KERN_DEBUG, "%s: lookup_noperm() returned "
+		ecryptfs_printk(KERN_DEBUG, "%s: lookup_one_len() returned "
 				"[%ld] on lower_dentry = [%s]\n", __func__,
 				PTR_ERR(lower_dentry),
-				qname.name);
+				name);
 		res = ERR_CAST(lower_dentry);
 	} else {
 		res = ecryptfs_lookup_interpose(ecryptfs_dentry, lower_dentry);
@@ -505,24 +503,18 @@ out_lock:
 	return rc;
 }
 
-static struct dentry *ecryptfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
-				     struct dentry *dentry, umode_t mode)
+static int ecryptfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
+			  struct dentry *dentry, umode_t mode)
 {
 	int rc;
 	struct dentry *lower_dentry;
 	struct inode *lower_dir;
 
 	rc = lock_parent(dentry, &lower_dentry, &lower_dir);
-	if (rc)
-		goto out;
-
-	lower_dentry = vfs_mkdir(&nop_mnt_idmap, lower_dir,
-				 lower_dentry, mode);
-	rc = PTR_ERR(lower_dentry);
-	if (IS_ERR(lower_dentry))
-		goto out;
-	rc = 0;
-	if (d_unhashed(lower_dentry))
+	if (!rc)
+		rc = vfs_mkdir(&nop_mnt_idmap, lower_dir,
+			       lower_dentry, mode);
+	if (rc || d_really_is_negative(lower_dentry))
 		goto out;
 	rc = ecryptfs_interpose(lower_dentry, dentry, dir->i_sb);
 	if (rc)
@@ -534,7 +526,7 @@ out:
 	inode_unlock(lower_dir);
 	if (d_really_is_negative(dentry))
 		d_drop(dentry);
-	return ERR_PTR(rc);
+	return rc;
 }
 
 static int ecryptfs_rmdir(struct inode *dir, struct dentry *dentry)
@@ -635,10 +627,10 @@ ecryptfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 	}
 
 	rd.old_mnt_idmap	= &nop_mnt_idmap;
-	rd.old_parent		= lower_old_dir_dentry;
+	rd.old_dir		= d_inode(lower_old_dir_dentry);
 	rd.old_dentry		= lower_old_dentry;
 	rd.new_mnt_idmap	= &nop_mnt_idmap;
-	rd.new_parent		= lower_new_dir_dentry;
+	rd.new_dir		= d_inode(lower_new_dir_dentry);
 	rd.new_dentry		= lower_new_dentry;
 	rc = vfs_rename(&rd);
 	if (rc)
@@ -1016,6 +1008,14 @@ static int ecryptfs_getattr_link(struct mnt_idmap *idmap,
 	return rc;
 }
 
+static int ecryptfs_do_getattr(const struct path *path, struct kstat *stat,
+			       u32 request_mask, unsigned int flags)
+{
+	if (flags & AT_GETATTR_NOSEC)
+		return vfs_getattr_nosec(path, stat, request_mask, flags);
+	return vfs_getattr(path, stat, request_mask, flags);
+}
+
 static int ecryptfs_getattr(struct mnt_idmap *idmap,
 			    const struct path *path, struct kstat *stat,
 			    u32 request_mask, unsigned int flags)
@@ -1024,8 +1024,8 @@ static int ecryptfs_getattr(struct mnt_idmap *idmap,
 	struct kstat lower_stat;
 	int rc;
 
-	rc = vfs_getattr_nosec(ecryptfs_dentry_to_lower_path(dentry),
-			       &lower_stat, request_mask, flags);
+	rc = ecryptfs_do_getattr(ecryptfs_dentry_to_lower_path(dentry),
+				 &lower_stat, request_mask, flags);
 	if (!rc) {
 		fsstack_copy_attr_all(d_inode(dentry),
 				      ecryptfs_inode_to_lower(d_inode(dentry)));
@@ -1124,13 +1124,13 @@ out:
 	return rc;
 }
 
-static int ecryptfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
+static int ecryptfs_fileattr_get(struct dentry *dentry, struct fileattr *fa)
 {
 	return vfs_fileattr_get(ecryptfs_dentry_to_lower(dentry), fa);
 }
 
 static int ecryptfs_fileattr_set(struct mnt_idmap *idmap,
-				 struct dentry *dentry, struct file_kattr *fa)
+				 struct dentry *dentry, struct fileattr *fa)
 {
 	struct dentry *lower_dentry = ecryptfs_dentry_to_lower(dentry);
 	int rc;

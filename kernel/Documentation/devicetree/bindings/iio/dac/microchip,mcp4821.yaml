@@ -64,7 +64,7 @@ required:
   - reg
   - vdd-supply
 
-unevaluatedProperties: false
+additionalProperties: false
 
 examples:
   - |

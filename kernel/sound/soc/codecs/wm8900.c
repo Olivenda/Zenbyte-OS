@@ -867,22 +867,22 @@ static int wm8900_set_dai_fmt(struct snd_soc_dai *codec_dai,
 
 	/* set master/slave audio interface */
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBC_CFC:
+	case SND_SOC_DAIFMT_CBS_CFS:
 		clocking1 &= ~WM8900_REG_CLOCKING1_BCLK_DIR;
 		aif3 &= ~WM8900_REG_AUDIO3_ADCLRC_DIR;
 		aif4 &= ~WM8900_REG_AUDIO4_DACLRC_DIR;
 		break;
-	case SND_SOC_DAIFMT_CBC_CFP:
+	case SND_SOC_DAIFMT_CBS_CFM:
 		clocking1 &= ~WM8900_REG_CLOCKING1_BCLK_DIR;
 		aif3 |= WM8900_REG_AUDIO3_ADCLRC_DIR;
 		aif4 |= WM8900_REG_AUDIO4_DACLRC_DIR;
 		break;
-	case SND_SOC_DAIFMT_CBP_CFP:
+	case SND_SOC_DAIFMT_CBM_CFM:
 		clocking1 |= WM8900_REG_CLOCKING1_BCLK_DIR;
 		aif3 |= WM8900_REG_AUDIO3_ADCLRC_DIR;
 		aif4 |= WM8900_REG_AUDIO4_DACLRC_DIR;
 		break;
-	case SND_SOC_DAIFMT_CBP_CFC:
+	case SND_SOC_DAIFMT_CBM_CFS:
 		clocking1 |= WM8900_REG_CLOCKING1_BCLK_DIR;
 		aif3 &= ~WM8900_REG_AUDIO3_ADCLRC_DIR;
 		aif4 &= ~WM8900_REG_AUDIO4_DACLRC_DIR;

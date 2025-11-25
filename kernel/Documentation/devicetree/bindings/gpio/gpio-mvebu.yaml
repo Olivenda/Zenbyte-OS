@@ -72,9 +72,6 @@ properties:
   "#gpio-cells":
     const: 2
 
-  gpio-ranges:
-    maxItems: 1
-
   marvell,pwm-offset:
     $ref: /schemas/types.yaml#/definitions/uint32
     description: Offset in the register map for the pwm registers (in bytes)
@@ -98,13 +95,6 @@ properties:
       - const: core
       - const: axi
     minItems: 1
-
-patternProperties:
-  "^(.+-hog(-[0-9]+)?)$":
-    type: object
-
-    required:
-      - gpio-hog
 
 required:
   - compatible

@@ -9,11 +9,7 @@ TEST_FILES := ../../../../../Documentation/netlink/specs
 TEST_FILES += ../../../../net/ynl
 
 TEST_GEN_FILES += csum
-TEST_GEN_FILES += $(patsubst %.c,%.o,$(wildcard *.bpf.c))
-TEST_GEN_FILES += xdp_helper
 
-TEST_INCLUDES := $(wildcard py/*.py sh/*.sh)
+TEST_INCLUDES := $(wildcard py/*.py)
 
 include ../../lib.mk
-
-include ../bpf.mk

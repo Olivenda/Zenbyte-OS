@@ -20,7 +20,7 @@
 #include "xe_ttm_vram_mgr.h"
 #include "xe_vm.h"
 
-MODULE_IMPORT_NS("DMA_BUF");
+MODULE_IMPORT_NS(DMA_BUF);
 
 static int xe_dma_buf_attach(struct dma_buf *dmabuf,
 			     struct dma_buf_attachment *attach)
@@ -233,7 +233,7 @@ static void xe_dma_buf_move_notify(struct dma_buf_attachment *attach)
 	struct drm_gem_object *obj = attach->importer_priv;
 	struct xe_bo *bo = gem_to_xe_bo(obj);
 
-	XE_WARN_ON(xe_bo_evict(bo));
+	XE_WARN_ON(xe_bo_evict(bo, false));
 }
 
 static const struct dma_buf_attach_ops xe_dma_buf_attach_ops = {

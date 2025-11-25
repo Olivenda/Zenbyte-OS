@@ -192,8 +192,7 @@ const struct file_operations vboxsf_dir_fops = {
  * This is called during name resolution/lookup to check if the @dentry in
  * the cache is still valid. the job is handled by vboxsf_inode_revalidate.
  */
-static int vboxsf_dentry_revalidate(struct inode *dir, const struct qstr *name,
-				    struct dentry *dentry, unsigned int flags)
+static int vboxsf_dentry_revalidate(struct dentry *dentry, unsigned int flags)
 {
 	if (flags & LOOKUP_RCU)
 		return -ECHILD;
@@ -303,11 +302,11 @@ static int vboxsf_dir_mkfile(struct mnt_idmap *idmap,
 	return vboxsf_dir_create(parent, dentry, mode, false, excl, NULL);
 }
 
-static struct dentry *vboxsf_dir_mkdir(struct mnt_idmap *idmap,
-				       struct inode *parent, struct dentry *dentry,
-				       umode_t mode)
+static int vboxsf_dir_mkdir(struct mnt_idmap *idmap,
+			    struct inode *parent, struct dentry *dentry,
+			    umode_t mode)
 {
-	return ERR_PTR(vboxsf_dir_create(parent, dentry, mode, true, true, NULL));
+	return vboxsf_dir_create(parent, dentry, mode, true, true, NULL);
 }
 
 static int vboxsf_dir_atomic_open(struct inode *parent, struct dentry *dentry,

@@ -94,18 +94,22 @@ static int kdb_ftdump(int argc, const char **argv)
 {
 	int skip_entries = 0;
 	long cpu_file;
-	int err;
+	char *cp;
 	int cnt;
+	int cpu;
 
 	if (argc > 2)
 		return KDB_ARGCOUNT;
 
-	if (argc && kstrtoint(argv[1], 0, &skip_entries))
-		return KDB_BADINT;
+	if (argc) {
+		skip_entries = simple_strtol(argv[1], &cp, 0);
+		if (*cp)
+			skip_entries = 0;
+	}
 
 	if (argc == 2) {
-		err = kstrtol(argv[2], 0, &cpu_file);
-		if (err || cpu_file >= NR_CPUS || cpu_file < 0 ||
+		cpu_file = simple_strtol(argv[2], &cp, 0);
+		if (*cp || cpu_file >= NR_CPUS || cpu_file < 0 ||
 		    !cpu_online(cpu_file))
 			return KDB_BADINT;
 	} else {
@@ -117,7 +121,9 @@ static int kdb_ftdump(int argc, const char **argv)
 	trace_init_global_iter(&iter);
 	iter.buffer_iter = buffer_iter;
 
-	tracer_tracing_disable(iter.tr);
+	for_each_tracing_cpu(cpu) {
+		atomic_inc(&per_cpu_ptr(iter.array_buffer->data, cpu)->disabled);
+	}
 
 	/* A negative skip_entries means skip all but the last entries */
 	if (skip_entries < 0) {
@@ -130,7 +136,9 @@ static int kdb_ftdump(int argc, const char **argv)
 
 	ftrace_dump_buf(skip_entries, cpu_file);
 
-	tracer_tracing_enable(iter.tr);
+	for_each_tracing_cpu(cpu) {
+		atomic_dec(&per_cpu_ptr(iter.array_buffer->data, cpu)->disabled);
+	}
 
 	kdb_trap_printk--;
 

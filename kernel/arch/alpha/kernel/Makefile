@@ -3,7 +3,7 @@
 # Makefile for the linux kernel.
 #
 
-always-$(KBUILD_BUILTIN)	:= vmlinux.lds
+extra-y		:= vmlinux.lds
 asflags-y	:= $(KBUILD_CFLAGS)
 ccflags-y	:= -Wno-sign-compare
 

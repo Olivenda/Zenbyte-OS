@@ -1,5 +1,5 @@
-#!/bin/bash -e
-# CoreSight / Memcpy 16k 10 Threads (exclusive)
+#!/bin/sh -e
+# CoreSight / Memcpy 16k 10 Threads
 
 # SPDX-License-Identifier: GPL-2.0
 # Carsten Haitzler <carsten.haitzler@arm.com>, 2021

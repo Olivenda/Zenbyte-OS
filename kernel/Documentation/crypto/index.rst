@@ -26,4 +26,3 @@ for cryptographic use cases, as well as programming examples.
    api-samples
    descore-readme
    device_drivers/index
-   krb5

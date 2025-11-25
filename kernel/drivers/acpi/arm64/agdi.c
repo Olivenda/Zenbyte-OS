@@ -88,7 +88,7 @@ static struct platform_driver agdi_driver = {
 		.name = "agdi",
 	},
 	.probe = agdi_probe,
-	.remove = agdi_remove,
+	.remove_new = agdi_remove,
 };
 
 void __init acpi_agdi_init(void)

@@ -9,8 +9,6 @@
 #include "gt/gen8_ppgtt.h"
 
 #include "i915_drv.h"
-#include "intel_display_core.h"
-#include "intel_display_rpm.h"
 #include "intel_display_types.h"
 #include "intel_dpt.h"
 #include "intel_fb.h"
@@ -127,9 +125,8 @@ struct i915_vma *intel_dpt_pin_to_ggtt(struct i915_address_space *vm,
 				       unsigned int alignment)
 {
 	struct drm_i915_private *i915 = vm->i915;
-	struct intel_display *display = i915->display;
 	struct i915_dpt *dpt = i915_vm_to_dpt(vm);
-	struct ref_tracker *wakeref;
+	intel_wakeref_t wakeref;
 	struct i915_vma *vma;
 	void __iomem *iomem;
 	struct i915_gem_ww_ctx ww;
@@ -139,8 +136,8 @@ struct i915_vma *intel_dpt_pin_to_ggtt(struct i915_address_space *vm,
 	if (i915_gem_object_is_stolen(dpt->obj))
 		pin_flags |= PIN_MAPPABLE;
 
-	wakeref = intel_display_rpm_get(display);
-	atomic_inc(&display->restore.pending_fb_pin);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
+	atomic_inc(&i915->gpu_error.pending_fb_pin);
 
 	for_i915_gem_ww(&ww, err, true) {
 		err = i915_gem_object_lock(dpt->obj, &ww);
@@ -170,8 +167,8 @@ struct i915_vma *intel_dpt_pin_to_ggtt(struct i915_address_space *vm,
 
 	dpt->obj->mm.dirty = true;
 
-	atomic_dec(&display->restore.pending_fb_pin);
-	intel_display_rpm_put(display, wakeref);
+	atomic_dec(&i915->gpu_error.pending_fb_pin);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 
 	return err ? ERR_PTR(err) : vma;
 }
@@ -186,7 +183,7 @@ void intel_dpt_unpin_from_ggtt(struct i915_address_space *vm)
 
 /**
  * intel_dpt_resume - restore the memory mapping for all DPT FBs during system resume
- * @display: display device instance
+ * @i915: device instance
  *
  * Restore the memory mapping during system resume for all framebuffers which
  * are mapped to HW via a GGTT->DPT page table. The content of these page
@@ -196,26 +193,26 @@ void intel_dpt_unpin_from_ggtt(struct i915_address_space *vm)
  * This function must be called after the mappings in GGTT have been restored calling
  * i915_ggtt_resume().
  */
-void intel_dpt_resume(struct intel_display *display)
+void intel_dpt_resume(struct drm_i915_private *i915)
 {
 	struct drm_framebuffer *drm_fb;
 
-	if (!HAS_DISPLAY(display))
+	if (!HAS_DISPLAY(i915))
 		return;
 
-	mutex_lock(&display->drm->mode_config.fb_lock);
-	drm_for_each_fb(drm_fb, display->drm) {
+	mutex_lock(&i915->drm.mode_config.fb_lock);
+	drm_for_each_fb(drm_fb, &i915->drm) {
 		struct intel_framebuffer *fb = to_intel_framebuffer(drm_fb);
 
 		if (fb->dpt_vm)
-			i915_ggtt_resume_vm(fb->dpt_vm, true);
+			i915_ggtt_resume_vm(fb->dpt_vm);
 	}
-	mutex_unlock(&display->drm->mode_config.fb_lock);
+	mutex_unlock(&i915->drm.mode_config.fb_lock);
 }
 
 /**
  * intel_dpt_suspend - suspend the memory mapping for all DPT FBs during system suspend
- * @display: display device instance
+ * @i915: device instance
  *
  * Suspend the memory mapping during system suspend for all framebuffers which
  * are mapped to HW via a GGTT->DPT page table.
@@ -223,29 +220,29 @@ void intel_dpt_resume(struct intel_display *display)
  * This function must be called before the mappings in GGTT are suspended calling
  * i915_ggtt_suspend().
  */
-void intel_dpt_suspend(struct intel_display *display)
+void intel_dpt_suspend(struct drm_i915_private *i915)
 {
 	struct drm_framebuffer *drm_fb;
 
-	if (!HAS_DISPLAY(display))
+	if (!HAS_DISPLAY(i915))
 		return;
 
-	mutex_lock(&display->drm->mode_config.fb_lock);
+	mutex_lock(&i915->drm.mode_config.fb_lock);
 
-	drm_for_each_fb(drm_fb, display->drm) {
+	drm_for_each_fb(drm_fb, &i915->drm) {
 		struct intel_framebuffer *fb = to_intel_framebuffer(drm_fb);
 
 		if (fb->dpt_vm)
-			i915_ggtt_suspend_vm(fb->dpt_vm, true);
+			i915_ggtt_suspend_vm(fb->dpt_vm);
 	}
 
-	mutex_unlock(&display->drm->mode_config.fb_lock);
+	mutex_unlock(&i915->drm.mode_config.fb_lock);
 }
 
 struct i915_address_space *
 intel_dpt_create(struct intel_framebuffer *fb)
 {
-	struct drm_gem_object *obj = intel_fb_bo(&fb->base);
+	struct drm_gem_object *obj = &intel_fb_obj(&fb->base)->base;
 	struct drm_i915_private *i915 = to_i915(obj->dev);
 	struct drm_i915_gem_object *dpt_obj;
 	struct i915_address_space *vm;

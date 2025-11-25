@@ -182,7 +182,7 @@ struct vfsmount *nfs_d_automount(struct path *path)
 	ctx->version		= client->rpc_ops->version;
 	ctx->minorversion	= client->cl_minorversion;
 	ctx->nfs_mod		= client->cl_nfs_mod;
-	get_nfs_version(ctx->nfs_mod);
+	__module_get(ctx->nfs_mod->owner);
 
 	ret = client->rpc_ops->submount(fc, server);
 	if (ret < 0) {
@@ -195,6 +195,7 @@ struct vfsmount *nfs_d_automount(struct path *path)
 	if (IS_ERR(mnt))
 		goto out_fc;
 
+	mntget(mnt); /* prevent immediate expiration */
 	if (timeout <= 0)
 		goto out_fc;
 
@@ -307,7 +308,7 @@ int nfs_submount(struct fs_context *fc, struct nfs_server *server)
 	int err;
 
 	/* Look it up again to get its attributes */
-	err = server->nfs_client->rpc_ops->lookup(d_inode(parent), dentry, &dentry->d_name,
+	err = server->nfs_client->rpc_ops->lookup(d_inode(parent), dentry,
 						  ctx->mntfh, ctx->clone_data.fattr);
 	dput(parent);
 	if (err != 0)

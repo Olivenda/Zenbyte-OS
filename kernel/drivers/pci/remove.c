@@ -17,44 +17,39 @@ static void pci_free_resources(struct pci_dev *dev)
 	}
 }
 
-static void pci_pwrctrl_unregister(struct device *dev)
+static int pci_pwrctl_unregister(struct device *dev, void *data)
 {
-	struct device_node *np;
-	struct platform_device *pdev;
+	struct device_node *pci_node = data, *plat_node = dev_of_node(dev);
 
-	np = dev_of_node(dev);
-	if (!np)
-		return;
+	if (dev_is_platform(dev) && plat_node && plat_node == pci_node) {
+		of_device_unregister(to_platform_device(dev));
+		of_node_clear_flag(plat_node, OF_POPULATED);
+	}
 
-	pdev = of_find_device_by_node(np);
-	if (!pdev)
-		return;
-
-	of_device_unregister(pdev);
-	put_device(&pdev->dev);
-
-	of_node_clear_flag(np, OF_POPULATED);
+	return 0;
 }
 
 static void pci_stop_dev(struct pci_dev *dev)
 {
 	pci_pme_active(dev, false);
 
-	if (!pci_dev_test_and_clear_added(dev))
-		return;
+	if (pci_dev_is_added(dev)) {
+		device_for_each_child(dev->dev.parent, dev_of_node(&dev->dev),
+				      pci_pwrctl_unregister);
+		device_release_driver(&dev->dev);
+		pci_proc_detach_device(dev);
+		pci_remove_sysfs_dev_files(dev);
+		of_pci_remove_node(dev);
 
-	device_release_driver(&dev->dev);
-	pci_proc_detach_device(dev);
-	pci_remove_sysfs_dev_files(dev);
-	of_pci_remove_node(dev);
+		pci_dev_assign_added(dev, false);
+	}
 }
 
 static void pci_destroy_dev(struct pci_dev *dev)
 {
-	if (pci_dev_test_and_set_removed(dev))
+	if (!dev->dev.kobj.parent)
 		return;
 
-	pci_doe_sysfs_teardown(dev);
 	pci_npem_remove(dev);
 
 	device_del(&dev->dev);
@@ -66,7 +61,6 @@ static void pci_destroy_dev(struct pci_dev *dev)
 	pci_doe_destroy(dev);
 	pcie_aspm_exit_link_state(dev);
 	pci_bridge_d3_update(dev);
-	pci_pwrctrl_unregister(&dev->dev);
 	pci_free_resources(dev);
 	put_device(&dev->dev);
 }
@@ -165,8 +159,6 @@ void pci_stop_root_bus(struct pci_bus *bus)
 	list_for_each_entry_safe_reverse(child, tmp,
 					 &bus->devices, bus_list)
 		pci_stop_bus_device(child);
-
-	of_pci_remove_host_bridge_node(host_bridge);
 
 	/* stop the host bridge */
 	device_release_driver(&host_bridge->dev);

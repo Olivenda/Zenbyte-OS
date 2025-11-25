@@ -66,6 +66,7 @@ struct s390_xts_ctx {
 struct gcm_sg_walk {
 	struct scatter_walk walk;
 	unsigned int walk_bytes;
+	u8 *walk_ptr;
 	unsigned int walk_bytes_remain;
 	u8 buf[AES_BLOCK_SIZE];
 	unsigned int buf_bytes;
@@ -786,20 +787,29 @@ static void gcm_walk_start(struct gcm_sg_walk *gw, struct scatterlist *sg,
 
 static inline unsigned int _gcm_sg_clamp_and_map(struct gcm_sg_walk *gw)
 {
-	if (gw->walk_bytes_remain == 0)
-		return 0;
-	gw->walk_bytes = scatterwalk_next(&gw->walk, gw->walk_bytes_remain);
+	struct scatterlist *nextsg;
+
+	gw->walk_bytes = scatterwalk_clamp(&gw->walk, gw->walk_bytes_remain);
+	while (!gw->walk_bytes) {
+		nextsg = sg_next(gw->walk.sg);
+		if (!nextsg)
+			return 0;
+		scatterwalk_start(&gw->walk, nextsg);
+		gw->walk_bytes = scatterwalk_clamp(&gw->walk,
+						   gw->walk_bytes_remain);
+	}
+	gw->walk_ptr = scatterwalk_map(&gw->walk);
 	return gw->walk_bytes;
 }
 
 static inline void _gcm_sg_unmap_and_advance(struct gcm_sg_walk *gw,
-					     unsigned int nbytes, bool out)
+					     unsigned int nbytes)
 {
 	gw->walk_bytes_remain -= nbytes;
-	if (out)
-		scatterwalk_done_dst(&gw->walk, nbytes);
-	else
-		scatterwalk_done_src(&gw->walk, nbytes);
+	scatterwalk_unmap(gw->walk_ptr);
+	scatterwalk_advance(&gw->walk, nbytes);
+	scatterwalk_done(&gw->walk, 0, gw->walk_bytes_remain);
+	gw->walk_ptr = NULL;
 }
 
 static int gcm_in_walk_go(struct gcm_sg_walk *gw, unsigned int minbytesneeded)
@@ -825,16 +835,16 @@ static int gcm_in_walk_go(struct gcm_sg_walk *gw, unsigned int minbytesneeded)
 	}
 
 	if (!gw->buf_bytes && gw->walk_bytes >= minbytesneeded) {
-		gw->ptr = gw->walk.addr;
+		gw->ptr = gw->walk_ptr;
 		gw->nbytes = gw->walk_bytes;
 		goto out;
 	}
 
 	while (1) {
 		n = min(gw->walk_bytes, AES_BLOCK_SIZE - gw->buf_bytes);
-		memcpy(gw->buf + gw->buf_bytes, gw->walk.addr, n);
+		memcpy(gw->buf + gw->buf_bytes, gw->walk_ptr, n);
 		gw->buf_bytes += n;
-		_gcm_sg_unmap_and_advance(gw, n, false);
+		_gcm_sg_unmap_and_advance(gw, n);
 		if (gw->buf_bytes >= minbytesneeded) {
 			gw->ptr = gw->buf;
 			gw->nbytes = gw->buf_bytes;
@@ -866,12 +876,13 @@ static int gcm_out_walk_go(struct gcm_sg_walk *gw, unsigned int minbytesneeded)
 	}
 
 	if (gw->walk_bytes >= minbytesneeded) {
-		gw->ptr = gw->walk.addr;
+		gw->ptr = gw->walk_ptr;
 		gw->nbytes = gw->walk_bytes;
 		goto out;
 	}
 
-	scatterwalk_unmap(&gw->walk);
+	scatterwalk_unmap(gw->walk_ptr);
+	gw->walk_ptr = NULL;
 
 	gw->ptr = gw->buf;
 	gw->nbytes = sizeof(gw->buf);
@@ -893,7 +904,7 @@ static int gcm_in_walk_done(struct gcm_sg_walk *gw, unsigned int bytesdone)
 		} else
 			gw->buf_bytes = 0;
 	} else
-		_gcm_sg_unmap_and_advance(gw, bytesdone, false);
+		_gcm_sg_unmap_and_advance(gw, bytesdone);
 
 	return bytesdone;
 }
@@ -910,11 +921,11 @@ static int gcm_out_walk_done(struct gcm_sg_walk *gw, unsigned int bytesdone)
 			if (!_gcm_sg_clamp_and_map(gw))
 				return i;
 			n = min(gw->walk_bytes, bytesdone - i);
-			memcpy(gw->walk.addr, gw->buf + i, n);
-			_gcm_sg_unmap_and_advance(gw, n, true);
+			memcpy(gw->walk_ptr, gw->buf + i, n);
+			_gcm_sg_unmap_and_advance(gw, n);
 		}
 	} else
-		_gcm_sg_unmap_and_advance(gw, bytesdone, true);
+		_gcm_sg_unmap_and_advance(gw, bytesdone);
 
 	return bytesdone;
 }
@@ -1157,4 +1168,4 @@ MODULE_ALIAS_CRYPTO("aes-all");
 
 MODULE_DESCRIPTION("Rijndael (AES) Cipher Algorithm");
 MODULE_LICENSE("GPL");
-MODULE_IMPORT_NS("CRYPTO_INTERNAL");
+MODULE_IMPORT_NS(CRYPTO_INTERNAL);

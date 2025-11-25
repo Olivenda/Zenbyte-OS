@@ -11,7 +11,6 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
-#include <linux/export.h>
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
@@ -68,6 +67,14 @@ out:
 	if (fb_WARN_ON_ONCE(info, pageref->page != page))
 		return NULL; /* inconsistent state */
 	return pageref;
+}
+
+static void fb_deferred_io_pageref_clear(struct fb_deferred_io_pageref *pageref)
+{
+	struct page *page = pageref->page;
+
+	if (page)
+		page->mapping = NULL;
 }
 
 static struct fb_deferred_io_pageref *fb_deferred_io_pageref_get(struct fb_info *info,
@@ -133,10 +140,13 @@ static vm_fault_t fb_deferred_io_fault(struct vm_fault *vmf)
 	if (!page)
 		return VM_FAULT_SIGBUS;
 
-	if (!vmf->vma->vm_file)
-		fb_err(info, "no mapping available\n");
+	if (vmf->vma->vm_file)
+		page->mapping = vmf->vma->vm_file->f_mapping;
+	else
+		printk(KERN_ERR "no mapping available\n");
 
-	BUG_ON(!info->fbdefio->mapping);
+	BUG_ON(!page->mapping);
+	page->index = vmf->pgoff; /* for folio_mkclean() */
 
 	vmf->page = page;
 	return 0;
@@ -184,9 +194,9 @@ static vm_fault_t fb_deferred_io_track_page(struct fb_info *info, unsigned long 
 
 	/*
 	 * We want the page to remain locked from ->page_mkwrite until
-	 * the PTE is marked dirty to avoid mapping_wrprotect_range()
-	 * being called before the PTE is updated, which would leave
-	 * the page ignored by defio.
+	 * the PTE is marked dirty to avoid folio_mkclean() being called
+	 * before the PTE is updated, which would leave the page ignored
+	 * by defio.
 	 * Do this by locking the page here and informing the caller
 	 * about it with VM_FAULT_LOCKED.
 	 */
@@ -264,17 +274,15 @@ static void fb_deferred_io_work(struct work_struct *work)
 	struct fb_deferred_io_pageref *pageref, *next;
 	struct fb_deferred_io *fbdefio = info->fbdefio;
 
-	/* here we wrprotect the page's mappings, then do all deferred IO. */
+	/* here we mkclean the pages, then do all deferred IO */
 	mutex_lock(&fbdefio->lock);
-#ifdef CONFIG_MMU
 	list_for_each_entry(pageref, &fbdefio->pagereflist, list) {
-		struct page *page = pageref->page;
-		pgoff_t pgoff = pageref->offset >> PAGE_SHIFT;
+		struct folio *folio = page_folio(pageref->page);
 
-		mapping_wrprotect_range(fbdefio->mapping, pgoff,
-					page_to_pfn(page), 1);
+		folio_lock(folio);
+		folio_mkclean(folio);
+		folio_unlock(folio);
 	}
-#endif
 
 	/* driver's callback with pagereflist */
 	fbdefio->deferred_io(info, &fbdefio->pagereflist);
@@ -329,7 +337,6 @@ void fb_deferred_io_open(struct fb_info *info,
 {
 	struct fb_deferred_io *fbdefio = info->fbdefio;
 
-	fbdefio->mapping = file->f_mapping;
 	file->f_mapping->a_ops = &fb_deferred_io_aops;
 	fbdefio->open_count++;
 }
@@ -337,7 +344,13 @@ EXPORT_SYMBOL_GPL(fb_deferred_io_open);
 
 static void fb_deferred_io_lastclose(struct fb_info *info)
 {
+	unsigned long i;
+
 	flush_delayed_work(&info->deferred_work);
+
+	/* clear out the mapping that we setup */
+	for (i = 0; i < info->npagerefs; ++i)
+		fb_deferred_io_pageref_clear(&info->pagerefs[i]);
 }
 
 void fb_deferred_io_release(struct fb_info *info)
@@ -357,6 +370,5 @@ void fb_deferred_io_cleanup(struct fb_info *info)
 
 	kvfree(info->pagerefs);
 	mutex_destroy(&fbdefio->lock);
-	fbdefio->mapping = NULL;
 }
 EXPORT_SYMBOL_GPL(fb_deferred_io_cleanup);

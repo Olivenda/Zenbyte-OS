@@ -98,6 +98,7 @@ static void cc_trng_pm_put_suspend(struct device *dev)
 {
 	int rc = 0;
 
+	pm_runtime_mark_last_busy(dev);
 	rc = pm_runtime_put_autosuspend(dev);
 	if (rc)
 		dev_err(dev, "pm_runtime_put_autosuspend returned %x\n", rc);
@@ -652,7 +653,7 @@ static struct platform_driver cctrng_driver = {
 		.pm = &cctrng_pm,
 	},
 	.probe = cctrng_probe,
-	.remove = cctrng_remove,
+	.remove_new = cctrng_remove,
 };
 
 module_platform_driver(cctrng_driver);

@@ -175,19 +175,9 @@ static inline bool lock_is_write(struct file_lock *fl)
 	return fl->c.flc_type == F_WRLCK;
 }
 
-static inline void locks_wake_up_waiter(struct file_lock_core *flc)
-{
-	wake_up(&flc->flc_wait);
-}
-
 static inline void locks_wake_up(struct file_lock *fl)
 {
-	locks_wake_up_waiter(&fl->c);
-}
-
-static inline bool locks_can_async_lock(const struct file_operations *fops)
-{
-	return !fops->lock || fops->fop_flags & FOP_ASYNC_LOCK;
+	wake_up(&fl->c.flc_wait);
 }
 
 /* fs/locks.c */

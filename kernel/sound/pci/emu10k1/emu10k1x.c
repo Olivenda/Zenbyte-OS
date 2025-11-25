@@ -20,7 +20,6 @@
 #include <linux/pci.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
-#include <linux/string.h>
 #include <linux/module.h>
 #include <sound/core.h>
 #include <sound/initval.h>
@@ -841,15 +840,15 @@ static int snd_emu10k1x_pcm(struct emu10k1x *emu, int device)
 	pcm->info_flags = 0;
 	switch(device) {
 	case 0:
-		strscpy(pcm->name, "EMU10K1X Front");
+		strcpy(pcm->name, "EMU10K1X Front");
 		map = snd_pcm_std_chmaps;
 		break;
 	case 1:
-		strscpy(pcm->name, "EMU10K1X Rear");
+		strcpy(pcm->name, "EMU10K1X Rear");
 		map = surround_map;
 		break;
 	case 2:
-		strscpy(pcm->name, "EMU10K1X Center/LFE");
+		strcpy(pcm->name, "EMU10K1X Center/LFE");
 		map = clfe_map;
 		break;
 	}
@@ -885,7 +884,7 @@ static int snd_emu10k1x_create(struct snd_card *card,
 	spin_lock_init(&chip->emu_lock);
 	spin_lock_init(&chip->voice_lock);
   
-	err = pcim_request_all_regions(pci, "EMU10K1X");
+	err = pci_request_regions(pci, "EMU10K1X");
 	if (err < 0)
 		return err;
 	chip->port = pci_resource_start(pci, 0);
@@ -1462,7 +1461,7 @@ static int emu10k1x_midi_init(struct emu10k1x *emu,
 	spin_lock_init(&midi->open_lock);
 	spin_lock_init(&midi->input_lock);
 	spin_lock_init(&midi->output_lock);
-	strscpy(rmidi->name, name);
+	strcpy(rmidi->name, name);
 	snd_rawmidi_set_ops(rmidi, SNDRV_RAWMIDI_STREAM_OUTPUT, &snd_emu10k1x_midi_output);
 	snd_rawmidi_set_ops(rmidi, SNDRV_RAWMIDI_STREAM_INPUT, &snd_emu10k1x_midi_input);
 	rmidi->info_flags |= SNDRV_RAWMIDI_INFO_OUTPUT |
@@ -1541,8 +1540,8 @@ static int __snd_emu10k1x_probe(struct pci_dev *pci,
 
 	snd_emu10k1x_proc_init(chip);
 
-	strscpy(card->driver, "EMU10K1X");
-	strscpy(card->shortname, "Dell Sound Blaster Live!");
+	strcpy(card->driver, "EMU10K1X");
+	strcpy(card->shortname, "Dell Sound Blaster Live!");
 	sprintf(card->longname, "%s at 0x%lx irq %i",
 		card->shortname, chip->port, chip->irq);
 

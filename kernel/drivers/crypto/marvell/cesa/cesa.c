@@ -375,6 +375,7 @@ static int mv_cesa_get_sram(struct platform_device *pdev, int idx)
 {
 	struct mv_cesa_dev *cesa = platform_get_drvdata(pdev);
 	struct mv_cesa_engine *engine = &cesa->engines[idx];
+	const char *res_name = "sram";
 	struct resource *res;
 
 	engine->pool = of_gen_pool_get(cesa->dev->of_node,
@@ -390,7 +391,19 @@ static int mv_cesa_get_sram(struct platform_device *pdev, int idx)
 		return -ENOMEM;
 	}
 
-	engine->sram = devm_platform_get_and_ioremap_resource(pdev, idx, &res);
+	if (cesa->caps->nengines > 1) {
+		if (!idx)
+			res_name = "sram0";
+		else
+			res_name = "sram1";
+	}
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+					   res_name);
+	if (!res || resource_size(res) < cesa->sram_size)
+		return -EINVAL;
+
+	engine->sram = devm_ioremap_resource(cesa->dev, res);
 	if (IS_ERR(engine->sram))
 		return PTR_ERR(engine->sram);
 
@@ -497,21 +510,25 @@ static int mv_cesa_probe(struct platform_device *pdev)
 		 * if the clock does not exist.
 		 */
 		snprintf(res_name, sizeof(res_name), "cesa%u", i);
-		engine->clk = devm_clk_get_optional_enabled(dev, res_name);
+		engine->clk = devm_clk_get(dev, res_name);
 		if (IS_ERR(engine->clk)) {
-			engine->clk = devm_clk_get_optional_enabled(dev, NULL);
-			if (IS_ERR(engine->clk)) {
-				ret = PTR_ERR(engine->clk);
-				goto err_cleanup;
-			}
+			engine->clk = devm_clk_get(dev, NULL);
+			if (IS_ERR(engine->clk))
+				engine->clk = NULL;
 		}
 
 		snprintf(res_name, sizeof(res_name), "cesaz%u", i);
-		engine->zclk = devm_clk_get_optional_enabled(dev, res_name);
-		if (IS_ERR(engine->zclk)) {
-			ret = PTR_ERR(engine->zclk);
+		engine->zclk = devm_clk_get(dev, res_name);
+		if (IS_ERR(engine->zclk))
+			engine->zclk = NULL;
+
+		ret = clk_prepare_enable(engine->clk);
+		if (ret)
 			goto err_cleanup;
-		}
+
+		ret = clk_prepare_enable(engine->zclk);
+		if (ret)
+			goto err_cleanup;
 
 		engine->regs = cesa->regs + CESA_ENGINE_OFF(i);
 
@@ -553,8 +570,13 @@ static int mv_cesa_probe(struct platform_device *pdev)
 	return 0;
 
 err_cleanup:
-	for (i = 0; i < caps->nengines; i++)
+	for (i = 0; i < caps->nengines; i++) {
+		clk_disable_unprepare(cesa->engines[i].zclk);
+		clk_disable_unprepare(cesa->engines[i].clk);
 		mv_cesa_put_sram(pdev, i);
+		if (cesa->engines[i].irq > 0)
+			irq_set_affinity_hint(cesa->engines[i].irq, NULL);
+	}
 
 	return ret;
 }
@@ -566,8 +588,12 @@ static void mv_cesa_remove(struct platform_device *pdev)
 
 	mv_cesa_remove_algs(cesa);
 
-	for (i = 0; i < cesa->caps->nengines; i++)
+	for (i = 0; i < cesa->caps->nengines; i++) {
+		clk_disable_unprepare(cesa->engines[i].zclk);
+		clk_disable_unprepare(cesa->engines[i].clk);
 		mv_cesa_put_sram(pdev, i);
+		irq_set_affinity_hint(cesa->engines[i].irq, NULL);
+	}
 }
 
 static const struct platform_device_id mv_cesa_plat_id_table[] = {
@@ -578,7 +604,7 @@ MODULE_DEVICE_TABLE(platform, mv_cesa_plat_id_table);
 
 static struct platform_driver marvell_cesa = {
 	.probe		= mv_cesa_probe,
-	.remove		= mv_cesa_remove,
+	.remove_new	= mv_cesa_remove,
 	.id_table	= mv_cesa_plat_id_table,
 	.driver		= {
 		.name	= "marvell-cesa",

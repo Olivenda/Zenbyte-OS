@@ -80,7 +80,11 @@ command results in a shift count error.'
     NPROC=1
 else
     ONLINE=0
-    OPTIONS="--dir $srcroot $COCCIINCLUDE"
+    if [ "$KBUILD_EXTMOD" = "" ] ; then
+        OPTIONS="--dir $srctree $COCCIINCLUDE"
+    else
+        OPTIONS="--dir $KBUILD_EXTMOD $COCCIINCLUDE"
+    fi
 
     # Use only one thread per core by default if hyperthreading is enabled
     THREADS_PER_CORE=$(LANG=C lscpu | grep "Thread(s) per core: " | tr -cd "[:digit:]")

@@ -71,24 +71,6 @@ const char *sym_type_name(enum symbol_type type)
 }
 
 /**
- * sym_get_prompt_menu - get the menu entry with a prompt
- *
- * @sym: a symbol pointer
- *
- * Return: the menu entry with a prompt.
- */
-struct menu *sym_get_prompt_menu(const struct symbol *sym)
-{
-	struct menu *m;
-
-	list_for_each_entry(m, &sym->menus, link)
-		if (m->prompt)
-			return m;
-
-	return NULL;
-}
-
-/**
  * sym_get_choice_menu - get the parent choice menu if present
  *
  * @sym: a symbol pointer
@@ -98,12 +80,18 @@ struct menu *sym_get_prompt_menu(const struct symbol *sym)
 struct menu *sym_get_choice_menu(const struct symbol *sym)
 {
 	struct menu *menu = NULL;
+	struct menu *m;
 
 	/*
 	 * Choice members must have a prompt. Find a menu entry with a prompt,
 	 * and assume it resides inside a choice block.
 	 */
-	menu = sym_get_prompt_menu(sym);
+	list_for_each_entry(m, &sym->menus, link)
+		if (m->prompt) {
+			menu = m;
+			break;
+		}
+
 	if (!menu)
 		return NULL;
 
@@ -194,10 +182,6 @@ static void sym_set_changed(struct symbol *sym)
 	struct menu *menu;
 
 	list_for_each_entry(menu, &sym->menus, link)
-		menu->flags |= MENU_CHANGED;
-
-	menu = sym_get_choice_menu(sym);
-	if (menu)
 		menu->flags |= MENU_CHANGED;
 }
 
@@ -883,7 +867,7 @@ const char *sym_get_string_value(struct symbol *sym)
 	default:
 		;
 	}
-	return sym->curr.val;
+	return (const char *)sym->curr.val;
 }
 
 bool sym_is_changeable(const struct symbol *sym)

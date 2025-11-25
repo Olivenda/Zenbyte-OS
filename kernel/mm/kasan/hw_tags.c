@@ -8,7 +8,6 @@
 
 #define pr_fmt(fmt) "kasan: " fmt
 
-#include <kunit/visibility.h>
 #include <linux/init.h>
 #include <linux/kasan.h>
 #include <linux/kernel.h>
@@ -16,7 +15,6 @@
 #include <linux/mm.h>
 #include <linux/static_key.h>
 #include <linux/string.h>
-#include <linux/string_choices.h>
 #include <linux/types.h>
 #include <linux/vmalloc.h>
 
@@ -264,8 +262,8 @@ void __init kasan_init_hw_tags(void)
 
 	pr_info("KernelAddressSanitizer initialized (hw-tags, mode=%s, vmalloc=%s, stacktrace=%s)\n",
 		kasan_mode_info(),
-		str_on_off(kasan_vmalloc_enabled()),
-		str_on_off(kasan_stack_collection_enabled()));
+		kasan_vmalloc_enabled() ? "on" : "off",
+		kasan_stack_collection_enabled() ? "on" : "off");
 }
 
 #ifdef CONFIG_KASAN_VMALLOC
@@ -396,12 +394,12 @@ void kasan_enable_hw_tags(void)
 
 #if IS_ENABLED(CONFIG_KASAN_KUNIT_TEST)
 
-EXPORT_SYMBOL_IF_KUNIT(kasan_enable_hw_tags);
+EXPORT_SYMBOL_GPL(kasan_enable_hw_tags);
 
-VISIBLE_IF_KUNIT void kasan_force_async_fault(void)
+void kasan_force_async_fault(void)
 {
 	hw_force_async_tag_fault();
 }
-EXPORT_SYMBOL_IF_KUNIT(kasan_force_async_fault);
+EXPORT_SYMBOL_GPL(kasan_force_async_fault);
 
 #endif

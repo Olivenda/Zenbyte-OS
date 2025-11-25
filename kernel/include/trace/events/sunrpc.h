@@ -21,6 +21,7 @@ TRACE_DEFINE_ENUM(SOCK_DGRAM);
 TRACE_DEFINE_ENUM(SOCK_RAW);
 TRACE_DEFINE_ENUM(SOCK_RDM);
 TRACE_DEFINE_ENUM(SOCK_SEQPACKET);
+TRACE_DEFINE_ENUM(SOCK_DCCP);
 TRACE_DEFINE_ENUM(SOCK_PACKET);
 
 #define show_socket_type(type)					\
@@ -30,6 +31,7 @@ TRACE_DEFINE_ENUM(SOCK_PACKET);
 		{ SOCK_RAW,		"RAW" },		\
 		{ SOCK_RDM,		"RDM" },		\
 		{ SOCK_SEQPACKET,	"SEQPACKET" },		\
+		{ SOCK_DCCP,		"DCCP" },		\
 		{ SOCK_PACKET,		"PACKET" })
 
 /* This list is known to be incomplete, add new enums as needed. */
@@ -341,7 +343,6 @@ TRACE_EVENT(rpc_request,
 		{ RPC_TASK_MOVEABLE, "MOVEABLE" },			\
 		{ RPC_TASK_NULLCREDS, "NULLCREDS" },			\
 		{ RPC_CALL_MAJORSEEN, "MAJORSEEN" },			\
-		{ RPC_TASK_NETUNREACH_FATAL, "NETUNREACH_FATAL"},	\
 		{ RPC_TASK_DYNAMIC, "DYNAMIC" },			\
 		{ RPC_TASK_NO_ROUND_ROBIN, "NO_ROUND_ROBIN" },		\
 		{ RPC_TASK_SOFT, "SOFT" },				\
@@ -717,7 +718,7 @@ TRACE_EVENT(rpc_xdr_overflow,
 	),
 
 	TP_printk(SUNRPC_TRACE_TASK_SPECIFIER
-		  " %sv%d %s requested=%zu p=%p end=%p xdr=[%p,%zu]/%u/[%p,%zu]/%u",
+		  " %sv%d %s requested=%zu p=%p end=%p xdr=[%p,%zu]/%u/[%p,%zu]/%u\n",
 		__entry->task_id, __entry->client_id,
 		__get_str(progname), __entry->version, __get_str(procedure),
 		__entry->requested, __entry->p, __entry->end,
@@ -775,7 +776,7 @@ TRACE_EVENT(rpc_xdr_alignment,
 	),
 
 	TP_printk(SUNRPC_TRACE_TASK_SPECIFIER
-		  " %sv%d %s offset=%zu copied=%u xdr=[%p,%zu]/%u/[%p,%zu]/%u",
+		  " %sv%d %s offset=%zu copied=%u xdr=[%p,%zu]/%u/[%p,%zu]/%u\n",
 		__entry->task_id, __entry->client_id,
 		__get_str(progname), __entry->version, __get_str(procedure),
 		__entry->offset, __entry->copied,
@@ -1098,7 +1099,7 @@ TRACE_EVENT(xprt_transmit,
 		__entry->client_id = rqst->rq_task->tk_client ?
 			rqst->rq_task->tk_client->cl_clid : -1;
 		__entry->xid = be32_to_cpu(rqst->rq_xid);
-		__entry->seqno = *rqst->rq_seqnos;
+		__entry->seqno = rqst->rq_seqno;
 		__entry->status = status;
 	),
 
@@ -1691,6 +1692,7 @@ SVC_RQST_FLAG_LIST
 		__print_flags(flags, "|", SVC_RQST_FLAG_LIST)
 
 TRACE_DEFINE_ENUM(SVC_GARBAGE);
+TRACE_DEFINE_ENUM(SVC_SYSERR);
 TRACE_DEFINE_ENUM(SVC_VALID);
 TRACE_DEFINE_ENUM(SVC_NEGATIVE);
 TRACE_DEFINE_ENUM(SVC_OK);
@@ -1703,6 +1705,7 @@ TRACE_DEFINE_ENUM(SVC_COMPLETE);
 #define show_svc_auth_status(status)			\
 	__print_symbolic(status,			\
 		{ SVC_GARBAGE,	"SVC_GARBAGE" },	\
+		{ SVC_SYSERR,	"SVC_SYSERR" },		\
 		{ SVC_VALID,	"SVC_VALID" },		\
 		{ SVC_NEGATIVE,	"SVC_NEGATIVE" },	\
 		{ SVC_OK,	"SVC_OK" },		\
@@ -2036,20 +2039,19 @@ TRACE_EVENT(svc_xprt_dequeue,
 
 	TP_STRUCT__entry(
 		SVC_XPRT_ENDPOINT_FIELDS(rqst->rq_xprt)
+
 		__field(unsigned long, wakeup)
-		__field(unsigned long, qtime)
 	),
 
 	TP_fast_assign(
-		ktime_t ktime = ktime_get();
-
 		SVC_XPRT_ENDPOINT_ASSIGNMENTS(rqst->rq_xprt);
-		__entry->wakeup = ktime_to_us(ktime_sub(ktime, rqst->rq_qtime));
-		__entry->qtime = ktime_to_us(ktime_sub(ktime, rqst->rq_xprt->xpt_qtime));
+
+		__entry->wakeup = ktime_to_us(ktime_sub(ktime_get(),
+							rqst->rq_qtime));
 	),
 
-	TP_printk(SVC_XPRT_ENDPOINT_FORMAT " wakeup-us=%lu qtime-us=%lu",
-		SVC_XPRT_ENDPOINT_VARARGS, __entry->wakeup, __entry->qtime)
+	TP_printk(SVC_XPRT_ENDPOINT_FORMAT " wakeup-us=%lu",
+		SVC_XPRT_ENDPOINT_VARARGS, __entry->wakeup)
 );
 
 DECLARE_EVENT_CLASS(svc_xprt_event,
@@ -2121,34 +2123,21 @@ TRACE_EVENT(svc_xprt_accept,
 	)
 );
 
-DECLARE_EVENT_CLASS(svc_pool_thread_event,
-	TP_PROTO(const struct svc_pool *pool, pid_t pid),
+TRACE_EVENT(svc_wake_up,
+	TP_PROTO(int pid),
 
-	TP_ARGS(pool, pid),
+	TP_ARGS(pid),
 
 	TP_STRUCT__entry(
-		__field(unsigned int, pool_id)
-		__field(pid_t, pid)
+		__field(int, pid)
 	),
 
 	TP_fast_assign(
-		__entry->pool_id = pool->sp_id;
 		__entry->pid = pid;
 	),
 
-	TP_printk("pool=%u pid=%d", __entry->pool_id, __entry->pid)
+	TP_printk("pid=%d", __entry->pid)
 );
-
-#define DEFINE_SVC_POOL_THREAD_EVENT(name) \
-	DEFINE_EVENT(svc_pool_thread_event, svc_pool_thread_##name, \
-			TP_PROTO( \
-				const struct svc_pool *pool, pid_t pid \
-			), \
-			TP_ARGS(pool, pid))
-
-DEFINE_SVC_POOL_THREAD_EVENT(wake);
-DEFINE_SVC_POOL_THREAD_EVENT(running);
-DEFINE_SVC_POOL_THREAD_EVENT(noidle);
 
 TRACE_EVENT(svc_alloc_arg_err,
 	TP_PROTO(

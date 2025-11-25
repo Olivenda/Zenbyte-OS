@@ -301,19 +301,19 @@ void afs_fs_fetch_status(struct afs_operation *op)
 static int afs_deliver_fs_fetch_data(struct afs_call *call)
 {
 	struct afs_operation *op = call->op;
-	struct netfs_io_subrequest *subreq = op->fetch.subreq;
 	struct afs_vnode_param *vp = &op->file[0];
+	struct afs_read *req = op->fetch.req;
 	const __be32 *bp;
 	size_t count_before;
 	int ret;
 
 	_enter("{%u,%zu,%zu/%llu}",
 	       call->unmarshall, call->iov_len, iov_iter_count(call->iter),
-	       call->remaining);
+	       req->actual_len);
 
 	switch (call->unmarshall) {
 	case 0:
-		call->remaining = 0;
+		req->actual_len = 0;
 		call->unmarshall++;
 		if (call->operation_ID == FSFETCHDATA64) {
 			afs_extract_to_tmp64(call);
@@ -323,8 +323,8 @@ static int afs_deliver_fs_fetch_data(struct afs_call *call)
 		}
 		fallthrough;
 
-		/* Extract the returned data length into ->remaining.
-		 * This may indicate more or less data than was
+		/* Extract the returned data length into
+		 * ->actual_len.  This may indicate more or less data than was
 		 * requested will be returned.
 		 */
 	case 1:
@@ -333,40 +333,42 @@ static int afs_deliver_fs_fetch_data(struct afs_call *call)
 		if (ret < 0)
 			return ret;
 
-		call->remaining = be64_to_cpu(call->tmp64);
-		_debug("DATA length: %llu", call->remaining);
+		req->actual_len = be64_to_cpu(call->tmp64);
+		_debug("DATA length: %llu", req->actual_len);
 
-		if (call->remaining == 0)
+		if (req->actual_len == 0)
 			goto no_more_data;
 
-		call->iter = &subreq->io_iter;
-		call->iov_len = umin(call->remaining, subreq->len - subreq->transferred);
+		call->iter = req->iter;
+		call->iov_len = min(req->actual_len, req->len);
 		call->unmarshall++;
 		fallthrough;
 
 		/* extract the returned data */
 	case 2:
 		count_before = call->iov_len;
-		_debug("extract data %zu/%llu", count_before, call->remaining);
+		_debug("extract data %zu/%llu", count_before, req->actual_len);
 
 		ret = afs_extract_data(call, true);
-		subreq->transferred += count_before - call->iov_len;
-		call->remaining -= count_before - call->iov_len;
+		if (req->subreq) {
+			req->subreq->transferred += count_before - call->iov_len;
+			netfs_read_subreq_progress(req->subreq, false);
+		}
 		if (ret < 0)
 			return ret;
 
 		call->iter = &call->def_iter;
-		if (call->remaining)
+		if (req->actual_len <= req->len)
 			goto no_more_data;
 
 		/* Discard any excess data the server gave us */
-		afs_extract_discard(call, call->remaining);
+		afs_extract_discard(call, req->actual_len - req->len);
 		call->unmarshall = 3;
 		fallthrough;
 
 	case 3:
 		_debug("extract discard %zu/%llu",
-		       iov_iter_count(call->iter), call->remaining);
+		       iov_iter_count(call->iter), req->actual_len - req->len);
 
 		ret = afs_extract_data(call, true);
 		if (ret < 0)
@@ -388,8 +390,8 @@ static int afs_deliver_fs_fetch_data(struct afs_call *call)
 		xdr_decode_AFSCallBack(&bp, call, &vp->scb);
 		xdr_decode_AFSVolSync(&bp, &op->volsync);
 
-		if (subreq->start + subreq->transferred >= vp->scb.status.size)
-			__set_bit(NETFS_SREQ_HIT_EOF, &subreq->flags);
+		req->data_version = vp->scb.status.data_version;
+		req->file_size = vp->scb.status.size;
 
 		call->unmarshall++;
 		fallthrough;
@@ -408,18 +410,14 @@ static int afs_deliver_fs_fetch_data(struct afs_call *call)
 static const struct afs_call_type afs_RXFSFetchData = {
 	.name		= "FS.FetchData",
 	.op		= afs_FS_FetchData,
-	.async_rx	= afs_fetch_data_async_rx,
 	.deliver	= afs_deliver_fs_fetch_data,
-	.immediate_cancel = afs_fetch_data_immediate_cancel,
 	.destructor	= afs_flat_call_destructor,
 };
 
 static const struct afs_call_type afs_RXFSFetchData64 = {
 	.name		= "FS.FetchData64",
 	.op		= afs_FS_FetchData64,
-	.async_rx	= afs_fetch_data_async_rx,
 	.deliver	= afs_deliver_fs_fetch_data,
-	.immediate_cancel = afs_fetch_data_immediate_cancel,
 	.destructor	= afs_flat_call_destructor,
 };
 
@@ -428,8 +426,8 @@ static const struct afs_call_type afs_RXFSFetchData64 = {
  */
 static void afs_fs_fetch_data64(struct afs_operation *op)
 {
-	struct netfs_io_subrequest *subreq = op->fetch.subreq;
 	struct afs_vnode_param *vp = &op->file[0];
+	struct afs_read *req = op->fetch.req;
 	struct afs_call *call;
 	__be32 *bp;
 
@@ -439,19 +437,16 @@ static void afs_fs_fetch_data64(struct afs_operation *op)
 	if (!call)
 		return afs_op_nomem(op);
 
-	if (op->flags & AFS_OPERATION_ASYNC)
-		call->async = true;
-
 	/* marshall the parameters */
 	bp = call->request;
 	bp[0] = htonl(FSFETCHDATA64);
 	bp[1] = htonl(vp->fid.vid);
 	bp[2] = htonl(vp->fid.vnode);
 	bp[3] = htonl(vp->fid.unique);
-	bp[4] = htonl(upper_32_bits(subreq->start + subreq->transferred));
-	bp[5] = htonl(lower_32_bits(subreq->start + subreq->transferred));
+	bp[4] = htonl(upper_32_bits(req->pos));
+	bp[5] = htonl(lower_32_bits(req->pos));
 	bp[6] = 0;
-	bp[7] = htonl(lower_32_bits(subreq->len   - subreq->transferred));
+	bp[7] = htonl(lower_32_bits(req->len));
 
 	call->fid = vp->fid;
 	trace_afs_make_fs_call(call, &vp->fid);
@@ -463,9 +458,9 @@ static void afs_fs_fetch_data64(struct afs_operation *op)
  */
 void afs_fs_fetch_data(struct afs_operation *op)
 {
-	struct netfs_io_subrequest *subreq = op->fetch.subreq;
 	struct afs_vnode_param *vp = &op->file[0];
 	struct afs_call *call;
+	struct afs_read *req = op->fetch.req;
 	__be32 *bp;
 
 	if (test_bit(AFS_SERVER_FL_HAS_FS64, &op->server->flags))
@@ -477,14 +472,16 @@ void afs_fs_fetch_data(struct afs_operation *op)
 	if (!call)
 		return afs_op_nomem(op);
 
+	req->call_debug_id = call->debug_id;
+
 	/* marshall the parameters */
 	bp = call->request;
 	bp[0] = htonl(FSFETCHDATA);
 	bp[1] = htonl(vp->fid.vid);
 	bp[2] = htonl(vp->fid.vnode);
 	bp[3] = htonl(vp->fid.unique);
-	bp[4] = htonl(lower_32_bits(subreq->start + subreq->transferred));
-	bp[5] = htonl(lower_32_bits(subreq->len   + subreq->transferred));
+	bp[4] = htonl(lower_32_bits(req->pos));
+	bp[5] = htonl(lower_32_bits(req->len));
 
 	call->fid = vp->fid;
 	trace_afs_make_fs_call(call, &vp->fid);
@@ -1653,7 +1650,7 @@ int afs_fs_give_up_all_callbacks(struct afs_net *net, struct afs_server *server,
 	bp = call->request;
 	*bp++ = htonl(FSGIVEUPALLCALLBACKS);
 
-	call->server = afs_use_server(server, false, afs_server_trace_use_give_up_cb);
+	call->server = afs_use_server(server, afs_server_trace_give_up_cb);
 	afs_make_call(call, GFP_NOFS);
 	afs_wait_for_call_to_complete(call);
 	ret = call->error;
@@ -1736,7 +1733,6 @@ static const struct afs_call_type afs_RXFSGetCapabilities = {
 	.op		= afs_FS_GetCapabilities,
 	.deliver	= afs_deliver_fs_get_capabilities,
 	.done		= afs_fileserver_probe_result,
-	.immediate_cancel = afs_fileserver_probe_result,
 	.destructor	= afs_fs_get_capabilities_destructor,
 };
 
@@ -1760,7 +1756,7 @@ bool afs_fs_get_capabilities(struct afs_net *net, struct afs_server *server,
 		return false;
 
 	call->key	= key;
-	call->server	= afs_use_server(server, false, afs_server_trace_use_get_caps);
+	call->server	= afs_use_server(server, afs_server_trace_get_caps);
 	call->peer	= rxrpc_kernel_get_peer(estate->addresses->addrs[addr_index].peer);
 	call->probe	= afs_get_endpoint_state(estate, afs_estate_trace_get_getcaps);
 	call->probe_index = addr_index;

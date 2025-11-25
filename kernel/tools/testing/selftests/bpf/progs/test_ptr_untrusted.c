@@ -7,7 +7,7 @@
 char tp_name[128];
 
 SEC("lsm.s/bpf")
-int BPF_PROG(lsm_run, int cmd, union bpf_attr *attr, unsigned int size, bool kernel)
+int BPF_PROG(lsm_run, int cmd, union bpf_attr *attr, unsigned int size)
 {
 	switch (cmd) {
 	case BPF_RAW_TRACEPOINT_OPEN:

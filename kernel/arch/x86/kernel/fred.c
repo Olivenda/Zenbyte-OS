@@ -3,7 +3,6 @@
 
 #include <asm/desc.h>
 #include <asm/fred.h>
-#include <asm/msr.h>
 #include <asm/tlbflush.h>
 #include <asm/traps.h>
 
@@ -44,23 +43,23 @@ void cpu_init_fred_exceptions(void)
 	 */
 	loadsegment(ss, __KERNEL_DS);
 
-	wrmsrq(MSR_IA32_FRED_CONFIG,
+	wrmsrl(MSR_IA32_FRED_CONFIG,
 	       /* Reserve for CALL emulation */
 	       FRED_CONFIG_REDZONE |
 	       FRED_CONFIG_INT_STKLVL(0) |
 	       FRED_CONFIG_ENTRYPOINT(asm_fred_entrypoint_user));
 
-	wrmsrq(MSR_IA32_FRED_STKLVLS, 0);
+	wrmsrl(MSR_IA32_FRED_STKLVLS, 0);
 
 	/*
 	 * Ater a CPU offline/online cycle, the FRED RSP0 MSR should be
 	 * resynchronized with its per-CPU cache.
 	 */
-	wrmsrq(MSR_IA32_FRED_RSP0, __this_cpu_read(fred_rsp0));
+	wrmsrl(MSR_IA32_FRED_RSP0, __this_cpu_read(fred_rsp0));
 
-	wrmsrq(MSR_IA32_FRED_RSP1, 0);
-	wrmsrq(MSR_IA32_FRED_RSP2, 0);
-	wrmsrq(MSR_IA32_FRED_RSP3, 0);
+	wrmsrl(MSR_IA32_FRED_RSP1, 0);
+	wrmsrl(MSR_IA32_FRED_RSP2, 0);
+	wrmsrl(MSR_IA32_FRED_RSP3, 0);
 
 	/* Enable FRED */
 	cr4_set_bits(X86_CR4_FRED);
@@ -80,14 +79,14 @@ void cpu_init_fred_rsps(void)
 	 * (remember that user space faults are always taken on stack level 0)
 	 * is to avoid overflowing the kernel stack.
 	 */
-	wrmsrq(MSR_IA32_FRED_STKLVLS,
+	wrmsrl(MSR_IA32_FRED_STKLVLS,
 	       FRED_STKLVL(X86_TRAP_DB,  FRED_DB_STACK_LEVEL) |
 	       FRED_STKLVL(X86_TRAP_NMI, FRED_NMI_STACK_LEVEL) |
 	       FRED_STKLVL(X86_TRAP_MC,  FRED_MC_STACK_LEVEL) |
 	       FRED_STKLVL(X86_TRAP_DF,  FRED_DF_STACK_LEVEL));
 
 	/* The FRED equivalents to IST stacks... */
-	wrmsrq(MSR_IA32_FRED_RSP1, __this_cpu_ist_top_va(DB));
-	wrmsrq(MSR_IA32_FRED_RSP2, __this_cpu_ist_top_va(NMI));
-	wrmsrq(MSR_IA32_FRED_RSP3, __this_cpu_ist_top_va(DF));
+	wrmsrl(MSR_IA32_FRED_RSP1, __this_cpu_ist_top_va(DB));
+	wrmsrl(MSR_IA32_FRED_RSP2, __this_cpu_ist_top_va(NMI));
+	wrmsrl(MSR_IA32_FRED_RSP3, __this_cpu_ist_top_va(DF));
 }

@@ -94,7 +94,7 @@ static void amd_gpio_free(struct gpio_chip *chip, unsigned offset)
 	iowrite8(agp->orig[offset], agp->pm + AMD_REG_GPIO(offset));
 }
 
-static int amd_gpio_set(struct gpio_chip *chip, unsigned int offset, int value)
+static void amd_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
 {
 	struct amd_gpio *agp = gpiochip_get_data(chip);
 	u8 temp;
@@ -107,8 +107,6 @@ static int amd_gpio_set(struct gpio_chip *chip, unsigned int offset, int value)
 	spin_unlock_irqrestore(&agp->lock, flags);
 
 	dev_dbg(&agp->pdev->dev, "Setting gpio %d, value %d, reg=%02x\n", offset, !!value, temp);
-
-	return 0;
 }
 
 static int amd_gpio_get(struct gpio_chip *chip, unsigned offset)

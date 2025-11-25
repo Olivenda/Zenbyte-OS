@@ -420,7 +420,7 @@ struct bcm4377_ring_state {
  * payloads_dma:DMA address for payload buffer
  * events: pointer to array of completions if waiting is allowed
  * msgids: bitmap to keep track of used message ids
- * lock: Spinlock to protect access to ring structures used in the irq handler
+ * lock: Spinlock to protect access to ring structurs used in the irq handler
  */
 struct bcm4377_transfer_ring {
 	enum bcm4377_transfer_ring_id ring_id;
@@ -1435,7 +1435,7 @@ static int bcm4377_check_bdaddr(struct bcm4377_data *bcm4377)
 
 	bda = (struct hci_rp_read_bd_addr *)skb->data;
 	if (!bcm4377_is_valid_bdaddr(bcm4377, &bda->bdaddr))
-		hci_set_quirk(bcm4377->hdev, HCI_QUIRK_USE_BDADDR_PROPERTY);
+		set_bit(HCI_QUIRK_USE_BDADDR_PROPERTY, &bcm4377->hdev->quirks);
 
 	kfree_skb(skb);
 	return 0;
@@ -2389,13 +2389,13 @@ static int bcm4377_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	hdev->setup = bcm4377_hci_setup;
 
 	if (bcm4377->hw->broken_mws_transport_config)
-		hci_set_quirk(hdev, HCI_QUIRK_BROKEN_MWS_TRANSPORT_CONFIG);
+		set_bit(HCI_QUIRK_BROKEN_MWS_TRANSPORT_CONFIG, &hdev->quirks);
 	if (bcm4377->hw->broken_ext_scan)
-		hci_set_quirk(hdev, HCI_QUIRK_BROKEN_EXT_SCAN);
+		set_bit(HCI_QUIRK_BROKEN_EXT_SCAN, &hdev->quirks);
 	if (bcm4377->hw->broken_le_coded)
-		hci_set_quirk(hdev, HCI_QUIRK_BROKEN_LE_CODED);
+		set_bit(HCI_QUIRK_BROKEN_LE_CODED, &hdev->quirks);
 	if (bcm4377->hw->broken_le_ext_adv_report_phy)
-		hci_set_quirk(hdev, HCI_QUIRK_FIXUP_LE_EXT_ADV_REPORT_PHY);
+		set_bit(HCI_QUIRK_FIXUP_LE_EXT_ADV_REPORT_PHY, &hdev->quirks);
 
 	pci_set_drvdata(pdev, bcm4377);
 	hci_set_drvdata(hdev, bcm4377);

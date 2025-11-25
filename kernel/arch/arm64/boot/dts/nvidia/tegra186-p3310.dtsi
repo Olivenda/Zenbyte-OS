@@ -61,8 +61,6 @@
 	};
 
 	serial@3100000 {
-		/delete-property/ dmas;
-		/delete-property/ dma-names;
 		status = "okay";
 	};
 
@@ -191,10 +189,6 @@
 
 	pmc@c360000 {
 		nvidia,invert-interrupt;
-	};
-
-	gpu@17000000 {
-		status = "okay";
 	};
 
 	bpmp {

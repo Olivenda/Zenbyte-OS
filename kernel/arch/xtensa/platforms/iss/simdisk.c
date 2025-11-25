@@ -14,7 +14,6 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/string.h>
-#include <linux/string_choices.h>
 #include <linux/blkdev.h>
 #include <linux/bio.h>
 #include <linux/proc_fs.h>
@@ -76,7 +75,7 @@ static void simdisk_transfer(struct simdisk *dev, unsigned long sector,
 
 	if (offset > dev->size || dev->size - offset < nbytes) {
 		pr_notice("Beyond-end %s (%ld %ld)\n",
-				str_write_read(write), offset, nbytes);
+				write ? "write" : "read", offset, nbytes);
 		return;
 	}
 

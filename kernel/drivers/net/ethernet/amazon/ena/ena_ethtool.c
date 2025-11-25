@@ -5,11 +5,9 @@
 
 #include <linux/ethtool.h>
 #include <linux/pci.h>
-#include <linux/net_tstamp.h>
 
 #include "ena_netdev.h"
 #include "ena_xdp.h"
-#include "ena_phc.h"
 
 struct ena_stats {
 	char name[ETH_GSTRING_LEN];
@@ -298,18 +296,6 @@ static void ena_get_ethtool_stats(struct net_device *netdev,
 	struct ena_adapter *adapter = netdev_priv(netdev);
 
 	ena_get_stats(adapter, data, true);
-}
-
-static int ena_get_ts_info(struct net_device *netdev,
-			   struct kernel_ethtool_ts_info *info)
-{
-	struct ena_adapter *adapter = netdev_priv(netdev);
-
-	info->so_timestamping = SOF_TIMESTAMPING_TX_SOFTWARE;
-
-	info->phc_index = ena_phc_get_index(adapter);
-
-	return 0;
 }
 
 static int ena_get_sw_stats_count(struct ena_adapter *adapter)
@@ -735,11 +721,9 @@ static u16 ena_flow_data_to_flow_hash(u32 hash_fields)
 	return data;
 }
 
-static int ena_get_rxfh_fields(struct net_device *netdev,
-			       struct ethtool_rxfh_fields *cmd)
+static int ena_get_rss_hash(struct ena_com_dev *ena_dev,
+			    struct ethtool_rxnfc *cmd)
 {
-	struct ena_adapter *adapter = netdev_priv(netdev);
-	struct ena_com_dev *ena_dev = adapter->ena_dev;
 	enum ena_admin_flow_hash_proto proto;
 	u16 hash_fields;
 	int rc;
@@ -788,12 +772,9 @@ static int ena_get_rxfh_fields(struct net_device *netdev,
 	return 0;
 }
 
-static int ena_set_rxfh_fields(struct net_device *netdev,
-			       const struct ethtool_rxfh_fields *cmd,
-			       struct netlink_ext_ack *extack)
+static int ena_set_rss_hash(struct ena_com_dev *ena_dev,
+			    struct ethtool_rxnfc *cmd)
 {
-	struct ena_adapter *adapter = netdev_priv(netdev);
-	struct ena_com_dev *ena_dev = adapter->ena_dev;
 	enum ena_admin_flow_hash_proto proto;
 	u16 hash_fields;
 
@@ -835,6 +816,26 @@ static int ena_set_rxfh_fields(struct net_device *netdev,
 	return ena_com_fill_hash_ctrl(ena_dev, proto, hash_fields);
 }
 
+static int ena_set_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *info)
+{
+	struct ena_adapter *adapter = netdev_priv(netdev);
+	int rc = 0;
+
+	switch (info->cmd) {
+	case ETHTOOL_SRXFH:
+		rc = ena_set_rss_hash(adapter->ena_dev, info);
+		break;
+	case ETHTOOL_SRXCLSRLDEL:
+	case ETHTOOL_SRXCLSRLINS:
+	default:
+		netif_err(adapter, drv, netdev,
+			  "Command parameter %d is not supported\n", info->cmd);
+		rc = -EOPNOTSUPP;
+	}
+
+	return rc;
+}
+
 static int ena_get_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *info,
 			 u32 *rules)
 {
@@ -845,6 +846,9 @@ static int ena_get_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *info,
 	case ETHTOOL_GRXRINGS:
 		info->data = adapter->num_io_queues;
 		rc = 0;
+		break;
+	case ETHTOOL_GRXFH:
+		rc = ena_get_rss_hash(adapter->ena_dev, info);
 		break;
 	case ETHTOOL_GRXCLSRLCNT:
 	case ETHTOOL_GRXCLSRULE:
@@ -1097,17 +1101,16 @@ static const struct ethtool_ops ena_ethtool_ops = {
 	.get_strings		= ena_get_ethtool_strings,
 	.get_ethtool_stats      = ena_get_ethtool_stats,
 	.get_rxnfc		= ena_get_rxnfc,
+	.set_rxnfc		= ena_set_rxnfc,
 	.get_rxfh_indir_size    = ena_get_rxfh_indir_size,
 	.get_rxfh_key_size	= ena_get_rxfh_key_size,
 	.get_rxfh		= ena_get_rxfh,
 	.set_rxfh		= ena_set_rxfh,
-	.get_rxfh_fields	= ena_get_rxfh_fields,
-	.set_rxfh_fields	= ena_set_rxfh_fields,
 	.get_channels		= ena_get_channels,
 	.set_channels		= ena_set_channels,
 	.get_tunable		= ena_get_tunable,
 	.set_tunable		= ena_set_tunable,
-	.get_ts_info		= ena_get_ts_info,
+	.get_ts_info            = ethtool_op_get_ts_info,
 };
 
 void ena_set_ethtool_ops(struct net_device *netdev)
@@ -1129,18 +1132,22 @@ static void ena_dump_stats_ex(struct ena_adapter *adapter, u8 *buf)
 		return;
 	}
 
-	strings_buf = kcalloc(strings_num, ETH_GSTRING_LEN, GFP_ATOMIC);
+	strings_buf = devm_kcalloc(&adapter->pdev->dev,
+				   ETH_GSTRING_LEN, strings_num,
+				   GFP_ATOMIC);
 	if (!strings_buf) {
 		netif_err(adapter, drv, netdev,
 			  "Failed to allocate strings_buf\n");
 		return;
 	}
 
-	data_buf = kcalloc(strings_num, sizeof(u64), GFP_ATOMIC);
+	data_buf = devm_kcalloc(&adapter->pdev->dev,
+				strings_num, sizeof(u64),
+				GFP_ATOMIC);
 	if (!data_buf) {
 		netif_err(adapter, drv, netdev,
 			  "Failed to allocate data buf\n");
-		kfree(strings_buf);
+		devm_kfree(&adapter->pdev->dev, strings_buf);
 		return;
 	}
 
@@ -1162,8 +1169,8 @@ static void ena_dump_stats_ex(struct ena_adapter *adapter, u8 *buf)
 				  strings_buf + i * ETH_GSTRING_LEN,
 				  data_buf[i]);
 
-	kfree(strings_buf);
-	kfree(data_buf);
+	devm_kfree(&adapter->pdev->dev, strings_buf);
+	devm_kfree(&adapter->pdev->dev, data_buf);
 }
 
 void ena_dump_stats_to_buf(struct ena_adapter *adapter, u8 *buf)

@@ -15,6 +15,7 @@ struct xfs_efd_log_item;
 struct xfs_efi_log_item;
 struct xfs_inode;
 struct xfs_item_ops;
+struct xfs_log_iovec;
 struct xfs_mount;
 struct xfs_trans;
 struct xfs_trans_res;
@@ -121,6 +122,7 @@ void	xfs_log_item_init(struct xfs_mount *mp, struct xfs_log_item *item,
  * This is the structure maintained for every active transaction.
  */
 typedef struct xfs_trans {
+	unsigned int		t_magic;	/* magic number */
 	unsigned int		t_log_res;	/* amt of log space resvd */
 	unsigned int		t_log_count;	/* count for perm log res */
 	unsigned int		t_blk_res;	/* # of blocks resvd */
@@ -146,7 +148,6 @@ typedef struct xfs_trans {
 	int64_t			t_rblocks_delta;/* superblock rblocks change */
 	int64_t			t_rextents_delta;/* superblocks rextents chg */
 	int64_t			t_rextslog_delta;/* superblocks rextslog chg */
-	int64_t			t_rgcount_delta; /* realtime group count */
 	struct list_head	t_items;	/* log item descriptors */
 	struct list_head	t_busy;		/* list of busy extents */
 	struct list_head	t_dfops;	/* deferred operations */
@@ -167,7 +168,8 @@ int		xfs_trans_alloc(struct xfs_mount *mp, struct xfs_trans_res *resp,
 			struct xfs_trans **tpp);
 int		xfs_trans_reserve_more(struct xfs_trans *tp,
 			unsigned int blocks, unsigned int rtextents);
-struct xfs_trans *xfs_trans_alloc_empty(struct xfs_mount *mp);
+int		xfs_trans_alloc_empty(struct xfs_mount *mp,
+			struct xfs_trans **tpp);
 void		xfs_trans_mod_sb(xfs_trans_t *, uint, int64_t);
 
 int xfs_trans_get_buf_map(struct xfs_trans *tp, struct xfs_buftarg *target,
@@ -212,7 +214,6 @@ xfs_trans_read_buf(
 }
 
 struct xfs_buf	*xfs_trans_getsb(struct xfs_trans *);
-struct xfs_buf	*xfs_trans_getrtsb(struct xfs_trans *tp);
 
 void		xfs_trans_brelse(xfs_trans_t *, struct xfs_buf *);
 void		xfs_trans_bjoin(xfs_trans_t *, struct xfs_buf *);

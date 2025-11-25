@@ -742,7 +742,7 @@
 			};
 		};
 
-		usb0: usb@500000 {
+		usb0: ohci@500000 {
 			compatible = "atmel,at91rm9200-ohci", "usb-ohci";
 			reg = <0x00500000 0x100000>;
 			interrupts = <20 IRQ_TYPE_LEVEL_HIGH 2>;
@@ -781,8 +781,9 @@
 
 	i2c_gpio0: i2c-gpio-0 {
 		compatible = "i2c-gpio";
-		sda-gpios = <&pioA 23 GPIO_ACTIVE_HIGH>;
-		scl-gpios = <&pioA 24 GPIO_ACTIVE_HIGH>;
+		gpios = <&pioA 23 GPIO_ACTIVE_HIGH /* sda */
+			 &pioA 24 GPIO_ACTIVE_HIGH /* scl */
+			>;
 		i2c-gpio,sda-open-drain;
 		i2c-gpio,scl-open-drain;
 		i2c-gpio,delay-us = <2>;	/* ~100 kHz */

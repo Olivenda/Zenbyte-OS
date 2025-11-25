@@ -265,7 +265,7 @@
 	non-removable;
 	status = "okay";
 
-	brcmf: wifi@1 {
+	brcmf: bcrmf@1 {
 		compatible = "brcm,bcm4329-fmac";
 		reg = <1>;
 		pinctrl-names = "default";

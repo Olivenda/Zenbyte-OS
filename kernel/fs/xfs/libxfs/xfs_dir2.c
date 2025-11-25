@@ -197,7 +197,7 @@ xfs_da_unmount(
 /*
  * Return 1 if directory contains only "." and "..".
  */
-static bool
+int
 xfs_dir_isempty(
 	xfs_inode_t	*dp)
 {
@@ -205,9 +205,9 @@ xfs_dir_isempty(
 
 	ASSERT(S_ISDIR(VFS_I(dp)->i_mode));
 	if (dp->i_disk_size == 0)	/* might happen during shutdown. */
-		return true;
+		return 1;
 	if (dp->i_disk_size > xfs_inode_data_fork_size(dp))
-		return false;
+		return 0;
 	sfp = dp->i_df.if_data;
 	return !sfp->count;
 }
@@ -379,11 +379,12 @@ xfs_dir_cilookup_result(
 					!(args->op_flags & XFS_DA_OP_CILOOKUP))
 		return -EEXIST;
 
-	args->value = kmemdup(name, len,
+	args->value = kmalloc(len,
 			GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_RETRY_MAYFAIL);
 	if (!args->value)
 		return -ENOMEM;
 
+	memcpy(args->value, name, len);
 	args->valuelen = len;
 	return -EEXIST;
 }

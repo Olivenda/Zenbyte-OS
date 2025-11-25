@@ -27,6 +27,7 @@
 #include <linux/iio/trigger_consumer.h>
 
 #define SX9500_DRIVER_NAME		"sx9500"
+#define SX9500_IRQ_NAME			"sx9500_event"
 
 /* Register definitions. */
 #define SX9500_REG_IRQ_SRC		0x00
@@ -386,10 +387,11 @@ static int sx9500_read_raw(struct iio_dev *indio_dev,
 	case IIO_PROXIMITY:
 		switch (mask) {
 		case IIO_CHAN_INFO_RAW:
-			if (!iio_device_claim_direct(indio_dev))
-				return -EBUSY;
+			ret = iio_device_claim_direct_mode(indio_dev);
+			if (ret)
+				return ret;
 			ret = sx9500_read_proximity(data, chan, val);
-			iio_device_release_direct(indio_dev);
+			iio_device_release_direct_mode(indio_dev);
 			return ret;
 		case IIO_CHAN_INFO_SAMP_FREQ:
 			return sx9500_read_samp_freq(data, val, val2);
@@ -538,7 +540,7 @@ static int sx9500_write_event_config(struct iio_dev *indio_dev,
 				     const struct iio_chan_spec *chan,
 				     enum iio_event_type type,
 				     enum iio_event_direction dir,
-				     bool state)
+				     int state)
 {
 	struct sx9500_data *data = iio_priv(indio_dev);
 	int ret;
@@ -549,7 +551,7 @@ static int sx9500_write_event_config(struct iio_dev *indio_dev,
 
 	mutex_lock(&data->mutex);
 
-	if (state) {
+	if (state == 1) {
 		ret = sx9500_inc_chan_users(data, chan->channel);
 		if (ret < 0)
 			goto out_unlock;
@@ -569,7 +571,7 @@ static int sx9500_write_event_config(struct iio_dev *indio_dev,
 	goto out_unlock;
 
 out_undo_chan:
-	if (state)
+	if (state == 1)
 		sx9500_dec_chan_users(data, chan->channel);
 	else
 		sx9500_inc_chan_users(data, chan->channel);
@@ -864,7 +866,7 @@ static const struct acpi_gpio_mapping acpi_sx9500_gpios[] = {
 	 * GPIO to be output only. Ask the GPIO core to ignore this limit.
 	 */
 	{ "interrupt-gpios", &interrupt_gpios, 1, ACPI_GPIO_QUIRK_NO_IO_RESTRICTION },
-	{ }
+	{ },
 };
 
 static void sx9500_gpio_probe(struct i2c_client *client,
@@ -937,7 +939,7 @@ static int sx9500_probe(struct i2c_client *client)
 		ret = devm_request_threaded_irq(&client->dev, client->irq,
 				sx9500_irq_handler, sx9500_irq_thread_handler,
 				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				"sx9500_event", indio_dev);
+				SX9500_IRQ_NAME, indio_dev);
 		if (ret < 0)
 			return ret;
 
@@ -1029,7 +1031,7 @@ static DEFINE_SIMPLE_DEV_PM_OPS(sx9500_pm_ops, sx9500_suspend, sx9500_resume);
 static const struct acpi_device_id sx9500_acpi_match[] = {
 	{"SSX9500", 0},
 	{"SASX9500", 0},
-	{ }
+	{ },
 };
 MODULE_DEVICE_TABLE(acpi, sx9500_acpi_match);
 

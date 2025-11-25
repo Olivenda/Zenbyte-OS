@@ -390,7 +390,7 @@ static int atmel_gpio_direction_output(struct gpio_chip *chip,
 	return 0;
 }
 
-static int atmel_gpio_set(struct gpio_chip *chip, unsigned int offset, int val)
+static void atmel_gpio_set(struct gpio_chip *chip, unsigned int offset, int val)
 {
 	struct atmel_pioctrl *atmel_pioctrl = gpiochip_get_data(chip);
 	struct atmel_pin *pin = atmel_pioctrl->pins[offset];
@@ -398,12 +398,10 @@ static int atmel_gpio_set(struct gpio_chip *chip, unsigned int offset, int val)
 	atmel_gpio_write(atmel_pioctrl, pin->bank,
 			 val ? ATMEL_PIO_SODR : ATMEL_PIO_CODR,
 			 BIT(pin->line));
-
-	return 0;
 }
 
-static int atmel_gpio_set_multiple(struct gpio_chip *chip, unsigned long *mask,
-				   unsigned long *bits)
+static void atmel_gpio_set_multiple(struct gpio_chip *chip, unsigned long *mask,
+				    unsigned long *bits)
 {
 	struct atmel_pioctrl *atmel_pioctrl = gpiochip_get_data(chip);
 	unsigned int bank;
@@ -433,8 +431,6 @@ static int atmel_gpio_set_multiple(struct gpio_chip *chip, unsigned long *mask,
 		bits[word] >>= ATMEL_PIO_NPINS_PER_BANK;
 #endif
 	}
-
-	return 0;
 }
 
 static struct gpio_chip atmel_gpio_chip = {
@@ -613,10 +609,8 @@ static int atmel_pctl_dt_subnode_to_map(struct pinctrl_dev *pctldev,
 		if (ret)
 			goto exit;
 
-		ret = pinctrl_utils_add_map_mux(pctldev, map, reserved_maps, num_maps,
+		pinctrl_utils_add_map_mux(pctldev, map, reserved_maps, num_maps,
 					  group, func);
-		if (ret)
-			goto exit;
 
 		if (num_configs) {
 			ret = pinctrl_utils_add_map_configs(pctldev, map,
@@ -1212,9 +1206,9 @@ static int atmel_pinctrl_probe(struct platform_device *pdev)
 		dev_dbg(dev, "bank %i: irq=%d\n", i, ret);
 	}
 
-	atmel_pioctrl->irq_domain = irq_domain_create_linear(dev_fwnode(dev),
-							     atmel_pioctrl->gpio_chip->ngpio,
-							     &irq_domain_simple_ops, NULL);
+	atmel_pioctrl->irq_domain = irq_domain_add_linear(dev->of_node,
+			atmel_pioctrl->gpio_chip->ngpio,
+			&irq_domain_simple_ops, NULL);
 	if (!atmel_pioctrl->irq_domain)
 		return dev_err_probe(dev, -ENODEV, "can't add the irq domain\n");
 

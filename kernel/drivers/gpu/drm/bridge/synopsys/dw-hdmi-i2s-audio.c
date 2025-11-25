@@ -148,8 +148,7 @@ static int dw_hdmi_i2s_get_eld(struct device *dev, void *data, uint8_t *buf,
 }
 
 static int dw_hdmi_i2s_get_dai_id(struct snd_soc_component *component,
-				  struct device_node *endpoint,
-				  void *data)
+				  struct device_node *endpoint)
 {
 	struct of_endpoint of_ep;
 	int ret;
@@ -226,7 +225,7 @@ static void snd_dw_hdmi_remove(struct platform_device *pdev)
 
 static struct platform_driver snd_dw_hdmi_driver = {
 	.probe	= snd_dw_hdmi_probe,
-	.remove = snd_dw_hdmi_remove,
+	.remove_new = snd_dw_hdmi_remove,
 	.driver	= {
 		.name = DRIVER_NAME,
 	},

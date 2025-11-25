@@ -151,16 +151,19 @@ static void release_bus(void)
 
 static void psp_release_i2c_bus_deferred(struct work_struct *work)
 {
-	guard(mutex)(&psp_i2c_access_mutex);
+	mutex_lock(&psp_i2c_access_mutex);
 
 	/*
 	 * If there is any pending transaction, cannot release the bus here.
-	 * psp_release_i2c_bus() will take care of this later.
+	 * psp_release_i2c_bus will take care of this later.
 	 */
 	if (psp_i2c_access_count)
-		return;
+		goto cleanup;
 
 	release_bus();
+
+cleanup:
+	mutex_unlock(&psp_i2c_access_mutex);
 }
 static DECLARE_DELAYED_WORK(release_queue, psp_release_i2c_bus_deferred);
 
@@ -168,11 +171,11 @@ static int psp_acquire_i2c_bus(void)
 {
 	int status;
 
-	guard(mutex)(&psp_i2c_access_mutex);
+	mutex_lock(&psp_i2c_access_mutex);
 
 	/* Return early if mailbox malfunctioned */
 	if (psp_i2c_mbox_fail)
-		return 0;
+		goto cleanup;
 
 	psp_i2c_access_count++;
 
@@ -181,11 +184,11 @@ static int psp_acquire_i2c_bus(void)
 	 * reservation period.
 	 */
 	if (psp_i2c_sem_acquired)
-		return 0;
+		goto cleanup;
 
 	status = psp_send_i2c_req(PSP_I2C_REQ_ACQUIRE);
 	if (status)
-		return 0;
+		goto cleanup;
 
 	psp_i2c_sem_acquired = jiffies;
 
@@ -198,24 +201,26 @@ static int psp_acquire_i2c_bus(void)
 	 * communication with PSP. At any case i2c bus is granted to the caller,
 	 * thus always return success.
 	 */
+cleanup:
+	mutex_unlock(&psp_i2c_access_mutex);
 	return 0;
 }
 
 static void psp_release_i2c_bus(void)
 {
-	guard(mutex)(&psp_i2c_access_mutex);
+	mutex_lock(&psp_i2c_access_mutex);
 
-	/* Return early if mailbox was malfunctioned */
+	/* Return early if mailbox was malfunctional */
 	if (psp_i2c_mbox_fail)
-		return;
+		goto cleanup;
 
 	/*
-	 * If we are last owner of PSP semaphore, need to release arbitration
+	 * If we are last owner of PSP semaphore, need to release aribtration
 	 * via mailbox.
 	 */
 	psp_i2c_access_count--;
 	if (psp_i2c_access_count)
-		return;
+		goto cleanup;
 
 	/*
 	 * Send a release command to PSP if the semaphore reservation timeout
@@ -223,13 +228,16 @@ static void psp_release_i2c_bus(void)
 	 */
 	if (!delayed_work_pending(&release_queue))
 		release_bus();
+
+cleanup:
+	mutex_unlock(&psp_i2c_access_mutex);
 }
 
 /*
  * Locking methods are based on the default implementation from
- * drivers/i2c/i2c-core-base.c, but with PSP acquire and release operations
+ * drivers/i2c/i2c-core-base.c, but with psp acquire and release operations
  * added. With this in place we can ensure that i2c clients on the bus shared
- * with PSP are able to lock HW access to the bus for arbitrary number of
+ * with psp are able to lock HW access to the bus for arbitrary number of
  * operations - that is e.g. write-wait-read.
  */
 static void i2c_adapter_dw_psp_lock_bus(struct i2c_adapter *adapter,

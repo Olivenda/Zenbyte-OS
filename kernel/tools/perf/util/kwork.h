@@ -1,7 +1,6 @@
 #ifndef PERF_UTIL_KWORK_H
 #define PERF_UTIL_KWORK_H
 
-#include "perf.h"
 #include "util/tool.h"
 #include "util/time-utils.h"
 
@@ -252,13 +251,11 @@ struct perf_kwork {
 	 * perf kwork top data
 	 */
 	struct kwork_top_stat top_stat;
+};
 
-	/* Add work callback. */
-	struct kwork_work *(*add_work)(struct perf_kwork *kwork,
+struct kwork_work *perf_kwork_add_work(struct perf_kwork *kwork,
 				       struct kwork_class *class,
 				       struct kwork_work *key);
-
-};
 
 #ifdef HAVE_BPF_SKEL
 

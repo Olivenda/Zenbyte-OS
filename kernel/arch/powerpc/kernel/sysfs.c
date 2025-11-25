@@ -17,7 +17,6 @@
 #include <asm/hvcall.h>
 #include <asm/machdep.h>
 #include <asm/smp.h>
-#include <asm/time.h>
 #include <asm/pmc.h>
 #include <asm/firmware.h>
 #include <asm/idle.h>

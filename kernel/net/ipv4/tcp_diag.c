@@ -83,7 +83,7 @@ static int tcp_diag_put_md5sig(struct sk_buff *skb,
 #endif
 
 static int tcp_diag_put_ulp(struct sk_buff *skb, struct sock *sk,
-			    const struct tcp_ulp_ops *ulp_ops, bool net_admin)
+			    const struct tcp_ulp_ops *ulp_ops)
 {
 	struct nlattr *nest;
 	int err;
@@ -97,7 +97,7 @@ static int tcp_diag_put_ulp(struct sk_buff *skb, struct sock *sk,
 		goto nla_failure;
 
 	if (ulp_ops->get_info)
-		err = ulp_ops->get_info(sk, skb, net_admin);
+		err = ulp_ops->get_info(sk, skb);
 	if (err)
 		goto nla_failure;
 
@@ -113,7 +113,6 @@ static int tcp_diag_get_aux(struct sock *sk, bool net_admin,
 			    struct sk_buff *skb)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
-	const struct tcp_ulp_ops *ulp_ops;
 	int err = 0;
 
 #ifdef CONFIG_TCP_MD5SIG
@@ -130,13 +129,15 @@ static int tcp_diag_get_aux(struct sock *sk, bool net_admin,
 	}
 #endif
 
-	ulp_ops = icsk->icsk_ulp_ops;
-	if (ulp_ops) {
-		err = tcp_diag_put_ulp(skb, sk, ulp_ops, net_admin);
-		if (err < 0)
+	if (net_admin) {
+		const struct tcp_ulp_ops *ulp_ops;
+
+		ulp_ops = icsk->icsk_ulp_ops;
+		if (ulp_ops)
+			err = tcp_diag_put_ulp(skb, sk, ulp_ops);
+		if (err)
 			return err;
 	}
-
 	return 0;
 }
 
@@ -163,7 +164,7 @@ static size_t tcp_diag_get_aux_size(struct sock *sk, bool net_admin)
 	}
 #endif
 
-	if (sk_fullsock(sk)) {
+	if (net_admin && sk_fullsock(sk)) {
 		const struct tcp_ulp_ops *ulp_ops;
 
 		ulp_ops = icsk->icsk_ulp_ops;
@@ -171,7 +172,7 @@ static size_t tcp_diag_get_aux_size(struct sock *sk, bool net_admin)
 			size += nla_total_size(0) +
 				nla_total_size(TCP_ULP_NAME_MAX);
 			if (ulp_ops->get_info_size)
-				size += ulp_ops->get_info_size(sk, net_admin);
+				size += ulp_ops->get_info_size(sk);
 		}
 	}
 	return size;

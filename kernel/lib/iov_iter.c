@@ -457,35 +457,38 @@ size_t iov_iter_zero(size_t bytes, struct iov_iter *i)
 }
 EXPORT_SYMBOL(iov_iter_zero);
 
-size_t copy_folio_from_iter_atomic(struct folio *folio, size_t offset,
+size_t copy_page_from_iter_atomic(struct page *page, size_t offset,
 		size_t bytes, struct iov_iter *i)
 {
 	size_t n, copied = 0;
+	bool uses_kmap = IS_ENABLED(CONFIG_DEBUG_KMAP_LOCAL_FORCE_MAP) ||
+			 PageHighMem(page);
 
-	if (!page_copy_sane(&folio->page, offset, bytes))
+	if (!page_copy_sane(page, offset, bytes))
 		return 0;
 	if (WARN_ON_ONCE(!i->data_source))
 		return 0;
 
 	do {
-		char *to = kmap_local_folio(folio, offset);
+		char *p;
 
 		n = bytes - copied;
-		if (folio_test_partial_kmap(folio) &&
-		    n > PAGE_SIZE - offset_in_page(offset))
-			n = PAGE_SIZE - offset_in_page(offset);
+		if (uses_kmap) {
+			page += offset / PAGE_SIZE;
+			offset %= PAGE_SIZE;
+			n = min_t(size_t, n, PAGE_SIZE - offset);
+		}
 
-		pagefault_disable();
-		n = __copy_from_iter(to, n, i);
-		pagefault_enable();
-		kunmap_local(to);
+		p = kmap_atomic(page) + offset;
+		n = __copy_from_iter(p, n, i);
+		kunmap_atomic(p);
 		copied += n;
 		offset += n;
-	} while (copied != bytes && n > 0);
+	} while (uses_kmap && copied != bytes && n > 0);
 
 	return copied;
 }
-EXPORT_SYMBOL(copy_folio_from_iter_atomic);
+EXPORT_SYMBOL(copy_page_from_iter_atomic);
 
 static void iov_iter_bvec_advance(struct iov_iter *i, size_t size)
 {
@@ -1056,22 +1059,22 @@ static ssize_t iter_xarray_populate_pages(struct page **pages, struct xarray *xa
 					  pgoff_t index, unsigned int nr_pages)
 {
 	XA_STATE(xas, xa, index);
-	struct folio *folio;
+	struct page *page;
 	unsigned int ret = 0;
 
 	rcu_read_lock();
-	for (folio = xas_load(&xas); folio; folio = xas_next(&xas)) {
-		if (xas_retry(&xas, folio))
+	for (page = xas_load(&xas); page; page = xas_next(&xas)) {
+		if (xas_retry(&xas, page))
 			continue;
 
-		/* Has the folio moved or been split? */
-		if (unlikely(folio != xas_reload(&xas))) {
+		/* Has the page moved or been split? */
+		if (unlikely(page != xas_reload(&xas))) {
 			xas_reset(&xas);
 			continue;
 		}
 
-		pages[ret] = folio_file_page(folio, xas.xa_index);
-		folio_get(folio);
+		pages[ret] = find_subpage(page, xas.xa_index);
+		get_page(pages[ret]);
 		if (++ret == nr_pages)
 			break;
 	}
@@ -1187,12 +1190,8 @@ static ssize_t __iov_iter_get_pages_alloc(struct iov_iter *i,
 		if (!n)
 			return -ENOMEM;
 		p = *pages;
-		for (int k = 0; k < n; k++) {
-			struct folio *folio = page_folio(page + k);
-			p[k] = page + k;
-			if (!folio_test_slab(folio))
-				folio_get(folio);
-		}
+		for (int k = 0; k < n; k++)
+			get_page(p[k] = page + k);
 		maxsize = min_t(size_t, maxsize, n * PAGE_SIZE - *start);
 		i->count -= maxsize;
 		i->iov_offset += maxsize;
@@ -1647,11 +1646,11 @@ static ssize_t iov_iter_extract_xarray_pages(struct iov_iter *i,
 					     iov_iter_extraction_t extraction_flags,
 					     size_t *offset0)
 {
-	struct page **p;
-	struct folio *folio;
+	struct page *page, **p;
 	unsigned int nr = 0, offset;
 	loff_t pos = i->xarray_start + i->iov_offset;
-	XA_STATE(xas, i->xarray, pos >> PAGE_SHIFT);
+	pgoff_t index = pos >> PAGE_SHIFT;
+	XA_STATE(xas, i->xarray, index);
 
 	offset = pos & ~PAGE_MASK;
 	*offset0 = offset;
@@ -1662,17 +1661,17 @@ static ssize_t iov_iter_extract_xarray_pages(struct iov_iter *i,
 	p = *pages;
 
 	rcu_read_lock();
-	for (folio = xas_load(&xas); folio; folio = xas_next(&xas)) {
-		if (xas_retry(&xas, folio))
+	for (page = xas_load(&xas); page; page = xas_next(&xas)) {
+		if (xas_retry(&xas, page))
 			continue;
 
-		/* Has the folio moved or been split? */
-		if (unlikely(folio != xas_reload(&xas))) {
+		/* Has the page moved or been split? */
+		if (unlikely(page != xas_reload(&xas))) {
 			xas_reset(&xas);
 			continue;
 		}
 
-		p[nr++] = folio_file_page(folio, xas.xa_index);
+		p[nr++] = find_subpage(page, xas.xa_index);
 		if (nr == maxpages)
 			break;
 	}
@@ -1684,8 +1683,8 @@ static ssize_t iov_iter_extract_xarray_pages(struct iov_iter *i,
 }
 
 /*
- * Extract a list of virtually contiguous pages from an ITER_BVEC iterator.
- * This does not get references on the pages, nor does it get a pin on them.
+ * Extract a list of contiguous pages from an ITER_BVEC iterator.  This does
+ * not get references on the pages, nor does it get a pin on them.
  */
 static ssize_t iov_iter_extract_bvec_pages(struct iov_iter *i,
 					   struct page ***pages, size_t maxsize,
@@ -1693,59 +1692,35 @@ static ssize_t iov_iter_extract_bvec_pages(struct iov_iter *i,
 					   iov_iter_extraction_t extraction_flags,
 					   size_t *offset0)
 {
-	size_t skip = i->iov_offset, size = 0;
-	struct bvec_iter bi;
-	int k = 0;
+	struct page **p, *page;
+	size_t skip = i->iov_offset, offset, size;
+	int k;
 
-	if (i->nr_segs == 0)
-		return 0;
-
-	if (i->iov_offset == i->bvec->bv_len) {
+	for (;;) {
+		if (i->nr_segs == 0)
+			return 0;
+		size = min(maxsize, i->bvec->bv_len - skip);
+		if (size)
+			break;
 		i->iov_offset = 0;
 		i->nr_segs--;
 		i->bvec++;
 		skip = 0;
 	}
-	bi.bi_idx = 0;
-	bi.bi_size = maxsize;
-	bi.bi_bvec_done = skip;
 
-	maxpages = want_pages_array(pages, maxsize, skip, maxpages);
+	skip += i->bvec->bv_offset;
+	page = i->bvec->bv_page + skip / PAGE_SIZE;
+	offset = skip % PAGE_SIZE;
+	*offset0 = offset;
 
-	while (bi.bi_size && bi.bi_idx < i->nr_segs) {
-		struct bio_vec bv = bvec_iter_bvec(i->bvec, bi);
+	maxpages = want_pages_array(pages, size, offset, maxpages);
+	if (!maxpages)
+		return -ENOMEM;
+	p = *pages;
+	for (k = 0; k < maxpages; k++)
+		p[k] = page + k;
 
-		/*
-		 * The iov_iter_extract_pages interface only allows an offset
-		 * into the first page.  Break out of the loop if we see an
-		 * offset into subsequent pages, the caller will have to call
-		 * iov_iter_extract_pages again for the reminder.
-		 */
-		if (k) {
-			if (bv.bv_offset)
-				break;
-		} else {
-			*offset0 = bv.bv_offset;
-		}
-
-		(*pages)[k++] = bv.bv_page;
-		size += bv.bv_len;
-
-		if (k >= maxpages)
-			break;
-
-		/*
-		 * We are done when the end of the bvec doesn't align to a page
-		 * boundary as that would create a hole in the returned space.
-		 * The caller will handle this with another call to
-		 * iov_iter_extract_pages.
-		 */
-		if (bv.bv_offset + bv.bv_len != PAGE_SIZE)
-			break;
-
-		bvec_iter_advance_single(i->bvec, &bi, bv.bv_len);
-	}
-
+	size = min_t(size_t, size, maxpages * PAGE_SIZE - offset);
 	iov_iter_advance(i, size);
 	return size;
 }

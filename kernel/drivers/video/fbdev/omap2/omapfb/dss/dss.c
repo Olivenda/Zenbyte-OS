@@ -26,7 +26,6 @@
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
 #include <linux/of.h>
-#include <linux/of_graph.h>
 #include <linux/regulator/consumer.h>
 #include <linux/suspend.h>
 #include <linux/component.h>
@@ -920,7 +919,10 @@ static int dss_init_ports(struct platform_device *pdev)
 	struct device_node *port;
 	int r, ret = 0;
 
-	port = of_graph_get_next_port(parent, NULL);
+	if (parent == NULL)
+		return 0;
+
+	port = omapdss_of_get_next_port(parent, NULL);
 	if (!port)
 		return 0;
 
@@ -950,9 +952,8 @@ static int dss_init_ports(struct platform_device *pdev)
 		default:
 			break;
 		}
-
-		port = of_graph_get_next_port(parent, port);
-	} while (!ret && port);
+	} while (!ret &&
+		 (port = omapdss_of_get_next_port(parent, port)) != NULL);
 
 	if (ret)
 		dss_uninit_ports(pdev);
@@ -965,7 +966,10 @@ static void dss_uninit_ports(struct platform_device *pdev)
 	struct device_node *parent = pdev->dev.of_node;
 	struct device_node *port;
 
-	port = of_graph_get_next_port(parent, NULL);
+	if (parent == NULL)
+		return;
+
+	port = omapdss_of_get_next_port(parent, NULL);
 	if (!port)
 		return;
 
@@ -996,9 +1000,7 @@ static void dss_uninit_ports(struct platform_device *pdev)
 		default:
 			break;
 		}
-
-		port = of_graph_get_next_port(parent, port);
-	} while (port);
+	} while ((port = omapdss_of_get_next_port(parent, port)) != NULL);
 }
 
 static int dss_video_pll_probe(struct platform_device *pdev)

@@ -12,7 +12,6 @@
 
 #define pr_fmt(fmt) "PM: " fmt
 
-#include <crypto/acompress.h>
 #include <linux/module.h>
 #include <linux/file.h>
 #include <linux/delay.h>
@@ -268,26 +267,35 @@ static void hib_end_io(struct bio *bio)
 	bio_put(bio);
 }
 
-static int hib_submit_io_sync(blk_opf_t opf, pgoff_t page_off, void *addr)
-{
-	return bdev_rw_virt(file_bdev(hib_resume_bdev_file),
-			page_off * (PAGE_SIZE >> 9), addr, PAGE_SIZE, opf);
-}
-
-static int hib_submit_io_async(blk_opf_t opf, pgoff_t page_off, void *addr,
+static int hib_submit_io(blk_opf_t opf, pgoff_t page_off, void *addr,
 			 struct hib_bio_batch *hb)
 {
+	struct page *page = virt_to_page(addr);
 	struct bio *bio;
+	int error = 0;
 
 	bio = bio_alloc(file_bdev(hib_resume_bdev_file), 1, opf,
 			GFP_NOIO | __GFP_HIGH);
 	bio->bi_iter.bi_sector = page_off * (PAGE_SIZE >> 9);
-	bio_add_virt_nofail(bio, addr, PAGE_SIZE);
-	bio->bi_end_io = hib_end_io;
-	bio->bi_private = hb;
-	atomic_inc(&hb->count);
-	submit_bio(bio);
-	return 0;
+
+	if (bio_add_page(bio, page, PAGE_SIZE, 0) < PAGE_SIZE) {
+		pr_err("Adding page to bio failed at %llu\n",
+		       (unsigned long long)bio->bi_iter.bi_sector);
+		bio_put(bio);
+		return -EFAULT;
+	}
+
+	if (hb) {
+		bio->bi_end_io = hib_end_io;
+		bio->bi_private = hb;
+		atomic_inc(&hb->count);
+		submit_bio(bio);
+	} else {
+		error = submit_bio_wait(bio);
+		bio_put(bio);
+	}
+
+	return error;
 }
 
 static int hib_wait_io(struct hib_bio_batch *hb)
@@ -307,7 +315,7 @@ static int mark_swapfiles(struct swap_map_handle *handle, unsigned int flags)
 {
 	int error;
 
-	hib_submit_io_sync(REQ_OP_READ, swsusp_resume_block, swsusp_header);
+	hib_submit_io(REQ_OP_READ, swsusp_resume_block, swsusp_header, NULL);
 	if (!memcmp("SWAP-SPACE",swsusp_header->sig, 10) ||
 	    !memcmp("SWAPSPACE2",swsusp_header->sig, 10)) {
 		memcpy(swsusp_header->orig_sig,swsusp_header->sig, 10);
@@ -320,8 +328,8 @@ static int mark_swapfiles(struct swap_map_handle *handle, unsigned int flags)
 		swsusp_header->flags = flags;
 		if (flags & SF_CRC32_MODE)
 			swsusp_header->crc32 = handle->crc32;
-		error = hib_submit_io_sync(REQ_OP_WRITE | REQ_SYNC,
-				      swsusp_resume_block, swsusp_header);
+		error = hib_submit_io(REQ_OP_WRITE | REQ_SYNC,
+				      swsusp_resume_block, swsusp_header, NULL);
 	} else {
 		pr_err("Swap header not found!\n");
 		error = -ENODEV;
@@ -371,30 +379,36 @@ static int swsusp_swap_check(void)
 
 static int write_page(void *buf, sector_t offset, struct hib_bio_batch *hb)
 {
-	gfp_t gfp = GFP_NOIO | __GFP_NOWARN | __GFP_NORETRY;
 	void *src;
 	int ret;
 
 	if (!offset)
 		return -ENOSPC;
 
-	if (!hb)
-		goto sync_io;
-
-	src = (void *)__get_free_page(gfp);
-	if (!src) {
-		ret = hib_wait_io(hb); /* Free pages */
-		if (ret)
-			return ret;
-		src = (void *)__get_free_page(gfp);
-		if (WARN_ON_ONCE(!src))
-			goto sync_io;
+	if (hb) {
+		src = (void *)__get_free_page(GFP_NOIO | __GFP_NOWARN |
+		                              __GFP_NORETRY);
+		if (src) {
+			copy_page(src, buf);
+		} else {
+			ret = hib_wait_io(hb); /* Free pages */
+			if (ret)
+				return ret;
+			src = (void *)__get_free_page(GFP_NOIO |
+			                              __GFP_NOWARN |
+			                              __GFP_NORETRY);
+			if (src) {
+				copy_page(src, buf);
+			} else {
+				WARN_ON_ONCE(1);
+				hb = NULL;	/* Go synchronous */
+				src = buf;
+			}
+		}
+	} else {
+		src = buf;
 	}
-
-	copy_page(src, buf);
-	return hib_submit_io_async(REQ_OP_WRITE | REQ_SYNC, offset, src, hb);
-sync_io:
-	return hib_submit_io_sync(REQ_OP_WRITE | REQ_SYNC, offset, buf);
+	return hib_submit_io(REQ_OP_WRITE | REQ_SYNC, offset, src, hb);
 }
 
 static void release_swap_writer(struct swap_map_handle *handle)
@@ -621,8 +635,7 @@ static int crc32_threadfn(void *data)
  */
 struct cmp_data {
 	struct task_struct *thr;                  /* thread */
-	struct crypto_acomp *cc;		  /* crypto compressor */
-	struct acomp_req *cr;			  /* crypto request */
+	struct crypto_comp *cc;                   /* crypto compressor stream */
 	atomic_t ready;                           /* ready to start flag */
 	atomic_t stop;                            /* ready to stop flag */
 	int ret;                                  /* return code */
@@ -643,6 +656,7 @@ static atomic64_t compressed_size = ATOMIC_INIT(0);
 static int compress_threadfn(void *data)
 {
 	struct cmp_data *d = data;
+	unsigned int cmp_len = 0;
 
 	while (1) {
 		wait_event(d->go, atomic_read_acquire(&d->ready) ||
@@ -656,13 +670,11 @@ static int compress_threadfn(void *data)
 		}
 		atomic_set(&d->ready, 0);
 
-		acomp_request_set_callback(d->cr, CRYPTO_TFM_REQ_MAY_SLEEP,
-					   NULL, NULL);
-		acomp_request_set_src_nondma(d->cr, d->unc, d->unc_len);
-		acomp_request_set_dst_nondma(d->cr, d->cmp + CMP_HEADER,
-					     CMP_SIZE - CMP_HEADER);
-		d->ret = crypto_acomp_compress(d->cr);
-		d->cmp_len = d->cr->dlen;
+		cmp_len = CMP_SIZE - CMP_HEADER;
+		d->ret = crypto_comp_compress(d->cc, d->unc, d->unc_len,
+					      d->cmp + CMP_HEADER,
+					      &cmp_len);
+		d->cmp_len = cmp_len;
 
 		atomic64_add(d->cmp_len, &compressed_size);
 		atomic_set_release(&d->stop, 1);
@@ -733,17 +745,10 @@ static int save_compressed_image(struct swap_map_handle *handle,
 		init_waitqueue_head(&data[thr].go);
 		init_waitqueue_head(&data[thr].done);
 
-		data[thr].cc = crypto_alloc_acomp(hib_comp_algo, 0, CRYPTO_ALG_ASYNC);
+		data[thr].cc = crypto_alloc_comp(hib_comp_algo, 0, 0);
 		if (IS_ERR_OR_NULL(data[thr].cc)) {
 			pr_err("Could not allocate comp stream %ld\n", PTR_ERR(data[thr].cc));
 			ret = -EFAULT;
-			goto out_clean;
-		}
-
-		data[thr].cr = acomp_request_alloc(data[thr].cc);
-		if (!data[thr].cr) {
-			pr_err("Could not allocate comp request\n");
-			ret = -ENOMEM;
 			goto out_clean;
 		}
 
@@ -897,8 +902,8 @@ out_clean:
 		for (thr = 0; thr < nr_threads; thr++) {
 			if (data[thr].thr)
 				kthread_stop(data[thr].thr);
-			acomp_request_free(data[thr].cr);
-			crypto_free_acomp(data[thr].cc);
+			if (data[thr].cc)
+				crypto_free_comp(data[thr].cc);
 		}
 		vfree(data);
 	}
@@ -1029,7 +1034,7 @@ static int get_swap_reader(struct swap_map_handle *handle,
 			return -ENOMEM;
 		}
 
-		error = hib_submit_io_sync(REQ_OP_READ, offset, tmp->map);
+		error = hib_submit_io(REQ_OP_READ, offset, tmp->map, NULL);
 		if (error) {
 			release_swap_reader(handle);
 			return error;
@@ -1053,10 +1058,7 @@ static int swap_read_page(struct swap_map_handle *handle, void *buf,
 	offset = handle->cur->entries[handle->k];
 	if (!offset)
 		return -EFAULT;
-	if (hb)
-		error = hib_submit_io_async(REQ_OP_READ, offset, buf, hb);
-	else
-		error = hib_submit_io_sync(REQ_OP_READ, offset, buf);
+	error = hib_submit_io(REQ_OP_READ, offset, buf, hb);
 	if (error)
 		return error;
 	if (++handle->k >= MAP_PAGE_ENTRIES) {
@@ -1143,8 +1145,7 @@ static int load_image(struct swap_map_handle *handle,
  */
 struct dec_data {
 	struct task_struct *thr;                  /* thread */
-	struct crypto_acomp *cc;		  /* crypto compressor */
-	struct acomp_req *cr;			  /* crypto request */
+	struct crypto_comp *cc;                   /* crypto compressor stream */
 	atomic_t ready;                           /* ready to start flag */
 	atomic_t stop;                            /* ready to stop flag */
 	int ret;                                  /* return code */
@@ -1162,6 +1163,7 @@ struct dec_data {
 static int decompress_threadfn(void *data)
 {
 	struct dec_data *d = data;
+	unsigned int unc_len = 0;
 
 	while (1) {
 		wait_event(d->go, atomic_read_acquire(&d->ready) ||
@@ -1175,13 +1177,10 @@ static int decompress_threadfn(void *data)
 		}
 		atomic_set(&d->ready, 0);
 
-		acomp_request_set_callback(d->cr, CRYPTO_TFM_REQ_MAY_SLEEP,
-					   NULL, NULL);
-		acomp_request_set_src_nondma(d->cr, d->cmp + CMP_HEADER,
-					     d->cmp_len);
-		acomp_request_set_dst_nondma(d->cr, d->unc, UNC_SIZE);
-		d->ret = crypto_acomp_decompress(d->cr);
-		d->unc_len = d->cr->dlen;
+		unc_len = UNC_SIZE;
+		d->ret = crypto_comp_decompress(d->cc, d->cmp + CMP_HEADER, d->cmp_len,
+						d->unc, &unc_len);
+		d->unc_len = unc_len;
 
 		if (clean_pages_on_decompress)
 			flush_icache_range((unsigned long)d->unc,
@@ -1258,17 +1257,10 @@ static int load_compressed_image(struct swap_map_handle *handle,
 		init_waitqueue_head(&data[thr].go);
 		init_waitqueue_head(&data[thr].done);
 
-		data[thr].cc = crypto_alloc_acomp(hib_comp_algo, 0, CRYPTO_ALG_ASYNC);
+		data[thr].cc = crypto_alloc_comp(hib_comp_algo, 0, 0);
 		if (IS_ERR_OR_NULL(data[thr].cc)) {
 			pr_err("Could not allocate comp stream %ld\n", PTR_ERR(data[thr].cc));
 			ret = -EFAULT;
-			goto out_clean;
-		}
-
-		data[thr].cr = acomp_request_alloc(data[thr].cc);
-		if (!data[thr].cr) {
-			pr_err("Could not allocate comp request\n");
-			ret = -ENOMEM;
 			goto out_clean;
 		}
 
@@ -1518,8 +1510,8 @@ out_clean:
 		for (thr = 0; thr < nr_threads; thr++) {
 			if (data[thr].thr)
 				kthread_stop(data[thr].thr);
-			acomp_request_free(data[thr].cr);
-			crypto_free_acomp(data[thr].cc);
+			if (data[thr].cc)
+				crypto_free_comp(data[thr].cc);
 		}
 		vfree(data);
 	}
@@ -1581,8 +1573,8 @@ int swsusp_check(bool exclusive)
 				BLK_OPEN_READ, holder, NULL);
 	if (!IS_ERR(hib_resume_bdev_file)) {
 		clear_page(swsusp_header);
-		error = hib_submit_io_sync(REQ_OP_READ, swsusp_resume_block,
-					swsusp_header);
+		error = hib_submit_io(REQ_OP_READ, swsusp_resume_block,
+					swsusp_header, NULL);
 		if (error)
 			goto put;
 
@@ -1590,9 +1582,9 @@ int swsusp_check(bool exclusive)
 			memcpy(swsusp_header->sig, swsusp_header->orig_sig, 10);
 			swsusp_header_flags = swsusp_header->flags;
 			/* Reset swap signature now */
-			error = hib_submit_io_sync(REQ_OP_WRITE | REQ_SYNC,
+			error = hib_submit_io(REQ_OP_WRITE | REQ_SYNC,
 						swsusp_resume_block,
-						swsusp_header);
+						swsusp_header, NULL);
 		} else {
 			error = -EINVAL;
 		}
@@ -1641,12 +1633,13 @@ int swsusp_unmark(void)
 {
 	int error;
 
-	hib_submit_io_sync(REQ_OP_READ, swsusp_resume_block, swsusp_header);
+	hib_submit_io(REQ_OP_READ, swsusp_resume_block,
+			swsusp_header, NULL);
 	if (!memcmp(HIBERNATE_SIG,swsusp_header->sig, 10)) {
 		memcpy(swsusp_header->sig,swsusp_header->orig_sig, 10);
-		error = hib_submit_io_sync(REQ_OP_WRITE | REQ_SYNC,
+		error = hib_submit_io(REQ_OP_WRITE | REQ_SYNC,
 					swsusp_resume_block,
-					swsusp_header);
+					swsusp_header, NULL);
 	} else {
 		pr_err("Cannot find swsusp signature!\n");
 		error = -ENODEV;

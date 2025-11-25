@@ -526,10 +526,8 @@ int main(int argc, char *argv[])
 		 */
 		ret = pread(fcopy_fd, &tmp, sizeof(int), 0);
 		if (ret < 0) {
-			if (errno == EINTR || errno == EAGAIN)
-				continue;
 			syslog(LOG_ERR, "pread failed: %s", strerror(errno));
-			goto close;
+			continue;
 		}
 
 		len = ring_size;

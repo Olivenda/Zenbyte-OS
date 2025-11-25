@@ -853,7 +853,8 @@ static void fw_schedule_device_work(struct fw_device *device,
 
 static void fw_device_shutdown(struct work_struct *work)
 {
-	struct fw_device *device = from_work(device, work, work.work);
+	struct fw_device *device =
+		container_of(work, struct fw_device, work.work);
 
 	if (time_before64(get_jiffies_64(),
 			  device->card->reset_jiffies + SHUTDOWN_DELAY)
@@ -920,7 +921,8 @@ static int update_unit(struct device *dev, void *data)
 
 static void fw_device_update(struct work_struct *work)
 {
-	struct fw_device *device = from_work(device, work, work.work);
+	struct fw_device *device =
+		container_of(work, struct fw_device, work.work);
 
 	fw_device_cdev_update(device);
 	device_for_each_child(&device->device, NULL, update_unit);
@@ -986,7 +988,7 @@ int fw_device_set_broadcast_channel(struct device *dev, void *gen)
 	return 0;
 }
 
-static int compare_configuration_rom(struct device *dev, const void *data)
+static int compare_configuration_rom(struct device *dev, void *data)
 {
 	const struct fw_device *old = fw_device(dev);
 	const u32 *config_rom = data;
@@ -1000,7 +1002,8 @@ static int compare_configuration_rom(struct device *dev, const void *data)
 
 static void fw_device_init(struct work_struct *work)
 {
-	struct fw_device *device = from_work(device, work, work.work);
+	struct fw_device *device =
+		container_of(work, struct fw_device, work.work);
 	struct fw_card *card = device->card;
 	struct device *found;
 	u32 minor;
@@ -1036,7 +1039,7 @@ static void fw_device_init(struct work_struct *work)
 	//
 	// serialize config_rom access.
 	scoped_guard(rwsem_read, &fw_device_rwsem) {
-		found = device_find_child(card->device, device->config_rom,
+		found = device_find_child(card->device, (void *)device->config_rom,
 					  compare_configuration_rom);
 	}
 	if (found) {
@@ -1181,7 +1184,8 @@ static int reread_config_rom(struct fw_device *device, int generation,
 
 static void fw_device_refresh(struct work_struct *work)
 {
-	struct fw_device *device = from_work(device, work, work.work);
+	struct fw_device *device =
+		container_of(work, struct fw_device, work.work);
 	struct fw_card *card = device->card;
 	int ret, node_id = device->node_id;
 	bool changed;
@@ -1247,7 +1251,8 @@ static void fw_device_refresh(struct work_struct *work)
 
 static void fw_device_workfn(struct work_struct *work)
 {
-	struct fw_device *device = from_work(device, to_delayed_work(work), work);
+	struct fw_device *device = container_of(to_delayed_work(work),
+						struct fw_device, work);
 	device->workfn(work);
 }
 

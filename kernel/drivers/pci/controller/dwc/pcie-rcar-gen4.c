@@ -87,7 +87,7 @@ struct rcar_gen4_pcie {
 #define to_rcar_gen4_pcie(_dw)	container_of(_dw, struct rcar_gen4_pcie, dw)
 
 /* Common */
-static bool rcar_gen4_pcie_link_up(struct dw_pcie *dw)
+static int rcar_gen4_pcie_link_up(struct dw_pcie *dw)
 {
 	struct rcar_gen4_pcie *rcar = to_rcar_gen4_pcie(dw);
 	u32 val, mask;
@@ -798,7 +798,7 @@ static struct platform_driver rcar_gen4_pcie_driver = {
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = rcar_gen4_pcie_probe,
-	.remove = rcar_gen4_pcie_remove,
+	.remove_new = rcar_gen4_pcie_remove,
 };
 module_platform_driver(rcar_gen4_pcie_driver);
 

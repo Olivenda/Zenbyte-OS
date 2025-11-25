@@ -31,8 +31,6 @@
 
 #define pr_fmt(fmt) "[TTM] " fmt
 
-#include <linux/export.h>
-
 #include <drm/ttm/ttm_bo.h>
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_tt.h>
@@ -60,13 +58,13 @@ static vm_fault_t ttm_bo_vm_fault_idle(struct ttm_buffer_object *bo,
 		if (vmf->flags & FAULT_FLAG_RETRY_NOWAIT)
 			return VM_FAULT_RETRY;
 
-		drm_gem_object_get(&bo->base);
+		ttm_bo_get(bo);
 		mmap_read_unlock(vmf->vma->vm_mm);
 		(void)dma_resv_wait_timeout(bo->base.resv,
 					    DMA_RESV_USAGE_KERNEL, true,
 					    MAX_SCHEDULE_TIMEOUT);
 		dma_resv_unlock(bo->base.resv);
-		drm_gem_object_put(&bo->base);
+		ttm_bo_put(bo);
 		return VM_FAULT_RETRY;
 	}
 
@@ -132,12 +130,12 @@ vm_fault_t ttm_bo_vm_reserve(struct ttm_buffer_object *bo,
 		 */
 		if (fault_flag_allow_retry_first(vmf->flags)) {
 			if (!(vmf->flags & FAULT_FLAG_RETRY_NOWAIT)) {
-				drm_gem_object_get(&bo->base);
+				ttm_bo_get(bo);
 				mmap_read_unlock(vmf->vma->vm_mm);
 				if (!dma_resv_lock_interruptible(bo->base.resv,
 								 NULL))
 					dma_resv_unlock(bo->base.resv);
-				drm_gem_object_put(&bo->base);
+				ttm_bo_put(bo);
 			}
 
 			return VM_FAULT_RETRY;
@@ -222,10 +220,11 @@ vm_fault_t ttm_bo_vm_fault_reserved(struct vm_fault *vmf,
 		struct ttm_operation_ctx ctx = {
 			.interruptible = true,
 			.no_wait_gpu = false,
+			.force_alloc = true
 		};
 
 		ttm = bo->ttm;
-		err = ttm_bo_populate(bo, &ctx);
+		err = ttm_tt_populate(bdev, bo->ttm, &ctx);
 		if (err) {
 			if (err == -EINTR || err == -ERESTARTSYS ||
 			    err == -EAGAIN)
@@ -354,7 +353,7 @@ void ttm_bo_vm_open(struct vm_area_struct *vma)
 
 	WARN_ON(bo->bdev->dev_mapping != vma->vm_file->f_mapping);
 
-	drm_gem_object_get(&bo->base);
+	ttm_bo_get(bo);
 }
 EXPORT_SYMBOL(ttm_bo_vm_open);
 
@@ -362,7 +361,7 @@ void ttm_bo_vm_close(struct vm_area_struct *vma)
 {
 	struct ttm_buffer_object *bo = vma->vm_private_data;
 
-	drm_gem_object_put(&bo->base);
+	ttm_bo_put(bo);
 	vma->vm_private_data = NULL;
 }
 EXPORT_SYMBOL(ttm_bo_vm_close);
@@ -406,25 +405,13 @@ static int ttm_bo_vm_access_kmap(struct ttm_buffer_object *bo,
 	return len;
 }
 
-/**
- * ttm_bo_access - Helper to access a buffer object
- *
- * @bo: ttm buffer object
- * @offset: access offset into buffer object
- * @buf: pointer to caller memory to read into or write from
- * @len: length of access
- * @write: write access
- *
- * Utility function to access a buffer object. Useful when buffer object cannot
- * be easily mapped (non-contiguous, non-visible, etc...). Should not directly
- * be exported to user space via a peak / poke interface.
- *
- * Returns:
- * @len if successful, negative error code on failure.
- */
-int ttm_bo_access(struct ttm_buffer_object *bo, unsigned long offset,
-		  void *buf, int len, int write)
+int ttm_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
+		     void *buf, int len, int write)
 {
+	struct ttm_buffer_object *bo = vma->vm_private_data;
+	unsigned long offset = (addr) - vma->vm_start +
+		((vma->vm_pgoff - drm_vma_node_start(&bo->base.vma_node))
+		 << PAGE_SHIFT);
 	int ret;
 
 	if (len < 1 || (offset + len) > bo->base.size)
@@ -442,8 +429,8 @@ int ttm_bo_access(struct ttm_buffer_object *bo, unsigned long offset,
 		break;
 	default:
 		if (bo->bdev->funcs->access_memory)
-			ret = bo->bdev->funcs->access_memory
-				(bo, offset, buf, len, write);
+			ret = bo->bdev->funcs->access_memory(
+				bo, offset, buf, len, write);
 		else
 			ret = -EIO;
 	}
@@ -451,18 +438,6 @@ int ttm_bo_access(struct ttm_buffer_object *bo, unsigned long offset,
 	ttm_bo_unreserve(bo);
 
 	return ret;
-}
-EXPORT_SYMBOL(ttm_bo_access);
-
-int ttm_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
-		     void *buf, int len, int write)
-{
-	struct ttm_buffer_object *bo = vma->vm_private_data;
-	unsigned long offset = (addr) - vma->vm_start +
-		((vma->vm_pgoff - drm_vma_node_start(&bo->base.vma_node))
-		 << PAGE_SHIFT);
-
-	return ttm_bo_access(bo, offset, buf, len, write);
 }
 EXPORT_SYMBOL(ttm_bo_vm_access);
 
@@ -487,7 +462,7 @@ int ttm_bo_mmap_obj(struct vm_area_struct *vma, struct ttm_buffer_object *bo)
 	if (is_cow_mapping(vma->vm_flags))
 		return -EINVAL;
 
-	drm_gem_object_get(&bo->base);
+	ttm_bo_get(bo);
 
 	/*
 	 * Drivers may want to override the vm_ops field. Otherwise we

@@ -16,7 +16,7 @@
 
 #include <asm/irq_vectors.h>
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/percpu.h>
 #include <linux/profile.h>
@@ -130,6 +130,6 @@ extern char spurious_entries_start[];
 typedef struct irq_desc* vector_irq_t[NR_VECTORS];
 DECLARE_PER_CPU(vector_irq_t, vector_irq);
 
-#endif /* !__ASSEMBLER__ */
+#endif /* !ASSEMBLY_ */
 
 #endif /* _ASM_X86_HW_IRQ_H */

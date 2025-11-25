@@ -198,6 +198,12 @@ struct cm_peer {
 	struct rio_dev *rdev;
 };
 
+struct rio_cm_work {
+	struct work_struct work;
+	struct cm_dev *cm;
+	void *data;
+};
+
 struct conn_req {
 	struct list_head node;
 	u32 destid;	/* requester destID */

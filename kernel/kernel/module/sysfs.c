@@ -19,16 +19,24 @@
  * J. Corbet <corbet@lwn.net>
  */
 #ifdef CONFIG_KALLSYMS
+struct module_sect_attr {
+	struct bin_attribute battr;
+	unsigned long address;
+};
+
 struct module_sect_attrs {
 	struct attribute_group grp;
-	struct bin_attribute attrs[];
+	unsigned int nsections;
+	struct module_sect_attr attrs[];
 };
 
 #define MODULE_SECT_READ_SIZE (3 /* "0x", "\n" */ + (BITS_PER_LONG / 4))
 static ssize_t module_sect_read(struct file *file, struct kobject *kobj,
-				const struct bin_attribute *battr,
+				struct bin_attribute *battr,
 				char *buf, loff_t pos, size_t count)
 {
+	struct module_sect_attr *sattr =
+		container_of(battr, struct module_sect_attr, battr);
 	char bounce[MODULE_SECT_READ_SIZE + 1];
 	size_t wrote;
 
@@ -45,7 +53,7 @@ static ssize_t module_sect_read(struct file *file, struct kobject *kobj,
 	 */
 	wrote = scnprintf(bounce, sizeof(bounce), "0x%px\n",
 			  kallsyms_show_value(file->f_cred)
-				? battr->private : NULL);
+				? (void *)sattr->address : NULL);
 	count = min(count, wrote);
 	memcpy(buf, bounce, count);
 
@@ -54,59 +62,59 @@ static ssize_t module_sect_read(struct file *file, struct kobject *kobj,
 
 static void free_sect_attrs(struct module_sect_attrs *sect_attrs)
 {
-	const struct bin_attribute *const *bin_attr;
+	unsigned int section;
 
-	for (bin_attr = sect_attrs->grp.bin_attrs; *bin_attr; bin_attr++)
-		kfree((*bin_attr)->attr.name);
-	kfree(sect_attrs->grp.bin_attrs);
+	for (section = 0; section < sect_attrs->nsections; section++)
+		kfree(sect_attrs->attrs[section].battr.attr.name);
 	kfree(sect_attrs);
 }
 
 static int add_sect_attrs(struct module *mod, const struct load_info *info)
 {
+	unsigned int nloaded = 0, i, size[2];
 	struct module_sect_attrs *sect_attrs;
-	const struct bin_attribute **gattr;
-	struct bin_attribute *sattr;
-	unsigned int nloaded = 0, i;
+	struct module_sect_attr *sattr;
+	struct bin_attribute **gattr;
 	int ret;
 
 	/* Count loaded sections and allocate structures */
 	for (i = 0; i < info->hdr->e_shnum; i++)
 		if (!sect_empty(&info->sechdrs[i]))
 			nloaded++;
-	sect_attrs = kzalloc(struct_size(sect_attrs, attrs, nloaded), GFP_KERNEL);
+	size[0] = ALIGN(struct_size(sect_attrs, attrs, nloaded),
+			sizeof(sect_attrs->grp.bin_attrs[0]));
+	size[1] = (nloaded + 1) * sizeof(sect_attrs->grp.bin_attrs[0]);
+	sect_attrs = kzalloc(size[0] + size[1], GFP_KERNEL);
 	if (!sect_attrs)
 		return -ENOMEM;
 
-	gattr = kcalloc(nloaded + 1, sizeof(*gattr), GFP_KERNEL);
-	if (!gattr) {
-		kfree(sect_attrs);
-		return -ENOMEM;
-	}
-
 	/* Setup section attributes. */
 	sect_attrs->grp.name = "sections";
-	sect_attrs->grp.bin_attrs = gattr;
+	sect_attrs->grp.bin_attrs = (void *)sect_attrs + size[0];
 
+	sect_attrs->nsections = 0;
 	sattr = &sect_attrs->attrs[0];
+	gattr = &sect_attrs->grp.bin_attrs[0];
 	for (i = 0; i < info->hdr->e_shnum; i++) {
 		Elf_Shdr *sec = &info->sechdrs[i];
 
 		if (sect_empty(sec))
 			continue;
-		sysfs_bin_attr_init(sattr);
-		sattr->attr.name =
+		sysfs_bin_attr_init(&sattr->battr);
+		sattr->address = sec->sh_addr;
+		sattr->battr.attr.name =
 			kstrdup(info->secstrings + sec->sh_name, GFP_KERNEL);
-		if (!sattr->attr.name) {
+		if (!sattr->battr.attr.name) {
 			ret = -ENOMEM;
 			goto out;
 		}
-		sattr->read = module_sect_read;
-		sattr->private = (void *)sec->sh_addr;
-		sattr->size = MODULE_SECT_READ_SIZE;
-		sattr->attr.mode = 0400;
-		*(gattr++) = sattr++;
+		sect_attrs->nsections++;
+		sattr->battr.read = module_sect_read;
+		sattr->battr.size = MODULE_SECT_READ_SIZE;
+		sattr->battr.attr.mode = 0400;
+		*(gattr++) = &(sattr++)->battr;
 	}
+	*gattr = NULL;
 
 	ret = sysfs_create_group(&mod->mkobj.kobj, &sect_attrs->grp);
 	if (ret)
@@ -138,13 +146,20 @@ static void remove_sect_attrs(struct module *mod)
  */
 
 struct module_notes_attrs {
-	struct attribute_group grp;
-	struct bin_attribute attrs[];
+	struct kobject *dir;
+	unsigned int notes;
+	struct bin_attribute attrs[] __counted_by(notes);
 };
 
-static void free_notes_attrs(struct module_notes_attrs *notes_attrs)
+static void free_notes_attrs(struct module_notes_attrs *notes_attrs,
+			     unsigned int i)
 {
-	kfree(notes_attrs->grp.bin_attrs);
+	if (notes_attrs->dir) {
+		while (i-- > 0)
+			sysfs_remove_bin_file(notes_attrs->dir,
+					      &notes_attrs->attrs[i]);
+		kobject_put(notes_attrs->dir);
+	}
 	kfree(notes_attrs);
 }
 
@@ -152,7 +167,6 @@ static int add_notes_attrs(struct module *mod, const struct load_info *info)
 {
 	unsigned int notes, loaded, i;
 	struct module_notes_attrs *notes_attrs;
-	const struct bin_attribute **gattr;
 	struct bin_attribute *nattr;
 	int ret;
 
@@ -171,55 +185,47 @@ static int add_notes_attrs(struct module *mod, const struct load_info *info)
 	if (!notes_attrs)
 		return -ENOMEM;
 
-	gattr = kcalloc(notes + 1, sizeof(*gattr), GFP_KERNEL);
-	if (!gattr) {
-		kfree(notes_attrs);
-		return -ENOMEM;
-	}
-
-	notes_attrs->grp.name = "notes";
-	notes_attrs->grp.bin_attrs = gattr;
-
+	notes_attrs->notes = notes;
 	nattr = &notes_attrs->attrs[0];
 	for (loaded = i = 0; i < info->hdr->e_shnum; ++i) {
 		if (sect_empty(&info->sechdrs[i]))
 			continue;
 		if (info->sechdrs[i].sh_type == SHT_NOTE) {
 			sysfs_bin_attr_init(nattr);
-			nattr->attr.name = mod->sect_attrs->attrs[loaded].attr.name;
+			nattr->attr.name = mod->sect_attrs->attrs[loaded].battr.attr.name;
 			nattr->attr.mode = 0444;
 			nattr->size = info->sechdrs[i].sh_size;
 			nattr->private = (void *)info->sechdrs[i].sh_addr;
 			nattr->read = sysfs_bin_attr_simple_read;
-			*(gattr++) = nattr++;
+			++nattr;
 		}
 		++loaded;
 	}
 
-	ret = sysfs_create_group(&mod->mkobj.kobj, &notes_attrs->grp);
-	if (ret)
+	notes_attrs->dir = kobject_create_and_add("notes", &mod->mkobj.kobj);
+	if (!notes_attrs->dir) {
+		ret = -ENOMEM;
 		goto out;
+	}
+
+	for (i = 0; i < notes; ++i) {
+		ret = sysfs_create_bin_file(notes_attrs->dir, &notes_attrs->attrs[i]);
+		if (ret)
+			goto out;
+	}
 
 	mod->notes_attrs = notes_attrs;
 	return 0;
 
 out:
-	free_notes_attrs(notes_attrs);
+	free_notes_attrs(notes_attrs, i);
 	return ret;
 }
 
 static void remove_notes_attrs(struct module *mod)
 {
-	if (mod->notes_attrs) {
-		sysfs_remove_group(&mod->mkobj.kobj,
-				   &mod->notes_attrs->grp);
-		/*
-		 * We are positive that no one is using any notes attrs
-		 * at this point.  Deallocate immediately.
-		 */
-		free_notes_attrs(mod->notes_attrs);
-		mod->notes_attrs = NULL;
-	}
+	if (mod->notes_attrs)
+		free_notes_attrs(mod->notes_attrs, mod->notes_attrs->notes);
 }
 
 #else /* !CONFIG_KALLSYMS */
@@ -269,7 +275,7 @@ static int add_usage_links(struct module *mod)
 
 static void module_remove_modinfo_attrs(struct module *mod, int end)
 {
-	const struct module_attribute *attr;
+	struct module_attribute *attr;
 	int i;
 
 	for (i = 0; (attr = &mod->modinfo_attrs[i]); i++) {
@@ -287,7 +293,7 @@ static void module_remove_modinfo_attrs(struct module *mod, int end)
 
 static int module_add_modinfo_attrs(struct module *mod)
 {
-	const struct module_attribute *attr;
+	struct module_attribute *attr;
 	struct module_attribute *temp_attr;
 	int error = 0;
 	int i;

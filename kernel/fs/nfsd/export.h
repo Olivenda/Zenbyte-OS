@@ -88,7 +88,7 @@ struct svc_expkey {
 	struct cache_head	h;
 
 	struct auth_domain *	ek_client;
-	u8			ek_fsidtype;
+	int			ek_fsidtype;
 	u32			ek_fsid[6];
 
 	struct path		ek_path;

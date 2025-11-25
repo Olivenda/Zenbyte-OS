@@ -41,7 +41,6 @@
 #include "sdhci.h"
 #include "sdhci-cqhci.h"
 #include "sdhci-pci.h"
-#include "sdhci-uhs2.h"
 
 static void sdhci_pci_hw_reset(struct sdhci_host *host);
 
@@ -152,15 +151,18 @@ static int sdhci_pci_runtime_suspend_host(struct sdhci_pci_chip *chip)
 {
 	struct sdhci_pci_slot *slot;
 	struct sdhci_host *host;
+	int i, ret;
 
-	for (int i = 0; i < chip->num_slots; i++) {
+	for (i = 0; i < chip->num_slots; i++) {
 		slot = chip->slots[i];
 		if (!slot)
 			continue;
 
 		host = slot->host;
 
-		sdhci_runtime_suspend_host(host);
+		ret = sdhci_runtime_suspend_host(host);
+		if (ret)
+			goto err_pci_runtime_suspend;
 
 		if (chip->rpm_retune &&
 		    host->tuning_mode != SDHCI_TUNING_MODE_3)
@@ -168,18 +170,26 @@ static int sdhci_pci_runtime_suspend_host(struct sdhci_pci_chip *chip)
 	}
 
 	return 0;
+
+err_pci_runtime_suspend:
+	while (--i >= 0)
+		sdhci_runtime_resume_host(chip->slots[i]->host, 0);
+	return ret;
 }
 
 static int sdhci_pci_runtime_resume_host(struct sdhci_pci_chip *chip)
 {
 	struct sdhci_pci_slot *slot;
+	int i, ret;
 
-	for (int i = 0; i < chip->num_slots; i++) {
+	for (i = 0; i < chip->num_slots; i++) {
 		slot = chip->slots[i];
 		if (!slot)
 			continue;
 
-		sdhci_runtime_resume_host(slot->host, 0);
+		ret = sdhci_runtime_resume_host(slot->host, 0);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
@@ -679,19 +689,8 @@ static int intel_start_signal_voltage_switch(struct mmc_host *mmc,
 	return 0;
 }
 
-static void sdhci_intel_set_clock(struct sdhci_host *host, unsigned int clock)
-{
-	u16 clk = sdhci_readw(host, SDHCI_CLOCK_CONTROL);
-
-	/* Stop card clock separately to avoid glitches on clock line */
-	if (clk & SDHCI_CLOCK_CARD_EN)
-		sdhci_writew(host, clk & ~SDHCI_CLOCK_CARD_EN, SDHCI_CLOCK_CONTROL);
-
-	sdhci_set_clock(host, clock);
-}
-
 static const struct sdhci_ops sdhci_intel_byt_ops = {
-	.set_clock		= sdhci_intel_set_clock,
+	.set_clock		= sdhci_set_clock,
 	.set_power		= sdhci_intel_set_power,
 	.enable_dma		= sdhci_pci_enable_dma,
 	.set_bus_width		= sdhci_set_bus_width,
@@ -701,7 +700,7 @@ static const struct sdhci_ops sdhci_intel_byt_ops = {
 };
 
 static const struct sdhci_ops sdhci_intel_glk_ops = {
-	.set_clock		= sdhci_intel_set_clock,
+	.set_clock		= sdhci_set_clock,
 	.set_power		= sdhci_intel_set_power,
 	.enable_dma		= sdhci_pci_enable_dma,
 	.set_bus_width		= sdhci_set_bus_width,
@@ -2174,7 +2173,7 @@ static struct sdhci_pci_slot *sdhci_pci_probe_slot(
 	ret = pcim_iomap_regions(pdev, BIT(bar), mmc_hostname(host->mmc));
 	if (ret) {
 		dev_err(&pdev->dev, "cannot request region\n");
-		return ERR_PTR(ret);
+		goto cleanup;
 	}
 
 	host->ioaddr = pcim_iomap_table(pdev)[bar];
@@ -2182,7 +2181,7 @@ static struct sdhci_pci_slot *sdhci_pci_probe_slot(
 	if (chip->fixes && chip->fixes->probe_slot) {
 		ret = chip->fixes->probe_slot(slot);
 		if (ret)
-			return ERR_PTR(ret);
+			goto cleanup;
 	}
 
 	host->mmc->pm_caps = MMC_PM_KEEP_POWER;
@@ -2243,6 +2242,9 @@ remove:
 	if (chip->fixes && chip->fixes->remove_slot)
 		chip->fixes->remove_slot(slot, 0);
 
+cleanup:
+	sdhci_free_host(host);
+
 	return ERR_PTR(ret);
 }
 
@@ -2256,23 +2258,12 @@ static void sdhci_pci_remove_slot(struct sdhci_pci_slot *slot)
 	if (scratch == (u32)-1)
 		dead = 1;
 
-	if (slot->chip->fixes && slot->chip->fixes->remove_host)
-		slot->chip->fixes->remove_host(slot, dead);
-	else
-		sdhci_remove_host(slot->host, dead);
+	sdhci_remove_host(slot->host, dead);
 
 	if (slot->chip->fixes && slot->chip->fixes->remove_slot)
 		slot->chip->fixes->remove_slot(slot, dead);
-}
 
-int sdhci_pci_uhs2_add_host(struct sdhci_pci_slot *slot)
-{
-	return sdhci_uhs2_add_host(slot->host);
-}
-
-void sdhci_pci_uhs2_remove_host(struct sdhci_pci_slot *slot, int dead)
-{
-	sdhci_uhs2_remove_host(slot->host, dead);
+	sdhci_free_host(slot->host);
 }
 
 static void sdhci_pci_runtime_pm_allow(struct device *dev)

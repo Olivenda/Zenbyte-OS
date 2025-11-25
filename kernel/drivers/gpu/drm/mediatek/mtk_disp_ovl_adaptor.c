@@ -492,39 +492,9 @@ static const struct of_device_id mtk_ovl_adaptor_comp_dt_ids[] = {
 	{ /* sentinel */ }
 };
 
-static int ovl_adaptor_of_get_ddp_comp_type(struct device_node *node,
-					    enum mtk_ovl_adaptor_comp_type *ctype)
+static int compare_of(struct device *dev, void *data)
 {
-	const struct of_device_id *of_id = of_match_node(mtk_ovl_adaptor_comp_dt_ids, node);
-
-	if (!of_id)
-		return -EINVAL;
-
-	*ctype = (enum mtk_ovl_adaptor_comp_type)((uintptr_t)of_id->data);
-
-	return 0;
-}
-
-bool mtk_ovl_adaptor_is_comp_present(struct device_node *node)
-{
-	enum mtk_ovl_adaptor_comp_type type;
-	int ret;
-
-	ret = ovl_adaptor_of_get_ddp_comp_type(node, &type);
-	if (ret)
-		return false;
-
-	if (type >= OVL_ADAPTOR_TYPE_NUM)
-		return false;
-
-	/*
-	 * In the context of mediatek-drm, ETHDR, MDP_RDMA and Padding are
-	 * used exclusively by OVL Adaptor: if this component is not one of
-	 * those, it's likely not an OVL Adaptor path.
-	 */
-	return type == OVL_ADAPTOR_TYPE_ETHDR ||
-	       type == OVL_ADAPTOR_TYPE_MDP_RDMA ||
-	       type == OVL_ADAPTOR_TYPE_PADDING;
+	return dev->of_node == data;
 }
 
 static int ovl_adaptor_comp_init(struct device *dev, struct component_match **match)
@@ -536,11 +506,12 @@ static int ovl_adaptor_comp_init(struct device *dev, struct component_match **ma
 	parent = dev->parent->parent->of_node->parent;
 
 	for_each_child_of_node_scoped(parent, node) {
+		const struct of_device_id *of_id;
 		enum mtk_ovl_adaptor_comp_type type;
-		int id, ret;
+		int id;
 
-		ret = ovl_adaptor_of_get_ddp_comp_type(node, &type);
-		if (ret)
+		of_id = of_match_node(mtk_ovl_adaptor_comp_dt_ids, node);
+		if (!of_id)
 			continue;
 
 		if (!of_device_is_available(node)) {
@@ -549,6 +520,7 @@ static int ovl_adaptor_comp_init(struct device *dev, struct component_match **ma
 			continue;
 		}
 
+		type = (enum mtk_ovl_adaptor_comp_type)(uintptr_t)of_id->data;
 		id = ovl_adaptor_comp_get_id(dev, node, type);
 		if (id < 0) {
 			dev_warn(dev, "Skipping unknown component %pOF\n",
@@ -562,7 +534,7 @@ static int ovl_adaptor_comp_init(struct device *dev, struct component_match **ma
 
 		priv->ovl_adaptor_comp[id] = &comp_pdev->dev;
 
-		drm_of_component_match_add(dev, match, component_compare_of, node);
+		drm_of_component_match_add(dev, match, compare_of, node);
 		dev_dbg(dev, "Adding component match for %pOF\n", node);
 	}
 
@@ -660,7 +632,7 @@ static void mtk_disp_ovl_adaptor_remove(struct platform_device *pdev)
 
 struct platform_driver mtk_disp_ovl_adaptor_driver = {
 	.probe		= mtk_disp_ovl_adaptor_probe,
-	.remove		= mtk_disp_ovl_adaptor_remove,
+	.remove_new	= mtk_disp_ovl_adaptor_remove,
 	.driver		= {
 		.name	= "mediatek-disp-ovl-adaptor",
 	},

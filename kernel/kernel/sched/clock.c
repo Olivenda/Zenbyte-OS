@@ -54,9 +54,6 @@
  *
  */
 
-#include <linux/sched/clock.h>
-#include "sched.h"
-
 /*
  * Scheduler clock - returns current time in nanosec units.
  * This is default implementation.
@@ -474,7 +471,7 @@ notrace void sched_clock_idle_wakeup_event(void)
 }
 EXPORT_SYMBOL_GPL(sched_clock_idle_wakeup_event);
 
-#else /* !CONFIG_HAVE_UNSTABLE_SCHED_CLOCK: */
+#else /* CONFIG_HAVE_UNSTABLE_SCHED_CLOCK */
 
 void __init sched_clock_init(void)
 {
@@ -492,7 +489,7 @@ notrace u64 sched_clock_cpu(int cpu)
 	return sched_clock();
 }
 
-#endif /* !CONFIG_HAVE_UNSTABLE_SCHED_CLOCK */
+#endif /* CONFIG_HAVE_UNSTABLE_SCHED_CLOCK */
 
 /*
  * Running clock - returns the time that has elapsed while a guest has been

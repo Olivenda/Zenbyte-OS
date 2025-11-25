@@ -132,9 +132,10 @@ properties:
       Address property. Base address of an alias of the GICD region containing
       only the {SET,CLR}SPI registers to be used if isolation is required,
       and if supported by the HW.
-    oneOf:
-      - $ref: /schemas/types.yaml#/definitions/uint32
-      - $ref: /schemas/types.yaml#/definitions/uint64
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    items:
+      minItems: 1
+      maxItems: 2
 
   ppi-partitions:
     type: object
@@ -222,8 +223,9 @@ patternProperties:
           (u32, u32) tuple describing the untranslated
           address and size of the pre-ITS window.
         $ref: /schemas/types.yaml#/definitions/uint32-array
-        minItems: 2
-        maxItems: 2
+        items:
+          minItems: 2
+          maxItems: 2
 
     required:
       - compatible

@@ -6,7 +6,6 @@
 #include <asm/vdso.h>
 #include <asm/page.h>
 #include <asm-generic/vmlinux.lds.h>
-#include <vdso/datapage.h>
 
 #ifdef __LITTLE_ENDIAN__
 OUTPUT_FORMAT("elf64-powerpcle", "elf64-powerpcle", "elf64-powerpcle")
@@ -17,8 +16,7 @@ OUTPUT_ARCH(powerpc:common64)
 
 SECTIONS
 {
-	VDSO_VVAR_SYMS
-
+	PROVIDE(_vdso_datapage = . - 2 * PAGE_SIZE);
 	. = SIZEOF_HEADERS;
 
 	.hash		: { *(.hash) }			:text

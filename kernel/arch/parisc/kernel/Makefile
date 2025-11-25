@@ -3,7 +3,7 @@
 # Makefile for arch/parisc/kernel
 #
 
-always-$(KBUILD_BUILTIN)		:= vmlinux.lds
+extra-y		:= vmlinux.lds
 
 obj-y		:= head.o cache.o pacache.o setup.o pdt.o traps.o time.o irq.o \
 		   syscall.o entry.o sys_parisc.o firmware.o \

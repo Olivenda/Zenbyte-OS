@@ -17,7 +17,7 @@
 #include <asm/page.h>
 #include <asm/mmu.h>
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 #include <asm/addrspace.h>
 #include <asm/fixmap.h>
 
@@ -28,7 +28,7 @@
 extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
 #define ZERO_PAGE(vaddr) (virt_to_page(empty_zero_page))
 
-#endif /* !__ASSEMBLER__ */
+#endif /* !__ASSEMBLY__ */
 
 /*
  * Effective and physical address definitions, to aid with sign

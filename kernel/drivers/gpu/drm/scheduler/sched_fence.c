@@ -21,15 +21,13 @@
  *
  */
 
-#include <linux/export.h>
+#include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
 
 #include <drm/gpu_scheduler.h>
-
-#include "sched_internal.h"
 
 static struct kmem_cache *sched_fence_slab;
 
@@ -206,8 +204,7 @@ struct drm_sched_fence *to_drm_sched_fence(struct dma_fence *f)
 EXPORT_SYMBOL(to_drm_sched_fence);
 
 struct drm_sched_fence *drm_sched_fence_alloc(struct drm_sched_entity *entity,
-					      void *owner,
-					      u64 drm_client_id)
+					      void *owner)
 {
 	struct drm_sched_fence *fence = NULL;
 
@@ -216,7 +213,6 @@ struct drm_sched_fence *drm_sched_fence_alloc(struct drm_sched_entity *entity,
 		return NULL;
 
 	fence->owner = owner;
-	fence->drm_client_id = drm_client_id;
 	spin_lock_init(&fence->lock);
 
 	return fence;

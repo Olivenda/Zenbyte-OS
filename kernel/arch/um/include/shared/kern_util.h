@@ -24,12 +24,10 @@ extern void free_stack(unsigned long stack, int order);
 struct pt_regs;
 extern void do_signal(struct pt_regs *regs);
 extern void interrupt_end(void);
-extern void relay_signal(int sig, struct siginfo *si, struct uml_pt_regs *regs,
-			 void *mc);
+extern void relay_signal(int sig, struct siginfo *si, struct uml_pt_regs *regs);
 
 extern unsigned long segv(struct faultinfo fi, unsigned long ip,
-			  int is_user, struct uml_pt_regs *regs,
-			  void *mc);
+			  int is_user, struct uml_pt_regs *regs);
 extern int handle_page_fault(unsigned long address, unsigned long ip,
 			     int is_write, int is_user, int *code_out);
 
@@ -61,10 +59,9 @@ extern unsigned long from_irq_stack(int nested);
 
 extern int singlestepping(void);
 
-extern void segv_handler(int sig, struct siginfo *unused_si, struct uml_pt_regs *regs,
-			 void *mc);
-extern void winch(int sig, struct siginfo *unused_si, struct uml_pt_regs *regs,
-		  void *mc);
+extern void segv_handler(int sig, struct siginfo *unused_si, struct uml_pt_regs *regs);
+extern void bus_handler(int sig, struct siginfo *si, struct uml_pt_regs *regs);
+extern void winch(int sig, struct siginfo *unused_si, struct uml_pt_regs *regs);
 extern void fatal_sigsegv(void) __attribute__ ((noreturn));
 
 void um_idle_sleep(void);

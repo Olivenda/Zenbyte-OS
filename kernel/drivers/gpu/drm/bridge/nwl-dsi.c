@@ -736,8 +736,9 @@ static int nwl_dsi_disable(struct nwl_dsi *dsi)
 	return 0;
 }
 
-static void nwl_dsi_bridge_atomic_disable(struct drm_bridge *bridge,
-					  struct drm_atomic_state *state)
+static void
+nwl_dsi_bridge_atomic_disable(struct drm_bridge *bridge,
+			      struct drm_bridge_state *old_bridge_state)
 {
 	struct nwl_dsi *dsi = bridge_to_dsi(bridge);
 	int ret;
@@ -897,8 +898,9 @@ runtime_put:
 	pm_runtime_put_sync(dev);
 }
 
-static void nwl_dsi_bridge_atomic_enable(struct drm_bridge *bridge,
-					 struct drm_atomic_state *state)
+static void
+nwl_dsi_bridge_atomic_enable(struct drm_bridge *bridge,
+			     struct drm_bridge_state *old_bridge_state)
 {
 	struct nwl_dsi *dsi = bridge_to_dsi(bridge);
 	int ret;
@@ -910,7 +912,6 @@ static void nwl_dsi_bridge_atomic_enable(struct drm_bridge *bridge,
 }
 
 static int nwl_dsi_bridge_attach(struct drm_bridge *bridge,
-				 struct drm_encoder *encoder,
 				 enum drm_bridge_attach_flags flags)
 {
 	struct nwl_dsi *dsi = bridge_to_dsi(bridge);
@@ -920,7 +921,7 @@ static int nwl_dsi_bridge_attach(struct drm_bridge *bridge,
 	if (IS_ERR(panel_bridge))
 		return PTR_ERR(panel_bridge);
 
-	return drm_bridge_attach(encoder, panel_bridge, bridge, flags);
+	return drm_bridge_attach(bridge->encoder, panel_bridge, bridge, flags);
 }
 
 static u32 *nwl_bridge_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
@@ -1149,10 +1150,9 @@ static int nwl_dsi_probe(struct platform_device *pdev)
 	struct nwl_dsi *dsi;
 	int ret;
 
-	dsi = devm_drm_bridge_alloc(dev, struct nwl_dsi, bridge,
-				    &nwl_dsi_bridge_funcs);
-	if (IS_ERR(dsi))
-		return PTR_ERR(dsi);
+	dsi = devm_kzalloc(dev, sizeof(*dsi), GFP_KERNEL);
+	if (!dsi)
+		return -ENOMEM;
 
 	dsi->dev = dev;
 
@@ -1181,9 +1181,9 @@ static int nwl_dsi_probe(struct platform_device *pdev)
 		dsi->quirks = (uintptr_t)attr->data;
 
 	dsi->bridge.driver_private = dsi;
+	dsi->bridge.funcs = &nwl_dsi_bridge_funcs;
 	dsi->bridge.of_node = dev->of_node;
 	dsi->bridge.timings = &nwl_dsi_timings;
-	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
 
 	dev_set_drvdata(dev, dsi);
 	pm_runtime_enable(dev);
@@ -1211,7 +1211,7 @@ static void nwl_dsi_remove(struct platform_device *pdev)
 
 static struct platform_driver nwl_dsi_driver = {
 	.probe		= nwl_dsi_probe,
-	.remove		= nwl_dsi_remove,
+	.remove_new	= nwl_dsi_remove,
 	.driver		= {
 		.of_match_table = nwl_dsi_dt_ids,
 		.name	= DRV_NAME,

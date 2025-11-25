@@ -152,7 +152,7 @@ static int max77541_pmic_setup(struct device *dev)
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to initialize IRQ\n");
 
-	ret = devm_device_init_wakeup(dev);
+	ret = device_init_wakeup(dev, true);
 	if (ret)
 		return dev_err_probe(dev, ret, "Unable to init wakeup\n");
 

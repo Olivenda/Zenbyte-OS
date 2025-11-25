@@ -108,13 +108,18 @@ retry:
 
 static int do_utimes_fd(int fd, struct timespec64 *times, int flags)
 {
+	struct fd f;
+	int error;
+
 	if (flags)
 		return -EINVAL;
 
-	CLASS(fd, f)(fd);
-	if (fd_empty(f))
+	f = fdget(fd);
+	if (!fd_file(f))
 		return -EBADF;
-	return vfs_utimes(&fd_file(f)->f_path, times);
+	error = vfs_utimes(&fd_file(f)->f_path, times);
+	fdput(f);
+	return error;
 }
 
 /*

@@ -36,19 +36,19 @@ static void idpf_ctlq_init_regs(struct idpf_hw *hw, struct idpf_ctlq_info *cq,
 {
 	/* Update tail to post pre-allocated buffers for rx queues */
 	if (is_rxq)
-		idpf_mbx_wr32(hw, cq->reg.tail, (u32)(cq->ring_size - 1));
+		wr32(hw, cq->reg.tail, (u32)(cq->ring_size - 1));
 
 	/* For non-Mailbox control queues only TAIL need to be set */
 	if (cq->q_id != -1)
 		return;
 
 	/* Clear Head for both send or receive */
-	idpf_mbx_wr32(hw, cq->reg.head, 0);
+	wr32(hw, cq->reg.head, 0);
 
 	/* set starting point */
-	idpf_mbx_wr32(hw, cq->reg.bal, lower_32_bits(cq->desc_ring.pa));
-	idpf_mbx_wr32(hw, cq->reg.bah, upper_32_bits(cq->desc_ring.pa));
-	idpf_mbx_wr32(hw, cq->reg.len, (cq->ring_size | cq->reg.len_ena_mask));
+	wr32(hw, cq->reg.bal, lower_32_bits(cq->desc_ring.pa));
+	wr32(hw, cq->reg.bah, upper_32_bits(cq->desc_ring.pa));
+	wr32(hw, cq->reg.len, (cq->ring_size | cq->reg.len_ena_mask));
 }
 
 /**
@@ -328,7 +328,7 @@ int idpf_ctlq_send(struct idpf_hw *hw, struct idpf_ctlq_info *cq,
 	 */
 	dma_wmb();
 
-	idpf_mbx_wr32(hw, cq->reg.tail, cq->next_to_use);
+	wr32(hw, cq->reg.tail, cq->next_to_use);
 
 err_unlock:
 	spin_unlock(&cq->cq_lock);
@@ -520,7 +520,7 @@ post_buffs_out:
 
 		dma_wmb();
 
-		idpf_mbx_wr32(hw, cq->reg.tail, cq->next_to_post);
+		wr32(hw, cq->reg.tail, cq->next_to_post);
 	}
 
 	spin_unlock(&cq->cq_lock);

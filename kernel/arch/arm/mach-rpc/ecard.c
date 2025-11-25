@@ -1124,7 +1124,7 @@ static int ecard_match(struct device *_dev, const struct device_driver *_drv)
 	return ret;
 }
 
-const struct bus_type ecard_bus_type = {
+struct bus_type ecard_bus_type = {
 	.name		= "ecard",
 	.dev_groups	= ecard_dev_groups,
 	.match		= ecard_match,

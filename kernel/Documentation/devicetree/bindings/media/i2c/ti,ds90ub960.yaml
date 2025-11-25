@@ -68,12 +68,6 @@ properties:
             description: The link number
             maxItems: 1
 
-          '#address-cells':
-            const: 1
-
-          '#size-cells':
-            const: 0
-
           i2c-alias:
             $ref: /schemas/types.yaml#/definitions/uint32
             description:
@@ -113,8 +107,7 @@ properties:
             maximum: 14
             description: Manual EQ level
 
-        patternProperties:
-          '^serializer(@[0-9a-f]+)*$':
+          serializer:
             type: object
             description: FPD-Link Serializer node
 
@@ -122,6 +115,7 @@ properties:
           - reg
           - i2c-alias
           - ti,rx-mode
+          - serializer
 
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
@@ -315,17 +309,13 @@ examples:
           /* Link 0 has DS90UB953 serializer and IMX274 sensor */
 
           link@0 {
-            #address-cells = <1>;
-            #size-cells = <0>;
-
             reg = <0>;
             i2c-alias = <0x44>;
 
             ti,rx-mode = <3>;
 
-            serializer1: serializer@30 {
+            serializer1: serializer {
               compatible = "ti,ds90ub953-q1";
-              reg = <0x30>;
 
               gpio-controller;
               #gpio-cells = <2>;

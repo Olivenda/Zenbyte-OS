@@ -151,6 +151,11 @@ static inline int hpet_set_periodic_freq(unsigned long freq)
 	return 0;
 }
 
+static inline int hpet_rtc_dropped_irq(void)
+{
+	return 0;
+}
+
 static inline int hpet_rtc_timer_init(void)
 {
 	return 0;
@@ -863,7 +868,7 @@ static void acpi_cmos_wake_setup(struct device *dev)
 		dev_info(dev, "RTC can wake from S4\n");
 
 	/* RTC always wakes from S1/S2/S3, and often S4/STD */
-	device_init_wakeup(dev, true);
+	device_init_wakeup(dev, 1);
 }
 
 static void cmos_check_acpi_rtc_status(struct device *dev,
@@ -1524,7 +1529,7 @@ static void cmos_platform_shutdown(struct platform_device *pdev)
 MODULE_ALIAS("platform:rtc_cmos");
 
 static struct platform_driver cmos_platform_driver = {
-	.remove		= cmos_platform_remove,
+	.remove_new	= cmos_platform_remove,
 	.shutdown	= cmos_platform_shutdown,
 	.driver = {
 		.name		= driver_name,

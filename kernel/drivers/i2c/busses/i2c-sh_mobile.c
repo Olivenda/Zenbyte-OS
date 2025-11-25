@@ -24,7 +24,6 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 
 /* Transmit operation:                                                      */
 /*                                                                          */
@@ -410,7 +409,7 @@ static irqreturn_t sh_mobile_i2c_isr(int irq, void *dev_id)
 	pd->sr |= sr; /* remember state */
 
 	dev_dbg(pd->dev, "i2c_isr 0x%02x 0x%02x %s %d %d!\n", sr, pd->sr,
-	       str_read_write(pd->msg->flags & I2C_M_RD),
+	       (pd->msg->flags & I2C_M_RD) ? "read" : "write",
 	       pd->pos, pd->msg->len);
 
 	/* Kick off TxDMA after preface was done */
@@ -740,8 +739,8 @@ static u32 sh_mobile_i2c_func(struct i2c_adapter *adapter)
 
 static const struct i2c_algorithm sh_mobile_i2c_algorithm = {
 	.functionality = sh_mobile_i2c_func,
-	.xfer = sh_mobile_i2c_xfer,
-	.xfer_atomic = sh_mobile_i2c_xfer_atomic,
+	.master_xfer = sh_mobile_i2c_xfer,
+	.master_xfer_atomic = sh_mobile_i2c_xfer_atomic,
 };
 
 static const struct i2c_adapter_quirks sh_mobile_i2c_quirks = {
@@ -984,7 +983,7 @@ static struct platform_driver sh_mobile_i2c_driver = {
 		.pm	= pm_sleep_ptr(&sh_mobile_i2c_pm_ops),
 	},
 	.probe		= sh_mobile_i2c_probe,
-	.remove		= sh_mobile_i2c_remove,
+	.remove_new	= sh_mobile_i2c_remove,
 };
 
 static int __init sh_mobile_i2c_adap_init(void)

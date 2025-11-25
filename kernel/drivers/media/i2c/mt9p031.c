@@ -17,12 +17,14 @@
 #include <linux/log2.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/of.h>
+#include <linux/of_graph.h>
 #include <linux/pm.h>
-#include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/videodev2.h>
 
+#include <media/i2c/mt9p031.h>
 #include <media/v4l2-async.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
@@ -111,24 +113,17 @@
 #define MT9P031_TEST_PATTERN_RED			0xa2
 #define MT9P031_TEST_PATTERN_BLUE			0xa3
 
-struct mt9p031_model_info {
-	u32 code;
-};
-
 struct mt9p031 {
 	struct v4l2_subdev subdev;
 	struct media_pad pad;
 	struct v4l2_rect crop;  /* Sensor window */
 	struct v4l2_mbus_framefmt format;
+	struct mt9p031_platform_data *pdata;
 	struct mutex power_lock; /* lock to protect power_count */
 	int power_count;
 
 	struct clk *clk;
 	struct regulator_bulk_data regulators[3];
-
-	unsigned int pixclk_pol:1;
-	int ext_freq;
-	int target_freq;
 
 	u32 code;
 	struct aptina_pll pll;
@@ -230,6 +225,7 @@ static int mt9p031_clk_setup(struct mt9p031 *mt9p031)
 	};
 
 	struct i2c_client *client = v4l2_get_subdevdata(&mt9p031->subdev);
+	struct mt9p031_platform_data *pdata = mt9p031->pdata;
 	unsigned long ext_freq;
 	int ret;
 
@@ -237,7 +233,7 @@ static int mt9p031_clk_setup(struct mt9p031 *mt9p031)
 	if (IS_ERR(mt9p031->clk))
 		return PTR_ERR(mt9p031->clk);
 
-	ret = clk_set_rate(mt9p031->clk, mt9p031->ext_freq);
+	ret = clk_set_rate(mt9p031->clk, pdata->ext_freq);
 	if (ret < 0)
 		return ret;
 
@@ -249,7 +245,7 @@ static int mt9p031_clk_setup(struct mt9p031 *mt9p031)
 	if (ext_freq > limits.ext_clock_max) {
 		unsigned int div;
 
-		div = DIV_ROUND_UP(ext_freq, mt9p031->target_freq);
+		div = DIV_ROUND_UP(ext_freq, pdata->target_freq);
 		div = roundup_pow_of_two(div) / 2;
 
 		mt9p031->clk_div = min_t(unsigned int, div, 64);
@@ -259,7 +255,7 @@ static int mt9p031_clk_setup(struct mt9p031 *mt9p031)
 	}
 
 	mt9p031->pll.ext_clock = ext_freq;
-	mt9p031->pll.pix_clock = mt9p031->target_freq;
+	mt9p031->pll.pix_clock = pdata->target_freq;
 	mt9p031->use_pll = true;
 
 	return aptina_pll_calculate(&client->dev, &limits, &mt9p031->pll);
@@ -380,7 +376,7 @@ static int __mt9p031_set_power(struct mt9p031 *mt9p031, bool on)
 	}
 
 	/* Configure the pixel clock polarity */
-	if (mt9p031->pixclk_pol) {
+	if (mt9p031->pdata && mt9p031->pdata->pixclk_pol) {
 		ret = mt9p031_write(client, MT9P031_PIXEL_CLOCK_CONTROL,
 				MT9P031_PIXEL_CLOCK_INVERT);
 		if (ret < 0)
@@ -1061,41 +1057,52 @@ static const struct v4l2_subdev_internal_ops mt9p031_subdev_internal_ops = {
  * Driver initialization and probing
  */
 
-static int mt9p031_parse_properties(struct mt9p031 *mt9p031, struct device *dev)
+static struct mt9p031_platform_data *
+mt9p031_get_pdata(struct i2c_client *client)
 {
+	struct mt9p031_platform_data *pdata = NULL;
+	struct device_node *np;
 	struct v4l2_fwnode_endpoint endpoint = {
 		.bus_type = V4L2_MBUS_PARALLEL
 	};
-	struct fwnode_handle *np;
-	int ret;
 
-	np = fwnode_graph_get_next_endpoint(dev_fwnode(dev), NULL);
+	if (!IS_ENABLED(CONFIG_OF) || !client->dev.of_node)
+		return client->dev.platform_data;
+
+	np = of_graph_get_endpoint_by_regs(client->dev.of_node, 0, -1);
 	if (!np)
-		return dev_err_probe(dev, -EINVAL, "endpoint node not found\n");
+		return NULL;
 
-	ret = v4l2_fwnode_endpoint_parse(np, &endpoint);
-	fwnode_handle_put(np);
-	if (ret)
-		return dev_err_probe(dev, -EINVAL, "could not parse endpoint\n");
+	if (v4l2_fwnode_endpoint_parse(of_fwnode_handle(np), &endpoint) < 0)
+		goto done;
 
-	fwnode_property_read_u32(np, "input-clock-frequency",
-				 &mt9p031->ext_freq);
-	fwnode_property_read_u32(np, "pixel-clock-frequency",
-				 &mt9p031->target_freq);
+	pdata = devm_kzalloc(&client->dev, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		goto done;
 
-	mt9p031->pixclk_pol = !!(endpoint.bus.parallel.flags &
-				 V4L2_MBUS_PCLK_SAMPLE_RISING);
+	of_property_read_u32(np, "input-clock-frequency", &pdata->ext_freq);
+	of_property_read_u32(np, "pixel-clock-frequency", &pdata->target_freq);
 
-	return 0;
+	pdata->pixclk_pol = !!(endpoint.bus.parallel.flags &
+			       V4L2_MBUS_PCLK_SAMPLE_RISING);
+
+done:
+	of_node_put(np);
+	return pdata;
 }
 
 static int mt9p031_probe(struct i2c_client *client)
 {
+	struct mt9p031_platform_data *pdata = mt9p031_get_pdata(client);
 	struct i2c_adapter *adapter = client->adapter;
-	const struct mt9p031_model_info *info;
 	struct mt9p031 *mt9p031;
 	unsigned int i;
 	int ret;
+
+	if (pdata == NULL) {
+		dev_err(&client->dev, "No platform data\n");
+		return -EINVAL;
+	}
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_WORD_DATA)) {
 		dev_warn(&client->dev,
@@ -1107,14 +1114,10 @@ static int mt9p031_probe(struct i2c_client *client)
 	if (mt9p031 == NULL)
 		return -ENOMEM;
 
-	ret = mt9p031_parse_properties(mt9p031, &client->dev);
-	if (ret)
-		return ret;
-
+	mt9p031->pdata = pdata;
 	mt9p031->output_control	= MT9P031_OUTPUT_CONTROL_DEF;
 	mt9p031->mode2 = MT9P031_READ_MODE_2_ROW_BLC;
-	info = device_get_match_data(&client->dev);
-	mt9p031->code = info->code;
+	mt9p031->code = (uintptr_t)i2c_get_match_data(client);
 
 	mt9p031->regulators[0].supply = "vdd";
 	mt9p031->regulators[1].supply = "vdd_io";
@@ -1142,8 +1145,8 @@ static int mt9p031_probe(struct i2c_client *client)
 	v4l2_ctrl_new_std(&mt9p031->ctrls, &mt9p031_ctrl_ops,
 			  V4L2_CID_VFLIP, 0, 1, 1, 0);
 	v4l2_ctrl_new_std(&mt9p031->ctrls, &mt9p031_ctrl_ops,
-			  V4L2_CID_PIXEL_RATE, mt9p031->target_freq,
-			  mt9p031->target_freq, 1, mt9p031->target_freq);
+			  V4L2_CID_PIXEL_RATE, pdata->target_freq,
+			  pdata->target_freq, 1, pdata->target_freq);
 	v4l2_ctrl_new_std_menu_items(&mt9p031->ctrls, &mt9p031_ctrl_ops,
 			  V4L2_CID_TEST_PATTERN,
 			  ARRAY_SIZE(mt9p031_test_pattern_menu) - 1, 0,
@@ -1210,18 +1213,18 @@ static void mt9p031_remove(struct i2c_client *client)
 	mutex_destroy(&mt9p031->power_lock);
 }
 
-static const struct mt9p031_model_info mt9p031_models_bayer = {
-	.code = MEDIA_BUS_FMT_SGRBG12_1X12
+static const struct i2c_device_id mt9p031_id[] = {
+	{ "mt9p006", MEDIA_BUS_FMT_SGRBG12_1X12 },
+	{ "mt9p031", MEDIA_BUS_FMT_SGRBG12_1X12 },
+	{ "mt9p031m", MEDIA_BUS_FMT_Y12_1X12 },
+	{ /* sentinel */ }
 };
-
-static const struct mt9p031_model_info mt9p031_models_mono = {
-	.code = MEDIA_BUS_FMT_Y12_1X12
-};
+MODULE_DEVICE_TABLE(i2c, mt9p031_id);
 
 static const struct of_device_id mt9p031_of_match[] = {
-	{ .compatible = "aptina,mt9p006", .data = &mt9p031_models_bayer },
-	{ .compatible = "aptina,mt9p031", .data = &mt9p031_models_bayer },
-	{ .compatible = "aptina,mt9p031m", .data = &mt9p031_models_mono },
+	{ .compatible = "aptina,mt9p006", .data = (void *)MEDIA_BUS_FMT_SGRBG12_1X12 },
+	{ .compatible = "aptina,mt9p031", .data = (void *)MEDIA_BUS_FMT_SGRBG12_1X12 },
+	{ .compatible = "aptina,mt9p031m", .data = (void *)MEDIA_BUS_FMT_Y12_1X12 },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, mt9p031_of_match);
@@ -1233,6 +1236,7 @@ static struct i2c_driver mt9p031_i2c_driver = {
 	},
 	.probe          = mt9p031_probe,
 	.remove         = mt9p031_remove,
+	.id_table       = mt9p031_id,
 };
 
 module_i2c_driver(mt9p031_i2c_driver);

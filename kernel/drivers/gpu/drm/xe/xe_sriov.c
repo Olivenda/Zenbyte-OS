@@ -3,8 +3,6 @@
  * Copyright © 2023 Intel Corporation
  */
 
-#include <linux/fault-inject.h>
-
 #include <drm/drm_managed.h>
 
 #include "regs/xe_regs.h"
@@ -14,7 +12,6 @@
 #include "xe_mmio.h"
 #include "xe_sriov.h"
 #include "xe_sriov_pf.h"
-#include "xe_sriov_vf.h"
 
 /**
  * xe_sriov_mode_to_string - Convert enum value to string.
@@ -38,7 +35,7 @@ const char *xe_sriov_mode_to_string(enum xe_sriov_mode mode)
 
 static bool test_is_vf(struct xe_device *xe)
 {
-	u32 value = xe_mmio_read32(xe_root_tile_mmio(xe), VF_CAP_REG);
+	u32 value = xe_mmio_read32(xe_root_mmio_gt(xe), VF_CAP_REG);
 
 	return value & VF_CAP;
 }
@@ -81,7 +78,7 @@ void xe_sriov_probe_early(struct xe_device *xe)
 	xe->sriov.__mode = mode;
 	xe_assert(xe, xe->sriov.__mode);
 
-	if (IS_SRIOV(xe))
+	if (has_sriov)
 		drm_info(&xe->drm, "Running in %s mode\n",
 			 xe_sriov_mode_to_string(xe_device_sriov_mode(xe)));
 }
@@ -115,9 +112,6 @@ int xe_sriov_init(struct xe_device *xe)
 			return err;
 	}
 
-	if (IS_SRIOV_VF(xe))
-		xe_sriov_vf_init_early(xe);
-
 	xe_assert(xe, !xe->sriov.wq);
 	xe->sriov.wq = alloc_workqueue("xe-sriov-wq", 0, 0);
 	if (!xe->sriov.wq)
@@ -125,7 +119,6 @@ int xe_sriov_init(struct xe_device *xe)
 
 	return drmm_add_action_or_reset(&xe->drm, fini_sriov, xe);
 }
-ALLOW_ERROR_INJECTION(xe_sriov_init, ERRNO); /* See xe_pci_probe() */
 
 /**
  * xe_sriov_print_info - Print basic SR-IOV information.

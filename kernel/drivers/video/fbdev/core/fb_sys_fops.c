@@ -9,8 +9,6 @@
  * for more details.
  *
  */
-
-#include <linux/export.h>
 #include <linux/fb.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>

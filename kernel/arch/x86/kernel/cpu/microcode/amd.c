@@ -94,18 +94,6 @@ static struct equiv_cpu_table {
 	struct equiv_cpu_entry *entry;
 } equiv_table;
 
-union zen_patch_rev {
-	struct {
-		__u32 rev	 : 8,
-		      stepping	 : 4,
-		      model	 : 4,
-		      __reserved : 4,
-		      ext_model	 : 4,
-		      ext_fam	 : 8;
-	};
-	__u32 ucode_rev;
-};
-
 union cpuid_1_eax {
 	struct {
 		__u32 stepping    : 4,
@@ -240,6 +228,7 @@ static bool verify_sha256_digest(u32 patch_id, u32 cur_rev, const u8 *data, unsi
 {
 	struct patch_digest *pd = NULL;
 	u8 digest[SHA256_DIGEST_SIZE];
+	struct sha256_state s;
 	int i;
 
 	if (x86_family(bsp_cpuid_1_eax) < 0x17)
@@ -257,7 +246,9 @@ static bool verify_sha256_digest(u32 patch_id, u32 cur_rev, const u8 *data, unsi
 		return false;
 	}
 
-	sha256(data, len, digest);
+	sha256_init(&s);
+	sha256_update(&s, data, len);
+	sha256_final(&s, digest);
 
 	if (memcmp(digest, pd->sha256, sizeof(digest))) {
 		pr_err("Patch 0x%x SHA256 digest mismatch!\n", patch_id);
@@ -418,13 +409,13 @@ static bool __verify_patch_section(const u8 *buf, size_t buf_size, u32 *sh_psize
  * exceed the per-family maximum). @sh_psize is the size read from the section
  * header.
  */
-static bool __verify_patch_size(u32 sh_psize, size_t buf_size)
+static unsigned int __verify_patch_size(u32 sh_psize, size_t buf_size)
 {
 	u8 family = x86_family(bsp_cpuid_1_eax);
 	u32 max_size;
 
 	if (family >= 0x15)
-		goto ret;
+		return min_t(u32, sh_psize, buf_size);
 
 #define F1XH_MPB_MAX_SIZE 2048
 #define F14H_MPB_MAX_SIZE 1824
@@ -438,15 +429,13 @@ static bool __verify_patch_size(u32 sh_psize, size_t buf_size)
 		break;
 	default:
 		WARN(1, "%s: WTF family: 0x%x\n", __func__, family);
-		return false;
+		return 0;
 	}
 
-	if (sh_psize > max_size)
-		return false;
+	if (sh_psize > min_t(u32, buf_size, max_size))
+		return 0;
 
-ret:
-	/* Working with the whole buffer so < is ok. */
-	return sh_psize <= buf_size;
+	return sh_psize;
 }
 
 /*
@@ -461,6 +450,7 @@ static int verify_patch(const u8 *buf, size_t buf_size, u32 *patch_size)
 {
 	u8 family = x86_family(bsp_cpuid_1_eax);
 	struct microcode_header_amd *mc_hdr;
+	unsigned int ret;
 	u32 sh_psize;
 	u16 proc_id;
 	u8 patch_fam;
@@ -484,7 +474,8 @@ static int verify_patch(const u8 *buf, size_t buf_size, u32 *patch_size)
 		return -1;
 	}
 
-	if (!__verify_patch_size(sh_psize, buf_size)) {
+	ret = __verify_patch_size(sh_psize, buf_size);
+	if (!ret) {
 		pr_debug("Per-family patch size mismatch.\n");
 		return -1;
 	}
@@ -516,8 +507,8 @@ static bool mc_patch_matches(struct microcode_amd *mc, u16 eq_id)
 
 /*
  * This scans the ucode blob for the proper container as we can have multiple
- * containers glued together.
- *
+ * containers glued together. Returns the equivalence ID from the equivalence
+ * table or 0 if none found.
  * Returns the amount of bytes consumed while scanning. @desc contains all the
  * data we're going to use in later stages of the application.
  */
@@ -627,7 +618,7 @@ static bool __apply_microcode_amd(struct microcode_amd *mc, u32 *cur_rev,
 	if (!verify_sha256_digest(mc->hdr.patch_id, *cur_rev, (const u8 *)p_addr, psize))
 		return false;
 
-	native_wrmsrq(MSR_AMD64_PATCH_LOADER, p_addr);
+	native_wrmsrl(MSR_AMD64_PATCH_LOADER, p_addr);
 
 	if (x86_family(bsp_cpuid_1_eax) == 0x17) {
 		unsigned long p_addr_end = p_addr + psize - 1;
@@ -649,6 +640,7 @@ static bool __apply_microcode_amd(struct microcode_amd *mc, u32 *cur_rev,
 
 	return true;
 }
+
 
 static bool get_builtin_microcode(struct cpio_data *cp)
 {
@@ -1196,18 +1188,11 @@ static void microcode_fini_cpu_amd(int cpu)
 	uci->mc = NULL;
 }
 
-static void finalize_late_load_amd(int result)
-{
-	if (result)
-		cleanup();
-}
-
 static struct microcode_ops microcode_amd_ops = {
 	.request_microcode_fw	= request_microcode_amd,
 	.collect_cpu_info	= collect_cpu_info_amd,
 	.apply_microcode	= apply_microcode_amd,
 	.microcode_fini_cpu	= microcode_fini_cpu_amd,
-	.finalize_late_load	= finalize_late_load_amd,
 	.nmi_safe		= true,
 };
 

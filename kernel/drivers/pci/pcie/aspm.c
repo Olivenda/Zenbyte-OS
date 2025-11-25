@@ -245,7 +245,7 @@ struct pcie_link_state {
 	u32 clkpm_disable:1;		/* Clock PM disabled */
 };
 
-static bool aspm_disabled, aspm_force;
+static int aspm_disabled, aspm_force;
 static bool aspm_support_enabled = true;
 static DEFINE_MUTEX(aspm_lock);
 static LIST_HEAD(link_list);
@@ -884,9 +884,10 @@ static void pcie_aspm_cap_init(struct pcie_link_state *link, int blacklist)
 /* Configure the ASPM L1 substates. Caller must disable L1 first. */
 static void pcie_config_aspm_l1ss(struct pcie_link_state *link, u32 state)
 {
-	u32 val = 0;
+	u32 val;
 	struct pci_dev *child = link->downstream, *parent = link->pdev;
 
+	val = 0;
 	if (state & PCIE_LINK_STATE_L1_1)
 		val |= PCI_L1SS_CTL1_ASPM_L1_1;
 	if (state & PCIE_LINK_STATE_L1_2)
@@ -1470,9 +1471,6 @@ static int __pci_enable_link_state(struct pci_dev *pdev, int state, bool locked)
  * touch the LNKCTL register. Also note that this does not enable states
  * disabled by pci_disable_link_state(). Return 0 or a negative errno.
  *
- * Note: Ensure devices are in D0 before enabling PCI-PM L1 PM Substates, per
- * PCIe r6.0, sec 5.5.4.
- *
  * @pdev: PCI device
  * @state: Mask of ASPM link states to enable
  */
@@ -1488,9 +1486,6 @@ EXPORT_SYMBOL(pci_enable_link_state);
  * the BIOS didn't grant ASPM control to the OS, this does nothing because we
  * can't touch the LNKCTL register. Also note that this does not enable states
  * disabled by pci_disable_link_state(). Return 0 or a negative errno.
- *
- * Note: Ensure devices are in D0 before enabling PCI-PM L1 PM Substates, per
- * PCIe r6.0, sec 5.5.4.
  *
  * @pdev: PCI device
  * @state: Mask of ASPM link states to enable
@@ -1711,11 +1706,11 @@ static int __init pcie_aspm_disable(char *str)
 {
 	if (!strcmp(str, "off")) {
 		aspm_policy = POLICY_DEFAULT;
-		aspm_disabled = true;
+		aspm_disabled = 1;
 		aspm_support_enabled = false;
 		pr_info("PCIe ASPM is disabled\n");
 	} else if (!strcmp(str, "force")) {
-		aspm_force = true;
+		aspm_force = 1;
 		pr_info("PCIe ASPM is forcibly enabled\n");
 	}
 	return 1;
@@ -1733,7 +1728,7 @@ void pcie_no_aspm(void)
 	 */
 	if (!aspm_force) {
 		aspm_policy = POLICY_DEFAULT;
-		aspm_disabled = true;
+		aspm_disabled = 1;
 	}
 }
 

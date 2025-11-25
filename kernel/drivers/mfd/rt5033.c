@@ -98,11 +98,7 @@ static int rt5033_i2c_probe(struct i2c_client *i2c)
 		return ret;
 	}
 
-	if (rt5033->wakeup) {
-		ret = devm_device_init_wakeup(rt5033->dev);
-		if (ret)
-			return dev_err_probe(rt5033->dev, ret, "Failed to init wakeup\n");
-	}
+	device_init_wakeup(rt5033->dev, rt5033->wakeup);
 
 	return 0;
 }

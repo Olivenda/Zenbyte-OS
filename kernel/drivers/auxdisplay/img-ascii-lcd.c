@@ -36,6 +36,7 @@ struct img_ascii_lcd_config {
  * @base: the base address of the LCD registers
  * @regmap: the regmap through which LCD registers are accessed
  * @offset: the offset within regmap to the start of the LCD registers
+ * @cfg: pointer to the LCD model configuration
  */
 struct img_ascii_lcd_ctx {
 	struct linedisp linedisp;
@@ -44,6 +45,7 @@ struct img_ascii_lcd_ctx {
 		struct regmap *regmap;
 	};
 	u32 offset;
+	const struct img_ascii_lcd_config *cfg;
 };
 
 /*
@@ -69,7 +71,7 @@ static void boston_update(struct linedisp *linedisp)
 #endif
 }
 
-static const struct img_ascii_lcd_config boston_config = {
+static struct img_ascii_lcd_config boston_config = {
 	.num_chars = 8,
 	.ops = {
 		.update = boston_update,
@@ -98,7 +100,7 @@ static void malta_update(struct linedisp *linedisp)
 		pr_err_ratelimited("Failed to update LCD display: %d\n", err);
 }
 
-static const struct img_ascii_lcd_config malta_config = {
+static struct img_ascii_lcd_config malta_config = {
 	.num_chars = 8,
 	.external_regmap = true,
 	.ops = {
@@ -200,7 +202,7 @@ static void sead3_update(struct linedisp *linedisp)
 		pr_err_ratelimited("Failed to update LCD display: %d\n", err);
 }
 
-static const struct img_ascii_lcd_config sead3_config = {
+static struct img_ascii_lcd_config sead3_config = {
 	.num_chars = 16,
 	.external_regmap = true,
 	.ops = {
@@ -289,11 +291,11 @@ static struct platform_driver img_ascii_lcd_driver = {
 		.of_match_table	= img_ascii_lcd_matches,
 	},
 	.probe	= img_ascii_lcd_probe,
-	.remove = img_ascii_lcd_remove,
+	.remove_new = img_ascii_lcd_remove,
 };
 module_platform_driver(img_ascii_lcd_driver);
 
 MODULE_DESCRIPTION("Imagination Technologies ASCII LCD Display");
 MODULE_AUTHOR("Paul Burton <paul.burton@mips.com>");
 MODULE_LICENSE("GPL");
-MODULE_IMPORT_NS("LINEDISP");
+MODULE_IMPORT_NS(LINEDISP);

@@ -5,7 +5,6 @@
 
 struct pseudo_fs_context {
 	const struct super_operations *ops;
-	const struct export_operations *eops;
 	const struct xattr_handler * const *xattr;
 	const struct dentry_operations *dops;
 	unsigned long magic;

@@ -28,7 +28,6 @@ Contents:
    freescale/gianfar
    google/gve
    huawei/hinic
-   huawei/hinic3
    intel/e100
    intel/e1000
    intel/e1000e
@@ -56,11 +55,9 @@ Contents:
    ti/cpsw_switchdev
    ti/am65_nuss_cpsw_switchdev
    ti/tlan
-   ti/icssg_prueth
+   toshiba/spider_net
    wangxun/txgbe
-   wangxun/txgbevf
    wangxun/ngbe
-   wangxun/ngbevf
 
 .. only::  subproject and html
 

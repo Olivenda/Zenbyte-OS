@@ -21,7 +21,6 @@
 #include <perf/cpumap.h>
 
 #include "env.h"
-#include "perf.h"
 #include "svghelper.h"
 
 static u64 first_time, last_time;

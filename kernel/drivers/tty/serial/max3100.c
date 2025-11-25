@@ -16,7 +16,6 @@
 /* 4 MAX3100s should be enough for everyone */
 #define MAX_MAX3100 4
 
-#include <linux/bitops.h>
 #include <linux/container_of.h>
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -134,7 +133,7 @@ static int max3100_do_parity(struct max3100_port *s, u16 c)
 	else
 		c &= 0xff;
 
-	parity = parity ^ parity8(c);
+	parity = parity ^ (hweight8(c) & 1);
 	return parity;
 }
 
@@ -309,7 +308,7 @@ static void max3100_dowork(struct max3100_port *s)
 
 static void max3100_timeout(struct timer_list *t)
 {
-	struct max3100_port *s = timer_container_of(s, t, timer);
+	struct max3100_port *s = from_timer(s, t, timer);
 
 	max3100_dowork(s);
 	mod_timer(&s->timer, jiffies + uart_poll_timeout(&s->port));
@@ -507,7 +506,7 @@ max3100_set_termios(struct uart_port *port, struct ktermios *termios,
 			MAX3100_STATUS_PE | MAX3100_STATUS_FE |
 			MAX3100_STATUS_OE;
 
-	timer_delete_sync(&s->timer);
+	del_timer_sync(&s->timer);
 	uart_update_timeout(port, termios->c_cflag, baud);
 
 	spin_lock(&s->conf_lock);
@@ -533,7 +532,7 @@ static void max3100_shutdown(struct uart_port *port)
 
 	s->force_end_work = 1;
 
-	timer_delete_sync(&s->timer);
+	del_timer_sync(&s->timer);
 
 	if (s->workqueue) {
 		destroy_workqueue(s->workqueue);

@@ -38,8 +38,8 @@ struct metadata_dst;
 
 typedef union salt {
 	struct {
-		ssci_t ssci;
-		__be64 pn;
+		u32 ssci;
+		u64 pn;
 	} __packed;
 	u8 bytes[MACSEC_SALT_LEN];
 } __packed salt_t;

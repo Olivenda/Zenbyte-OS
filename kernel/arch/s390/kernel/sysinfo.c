@@ -5,7 +5,6 @@
  *	       Martin Schwidefsky <schwidefsky@de.ibm.com>,
  */
 
-#include <linux/cpufeature.h>
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -16,16 +15,53 @@
 #include <linux/export.h>
 #include <linux/slab.h>
 #include <asm/asm-extable.h>
-#include <asm/machine.h>
 #include <asm/ebcdic.h>
 #include <asm/debug.h>
 #include <asm/sysinfo.h>
 #include <asm/cpcmd.h>
 #include <asm/topology.h>
 #include <asm/fpu.h>
-#include <asm/asm.h>
 
 int topology_max_mnest;
+
+static inline int __stsi(void *sysinfo, int fc, int sel1, int sel2, int *lvl)
+{
+	int r0 = (fc << 28) | sel1;
+	int rc = 0;
+
+	asm volatile(
+		"	lr	0,%[r0]\n"
+		"	lr	1,%[r1]\n"
+		"	stsi	0(%[sysinfo])\n"
+		"0:	jz	2f\n"
+		"1:	lhi	%[rc],%[retval]\n"
+		"2:	lr	%[r0],0\n"
+		EX_TABLE(0b, 1b)
+		: [r0] "+d" (r0), [rc] "+d" (rc)
+		: [r1] "d" (sel2),
+		  [sysinfo] "a" (sysinfo),
+		  [retval] "K" (-EOPNOTSUPP)
+		: "cc", "0", "1", "memory");
+	*lvl = ((unsigned int) r0) >> 28;
+	return rc;
+}
+
+/*
+ * stsi - store system information
+ *
+ * Returns the current configuration level if function code 0 was specified.
+ * Otherwise returns 0 on success or a negative value on error.
+ */
+int stsi(void *sysinfo, int fc, int sel1, int sel2)
+{
+	int lvl, rc;
+
+	rc = __stsi(sysinfo, fc, sel1, sel2, &lvl);
+	if (rc)
+		return rc;
+	return fc ? 0 : lvl;
+}
+EXPORT_SYMBOL(stsi);
 
 #ifdef CONFIG_PROC_FS
 
@@ -118,7 +154,7 @@ static void stsi_15_1_x(struct seq_file *m, struct sysinfo_15_1_x *info)
 	int i;
 
 	seq_putc(m, '\n');
-	if (!cpu_has_topology())
+	if (!MACHINE_HAS_TOPOLOGY)
 		return;
 	if (stsi(info, 15, 1, topology_max_mnest))
 		return;
@@ -379,7 +415,7 @@ static struct service_level service_level_vm = {
 static __init int create_proc_service_level(void)
 {
 	proc_create_seq("service_levels", 0, NULL, &service_level_seq_ops);
-	if (machine_is_vm())
+	if (MACHINE_IS_VM)
 		register_service_level(&service_level_vm);
 	return 0;
 }
@@ -523,7 +559,7 @@ static __init int stsi_init_debugfs(void)
 		sf = &stsi_file[i];
 		debugfs_create_file(sf->name, 0400, stsi_root, NULL, sf->fops);
 	}
-	if (IS_ENABLED(CONFIG_SCHED_TOPOLOGY) && cpu_has_topology()) {
+	if (IS_ENABLED(CONFIG_SCHED_TOPOLOGY) && MACHINE_HAS_TOPOLOGY) {
 		char link_to[10];
 
 		sprintf(link_to, "15_1_%d", topology_mnest_limit());

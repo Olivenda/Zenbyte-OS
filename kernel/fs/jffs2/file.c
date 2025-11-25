@@ -21,14 +21,12 @@
 #include <linux/jffs2.h>
 #include "nodelist.h"
 
-static int jffs2_write_end(const struct kiocb *iocb,
-			   struct address_space *mapping,
-			   loff_t pos, unsigned len, unsigned copied,
-			   struct folio *folio, void *fsdata);
-static int jffs2_write_begin(const struct kiocb *iocb,
-			     struct address_space *mapping,
-			     loff_t pos, unsigned len,
-			     struct folio **foliop, void **fsdata);
+static int jffs2_write_end(struct file *filp, struct address_space *mapping,
+			loff_t pos, unsigned len, unsigned copied,
+			struct folio *folio, void *fsdata);
+static int jffs2_write_begin(struct file *filp, struct address_space *mapping,
+			loff_t pos, unsigned len,
+			struct folio **foliop, void **fsdata);
 static int jffs2_read_folio(struct file *filp, struct folio *folio);
 
 int jffs2_fsync(struct file *filp, loff_t start, loff_t end, int datasync)
@@ -56,7 +54,7 @@ const struct file_operations jffs2_file_operations =
  	.read_iter =	generic_file_read_iter,
  	.write_iter =	generic_file_write_iter,
 	.unlocked_ioctl=jffs2_ioctl,
-	.mmap_prepare =	generic_file_readonly_mmap_prepare,
+	.mmap =		generic_file_readonly_mmap,
 	.fsync =	jffs2_fsync,
 	.splice_read =	filemap_splice_read,
 	.splice_write = iter_file_splice_write,
@@ -123,10 +121,9 @@ static int jffs2_read_folio(struct file *file, struct folio *folio)
 	return ret;
 }
 
-static int jffs2_write_begin(const struct kiocb *iocb,
-			     struct address_space *mapping,
-			     loff_t pos, unsigned len,
-			     struct folio **foliop, void **fsdata)
+static int jffs2_write_begin(struct file *filp, struct address_space *mapping,
+			loff_t pos, unsigned len,
+			struct folio **foliop, void **fsdata)
 {
 	struct folio *folio;
 	struct inode *inode = mapping->host;
@@ -238,10 +235,9 @@ out_err:
 	return ret;
 }
 
-static int jffs2_write_end(const struct kiocb *iocb,
-			   struct address_space *mapping,
-			   loff_t pos, unsigned len, unsigned copied,
-			   struct folio *folio, void *fsdata)
+static int jffs2_write_end(struct file *filp, struct address_space *mapping,
+			loff_t pos, unsigned len, unsigned copied,
+			struct folio *folio, void *fsdata)
 {
 	/* Actually commit the write from the page cache page we're looking at.
 	 * For now, we write the full page out each time. It sucks, but it's simple

@@ -9,13 +9,10 @@
 #include <linux/platform_device.h>
 #include <linux/clk-provider.h>
 #include <linux/interconnect-clk.h>
-#include <linux/pm_runtime.h>
 #include <linux/reset-controller.h>
 #include <linux/of.h>
 
 #include "common.h"
-#include "clk-alpha-pll.h"
-#include "clk-branch.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
 #include "reset.h"
@@ -25,7 +22,6 @@ struct qcom_cc {
 	struct qcom_reset_controller reset;
 	struct clk_regmap **rclks;
 	size_t num_rclks;
-	struct dev_pm_domain_list *pd_list;
 };
 
 const
@@ -287,40 +283,6 @@ static int qcom_cc_icc_register(struct device *dev,
 						     desc->num_icc_hws, icd);
 }
 
-static int qcom_cc_clk_pll_configure(const struct qcom_cc_driver_data *data,
-				     struct regmap *regmap)
-{
-	const struct clk_init_data *init;
-	struct clk_alpha_pll *pll;
-	int i;
-
-	for (i = 0; i < data->num_alpha_plls; i++) {
-		pll = data->alpha_plls[i];
-		init = pll->clkr.hw.init;
-
-		if (!pll->config || !pll->regs) {
-			pr_err("%s: missing pll config or regs\n", init->name);
-			return -EINVAL;
-		}
-
-		qcom_clk_alpha_pll_configure(pll, regmap);
-	}
-
-	return 0;
-}
-
-static void qcom_cc_clk_regs_configure(struct device *dev, const struct qcom_cc_driver_data *data,
-				       struct regmap *regmap)
-{
-	int i;
-
-	for (i = 0; i < data->num_clk_cbcrs; i++)
-		qcom_branch_set_clk_en(regmap, data->clk_cbcrs[i]);
-
-	if (data->clk_regs_configure)
-		data->clk_regs_configure(dev, regmap);
-}
-
 int qcom_cc_really_probe(struct device *dev,
 			 const struct qcom_cc_desc *desc, struct regmap *regmap)
 {
@@ -337,28 +299,6 @@ int qcom_cc_really_probe(struct device *dev,
 	if (!cc)
 		return -ENOMEM;
 
-	ret = devm_pm_domain_attach_list(dev, NULL, &cc->pd_list);
-	if (ret < 0 && ret != -EEXIST)
-		return ret;
-
-	if (desc->use_rpm) {
-		ret = devm_pm_runtime_enable(dev);
-		if (ret)
-			return ret;
-
-		ret = pm_runtime_resume_and_get(dev);
-		if (ret)
-			return ret;
-	}
-
-	if (desc->driver_data) {
-		ret = qcom_cc_clk_pll_configure(desc->driver_data, regmap);
-		if (ret)
-			goto put_rpm;
-
-		qcom_cc_clk_regs_configure(dev, desc->driver_data, regmap);
-	}
-
 	reset = &cc->reset;
 	reset->rcdev.of_node = dev->of_node;
 	reset->rcdev.ops = &qcom_reset_ops;
@@ -369,35 +309,22 @@ int qcom_cc_really_probe(struct device *dev,
 
 	ret = devm_reset_controller_register(dev, &reset->rcdev);
 	if (ret)
-		goto put_rpm;
+		return ret;
 
 	if (desc->gdscs && desc->num_gdscs) {
 		scd = devm_kzalloc(dev, sizeof(*scd), GFP_KERNEL);
-		if (!scd) {
-			ret = -ENOMEM;
-			goto put_rpm;
-		}
+		if (!scd)
+			return -ENOMEM;
 		scd->dev = dev;
 		scd->scs = desc->gdscs;
 		scd->num = desc->num_gdscs;
-		scd->pd_list = cc->pd_list;
 		ret = gdsc_register(scd, &reset->rcdev, regmap);
 		if (ret)
-			goto put_rpm;
+			return ret;
 		ret = devm_add_action_or_reset(dev, qcom_cc_gdsc_unregister,
 					       scd);
 		if (ret)
-			goto put_rpm;
-	}
-
-	if (desc->driver_data &&
-	    desc->driver_data->dfs_rcgs &&
-	    desc->driver_data->num_dfs_rcgs) {
-		ret = qcom_cc_register_rcg_dfs(regmap,
-					       desc->driver_data->dfs_rcgs,
-					       desc->driver_data->num_dfs_rcgs);
-		if (ret)
-			goto put_rpm;
+			return ret;
 	}
 
 	cc->rclks = rclks;
@@ -408,7 +335,7 @@ int qcom_cc_really_probe(struct device *dev,
 	for (i = 0; i < num_clk_hws; i++) {
 		ret = devm_clk_hw_register(dev, clk_hws[i]);
 		if (ret)
-			goto put_rpm;
+			return ret;
 	}
 
 	for (i = 0; i < num_clks; i++) {
@@ -417,20 +344,14 @@ int qcom_cc_really_probe(struct device *dev,
 
 		ret = devm_clk_register_regmap(dev, rclks[i]);
 		if (ret)
-			goto put_rpm;
+			return ret;
 	}
 
 	ret = devm_of_clk_add_hw_provider(dev, qcom_cc_clk_hw_get, cc);
 	if (ret)
-		goto put_rpm;
+		return ret;
 
-	ret = qcom_cc_icc_register(dev, desc);
-
-put_rpm:
-	if (desc->use_rpm)
-		pm_runtime_put(dev);
-
-	return ret;
+	return qcom_cc_icc_register(dev, desc);
 }
 EXPORT_SYMBOL_GPL(qcom_cc_really_probe);
 

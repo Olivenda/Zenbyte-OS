@@ -99,6 +99,4 @@ void dcn35_set_long_vblank(struct pipe_ctx **pipe_ctx,
 
 bool dcn35_is_dp_dig_pixel_rate_div_policy(struct pipe_ctx *pipe_ctx);
 
-void dcn35_hardware_release(struct dc *dc);
-
 #endif /* __DC_HWSS_DCN35_H__ */

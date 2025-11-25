@@ -8,7 +8,6 @@
  */
 
 #include <linux/bitfield.h>
-#include <linux/cleanup.h>
 #include <linux/init.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
@@ -162,7 +161,7 @@ static int max34408_read_raw(struct iio_dev *indio_dev,
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_SCALE:
 		/*
-		 * calculate current for 8bit ADC with Rsense
+		 * calcluate current for 8bit ADC with Rsense
 		 * value.
 		 * 10 mV * 1000 / Rsense uOhm = max current
 		 * (max current * adc val * 1000) / (2^8 - 1) mA

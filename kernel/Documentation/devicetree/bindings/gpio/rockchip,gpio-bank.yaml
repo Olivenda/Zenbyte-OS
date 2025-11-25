@@ -41,9 +41,6 @@ properties:
   "#interrupt-cells":
     const: 2
 
-  power-domains:
-    maxItems: 1
-
 patternProperties:
   "^.+-hog(-[0-9]+)?$":
     type: object

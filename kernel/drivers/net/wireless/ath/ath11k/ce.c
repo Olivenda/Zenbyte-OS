@@ -2,10 +2,8 @@
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
  * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
-#include <linux/export.h>
 #include "dp_rx.h"
 #include "debug.h"
 #include "hif.h"
@@ -554,7 +552,7 @@ static int ath11k_ce_init_ring(struct ath11k_base *ab,
 			       struct ath11k_ce_ring *ce_ring,
 			       int ce_id, enum hal_ring_type type)
 {
-	struct hal_srng_params params = {};
+	struct hal_srng_params params = { 0 };
 	int ret;
 
 	params.ring_base_paddr = ce_ring->base_addr_ce_space;
@@ -906,7 +904,7 @@ EXPORT_SYMBOL(ath11k_ce_rx_post_buf);
 
 void ath11k_ce_rx_replenish_retry(struct timer_list *t)
 {
-	struct ath11k_base *ab = timer_container_of(ab, t, rx_replenish_retry);
+	struct ath11k_base *ab = from_timer(ab, t, rx_replenish_retry);
 
 	ath11k_ce_rx_post_buf(ab);
 }

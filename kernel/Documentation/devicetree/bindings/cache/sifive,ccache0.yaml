@@ -39,7 +39,6 @@ properties:
           - const: cache
       - items:
           - enum:
-              - eswin,eic7700-l3-cache
               - starfive,jh7100-ccache
               - starfive,jh7110-ccache
           - const: sifive,ccache0
@@ -56,10 +55,10 @@ properties:
     enum: [2, 3]
 
   cache-sets:
-    enum: [1024, 2048, 4096]
+    enum: [1024, 2048]
 
   cache-size:
-    enum: [2097152, 4194304]
+    const: 2097152
 
   cache-unified: true
 
@@ -90,7 +89,6 @@ allOf:
         compatible:
           contains:
             enum:
-              - eswin,eic7700-l3-cache
               - sifive,fu740-c000-ccache
               - starfive,jh7100-ccache
               - starfive,jh7110-ccache
@@ -114,22 +112,6 @@ allOf:
       properties:
         compatible:
           contains:
-            const: eswin,eic7700-l3-cache
-
-    then:
-      properties:
-        cache-size:
-          const: 4194304
-
-    else:
-      properties:
-        cache-size:
-          const: 2097152
-
-  - if:
-      properties:
-        compatible:
-          contains:
             enum:
               - sifive,fu740-c000-ccache
               - starfive,jh7100-ccache
@@ -140,30 +122,10 @@ allOf:
         cache-sets:
           const: 2048
 
-  - if:
-      properties:
-        compatible:
-          contains:
-            enum:
-              - microchip,mpfs-ccache
-              - sifive,fu540-c000-ccache
-
-    then:
+    else:
       properties:
         cache-sets:
           const: 1024
-
-  - if:
-      properties:
-        compatible:
-          contains:
-            enum:
-              - eswin,eic7700-l3-cache
-
-    then:
-      properties:
-        cache-sets:
-          const: 4096
 
   - if:
       properties:

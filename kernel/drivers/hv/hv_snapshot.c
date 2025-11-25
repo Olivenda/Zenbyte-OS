@@ -12,7 +12,7 @@
 #include <linux/connector.h>
 #include <linux/workqueue.h>
 #include <linux/hyperv.h>
-#include <hyperv/hvhdk.h>
+#include <asm/hyperv-tlfs.h>
 
 #include "hyperv_vmbus.h"
 #include "hv_utils_transport.h"
@@ -193,8 +193,7 @@ static void vss_send_op(void)
 	vss_transaction.state = HVUTIL_USERSPACE_REQ;
 
 	schedule_delayed_work(&vss_timeout_work, op == VSS_OP_FREEZE ?
-				secs_to_jiffies(VSS_FREEZE_TIMEOUT) :
-				secs_to_jiffies(HV_UTIL_TIMEOUT));
+			VSS_FREEZE_TIMEOUT * HZ : HV_UTIL_TIMEOUT * HZ);
 
 	rc = hvutil_transport_send(hvt, vss_msg, sizeof(*vss_msg), NULL);
 	if (rc) {

@@ -15,7 +15,6 @@
 #include "ivpu_ipc.h"
 #include "ivpu_jsm_msg.h"
 #include "ivpu_pm.h"
-#include "ivpu_trace.h"
 
 #define IPC_MAX_RX_MSG	128
 
@@ -228,7 +227,6 @@ int ivpu_ipc_send(struct ivpu_device *vdev, struct ivpu_ipc_consumer *cons, stru
 		goto unlock;
 
 	ivpu_ipc_tx(vdev, cons->tx_vpu_addr);
-	trace_jsm("[tx]", req);
 
 unlock:
 	mutex_unlock(&ipc->lock);
@@ -280,13 +278,12 @@ int ivpu_ipc_receive(struct ivpu_device *vdev, struct ivpu_ipc_consumer *cons,
 		u32 size = min_t(int, rx_msg->ipc_hdr->data_size, sizeof(*jsm_msg));
 
 		if (rx_msg->jsm_msg->result != VPU_JSM_STATUS_SUCCESS) {
-			ivpu_err(vdev, "IPC resp result error: %d\n", rx_msg->jsm_msg->result);
+			ivpu_dbg(vdev, IPC, "IPC resp result error: %d\n", rx_msg->jsm_msg->result);
 			ret = -EBADMSG;
 		}
 
 		if (jsm_msg)
 			memcpy(jsm_msg, rx_msg->jsm_msg, size);
-		trace_jsm("[rx]", rx_msg->jsm_msg);
 	}
 
 	ivpu_ipc_rx_msg_del(vdev, rx_msg);
@@ -460,12 +457,13 @@ void ivpu_ipc_irq_handler(struct ivpu_device *vdev)
 		}
 	}
 
-	queue_work(system_wq, &vdev->irq_ipc_work);
+	if (!list_empty(&ipc->cb_msg_list))
+		if (!kfifo_put(&vdev->hw->irq.fifo, IVPU_HW_IRQ_SRC_IPC))
+			ivpu_err_ratelimited(vdev, "IRQ FIFO full\n");
 }
 
-void ivpu_ipc_irq_work_fn(struct work_struct *work)
+void ivpu_ipc_irq_thread_handler(struct ivpu_device *vdev)
 {
-	struct ivpu_device *vdev = container_of(work, struct ivpu_device, irq_ipc_work);
 	struct ivpu_ipc_info *ipc = vdev->ipc;
 	struct ivpu_ipc_rx_msg *rx_msg, *r;
 	struct list_head cb_msg_list;
@@ -536,6 +534,7 @@ void ivpu_ipc_fini(struct ivpu_device *vdev)
 {
 	struct ivpu_ipc_info *ipc = vdev->ipc;
 
+	drm_WARN_ON(&vdev->drm, ipc->on);
 	drm_WARN_ON(&vdev->drm, !list_empty(&ipc->cons_list));
 	drm_WARN_ON(&vdev->drm, !list_empty(&ipc->cb_msg_list));
 	drm_WARN_ON(&vdev->drm, atomic_read(&ipc->rx_msg_count) > 0);

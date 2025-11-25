@@ -72,6 +72,9 @@ depot_stack_handle_t kmsan_save_stack_with_flags(gfp_t flags,
 
 	nr_entries = stack_trace_save(entries, KMSAN_STACK_DEPTH, 0);
 
+	/* Don't sleep. */
+	flags &= ~(__GFP_DIRECT_RECLAIM | __GFP_KSWAPD_RECLAIM);
+
 	handle = stack_depot_save(entries, nr_entries, flags);
 	return stack_depot_set_extra_bits(handle, extra);
 }
@@ -156,8 +159,8 @@ depot_stack_handle_t kmsan_internal_chain_origin(depot_stack_handle_t id)
 	 * Make sure we have enough spare bits in @id to hold the UAF bit and
 	 * the chain depth.
 	 */
-	BUILD_BUG_ON((1 << STACK_DEPOT_EXTRA_BITS) <=
-		     (KMSAN_MAX_ORIGIN_DEPTH << 1));
+	BUILD_BUG_ON(
+		(1 << STACK_DEPOT_EXTRA_BITS) <= (KMSAN_MAX_ORIGIN_DEPTH << 1));
 
 	extra_bits = stack_depot_get_extra_bits(id);
 	depth = kmsan_depth_from_eb(extra_bits);
@@ -275,9 +278,11 @@ void kmsan_internal_check_memory(void *addr, size_t size,
 			 * bytes before, report them.
 			 */
 			if (cur_origin) {
+				kmsan_enter_runtime();
 				kmsan_report(cur_origin, addr, size,
 					     cur_off_start, pos - 1, user_addr,
 					     reason);
+				kmsan_leave_runtime();
 			}
 			cur_origin = 0;
 			cur_off_start = -1;
@@ -291,9 +296,11 @@ void kmsan_internal_check_memory(void *addr, size_t size,
 				 * poisoned bytes before, report them.
 				 */
 				if (cur_origin) {
+					kmsan_enter_runtime();
 					kmsan_report(cur_origin, addr, size,
 						     cur_off_start, pos + i - 1,
 						     user_addr, reason);
+					kmsan_leave_runtime();
 				}
 				cur_origin = 0;
 				cur_off_start = -1;
@@ -309,9 +316,11 @@ void kmsan_internal_check_memory(void *addr, size_t size,
 			 */
 			if (cur_origin != new_origin) {
 				if (cur_origin) {
+					kmsan_enter_runtime();
 					kmsan_report(cur_origin, addr, size,
 						     cur_off_start, pos + i - 1,
 						     user_addr, reason);
+					kmsan_leave_runtime();
 				}
 				cur_origin = new_origin;
 				cur_off_start = pos + i;
@@ -321,8 +330,10 @@ void kmsan_internal_check_memory(void *addr, size_t size,
 	}
 	KMSAN_WARN_ON(pos != size);
 	if (cur_origin) {
+		kmsan_enter_runtime();
 		kmsan_report(cur_origin, addr, size, cur_off_start, pos - 1,
 			     user_addr, reason);
+		kmsan_leave_runtime();
 	}
 }
 

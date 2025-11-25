@@ -32,10 +32,11 @@
 	PPC_STL		r2, PPC_MIN_STKFRM + STK_GOT(r1)
   .cfi_rel_offset r2, PPC_MIN_STKFRM + STK_GOT
 #endif
+	get_datapage	r5
 	.ifeq	\call_time
-		get_datapage	r5 vdso_u_time_data
+	addi		r5, r5, VDSO_DATA_OFFSET
 	.else
-		get_datapage	r4 vdso_u_time_data
+	addi		r4, r5, VDSO_DATA_OFFSET
 	.endif
 	bl		CFUNC(DOTSYM(\funct))
 	PPC_LL		r0, PPC_MIN_STKFRM + PPC_LR_STKOFF(r1)

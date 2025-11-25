@@ -13,7 +13,6 @@
 #include <linux/log2.h>
 #include <linux/dma-map-ops.h>
 #include <linux/iommu-helper.h>
-#include <linux/string_choices.h>
 
 #include <asm/io.h>
 #include <asm/hwrpb.h>
@@ -72,8 +71,14 @@ iommu_arena_new_node(int nid, struct pci_controller *hose, dma_addr_t base,
 	if (align < mem_size)
 		align = mem_size;
 
-	arena = memblock_alloc_or_panic(sizeof(*arena), SMP_CACHE_BYTES);
-	arena->ptes = memblock_alloc_or_panic(mem_size, align);
+	arena = memblock_alloc(sizeof(*arena), SMP_CACHE_BYTES);
+	if (!arena)
+		panic("%s: Failed to allocate %zu bytes\n", __func__,
+		      sizeof(*arena));
+	arena->ptes = memblock_alloc(mem_size, align);
+	if (!arena->ptes)
+		panic("%s: Failed to allocate %lu bytes align=0x%lx\n",
+		      __func__, mem_size, align);
 
 	spin_lock_init(&arena->lock);
 	arena->hose = hose;
@@ -213,7 +218,7 @@ static int pci_dac_dma_supported(struct pci_dev *dev, u64 mask)
 
 	/* If both conditions above are met, we are fine. */
 	DBGA("pci_dac_dma_supported %s from %ps\n",
-	     str_yes_no(ok), __builtin_return_address(0));
+	     ok ? "yes" : "no", __builtin_return_address(0));
 
 	return ok;
 }

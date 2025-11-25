@@ -87,8 +87,7 @@ nouveau_job_init(struct nouveau_job *job,
 	}
 
 	ret = drm_sched_job_init(&job->base, &sched->entity,
-				 args->credits, NULL,
-				 job->file_priv->client_id);
+				 args->credits, NULL);
 	if (ret)
 		goto err_free_chains;
 
@@ -371,7 +370,7 @@ nouveau_sched_timedout_job(struct drm_sched_job *sched_job)
 {
 	struct drm_gpu_scheduler *sched = sched_job->sched;
 	struct nouveau_job *job = to_nouveau_job(sched_job);
-	enum drm_gpu_sched_stat stat = DRM_GPU_SCHED_STAT_RESET;
+	enum drm_gpu_sched_stat stat = DRM_GPU_SCHED_STAT_NOMINAL;
 
 	drm_sched_stop(sched, sched_job);
 
@@ -380,7 +379,7 @@ nouveau_sched_timedout_job(struct drm_sched_job *sched_job)
 	else
 		NV_PRINTK(warn, job->cli, "Generic job timeout.\n");
 
-	drm_sched_start(sched, 0);
+	drm_sched_start(sched);
 
 	return stat;
 }
@@ -405,14 +404,7 @@ nouveau_sched_init(struct nouveau_sched *sched, struct nouveau_drm *drm,
 {
 	struct drm_gpu_scheduler *drm_sched = &sched->base;
 	struct drm_sched_entity *entity = &sched->entity;
-	struct drm_sched_init_args args = {
-		.ops = &nouveau_sched_ops,
-		.num_rqs = DRM_SCHED_PRIORITY_COUNT,
-		.credit_limit = credit_limit,
-		.timeout = msecs_to_jiffies(NOUVEAU_SCHED_JOB_TIMEOUT_MS),
-		.name = "nouveau_sched",
-		.dev = drm->dev->dev
-	};
+	const long timeout = msecs_to_jiffies(NOUVEAU_SCHED_JOB_TIMEOUT_MS);
 	int ret;
 
 	if (!wq) {
@@ -424,9 +416,10 @@ nouveau_sched_init(struct nouveau_sched *sched, struct nouveau_drm *drm,
 		sched->wq = wq;
 	}
 
-	args.submit_wq = wq,
-
-	ret = drm_sched_init(drm_sched, &args);
+	ret = drm_sched_init(drm_sched, &nouveau_sched_ops, wq,
+			     NOUVEAU_SCHED_PRIORITY_COUNT,
+			     credit_limit, 0, timeout,
+			     NULL, NULL, "nouveau_sched", drm->dev->dev);
 	if (ret)
 		goto fail_wq;
 

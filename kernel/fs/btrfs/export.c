@@ -81,7 +81,7 @@ struct dentry *btrfs_get_dentry(struct super_block *sb, u64 objectid,
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
 	struct btrfs_root *root;
-	struct btrfs_inode *inode;
+	struct inode *inode;
 
 	if (objectid < BTRFS_FIRST_FREE_OBJECTID)
 		return ERR_PTR(-ESTALE);
@@ -95,12 +95,12 @@ struct dentry *btrfs_get_dentry(struct super_block *sb, u64 objectid,
 	if (IS_ERR(inode))
 		return ERR_CAST(inode);
 
-	if (generation != 0 && generation != inode->vfs_inode.i_generation) {
-		iput(&inode->vfs_inode);
+	if (generation != 0 && generation != inode->i_generation) {
+		iput(inode);
 		return ERR_PTR(-ESTALE);
 	}
 
-	return d_obtain_alias(&inode->vfs_inode);
+	return d_obtain_alias(inode);
 }
 
 static struct dentry *btrfs_fh_to_parent(struct super_block *sb, struct fid *fh,
@@ -151,10 +151,9 @@ static struct dentry *btrfs_fh_to_dentry(struct super_block *sb, struct fid *fh,
 
 struct dentry *btrfs_get_parent(struct dentry *child)
 {
-	struct btrfs_inode *dir = BTRFS_I(d_inode(child));
-	struct btrfs_inode *inode;
-	struct btrfs_root *root = dir->root;
-	struct btrfs_fs_info *fs_info = root->fs_info;
+	struct inode *dir = d_inode(child);
+	struct btrfs_fs_info *fs_info = btrfs_sb(dir->i_sb);
+	struct btrfs_root *root = BTRFS_I(dir)->root;
 	struct btrfs_path *path;
 	struct extent_buffer *leaf;
 	struct btrfs_root_ref *ref;
@@ -166,13 +165,13 @@ struct dentry *btrfs_get_parent(struct dentry *child)
 	if (!path)
 		return ERR_PTR(-ENOMEM);
 
-	if (btrfs_ino(dir) == BTRFS_FIRST_FREE_OBJECTID) {
+	if (btrfs_ino(BTRFS_I(dir)) == BTRFS_FIRST_FREE_OBJECTID) {
 		key.objectid = btrfs_root_id(root);
 		key.type = BTRFS_ROOT_BACKREF_KEY;
 		key.offset = (u64)-1;
 		root = fs_info->tree_root;
 	} else {
-		key.objectid = btrfs_ino(dir);
+		key.objectid = btrfs_ino(BTRFS_I(dir));
 		key.type = BTRFS_INODE_REF_KEY;
 		key.offset = (u64)-1;
 	}
@@ -217,11 +216,7 @@ struct dentry *btrfs_get_parent(struct dentry *child)
 					found_key.offset, 0);
 	}
 
-	inode = btrfs_iget(key.objectid, root);
-	if (IS_ERR(inode))
-		return ERR_CAST(inode);
-
-	return d_obtain_alias(&inode->vfs_inode);
+	return d_obtain_alias(btrfs_iget(key.objectid, root));
 fail:
 	btrfs_free_path(path);
 	return ERR_PTR(ret);
@@ -230,11 +225,11 @@ fail:
 static int btrfs_get_name(struct dentry *parent, char *name,
 			  struct dentry *child)
 {
-	struct btrfs_inode *inode = BTRFS_I(d_inode(child));
-	struct btrfs_inode *dir = BTRFS_I(d_inode(parent));
-	struct btrfs_root *root = dir->root;
-	struct btrfs_fs_info *fs_info = root->fs_info;
-	BTRFS_PATH_AUTO_FREE(path);
+	struct inode *inode = d_inode(child);
+	struct inode *dir = d_inode(parent);
+	struct btrfs_fs_info *fs_info = inode_to_fs_info(inode);
+	struct btrfs_path *path;
+	struct btrfs_root *root = BTRFS_I(dir)->root;
 	struct btrfs_inode_ref *iref;
 	struct btrfs_root_ref *rref;
 	struct extent_buffer *leaf;
@@ -244,34 +239,37 @@ static int btrfs_get_name(struct dentry *parent, char *name,
 	int ret;
 	u64 ino;
 
-	if (!S_ISDIR(dir->vfs_inode.i_mode))
+	if (!S_ISDIR(dir->i_mode))
 		return -EINVAL;
 
-	ino = btrfs_ino(inode);
+	ino = btrfs_ino(BTRFS_I(inode));
 
 	path = btrfs_alloc_path();
 	if (!path)
 		return -ENOMEM;
 
 	if (ino == BTRFS_FIRST_FREE_OBJECTID) {
-		key.objectid = btrfs_root_id(inode->root);
+		key.objectid = btrfs_root_id(BTRFS_I(inode)->root);
 		key.type = BTRFS_ROOT_BACKREF_KEY;
 		key.offset = (u64)-1;
 		root = fs_info->tree_root;
 	} else {
 		key.objectid = ino;
+		key.offset = btrfs_ino(BTRFS_I(dir));
 		key.type = BTRFS_INODE_REF_KEY;
-		key.offset = btrfs_ino(dir);
 	}
 
 	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
 	if (ret < 0) {
+		btrfs_free_path(path);
 		return ret;
 	} else if (ret > 0) {
-		if (ino == BTRFS_FIRST_FREE_OBJECTID)
+		if (ino == BTRFS_FIRST_FREE_OBJECTID) {
 			path->slots[0]--;
-		else
+		} else {
+			btrfs_free_path(path);
 			return -ENOENT;
+		}
 	}
 	leaf = path->nodes[0];
 
@@ -288,6 +286,7 @@ static int btrfs_get_name(struct dentry *parent, char *name,
 	}
 
 	read_extent_buffer(leaf, name, name_ptr, name_len);
+	btrfs_free_path(path);
 
 	/*
 	 * have to add the null termination to make sure that reconnect_path

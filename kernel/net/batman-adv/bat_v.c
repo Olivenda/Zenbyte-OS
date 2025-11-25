@@ -43,7 +43,7 @@
 
 static void batadv_v_iface_activate(struct batadv_hard_iface *hard_iface)
 {
-	struct batadv_priv *bat_priv = netdev_priv(hard_iface->mesh_iface);
+	struct batadv_priv *bat_priv = netdev_priv(hard_iface->soft_iface);
 	struct batadv_hard_iface *primary_if;
 
 	primary_if = batadv_primary_if_get_selected(bat_priv);
@@ -97,7 +97,7 @@ static void batadv_v_primary_iface_set(struct batadv_hard_iface *hard_iface)
  */
 static void batadv_v_iface_update_mac(struct batadv_hard_iface *hard_iface)
 {
-	struct batadv_priv *bat_priv = netdev_priv(hard_iface->mesh_iface);
+	struct batadv_priv *bat_priv = netdev_priv(hard_iface->soft_iface);
 	struct batadv_hard_iface *primary_if;
 
 	primary_if = batadv_primary_if_get_selected(bat_priv);
@@ -166,7 +166,7 @@ batadv_v_neigh_dump_neigh(struct sk_buff *msg, u32 portid, u32 seq,
  * @msg: Netlink message to dump into
  * @portid: Port making netlink request
  * @seq: Sequence number of netlink message
- * @bat_priv: The bat priv with all the mesh interface information
+ * @bat_priv: The bat priv with all the soft interface information
  * @hard_iface: The hard interface to be dumped
  * @idx_s: Entries to be skipped
  *
@@ -203,7 +203,7 @@ batadv_v_neigh_dump_hardif(struct sk_buff *msg, u32 portid, u32 seq,
  *  message
  * @msg: Netlink message to dump into
  * @cb: Control block containing additional options
- * @bat_priv: The bat priv with all the mesh interface information
+ * @bat_priv: The bat priv with all the soft interface information
  * @single_hardif: Limit dumping to this hard interface
  */
 static void
@@ -212,7 +212,6 @@ batadv_v_neigh_dump(struct sk_buff *msg, struct netlink_callback *cb,
 		    struct batadv_hard_iface *single_hardif)
 {
 	struct batadv_hard_iface *hard_iface;
-	struct list_head *iter;
 	int i_hardif = 0;
 	int i_hardif_s = cb->args[0];
 	int idx = cb->args[1];
@@ -228,7 +227,10 @@ batadv_v_neigh_dump(struct sk_buff *msg, struct netlink_callback *cb,
 				i_hardif++;
 		}
 	} else {
-		netdev_for_each_lower_private_rcu(bat_priv->mesh_iface, hard_iface, iter) {
+		list_for_each_entry_rcu(hard_iface, &batadv_hardif_list, list) {
+			if (hard_iface->soft_iface != bat_priv->soft_iface)
+				continue;
+
 			if (i_hardif++ < i_hardif_s)
 				continue;
 
@@ -252,7 +254,7 @@ batadv_v_neigh_dump(struct sk_buff *msg, struct netlink_callback *cb,
  * @msg: Netlink message to dump into
  * @portid: Port making netlink request
  * @seq: Sequence number of netlink message
- * @bat_priv: The bat priv with all the mesh interface information
+ * @bat_priv: The bat priv with all the soft interface information
  * @if_outgoing: Limit dump to entries with this outgoing interface
  * @orig_node: Originator to dump
  * @neigh_node: Single hops neighbour
@@ -320,7 +322,7 @@ batadv_v_orig_dump_subentry(struct sk_buff *msg, u32 portid, u32 seq,
  * @msg: Netlink message to dump into
  * @portid: Port making netlink request
  * @seq: Sequence number of netlink message
- * @bat_priv: The bat priv with all the mesh interface information
+ * @bat_priv: The bat priv with all the soft interface information
  * @if_outgoing: Limit dump to entries with this outgoing interface
  * @orig_node: Originator to dump
  * @sub_s: Number of sub entries to skip
@@ -372,7 +374,7 @@ batadv_v_orig_dump_entry(struct sk_buff *msg, u32 portid, u32 seq,
  * @msg: Netlink message to dump into
  * @portid: Port making netlink request
  * @seq: Sequence number of netlink message
- * @bat_priv: The bat priv with all the mesh interface information
+ * @bat_priv: The bat priv with all the soft interface information
  * @if_outgoing: Limit dump to entries with this outgoing interface
  * @head: Bucket to be dumped
  * @idx_s: Number of entries to be skipped
@@ -412,7 +414,7 @@ batadv_v_orig_dump_bucket(struct sk_buff *msg, u32 portid, u32 seq,
  * batadv_v_orig_dump() - Dump the originators into a message
  * @msg: Netlink message to dump into
  * @cb: Control block containing additional options
- * @bat_priv: The bat priv with all the mesh interface information
+ * @bat_priv: The bat priv with all the soft interface information
  * @if_outgoing: Limit dump to entries with this outgoing interface
  */
 static void
@@ -500,7 +502,7 @@ err_ifinfo1:
 
 /**
  * batadv_v_init_sel_class() - initialize GW selection class
- * @bat_priv: the bat priv with all the mesh interface information
+ * @bat_priv: the bat priv with all the soft interface information
  */
 static void batadv_v_init_sel_class(struct batadv_priv *bat_priv)
 {
@@ -551,7 +553,7 @@ out:
 
 /**
  * batadv_v_gw_get_best_gw_node() - retrieve the best GW node
- * @bat_priv: the bat priv with all the mesh interface information
+ * @bat_priv: the bat priv with all the soft interface information
  *
  * Return: the GW node having the best GW-metric, NULL if no GW is known
  */
@@ -588,7 +590,7 @@ next:
 
 /**
  * batadv_v_gw_is_eligible() - check if a originator would be selected as GW
- * @bat_priv: the bat priv with all the mesh interface information
+ * @bat_priv: the bat priv with all the soft interface information
  * @curr_gw_orig: originator representing the currently selected GW
  * @orig_node: the originator representing the new candidate
  *
@@ -645,7 +647,7 @@ out:
  * @msg: Netlink message to dump into
  * @portid: Port making netlink request
  * @cb: Control block containing additional options
- * @bat_priv: The bat priv with all the mesh interface information
+ * @bat_priv: The bat priv with all the soft interface information
  * @gw_node: Gateway to be dumped
  *
  * Return: Error code, or 0 on success
@@ -744,7 +746,7 @@ out:
  * batadv_v_gw_dump() - Dump gateways into a message
  * @msg: Netlink message to dump into
  * @cb: Control block containing additional options
- * @bat_priv: The bat priv with all the mesh interface information
+ * @bat_priv: The bat priv with all the soft interface information
  */
 static void batadv_v_gw_dump(struct sk_buff *msg, struct netlink_callback *cb,
 			     struct batadv_priv *bat_priv)

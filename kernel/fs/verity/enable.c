@@ -7,7 +7,7 @@
 
 #include "fsverity_private.h"
 
-#include <linux/export.h>
+#include <crypto/hash.h>
 #include <linux/mount.h>
 #include <linux/sched/signal.h>
 #include <linux/uaccess.h>
@@ -24,6 +24,7 @@ static int hash_one_block(struct inode *inode,
 			  struct block_buffer *cur)
 {
 	struct block_buffer *next = cur + 1;
+	int err;
 
 	/*
 	 * Safety check to prevent a buffer overflow in case of a filesystem bug
@@ -36,8 +37,10 @@ static int hash_one_block(struct inode *inode,
 	/* Zero-pad the block if it's shorter than the block size. */
 	memset(&cur->data[cur->filled], 0, params->block_size - cur->filled);
 
-	fsverity_hash_block(params, inode, cur->data,
-			    &next->data[next->filled]);
+	err = fsverity_hash_block(params, inode, cur->data,
+				  &next->data[next->filled]);
+	if (err)
+		return err;
 	next->filled += params->digest_size;
 	cur->filled = 0;
 	return 0;

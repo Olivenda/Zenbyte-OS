@@ -10,8 +10,7 @@ TEST_PROGS := \
 	test-state.sh \
 	test-ftrace.sh \
 	test-sysfs.sh \
-	test-syscall.sh \
-	test-kprobe.sh
+	test-syscall.sh
 
 TEST_FILES := settings
 

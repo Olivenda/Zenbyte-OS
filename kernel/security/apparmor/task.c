@@ -228,7 +228,8 @@ static int profile_ptrace_perm(const struct cred *cred,
 			       struct aa_label *peer, u32 request,
 			       struct apparmor_audit_data *ad)
 {
-	struct aa_ruleset *rules = profile->label.rules[0];
+	struct aa_ruleset *rules = list_first_entry(&profile->rules,
+						    typeof(*rules), list);
 	struct aa_perms perms = { };
 
 	ad->subj_cred = cred;
@@ -245,7 +246,7 @@ static int profile_tracee_perm(const struct cred *cred,
 			       struct apparmor_audit_data *ad)
 {
 	if (profile_unconfined(tracee) || unconfined(tracer) ||
-	    !label_mediates(&tracee->label, AA_CLASS_PTRACE))
+	    !ANY_RULE_MEDIATES(&tracee->rules, AA_CLASS_PTRACE))
 		return 0;
 
 	return profile_ptrace_perm(cred, tracee, tracer, request, ad);
@@ -259,7 +260,7 @@ static int profile_tracer_perm(const struct cred *cred,
 	if (profile_unconfined(tracer))
 		return 0;
 
-	if (label_mediates(&tracer->label, AA_CLASS_PTRACE))
+	if (ANY_RULE_MEDIATES(&tracer->rules, AA_CLASS_PTRACE))
 		return profile_ptrace_perm(cred, tracer, tracee, request, ad);
 
 	/* profile uses the old style capability check for ptrace */
@@ -323,7 +324,9 @@ int aa_profile_ns_perm(struct aa_profile *profile,
 	ad->request = request;
 
 	if (!profile_unconfined(profile)) {
-		struct aa_ruleset *rules = profile->label.rules[0];
+		struct aa_ruleset *rules = list_first_entry(&profile->rules,
+							    typeof(*rules),
+							    list);
 		aa_state_t state;
 
 		state = RULE_MEDIATES(rules, ad->class);

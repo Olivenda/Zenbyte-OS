@@ -59,10 +59,10 @@ For example, a simple nvram case::
 	devm_nvmem_register(&config);
   }
 
-Device drivers can define and register an nvmem cell using the nvmem_cell_info
-struct::
+Users of board files can define and register nvmem cells using the
+nvmem_cell_table struct::
 
-  static const struct nvmem_cell_info foo_nvmem_cell = {
+  static struct nvmem_cell_info foo_nvmem_cells[] = {
 	{
 		.name		= "macaddr",
 		.offset		= 0x7f00,
@@ -70,7 +70,13 @@ struct::
 	}
   };
 
-  int nvmem_add_one_cell(nvmem, &foo_nvmem_cell);
+  static struct nvmem_cell_table foo_nvmem_cell_table = {
+	.nvmem_name		= "i2c-eeprom",
+	.cells			= foo_nvmem_cells,
+	.ncells			= ARRAY_SIZE(foo_nvmem_cells),
+  };
+
+  nvmem_add_cell_table(&foo_nvmem_cell_table);
 
 Additionally it is possible to create nvmem cell lookup entries and register
 them with the nvmem framework from machine code as shown in the example below::

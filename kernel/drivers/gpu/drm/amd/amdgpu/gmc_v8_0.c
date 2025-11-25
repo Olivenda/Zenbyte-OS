@@ -53,7 +53,7 @@
 
 static void gmc_v8_0_set_gmc_funcs(struct amdgpu_device *adev);
 static void gmc_v8_0_set_irq_funcs(struct amdgpu_device *adev);
-static int gmc_v8_0_wait_for_idle(struct amdgpu_ip_block *ip_block);
+static int gmc_v8_0_wait_for_idle(void *handle);
 
 MODULE_FIRMWARE("amdgpu/tonga_mc.bin");
 MODULE_FIRMWARE("amdgpu/polaris11_mc.bin");
@@ -170,13 +170,8 @@ static void gmc_v8_0_init_golden_registers(struct amdgpu_device *adev)
 static void gmc_v8_0_mc_stop(struct amdgpu_device *adev)
 {
 	u32 blackout;
-	struct amdgpu_ip_block *ip_block;
 
-	ip_block = amdgpu_device_ip_get_ip_block(adev, AMD_IP_BLOCK_TYPE_GMC);
-	if (!ip_block)
-		return;
-
-	gmc_v8_0_wait_for_idle(ip_block);
+	gmc_v8_0_wait_for_idle(adev);
 
 	blackout = RREG32(mmMC_SHARED_BLACKOUT_CNTL);
 	if (REG_GET_FIELD(blackout, MC_SHARED_BLACKOUT_CNTL, BLACKOUT_MODE) != 1) {
@@ -259,8 +254,7 @@ static int gmc_v8_0_init_microcode(struct amdgpu_device *adev)
 		return -EINVAL;
 	}
 
-	err = amdgpu_ucode_request(adev, &adev->gmc.fw, AMDGPU_UCODE_REQUIRED,
-				   "amdgpu/%s_mc.bin", chip_name);
+	err = amdgpu_ucode_request(adev, &adev->gmc.fw, "amdgpu/%s_mc.bin", chip_name);
 	if (err) {
 		pr_err("mc: Failed to load firmware \"%s_mc.bin\"\n", chip_name);
 		amdgpu_ucode_release(&adev->gmc.fw);
@@ -432,7 +426,6 @@ static void gmc_v8_0_vram_gtt_location(struct amdgpu_device *adev,
  */
 static void gmc_v8_0_mc_program(struct amdgpu_device *adev)
 {
-	struct amdgpu_ip_block *ip_block;
 	u32 tmp;
 	int i, j;
 
@@ -446,11 +439,7 @@ static void gmc_v8_0_mc_program(struct amdgpu_device *adev)
 	}
 	WREG32(mmHDP_REG_COHERENCY_FLUSH_CNTL, 0);
 
-	ip_block = amdgpu_device_ip_get_ip_block(adev, AMD_IP_BLOCK_TYPE_GMC);
-	if (!ip_block)
-		return;
-
-	if (gmc_v8_0_wait_for_idle(ip_block))
+	if (gmc_v8_0_wait_for_idle((void *)adev))
 		dev_warn(adev->dev, "Wait for MC idle timedout !\n");
 
 	if (adev->mode_info.num_crtc) {
@@ -485,7 +474,7 @@ static void gmc_v8_0_mc_program(struct amdgpu_device *adev)
 	WREG32(mmMC_VM_AGP_BASE, 0);
 	WREG32(mmMC_VM_AGP_TOP, adev->gmc.agp_end >> 22);
 	WREG32(mmMC_VM_AGP_BOT, adev->gmc.agp_start >> 22);
-	if (gmc_v8_0_wait_for_idle(ip_block))
+	if (gmc_v8_0_wait_for_idle((void *)adev))
 		dev_warn(adev->dev, "Wait for MC idle timedout !\n");
 
 	WREG32(mmBIF_FB_EN, BIF_FB_EN__FB_READ_EN_MASK | BIF_FB_EN__FB_WRITE_EN_MASK);
@@ -1038,9 +1027,9 @@ static int gmc_v8_0_convert_vram_type(int mc_seq_vram_type)
 	}
 }
 
-static int gmc_v8_0_early_init(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_early_init(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	gmc_v8_0_set_gmc_funcs(adev);
 	gmc_v8_0_set_irq_funcs(adev);
@@ -1057,9 +1046,9 @@ static int gmc_v8_0_early_init(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int gmc_v8_0_late_init(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_late_init(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	if (amdgpu_vm_fault_stop != AMDGPU_VM_FAULT_STOP_ALWAYS)
 		return amdgpu_irq_get(adev, &adev->gmc.vm_fault, 0);
@@ -1087,10 +1076,10 @@ static unsigned int gmc_v8_0_get_vbios_fb_size(struct amdgpu_device *adev)
 
 #define mmMC_SEQ_MISC0_FIJI 0xA71
 
-static int gmc_v8_0_sw_init(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_sw_init(void *handle)
 {
 	int r;
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	set_bit(AMDGPU_GFXHUB(0), adev->vmhubs_mask);
 
@@ -1184,9 +1173,9 @@ static int gmc_v8_0_sw_init(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int gmc_v8_0_sw_fini(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_sw_fini(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	amdgpu_gem_force_release(adev);
 	amdgpu_vm_manager_fini(adev);
@@ -1198,10 +1187,10 @@ static int gmc_v8_0_sw_fini(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int gmc_v8_0_hw_init(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_hw_init(void *handle)
 {
 	int r;
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	gmc_v8_0_init_golden_registers(adev);
 
@@ -1233,9 +1222,9 @@ static int gmc_v8_0_hw_init(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int gmc_v8_0_hw_fini(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_hw_fini(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	amdgpu_irq_put(adev, &adev->gmc.vm_fault, 0);
 	gmc_v8_0_gart_disable(adev);
@@ -1243,29 +1232,32 @@ static int gmc_v8_0_hw_fini(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int gmc_v8_0_suspend(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_suspend(void *handle)
 {
-	gmc_v8_0_hw_fini(ip_block);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	gmc_v8_0_hw_fini(adev);
 
 	return 0;
 }
 
-static int gmc_v8_0_resume(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_resume(void *handle)
 {
 	int r;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-	r = gmc_v8_0_hw_init(ip_block);
+	r = gmc_v8_0_hw_init(adev);
 	if (r)
 		return r;
 
-	amdgpu_vmid_reset_all(ip_block->adev);
+	amdgpu_vmid_reset_all(adev);
 
 	return 0;
 }
 
-static bool gmc_v8_0_is_idle(struct amdgpu_ip_block *ip_block)
+static bool gmc_v8_0_is_idle(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	u32 tmp = RREG32(mmSRBM_STATUS);
 
 	if (tmp & (SRBM_STATUS__MCB_BUSY_MASK | SRBM_STATUS__MCB_NON_DISPLAY_BUSY_MASK |
@@ -1275,11 +1267,11 @@ static bool gmc_v8_0_is_idle(struct amdgpu_ip_block *ip_block)
 	return true;
 }
 
-static int gmc_v8_0_wait_for_idle(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_wait_for_idle(void *handle)
 {
 	unsigned int i;
 	u32 tmp;
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	for (i = 0; i < adev->usec_timeout; i++) {
 		/* read MC_STATUS */
@@ -1297,10 +1289,10 @@ static int gmc_v8_0_wait_for_idle(struct amdgpu_ip_block *ip_block)
 
 }
 
-static bool gmc_v8_0_check_soft_reset(struct amdgpu_ip_block *ip_block)
+static bool gmc_v8_0_check_soft_reset(void *handle)
 {
 	u32 srbm_soft_reset = 0;
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	u32 tmp = RREG32(mmSRBM_STATUS);
 
 	if (tmp & SRBM_STATUS__VMC_BUSY_MASK)
@@ -1324,23 +1316,23 @@ static bool gmc_v8_0_check_soft_reset(struct amdgpu_ip_block *ip_block)
 	return false;
 }
 
-static int gmc_v8_0_pre_soft_reset(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_pre_soft_reset(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	if (!adev->gmc.srbm_soft_reset)
 		return 0;
 
 	gmc_v8_0_mc_stop(adev);
-	if (gmc_v8_0_wait_for_idle(ip_block))
+	if (gmc_v8_0_wait_for_idle(adev))
 		dev_warn(adev->dev, "Wait for GMC idle timed out !\n");
 
 	return 0;
 }
 
-static int gmc_v8_0_soft_reset(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_soft_reset(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	u32 srbm_soft_reset;
 
 	if (!adev->gmc.srbm_soft_reset)
@@ -1369,9 +1361,9 @@ static int gmc_v8_0_soft_reset(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int gmc_v8_0_post_soft_reset(struct amdgpu_ip_block *ip_block)
+static int gmc_v8_0_post_soft_reset(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	if (!adev->gmc.srbm_soft_reset)
 		return 0;
@@ -1458,7 +1450,9 @@ static int gmc_v8_0_process_interrupt(struct amdgpu_device *adev,
 
 		task_info = amdgpu_vm_get_task_info_pasid(adev, entry->pasid);
 		if (task_info) {
-			amdgpu_vm_print_task_info(adev, task_info);
+			dev_err(adev->dev, " for process %s pid %d thread %s pid %d\n",
+				task_info->process_name, task_info->tgid,
+				task_info->task_name, task_info->pid);
 			amdgpu_vm_put_task_info(task_info);
 		}
 
@@ -1656,10 +1650,10 @@ static void fiji_update_mc_light_sleep(struct amdgpu_device *adev,
 	}
 }
 
-static int gmc_v8_0_set_clockgating_state(struct amdgpu_ip_block *ip_block,
+static int gmc_v8_0_set_clockgating_state(void *handle,
 					  enum amd_clockgating_state state)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	if (amdgpu_sriov_vf(adev))
 		return 0;
@@ -1677,15 +1671,15 @@ static int gmc_v8_0_set_clockgating_state(struct amdgpu_ip_block *ip_block,
 	return 0;
 }
 
-static int gmc_v8_0_set_powergating_state(struct amdgpu_ip_block *ip_block,
+static int gmc_v8_0_set_powergating_state(void *handle,
 					  enum amd_powergating_state state)
 {
 	return 0;
 }
 
-static void gmc_v8_0_get_clockgating_state(struct amdgpu_ip_block *ip_block, u64 *flags)
+static void gmc_v8_0_get_clockgating_state(void *handle, u64 *flags)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	int data;
 
 	if (amdgpu_sriov_vf(adev))
@@ -1720,6 +1714,8 @@ static const struct amd_ip_funcs gmc_v8_0_ip_funcs = {
 	.set_clockgating_state = gmc_v8_0_set_clockgating_state,
 	.set_powergating_state = gmc_v8_0_set_powergating_state,
 	.get_clockgating_state = gmc_v8_0_get_clockgating_state,
+	.dump_ip_state = NULL,
+	.print_ip_state = NULL,
 };
 
 static const struct amdgpu_gmc_funcs gmc_v8_0_gmc_funcs = {

@@ -1125,7 +1125,7 @@ static struct platform_driver envctrl_driver = {
 		.of_match_table = envctrl_match,
 	},
 	.probe		= envctrl_probe,
-	.remove		= envctrl_remove,
+	.remove_new	= envctrl_remove,
 };
 
 module_platform_driver(envctrl_driver);

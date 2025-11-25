@@ -187,15 +187,14 @@ SYM_CODE_END(ftrace_graph_caller)
 
 .globl return_to_handler
 return_to_handler:
-	subl	$(PTREGS_SIZE), %esp
-	movl	$0, PT_EBP(%esp)
-	movl	%edx, PT_EDX(%esp)
-	movl	%eax, PT_EAX(%esp)
+	pushl	$0
+	pushl	%edx
+	pushl	%eax
 	movl	%esp, %eax
 	call	ftrace_return_to_handler
 	movl	%eax, %ecx
-	movl	PT_EAX(%esp), %eax
-	movl	PT_EDX(%esp), %edx
-	addl	$(PTREGS_SIZE), %esp
+	popl	%eax
+	popl	%edx
+	addl	$4, %esp		# skip ebp
 	JMP_NOSPEC ecx
 #endif

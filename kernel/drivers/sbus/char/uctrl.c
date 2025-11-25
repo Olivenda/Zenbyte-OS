@@ -424,7 +424,7 @@ static struct platform_driver uctrl_driver = {
 		.of_match_table = uctrl_match,
 	},
 	.probe		= uctrl_probe,
-	.remove		= uctrl_remove,
+	.remove_new	= uctrl_remove,
 };
 
 

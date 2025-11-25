@@ -38,7 +38,6 @@ struct ioam6_lwt_freq {
 };
 
 struct ioam6_lwt {
-	struct dst_entry null_dst;
 	struct dst_cache cache;
 	struct ioam6_lwt_freq freq;
 	atomic_t pkt_cnt;
@@ -143,8 +142,10 @@ static int ioam6_build_state(struct net *net, struct nlattr *nla,
 		}
 	}
 
-	mode = nla_get_u8_default(tb[IOAM6_IPTUNNEL_MODE],
-				  IOAM6_IPTUNNEL_MODE_INLINE);
+	if (!tb[IOAM6_IPTUNNEL_MODE])
+		mode = IOAM6_IPTUNNEL_MODE_INLINE;
+	else
+		mode = nla_get_u8(tb[IOAM6_IPTUNNEL_MODE]);
 
 	if (tb[IOAM6_IPTUNNEL_SRC] && mode == IOAM6_IPTUNNEL_MODE_INLINE) {
 		NL_SET_ERR_MSG(extack, "no tunnel src expected with this mode");
@@ -177,14 +178,6 @@ static int ioam6_build_state(struct net *net, struct nlattr *nla,
 	err = dst_cache_init(&ilwt->cache, GFP_ATOMIC);
 	if (err)
 		goto free_lwt;
-
-	/* This "fake" dst_entry will be stored in a dst_cache, which will call
-	 * dst_hold() and dst_release() on it. We must ensure that dst_destroy()
-	 * will never be called. For that, its initial refcount is 1 and +1 when
-	 * it is stored in the cache. Then, +1/-1 each time we read the cache
-	 * and release it. Long story short, we're fine.
-	 */
-	dst_init(&ilwt->null_dst, NULL, NULL, DST_OBSOLETE_NONE, DST_NOCOUNT);
 
 	atomic_set(&ilwt->pkt_cnt, 0);
 	ilwt->freq.k = freq_k;
@@ -335,7 +328,7 @@ static int ioam6_do_encap(struct net *net, struct sk_buff *skb,
 	if (has_tunsrc)
 		memcpy(&hdr->saddr, tunsrc, sizeof(*tunsrc));
 	else
-		ipv6_dev_get_saddr(net, dst_dev(dst), &hdr->daddr,
+		ipv6_dev_get_saddr(net, dst->dev, &hdr->daddr,
 				   IPV6_PREFER_SRC_PUBLIC, &hdr->saddr);
 
 	skb_postpush_rcsum(skb, hdr, len);
@@ -345,8 +338,7 @@ static int ioam6_do_encap(struct net *net, struct sk_buff *skb,
 
 static int ioam6_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
-	struct dst_entry *orig_dst = skb_dst(skb);
-	struct dst_entry *dst = NULL;
+	struct dst_entry *dst = skb_dst(skb), *cache_dst = NULL;
 	struct ioam6_lwt *ilwt;
 	int err = -EINVAL;
 	u32 pkt_cnt;
@@ -354,7 +346,7 @@ static int ioam6_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 	if (skb->protocol != htons(ETH_P_IPV6))
 		goto drop;
 
-	ilwt = ioam6_lwt_state(orig_dst->lwtstate);
+	ilwt = ioam6_lwt_state(dst->lwtstate);
 
 	/* Check for insertion frequency (i.e., "k over n" insertions) */
 	pkt_cnt = atomic_fetch_inc(&ilwt->pkt_cnt);
@@ -362,19 +354,8 @@ static int ioam6_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 		goto out;
 
 	local_bh_disable();
-	dst = dst_cache_get(&ilwt->cache);
+	cache_dst = dst_cache_get(&ilwt->cache);
 	local_bh_enable();
-
-	/* This is how we notify that the destination does not change after
-	 * transformation and that we need to use orig_dst instead of the cache
-	 */
-	if (dst == &ilwt->null_dst) {
-		dst_release(dst);
-
-		dst = orig_dst;
-		/* keep refcount balance: dst_release() is called at the end */
-		dst_hold(dst);
-	}
 
 	switch (ilwt->mode) {
 	case IOAM6_IPTUNNEL_MODE_INLINE:
@@ -383,7 +364,7 @@ do_inline:
 		if (ipv6_hdr(skb)->nexthdr == NEXTHDR_HOP)
 			goto out;
 
-		err = ioam6_do_inline(net, skb, &ilwt->tuninfo, dst);
+		err = ioam6_do_inline(net, skb, &ilwt->tuninfo, cache_dst);
 		if (unlikely(err))
 			goto drop;
 
@@ -393,7 +374,7 @@ do_encap:
 		/* Encapsulation (ip6ip6) */
 		err = ioam6_do_encap(net, skb, &ilwt->tuninfo,
 				     ilwt->has_tunsrc, &ilwt->tunsrc,
-				     &ilwt->tundst, dst);
+				     &ilwt->tundst, cache_dst);
 		if (unlikely(err))
 			goto drop;
 
@@ -411,7 +392,7 @@ do_encap:
 		goto drop;
 	}
 
-	if (unlikely(!dst)) {
+	if (unlikely(!cache_dst)) {
 		struct ipv6hdr *hdr = ipv6_hdr(skb);
 		struct flowi6 fl6;
 
@@ -422,27 +403,20 @@ do_encap:
 		fl6.flowi6_mark = skb->mark;
 		fl6.flowi6_proto = hdr->nexthdr;
 
-		dst = ip6_route_output(net, NULL, &fl6);
-		if (dst->error) {
-			err = dst->error;
+		cache_dst = ip6_route_output(net, NULL, &fl6);
+		if (cache_dst->error) {
+			err = cache_dst->error;
 			goto drop;
 		}
 
-		/* If the destination is the same after transformation (which is
-		 * a valid use case for IOAM), then we don't want to add it to
-		 * the cache in order to avoid a reference loop. Instead, we add
-		 * our fake dst_entry to the cache as a way to detect this case.
-		 * Otherwise, we add the resolved destination to the cache.
-		 */
-		local_bh_disable();
-		if (orig_dst->lwtstate == dst->lwtstate)
-			dst_cache_set_ip6(&ilwt->cache,
-					  &ilwt->null_dst, &fl6.saddr);
-		else
-			dst_cache_set_ip6(&ilwt->cache, dst, &fl6.saddr);
-		local_bh_enable();
+		/* cache only if we don't create a dst reference loop */
+		if (dst->lwtstate != cache_dst->lwtstate) {
+			local_bh_disable();
+			dst_cache_set_ip6(&ilwt->cache, cache_dst, &fl6.saddr);
+			local_bh_enable();
+		}
 
-		err = skb_cow_head(skb, LL_RESERVED_SPACE(dst_dev(dst)));
+		err = skb_cow_head(skb, LL_RESERVED_SPACE(cache_dst->dev));
 		if (unlikely(err))
 			goto drop;
 	}
@@ -450,26 +424,22 @@ do_encap:
 	/* avoid lwtunnel_output() reentry loop when destination is the same
 	 * after transformation (e.g., with the inline mode)
 	 */
-	if (orig_dst->lwtstate != dst->lwtstate) {
+	if (dst->lwtstate != cache_dst->lwtstate) {
 		skb_dst_drop(skb);
-		skb_dst_set(skb, dst);
+		skb_dst_set(skb, cache_dst);
 		return dst_output(net, sk, skb);
 	}
 out:
-	dst_release(dst);
-	return orig_dst->lwtstate->orig_output(net, sk, skb);
+	dst_release(cache_dst);
+	return dst->lwtstate->orig_output(net, sk, skb);
 drop:
-	dst_release(dst);
+	dst_release(cache_dst);
 	kfree_skb(skb);
 	return err;
 }
 
 static void ioam6_destroy_state(struct lwtunnel_state *lwt)
 {
-	/* Since the refcount of per-cpu dst_entry caches will never be 0 (see
-	 * why above) when our "fake" dst_entry is used, it is not necessary to
-	 * remove them before calling dst_cache_destroy()
-	 */
 	dst_cache_destroy(&ioam6_lwt_state(lwt)->cache);
 }
 

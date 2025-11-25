@@ -737,6 +737,10 @@ static bool ixgbevf_cleanup_headers(struct ixgbevf_ring *rx_ring,
 				    union ixgbe_adv_rx_desc *rx_desc,
 				    struct sk_buff *skb)
 {
+	/* XDP packets use error pointer so abort at this point */
+	if (IS_ERR(skb))
+		return true;
+
 	/* verify that the packet does not have any known errors */
 	if (unlikely(ixgbevf_test_staterr(rx_desc,
 					  IXGBE_RXDADV_ERR_FRAME_ERR_MASK))) {
@@ -1045,9 +1049,9 @@ static int ixgbevf_xmit_xdp_ring(struct ixgbevf_ring *ring,
 	return IXGBEVF_XDP_TX;
 }
 
-static int ixgbevf_run_xdp(struct ixgbevf_adapter *adapter,
-			   struct ixgbevf_ring *rx_ring,
-			   struct xdp_buff *xdp)
+static struct sk_buff *ixgbevf_run_xdp(struct ixgbevf_adapter *adapter,
+				       struct ixgbevf_ring  *rx_ring,
+				       struct xdp_buff *xdp)
 {
 	int result = IXGBEVF_XDP_PASS;
 	struct ixgbevf_ring *xdp_ring;
@@ -1081,7 +1085,7 @@ out_failure:
 		break;
 	}
 xdp_out:
-	return result;
+	return ERR_PTR(-result);
 }
 
 static unsigned int ixgbevf_rx_frame_truesize(struct ixgbevf_ring *rx_ring,
@@ -1123,7 +1127,6 @@ static int ixgbevf_clean_rx_irq(struct ixgbevf_q_vector *q_vector,
 	struct sk_buff *skb = rx_ring->skb;
 	bool xdp_xmit = false;
 	struct xdp_buff xdp;
-	int xdp_res = 0;
 
 	/* Frame size depend on rx_ring setup when PAGE_SIZE=4K */
 #if (PAGE_SIZE < 8192)
@@ -1167,11 +1170,11 @@ static int ixgbevf_clean_rx_irq(struct ixgbevf_q_vector *q_vector,
 			/* At larger PAGE_SIZE, frame_sz depend on len size */
 			xdp.frame_sz = ixgbevf_rx_frame_truesize(rx_ring, size);
 #endif
-			xdp_res = ixgbevf_run_xdp(adapter, rx_ring, &xdp);
+			skb = ixgbevf_run_xdp(adapter, rx_ring, &xdp);
 		}
 
-		if (xdp_res) {
-			if (xdp_res == IXGBEVF_XDP_TX) {
+		if (IS_ERR(skb)) {
+			if (PTR_ERR(skb) == -IXGBEVF_XDP_TX) {
 				xdp_xmit = true;
 				ixgbevf_rx_buffer_flip(rx_ring, rx_buffer,
 						       size);
@@ -1191,7 +1194,7 @@ static int ixgbevf_clean_rx_irq(struct ixgbevf_q_vector *q_vector,
 		}
 
 		/* exit if we failed to retrieve a buffer */
-		if (!xdp_res && !skb) {
+		if (!skb) {
 			rx_ring->rx_stats.alloc_rx_buff_failed++;
 			rx_buffer->pagecnt_bias++;
 			break;
@@ -1205,7 +1208,7 @@ static int ixgbevf_clean_rx_irq(struct ixgbevf_q_vector *q_vector,
 			continue;
 
 		/* verify the packet layout is correct */
-		if (xdp_res || ixgbevf_cleanup_headers(rx_ring, rx_desc, skb)) {
+		if (ixgbevf_cleanup_headers(rx_ring, rx_desc, skb)) {
 			skb = NULL;
 			continue;
 		}
@@ -2542,7 +2545,7 @@ void ixgbevf_down(struct ixgbevf_adapter *adapter)
 
 	ixgbevf_napi_disable_all(adapter);
 
-	timer_delete_sync(&adapter->service_timer);
+	del_timer_sync(&adapter->service_timer);
 
 	/* disable transmits in the hardware now that interrupts are off */
 	for (i = 0; i < adapter->num_tx_queues; i++) {
@@ -3206,8 +3209,8 @@ void ixgbevf_update_stats(struct ixgbevf_adapter *adapter)
  **/
 static void ixgbevf_service_timer(struct timer_list *t)
 {
-	struct ixgbevf_adapter *adapter = timer_container_of(adapter, t,
-							     service_timer);
+	struct ixgbevf_adapter *adapter = from_timer(adapter, t,
+						     service_timer);
 
 	/* Reset the timer */
 	mod_timer(&adapter->service_timer, (HZ * 2) + jiffies);

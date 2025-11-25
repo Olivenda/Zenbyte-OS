@@ -139,21 +139,31 @@ static int tt_command_exec(int index, const char *arg)
 	return ret;
 }
 
-static ssize_t tt_command_process(char *s)
+static ssize_t tt_command_process(struct dentry *dentry, const char __user *user_buf,
+				  size_t count)
 {
+	char *buf __free(kfree);
 	char *arg;
 	int i;
 
-	strim(s);
+	buf = kmalloc(count + 1, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
 
-	arg = strchr(s, ':');
+	if (copy_from_user(buf, user_buf, count))
+		return -EFAULT;
+
+	buf[count] = '\0';
+	strim(buf);
+
+	arg = strstr(buf, ":");
 	if (arg) {
 		*arg = '\0';
 		arg++;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(tt_command_strings); i++) {
-		if (!strcmp(s, tt_command_strings[i]))
+		if (!strcmp(buf, tt_command_strings[i]))
 			return tt_command_exec(i, arg);
 	}
 
@@ -163,20 +173,20 @@ static ssize_t tt_command_process(char *s)
 static ssize_t tt_command_write(struct file *file, const char __user *user_buf,
 				size_t count, loff_t *ppos)
 {
-	char buf[TT_COMMAND_SIZE];
+	struct dentry *dentry = file->f_path.dentry;
 	ssize_t ret;
 
 	if (*ppos)
 		return -EINVAL;
 
-	if (count > TT_COMMAND_SIZE - 1)
+	if (count + 1 > TT_COMMAND_SIZE)
 		return -E2BIG;
 
-	if (copy_from_user(buf, user_buf, count))
-		return -EFAULT;
-	buf[count] = '\0';
+	ret = debugfs_file_get(dentry);
+	if (unlikely(ret))
+		return ret;
 
-	ret = tt_command_process(buf);
+	ret = tt_command_process(dentry, user_buf, count);
 	if (ret)
 		return ret;
 

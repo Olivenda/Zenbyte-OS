@@ -43,6 +43,7 @@
 #include <linux/smsc911x.h>
 #include <linux/device.h>
 #include <linux/of.h>
+#include <linux/of_gpio.h>
 #include <linux/of_net.h>
 #include <linux/acpi.h>
 #include <linux/pm_runtime.h>
@@ -2360,7 +2361,7 @@ static void smsc911x_drv_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 }
 
-/* standard register access */
+/* standard register acces */
 static const struct smsc911x_ops standard_smsc911x_ops = {
 	.reg_read = __smsc911x_reg_read,
 	.reg_write = __smsc911x_reg_write,
@@ -2676,7 +2677,7 @@ MODULE_DEVICE_TABLE(acpi, smsc911x_acpi_match);
 
 static struct platform_driver smsc911x_driver = {
 	.probe = smsc911x_drv_probe,
-	.remove = smsc911x_drv_remove,
+	.remove_new = smsc911x_drv_remove,
 	.driver = {
 		.name	= SMSC_CHIPNAME,
 		.pm	= SMSC911X_PM_OPS,

@@ -22,7 +22,6 @@ struct xe_modparam {
 	unsigned int max_vfs;
 #endif
 	int wedged_mode;
-	u32 svm_notifier_size;
 };
 
 extern struct xe_modparam xe_modparam;

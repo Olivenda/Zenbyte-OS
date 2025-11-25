@@ -8,8 +8,10 @@
 
 #include <linux/const.h>
 
-#include <vdso/page.h>
-
+/* PAGE_SHIFT determines the page size */
+#define PAGE_SHIFT	CONFIG_PAGE_SHIFT
+#define PAGE_SIZE	(_AC(1, UL) << PAGE_SHIFT)
+#define PAGE_MASK	(~(PAGE_SIZE-1))
 #define PTE_MASK	PAGE_MASK
 
 #if defined(CONFIG_HUGETLB_PAGE_SIZE_64K)
@@ -30,7 +32,7 @@
 #define HUGETLB_PAGE_ORDER	(HPAGE_SHIFT-PAGE_SHIFT)
 #endif
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 #include <asm/uncached.h>
 
 extern unsigned long shm_align_mask;
@@ -85,7 +87,7 @@ typedef struct page *pgtable_t;
 
 #define pte_pgprot(x) __pgprot(pte_val(x) & PTE_FLAGS_MASK)
 
-#endif /* !__ASSEMBLER__ */
+#endif /* !__ASSEMBLY__ */
 
 /*
  * __MEMORY_START and SIZE are the physical addresses and size of RAM.
@@ -126,10 +128,10 @@ typedef struct page *pgtable_t;
 #define ___va(x)	((x)+PAGE_OFFSET)
 #endif
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 #define __pa(x)		___pa((unsigned long)x)
 #define __va(x)		(void *)___va((unsigned long)x)
-#endif /* !__ASSEMBLER__ */
+#endif /* !__ASSEMBLY__ */
 
 #ifdef CONFIG_UNCACHED_MAPPING
 #if defined(CONFIG_29BIT)
@@ -145,6 +147,7 @@ typedef struct page *pgtable_t;
 #endif
 
 #define pfn_to_kaddr(pfn)	__va((pfn) << PAGE_SHIFT)
+#define page_to_phys(page)	(page_to_pfn(page) << PAGE_SHIFT)
 
 /*
  * PFN = physical frame number (ie PFN 0 == physical address 0)

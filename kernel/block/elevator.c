@@ -45,19 +45,6 @@
 #include "blk-wbt.h"
 #include "blk-cgroup.h"
 
-/* Holding context data for changing elevator */
-struct elv_change_ctx {
-	const char *name;
-	bool no_uevent;
-
-	/* for unregistering old elevator */
-	struct elevator_queue *old;
-	/* for registering new elevator */
-	struct elevator_queue *new;
-	/* holds sched tags data */
-	struct elevator_tags *et;
-};
-
 static DEFINE_SPINLOCK(elv_list_lock);
 static LIST_HEAD(elv_list);
 
@@ -134,7 +121,7 @@ static struct elevator_type *elevator_find_get(const char *name)
 static const struct kobj_type elv_ktype;
 
 struct elevator_queue *elevator_alloc(struct request_queue *q,
-		struct elevator_type *e, struct elevator_tags *et)
+				  struct elevator_type *e)
 {
 	struct elevator_queue *eq;
 
@@ -147,10 +134,10 @@ struct elevator_queue *elevator_alloc(struct request_queue *q,
 	kobject_init(&eq->kobj, &elv_ktype);
 	mutex_init(&eq->sysfs_lock);
 	hash_init(eq->hash);
-	eq->et = et;
 
 	return eq;
 }
+EXPORT_SYMBOL(elevator_alloc);
 
 static void elevator_release(struct kobject *kobj)
 {
@@ -161,17 +148,18 @@ static void elevator_release(struct kobject *kobj)
 	kfree(e);
 }
 
-static void elevator_exit(struct request_queue *q)
+void elevator_exit(struct request_queue *q)
 {
 	struct elevator_queue *e = q->elevator;
 
-	lockdep_assert_held(&q->elevator_lock);
-
 	ioc_clear_queue(q);
+	blk_mq_sched_free_rqs(q);
 
 	mutex_lock(&e->sysfs_lock);
 	blk_mq_exit_sched(q, e);
 	mutex_unlock(&e->sysfs_lock);
+
+	kobject_put(&e->kobj);
 }
 
 static inline void __elv_rqhash_del(struct request *rq)
@@ -417,22 +405,21 @@ struct request *elv_former_request(struct request_queue *q, struct request *rq)
 	return NULL;
 }
 
-#define to_elv(atr) container_of_const((atr), struct elv_fs_entry, attr)
+#define to_elv(atr) container_of((atr), struct elv_fs_entry, attr)
 
 static ssize_t
 elv_attr_show(struct kobject *kobj, struct attribute *attr, char *page)
 {
-	const struct elv_fs_entry *entry = to_elv(attr);
+	struct elv_fs_entry *entry = to_elv(attr);
 	struct elevator_queue *e;
-	ssize_t error = -ENODEV;
+	ssize_t error;
 
 	if (!entry->show)
 		return -EIO;
 
 	e = container_of(kobj, struct elevator_queue, kobj);
 	mutex_lock(&e->sysfs_lock);
-	if (!test_bit(ELEVATOR_FLAG_DYING, &e->flags))
-		error = entry->show(e, page);
+	error = e->type ? entry->show(e, page) : -ENOENT;
 	mutex_unlock(&e->sysfs_lock);
 	return error;
 }
@@ -441,17 +428,16 @@ static ssize_t
 elv_attr_store(struct kobject *kobj, struct attribute *attr,
 	       const char *page, size_t length)
 {
-	const struct elv_fs_entry *entry = to_elv(attr);
+	struct elv_fs_entry *entry = to_elv(attr);
 	struct elevator_queue *e;
-	ssize_t error = -ENODEV;
+	ssize_t error;
 
 	if (!entry->store)
 		return -EIO;
 
 	e = container_of(kobj, struct elevator_queue, kobj);
 	mutex_lock(&e->sysfs_lock);
-	if (!test_bit(ELEVATOR_FLAG_DYING, &e->flags))
-		error = entry->store(e, page, length);
+	error = e->type ? entry->store(e, page, length) : -ENOENT;
 	mutex_unlock(&e->sysfs_lock);
 	return error;
 }
@@ -466,15 +452,16 @@ static const struct kobj_type elv_ktype = {
 	.release	= elevator_release,
 };
 
-static int elv_register_queue(struct request_queue *q,
-			      struct elevator_queue *e,
-			      bool uevent)
+int elv_register_queue(struct request_queue *q, bool uevent)
 {
+	struct elevator_queue *e = q->elevator;
 	int error;
+
+	lockdep_assert_held(&q->sysfs_lock);
 
 	error = kobject_add(&e->kobj, &q->disk->queue_kobj, "iosched");
 	if (!error) {
-		const struct elv_fs_entry *attr = e->type->elevator_attrs;
+		struct elv_fs_entry *attr = e->type->elevator_attrs;
 		if (attr) {
 			while (attr->attr.name) {
 				if (sysfs_create_file(&e->kobj, &attr->attr))
@@ -485,25 +472,20 @@ static int elv_register_queue(struct request_queue *q,
 		if (uevent)
 			kobject_uevent(&e->kobj, KOBJ_ADD);
 
-		/*
-		 * Sched is initialized, it is ready to export it via
-		 * debugfs
-		 */
-		blk_mq_sched_reg_debugfs(q);
 		set_bit(ELEVATOR_FLAG_REGISTERED, &e->flags);
 	}
 	return error;
 }
 
-static void elv_unregister_queue(struct request_queue *q,
-				 struct elevator_queue *e)
+void elv_unregister_queue(struct request_queue *q)
 {
+	struct elevator_queue *e = q->elevator;
+
+	lockdep_assert_held(&q->sysfs_lock);
+
 	if (e && test_and_clear_bit(ELEVATOR_FLAG_REGISTERED, &e->flags)) {
 		kobject_uevent(&e->kobj, KOBJ_REMOVE);
 		kobject_del(&e->kobj);
-
-		/* unexport via debugfs before exiting sched */
-		blk_mq_sched_unreg_debugfs(q);
 	}
 }
 
@@ -565,119 +547,53 @@ void elv_unregister(struct elevator_type *e)
 }
 EXPORT_SYMBOL_GPL(elv_unregister);
 
-/*
- * Switch to new_e io scheduler.
- *
- * If switching fails, we are most likely running out of memory and not able
- * to restore the old io scheduler, so leaving the io scheduler being none.
- */
-static int elevator_switch(struct request_queue *q, struct elv_change_ctx *ctx)
+static inline bool elv_support_iosched(struct request_queue *q)
 {
-	struct elevator_type *new_e = NULL;
-	int ret = 0;
-
-	WARN_ON_ONCE(q->mq_freeze_depth == 0);
-	lockdep_assert_held(&q->elevator_lock);
-
-	if (strncmp(ctx->name, "none", 4)) {
-		new_e = elevator_find_get(ctx->name);
-		if (!new_e)
-			return -EINVAL;
-	}
-
-	blk_mq_quiesce_queue(q);
-
-	if (q->elevator) {
-		ctx->old = q->elevator;
-		elevator_exit(q);
-	}
-
-	if (new_e) {
-		ret = blk_mq_init_sched(q, new_e, ctx->et);
-		if (ret)
-			goto out_unfreeze;
-		ctx->new = q->elevator;
-	} else {
-		blk_queue_flag_clear(QUEUE_FLAG_SQ_SCHED, q);
-		q->elevator = NULL;
-		q->nr_requests = q->tag_set->queue_depth;
-	}
-	blk_add_trace_msg(q, "elv switch: %s", ctx->name);
-
-out_unfreeze:
-	blk_mq_unquiesce_queue(q);
-
-	if (ret) {
-		pr_warn("elv: switch to \"%s\" failed, falling back to \"none\"\n",
-			new_e->elevator_name);
-	}
-
-	if (new_e)
-		elevator_put(new_e);
-	return ret;
-}
-
-static void elv_exit_and_release(struct request_queue *q)
-{
-	struct elevator_queue *e;
-	unsigned memflags;
-
-	memflags = blk_mq_freeze_queue(q);
-	mutex_lock(&q->elevator_lock);
-	e = q->elevator;
-	elevator_exit(q);
-	mutex_unlock(&q->elevator_lock);
-	blk_mq_unfreeze_queue(q, memflags);
-	if (e) {
-		blk_mq_free_sched_tags(e->et, q->tag_set);
-		kobject_put(&e->kobj);
-	}
-}
-
-static int elevator_change_done(struct request_queue *q,
-				struct elv_change_ctx *ctx)
-{
-	int ret = 0;
-
-	if (ctx->old) {
-		bool enable_wbt = test_bit(ELEVATOR_FLAG_ENABLE_WBT_ON_EXIT,
-				&ctx->old->flags);
-
-		elv_unregister_queue(q, ctx->old);
-		blk_mq_free_sched_tags(ctx->old->et, q->tag_set);
-		kobject_put(&ctx->old->kobj);
-		if (enable_wbt)
-			wbt_enable_default(q->disk);
-	}
-	if (ctx->new) {
-		ret = elv_register_queue(q, ctx->new, !ctx->no_uevent);
-		if (ret)
-			elv_exit_and_release(q);
-	}
-	return ret;
+	if (!queue_is_mq(q) ||
+	    (q->tag_set->flags & BLK_MQ_F_NO_SCHED))
+		return false;
+	return true;
 }
 
 /*
- * Switch this queue to the given IO scheduler.
+ * For single queue devices, default to using mq-deadline. If we have multiple
+ * queues or mq-deadline is not available, default to "none".
  */
-static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
+static struct elevator_type *elevator_get_default(struct request_queue *q)
 {
-	unsigned int memflags;
-	struct blk_mq_tag_set *set = q->tag_set;
-	int ret = 0;
+	if (q->tag_set->flags & BLK_MQ_F_NO_SCHED_BY_DEFAULT)
+		return NULL;
 
-	lockdep_assert_held(&set->update_nr_hwq_lock);
+	if (q->nr_hw_queues != 1 &&
+	    !blk_mq_is_shared_tags(q->tag_set->flags))
+		return NULL;
 
-	if (strncmp(ctx->name, "none", 4)) {
-		ctx->et = blk_mq_alloc_sched_tags(set, set->nr_hw_queues,
-				blk_mq_default_nr_requests(set));
-		if (!ctx->et)
-			return -ENOMEM;
-	}
+	return elevator_find_get("mq-deadline");
+}
 
-	memflags = blk_mq_freeze_queue(q);
+/*
+ * Use the default elevator settings. If the chosen elevator initialization
+ * fails, fall back to the "none" elevator (no elevator).
+ */
+void elevator_init_mq(struct request_queue *q)
+{
+	struct elevator_type *e;
+	int err;
+
+	if (!elv_support_iosched(q))
+		return;
+
+	WARN_ON_ONCE(blk_queue_registered(q));
+
+	if (unlikely(q->elevator))
+		return;
+
+	e = elevator_get_default(q);
+	if (!e)
+		return;
+
 	/*
-	 * May be called before adding disk, when there isn't any FS I/O,
+	 * We are called before adding disk, when there isn't any FS I/O,
 	 * so freezing queue plus canceling dispatch work is enough to
 	 * drain any dispatch activities originated from passthrough
 	 * requests, then no need to quiesce queue which may add long boot
@@ -685,149 +601,151 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
 	 *
 	 * Disk isn't added yet, so verifying queue lock only manually.
 	 */
+	blk_freeze_queue_start_non_owner(q);
+	blk_freeze_acquire_lock(q, true, false);
+	blk_mq_freeze_queue_wait(q);
+
 	blk_mq_cancel_work_sync(q);
-	mutex_lock(&q->elevator_lock);
-	if (!(q->elevator && elevator_match(q->elevator->type, ctx->name)))
-		ret = elevator_switch(q, ctx);
-	mutex_unlock(&q->elevator_lock);
-	blk_mq_unfreeze_queue(q, memflags);
-	if (!ret)
-		ret = elevator_change_done(q, ctx);
-	/*
-	 * Free sched tags if it's allocated but we couldn't switch elevator.
-	 */
-	if (ctx->et && !ctx->new)
-		blk_mq_free_sched_tags(ctx->et, set);
+
+	err = blk_mq_init_sched(q, e);
+
+	blk_unfreeze_release_lock(q, true, false);
+	blk_mq_unfreeze_queue_non_owner(q);
+
+	if (err) {
+		pr_warn("\"%s\" elevator initialization failed, "
+			"falling back to \"none\"\n", e->elevator_name);
+	}
+
+	elevator_put(e);
+}
+
+/*
+ * Switch to new_e io scheduler.
+ *
+ * If switching fails, we are most likely running out of memory and not able
+ * to restore the old io scheduler, so leaving the io scheduler being none.
+ */
+int elevator_switch(struct request_queue *q, struct elevator_type *new_e)
+{
+	int ret;
+
+	lockdep_assert_held(&q->sysfs_lock);
+
+	blk_mq_freeze_queue(q);
+	blk_mq_quiesce_queue(q);
+
+	if (q->elevator) {
+		elv_unregister_queue(q);
+		elevator_exit(q);
+	}
+
+	ret = blk_mq_init_sched(q, new_e);
+	if (ret)
+		goto out_unfreeze;
+
+	ret = elv_register_queue(q, true);
+	if (ret) {
+		elevator_exit(q);
+		goto out_unfreeze;
+	}
+	blk_add_trace_msg(q, "elv switch: %s", new_e->elevator_name);
+
+out_unfreeze:
+	blk_mq_unquiesce_queue(q);
+	blk_mq_unfreeze_queue(q);
+
+	if (ret) {
+		pr_warn("elv: switch to \"%s\" failed, falling back to \"none\"\n",
+			new_e->elevator_name);
+	}
 
 	return ret;
 }
 
-/*
- * The I/O scheduler depends on the number of hardware queues, this forces a
- * reattachment when nr_hw_queues changes.
- */
-void elv_update_nr_hw_queues(struct request_queue *q, struct elevator_type *e,
-		struct elevator_tags *t)
+void elevator_disable(struct request_queue *q)
 {
-	struct blk_mq_tag_set *set = q->tag_set;
-	struct elv_change_ctx ctx = {};
-	int ret = -ENODEV;
+	lockdep_assert_held(&q->sysfs_lock);
 
-	WARN_ON_ONCE(q->mq_freeze_depth == 0);
+	blk_mq_freeze_queue(q);
+	blk_mq_quiesce_queue(q);
 
-	if (e && !blk_queue_dying(q) && blk_queue_registered(q)) {
-		ctx.name = e->elevator_name;
-		ctx.et = t;
+	elv_unregister_queue(q);
+	elevator_exit(q);
+	blk_queue_flag_clear(QUEUE_FLAG_SQ_SCHED, q);
+	q->elevator = NULL;
+	q->nr_requests = q->tag_set->queue_depth;
+	blk_add_trace_msg(q, "elv switch: none");
 
-		mutex_lock(&q->elevator_lock);
-		/* force to reattach elevator after nr_hw_queue is updated */
-		ret = elevator_switch(q, &ctx);
-		mutex_unlock(&q->elevator_lock);
-	}
-	blk_mq_unfreeze_queue_nomemrestore(q);
-	if (!ret)
-		WARN_ON_ONCE(elevator_change_done(q, &ctx));
-	/*
-	 * Free sched tags if it's allocated but we couldn't switch elevator.
-	 */
-	if (t && !ctx.new)
-		blk_mq_free_sched_tags(t, set);
+	blk_mq_unquiesce_queue(q);
+	blk_mq_unfreeze_queue(q);
 }
 
 /*
- * Use the default elevator settings. If the chosen elevator initialization
- * fails, fall back to the "none" elevator (no elevator).
+ * Switch this queue to the given IO scheduler.
  */
-void elevator_set_default(struct request_queue *q)
+static int elevator_change(struct request_queue *q, const char *elevator_name)
 {
-	struct elv_change_ctx ctx = {
-		.name = "mq-deadline",
-		.no_uevent = true,
-	};
-	int err;
 	struct elevator_type *e;
+	int ret;
 
-	/* now we allow to switch elevator */
-	blk_queue_flag_clear(QUEUE_FLAG_NO_ELV_SWITCH, q);
+	/* Make sure queue is not in the middle of being removed */
+	if (!blk_queue_registered(q))
+		return -ENOENT;
 
-	if (q->tag_set->flags & BLK_MQ_F_NO_SCHED_BY_DEFAULT)
-		return;
-
-	/*
-	 * For single queue devices, default to using mq-deadline. If we
-	 * have multiple queues or mq-deadline is not available, default
-	 * to "none".
-	 */
-	e = elevator_find_get(ctx.name);
-	if (!e)
-		return;
-
-	if ((q->nr_hw_queues == 1 ||
-			blk_mq_is_shared_tags(q->tag_set->flags))) {
-		err = elevator_change(q, &ctx);
-		if (err < 0)
-			pr_warn("\"%s\" elevator initialization, failed %d, falling back to \"none\"\n",
-					ctx.name, err);
+	if (!strncmp(elevator_name, "none", 4)) {
+		if (q->elevator)
+			elevator_disable(q);
+		return 0;
 	}
+
+	if (q->elevator && elevator_match(q->elevator->type, elevator_name))
+		return 0;
+
+	e = elevator_find_get(elevator_name);
+	if (!e)
+		return -EINVAL;
+	ret = elevator_switch(q, e);
 	elevator_put(e);
+	return ret;
 }
 
-void elevator_set_none(struct request_queue *q)
+int elv_iosched_load_module(struct gendisk *disk, const char *buf,
+			    size_t count)
 {
-	struct elv_change_ctx ctx = {
-		.name	= "none",
-	};
-	int err;
-
-	err = elevator_change(q, &ctx);
-	if (err < 0)
-		pr_warn("%s: set none elevator failed %d\n", __func__, err);
-}
-
-static void elv_iosched_load_module(const char *elevator_name)
-{
+	char elevator_name[ELV_NAME_MAX];
 	struct elevator_type *found;
+	const char *name;
+
+	if (!elv_support_iosched(disk->queue))
+		return -EOPNOTSUPP;
+
+	strscpy(elevator_name, buf, sizeof(elevator_name));
+	name = strstrip(elevator_name);
 
 	spin_lock(&elv_list_lock);
-	found = __elevator_find(elevator_name);
+	found = __elevator_find(name);
 	spin_unlock(&elv_list_lock);
 
 	if (!found)
-		request_module("%s-iosched", elevator_name);
+		request_module("%s-iosched", name);
+
+	return 0;
 }
 
 ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 			  size_t count)
 {
 	char elevator_name[ELV_NAME_MAX];
-	struct elv_change_ctx ctx = {};
 	int ret;
-	struct request_queue *q = disk->queue;
-	struct blk_mq_tag_set *set = q->tag_set;
 
-	/* Make sure queue is not in the middle of being removed */
-	if (!blk_queue_registered(q))
-		return -ENOENT;
+	if (!elv_support_iosched(disk->queue))
+		return count;
 
-	/*
-	 * If the attribute needs to load a module, do it before freezing the
-	 * queue to ensure that the module file can be read when the request
-	 * queue is the one for the device storing the module file.
-	 */
 	strscpy(elevator_name, buf, sizeof(elevator_name));
-	ctx.name = strstrip(elevator_name);
-
-	elv_iosched_load_module(ctx.name);
-
-	down_read(&set->update_nr_hwq_lock);
-	if (!blk_queue_no_elv_switch(q)) {
-		ret = elevator_change(q, &ctx);
-		if (!ret)
-			ret = count;
-	} else {
-		ret = -ENOENT;
-	}
-	up_read(&set->update_nr_hwq_lock);
+	ret = elevator_change(disk->queue, strstrip(elevator_name));
+	if (!ret)
+		return count;
 	return ret;
 }
 
@@ -837,7 +755,9 @@ ssize_t elv_iosched_show(struct gendisk *disk, char *name)
 	struct elevator_type *cur = NULL, *e;
 	int len = 0;
 
-	mutex_lock(&q->elevator_lock);
+	if (!elv_support_iosched(q))
+		return sprintf(name, "none\n");
+
 	if (!q->elevator) {
 		len += sprintf(name+len, "[none] ");
 	} else {
@@ -855,8 +775,6 @@ ssize_t elv_iosched_show(struct gendisk *disk, char *name)
 	spin_unlock(&elv_list_lock);
 
 	len += sprintf(name+len, "\n");
-	mutex_unlock(&q->elevator_lock);
-
 	return len;
 }
 

@@ -19,9 +19,7 @@ description: |
 
 properties:
   compatible:
-    enum:
-      - samsung,exynos7-decon
-      - samsung,exynos7870-decon
+    const: samsung,exynos7-decon
 
   clocks:
     maxItems: 4

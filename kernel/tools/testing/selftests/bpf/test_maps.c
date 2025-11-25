@@ -26,6 +26,10 @@
 #include "test_maps.h"
 #include "testing_helpers.h"
 
+#ifndef ENOTSUPP
+#define ENOTSUPP 524
+#endif
+
 int skips;
 
 static struct bpf_map_create_opts map_opts = { .sz = sizeof(map_opts) };
@@ -535,7 +539,7 @@ static void test_devmap_hash(unsigned int task, void *data)
 static void test_queuemap(unsigned int task, void *data)
 {
 	const int MAP_SIZE = 32;
-	__u32 vals[MAP_SIZE + MAP_SIZE/2], val = 0;
+	__u32 vals[MAP_SIZE + MAP_SIZE/2], val;
 	int fd, i;
 
 	/* Fill test values to be used */
@@ -591,7 +595,7 @@ static void test_queuemap(unsigned int task, void *data)
 static void test_stackmap(unsigned int task, void *data)
 {
 	const int MAP_SIZE = 32;
-	__u32 vals[MAP_SIZE + MAP_SIZE/2], val = 0;
+	__u32 vals[MAP_SIZE + MAP_SIZE/2], val;
 	int fd, i;
 
 	/* Fill test values to be used */
@@ -1396,10 +1400,9 @@ static void test_map_stress(void)
 #define MAX_DELAY_US 50000
 #define MIN_DELAY_RANGE_US 5000
 
-static bool can_retry(int err)
+static bool retry_for_again_or_busy(int err)
 {
-	return (err == EAGAIN || err == EBUSY ||
-		(err == ENOMEM && map_opts.map_flags == BPF_F_NO_PREALLOC));
+	return (err == EAGAIN || err == EBUSY);
 }
 
 int map_update_retriable(int map_fd, const void *key, const void *value, int flags, int attempts,
@@ -1452,12 +1455,12 @@ static void test_update_delete(unsigned int fn, void *data)
 
 		if (do_update) {
 			err = map_update_retriable(fd, &key, &value, BPF_NOEXIST, MAP_RETRIES,
-						   can_retry);
+						   retry_for_again_or_busy);
 			if (err)
 				printf("error %d %d\n", err, errno);
 			assert(err == 0);
 			err = map_update_retriable(fd, &key, &value, BPF_EXIST, MAP_RETRIES,
-						   can_retry);
+						   retry_for_again_or_busy);
 			if (err)
 				printf("error %d %d\n", err, errno);
 			assert(err == 0);

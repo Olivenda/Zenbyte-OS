@@ -30,9 +30,8 @@ properties:
 
   clock-names:
     description:
-      Must be "clkin" if the input reference is single ended or "clkin-diff"
-      if the input reference is differential.
-    enum: [clkin, clkin-diff]
+      Must be "clkin"
+    maxItems: 1
 
   adi,mute-till-lock-en:
     type: boolean

@@ -40,8 +40,7 @@ static bool set_cache_memory_policy_vi(struct device_queue_manager *dqm,
 				       enum cache_policy default_policy,
 				       enum cache_policy alternate_policy,
 				       void __user *alternate_aperture_base,
-				       uint64_t alternate_aperture_size,
-				       u32 misc_process_properties);
+				       uint64_t alternate_aperture_size);
 static int update_qpd_vi(struct device_queue_manager *dqm,
 			 struct qcm_process_device *qpd);
 static void init_sdma_vm(struct device_queue_manager *dqm,
@@ -90,8 +89,7 @@ static bool set_cache_memory_policy_vi(struct device_queue_manager *dqm,
 		enum cache_policy default_policy,
 		enum cache_policy alternate_policy,
 		void __user *alternate_aperture_base,
-		uint64_t alternate_aperture_size,
-		u32 misc_process_properties)
+		uint64_t alternate_aperture_size)
 {
 	uint32_t default_mtype;
 	uint32_t ape1_mtype;

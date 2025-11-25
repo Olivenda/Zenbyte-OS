@@ -141,6 +141,7 @@ static void avs_dsp_recovery(struct avs_dev *adev)
 	if (ret < 0)
 		dev_err(adev->dev, "dsp reboot failed: %d\n", ret);
 
+	pm_runtime_mark_last_busy(adev->dev);
 	pm_runtime_enable(adev->dev);
 	pm_request_autosuspend(adev->dev);
 
@@ -185,11 +186,10 @@ static void avs_dsp_receive_rx(struct avs_dev *adev, u64 header)
 {
 	struct avs_ipc *ipc = adev->ipc;
 	union avs_reply_msg msg = AVS_MSG(header);
-	u32 sts, lec;
+	u64 reg;
 
-	sts = snd_hdac_adsp_readl(adev, AVS_FW_REG_STATUS(adev));
-	lec = snd_hdac_adsp_readl(adev, AVS_FW_REG_ERROR(adev));
-	trace_avs_ipc_reply_msg(header, sts, lec);
+	reg = readq(avs_sram_addr(adev, AVS_FW_REGS_WINDOW));
+	trace_avs_ipc_reply_msg(header, reg);
 
 	ipc->rx.header = header;
 	/* Abort copying payload if request processing was unsuccessful. */
@@ -211,11 +211,10 @@ static void avs_dsp_process_notification(struct avs_dev *adev, u64 header)
 	union avs_notify_msg msg = AVS_MSG(header);
 	size_t data_size = 0;
 	void *data = NULL;
-	u32 sts, lec;
+	u64 reg;
 
-	sts = snd_hdac_adsp_readl(adev, AVS_FW_REG_STATUS(adev));
-	lec = snd_hdac_adsp_readl(adev, AVS_FW_REG_ERROR(adev));
-	trace_avs_ipc_notify_msg(header, sts, lec);
+	reg = readq(avs_sram_addr(adev, AVS_FW_REGS_WINDOW));
+	trace_avs_ipc_notify_msg(header, reg);
 
 	/* Ignore spurious notifications until handshake is established. */
 	if (!adev->ipc->ready && msg.notify_msg_type != AVS_NOTIFY_FW_READY) {
@@ -370,16 +369,13 @@ static void avs_ipc_msg_init(struct avs_ipc *ipc, struct avs_ipc_msg *reply)
 static void avs_dsp_send_tx(struct avs_dev *adev, struct avs_ipc_msg *tx, bool read_fwregs)
 {
 	const struct avs_spec *const spec = adev->spec;
-	u32 sts = UINT_MAX;
-	u32 lec = UINT_MAX;
+	u64 reg = ULONG_MAX;
 
 	tx->header |= spec->hipc->req_busy_mask;
-	if (read_fwregs) {
-		sts = snd_hdac_adsp_readl(adev, AVS_FW_REG_STATUS(adev));
-		lec = snd_hdac_adsp_readl(adev, AVS_FW_REG_ERROR(adev));
-	}
+	if (read_fwregs)
+		reg = readq(avs_sram_addr(adev, AVS_FW_REGS_WINDOW));
 
-	trace_avs_request(tx, sts, lec);
+	trace_avs_request(tx, reg);
 
 	if (tx->size)
 		memcpy_toio(avs_downlink_addr(adev), tx->data, tx->size);

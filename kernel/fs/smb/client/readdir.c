@@ -9,7 +9,6 @@
  *
  */
 #include <linux/fs.h>
-#include <linux/namei.h>
 #include <linux/pagemap.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
@@ -79,7 +78,7 @@ cifs_prime_dcache(struct dentry *parent, struct qstr *name,
 
 	cifs_dbg(FYI, "%s: for %s\n", __func__, name->name);
 
-	dentry = try_lookup_noperm(name, parent);
+	dentry = d_hash_and_lookup(parent, name);
 	if (!dentry) {
 		/*
 		 * If we know that the inode will need to be revalidated

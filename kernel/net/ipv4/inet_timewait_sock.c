@@ -39,7 +39,7 @@ void inet_twsk_bind_unhash(struct inet_timewait_sock *tw,
 	tw->tw_tb = NULL;
 	tw->tw_tb2 = NULL;
 	inet_bind2_bucket_destroy(hashinfo->bind2_bucket_cachep, tb2);
-	inet_bind_bucket_destroy(tb);
+	inet_bind_bucket_destroy(hashinfo->bind_bucket_cachep, tb);
 
 	__sock_put((struct sock *)tw);
 }
@@ -166,10 +166,11 @@ void inet_twsk_hashdance_schedule(struct inet_timewait_sock *tw,
 	spin_unlock(lock);
 	local_bh_enable();
 }
+EXPORT_SYMBOL_GPL(inet_twsk_hashdance_schedule);
 
 static void tw_timer_handler(struct timer_list *t)
 {
-	struct inet_timewait_sock *tw = timer_container_of(tw, t, tw_timer);
+	struct inet_timewait_sock *tw = from_timer(tw, t, tw_timer);
 
 	inet_twsk_kill(tw);
 }
@@ -206,7 +207,6 @@ struct inet_timewait_sock *inet_twsk_alloc(const struct sock *sk,
 		tw->tw_hash	    = sk->sk_hash;
 		tw->tw_ipv6only	    = 0;
 		tw->tw_transparent  = inet_test_bit(TRANSPARENT, sk);
-		tw->tw_connect_bind = !!(sk->sk_userlocks & SOCK_CONNECT_BIND);
 		tw->tw_prot	    = sk->sk_prot_creator;
 		atomic64_set(&tw->tw_cookie, atomic64_read(&sk->sk_cookie));
 		twsk_net_set(tw, sock_net(sk));
@@ -223,6 +223,7 @@ struct inet_timewait_sock *inet_twsk_alloc(const struct sock *sk,
 
 	return tw;
 }
+EXPORT_SYMBOL_GPL(inet_twsk_alloc);
 
 /* These are always called from BH context.  See callers in
  * tcp_input.c to verify this.
@@ -305,6 +306,7 @@ void __inet_twsk_schedule(struct inet_timewait_sock *tw, int timeo, bool rearm)
 		mod_timer_pending(&tw->tw_timer, jiffies + timeo);
 	}
 }
+EXPORT_SYMBOL_GPL(__inet_twsk_schedule);
 
 /* Remove all non full sockets (TIME_WAIT and NEW_SYN_RECV) for dead netns */
 void inet_twsk_purge(struct inet_hashinfo *hashinfo)
@@ -363,3 +365,4 @@ restart:
 		rcu_read_unlock();
 	}
 }
+EXPORT_SYMBOL_GPL(inet_twsk_purge);

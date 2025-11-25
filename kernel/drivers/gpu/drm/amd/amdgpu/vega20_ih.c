@@ -350,7 +350,6 @@ static int vega20_ih_irq_init(struct amdgpu_device *adev)
 			if (ret)
 				return ret;
 		}
-		ih[i]->overflow = false;
 	}
 
 	if (!amdgpu_sriov_vf(adev))
@@ -367,7 +366,6 @@ static int vega20_ih_irq_init(struct amdgpu_device *adev)
 	/* Enable IH Retry CAM */
 	if (amdgpu_ip_version(adev, OSSSYS_HWIP, 0) == IP_VERSION(4, 4, 0) ||
 	    amdgpu_ip_version(adev, OSSSYS_HWIP, 0) == IP_VERSION(4, 4, 2) ||
-	    amdgpu_ip_version(adev, OSSSYS_HWIP, 0) == IP_VERSION(4, 4, 4) ||
 	    amdgpu_ip_version(adev, OSSSYS_HWIP, 0) == IP_VERSION(4, 4, 5))
 		WREG32_FIELD15(OSSSYS, 0, IH_RETRY_INT_CAM_CNTL_ALDEBARAN,
 			       ENABLE, 1);
@@ -438,18 +436,16 @@ static u32 vega20_ih_get_wptr(struct amdgpu_device *adev,
 	if (!REG_GET_FIELD(wptr, IH_RB_WPTR, RB_OVERFLOW))
 		goto out;
 
-	if (!amdgpu_sriov_vf(adev))
-		wptr = REG_SET_FIELD(wptr, IH_RB_WPTR, RB_OVERFLOW, 0);
-	else
-		ih->overflow = true;
+	wptr = REG_SET_FIELD(wptr, IH_RB_WPTR, RB_OVERFLOW, 0);
 
 	/* When a ring buffer overflow happen start parsing interrupt
 	 * from the last not overwritten vector (wptr + 32). Hopefully
 	 * this should allow us to catchup.
 	 */
 	tmp = (wptr + 32) & ih->ptr_mask;
-	dev_warn_ratelimited(adev->dev, "%s ring buffer overflow (0x%08X, 0x%08X, 0x%08X)\n",
-			     amdgpu_ih_ring_name(adev, ih), wptr, ih->rptr, tmp);
+	dev_warn(adev->dev, "IH ring buffer overflow "
+		 "(0x%08X, 0x%08X, 0x%08X)\n",
+		 wptr, ih->rptr, tmp);
 	ih->rptr = tmp;
 
 	tmp = RREG32_NO_KIQ(ih_regs->ih_rb_cntl);
@@ -557,18 +553,18 @@ static void vega20_ih_set_self_irq_funcs(struct amdgpu_device *adev)
 	adev->irq.self_irq.funcs = &vega20_ih_self_irq_funcs;
 }
 
-static int vega20_ih_early_init(struct amdgpu_ip_block *ip_block)
+static int vega20_ih_early_init(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	vega20_ih_set_interrupt_funcs(adev);
 	vega20_ih_set_self_irq_funcs(adev);
 	return 0;
 }
 
-static int vega20_ih_sw_init(struct amdgpu_ip_block *ip_block)
+static int vega20_ih_sw_init(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	bool use_bus_addr = true;
 	int r;
 
@@ -617,19 +613,19 @@ static int vega20_ih_sw_init(struct amdgpu_ip_block *ip_block)
 	return r;
 }
 
-static int vega20_ih_sw_fini(struct amdgpu_ip_block *ip_block)
+static int vega20_ih_sw_fini(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	amdgpu_irq_fini_sw(adev);
 
 	return 0;
 }
 
-static int vega20_ih_hw_init(struct amdgpu_ip_block *ip_block)
+static int vega20_ih_hw_init(void *handle)
 {
 	int r;
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	r = vega20_ih_irq_init(adev);
 	if (r)
@@ -638,36 +634,42 @@ static int vega20_ih_hw_init(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int vega20_ih_hw_fini(struct amdgpu_ip_block *ip_block)
+static int vega20_ih_hw_fini(void *handle)
 {
-	vega20_ih_irq_disable(ip_block->adev);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	vega20_ih_irq_disable(adev);
 
 	return 0;
 }
 
-static int vega20_ih_suspend(struct amdgpu_ip_block *ip_block)
+static int vega20_ih_suspend(void *handle)
 {
-	return vega20_ih_hw_fini(ip_block);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	return vega20_ih_hw_fini(adev);
 }
 
-static int vega20_ih_resume(struct amdgpu_ip_block *ip_block)
+static int vega20_ih_resume(void *handle)
 {
-	return vega20_ih_hw_init(ip_block);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	return vega20_ih_hw_init(adev);
 }
 
-static bool vega20_ih_is_idle(struct amdgpu_ip_block *ip_block)
+static bool vega20_ih_is_idle(void *handle)
 {
 	/* todo */
 	return true;
 }
 
-static int vega20_ih_wait_for_idle(struct amdgpu_ip_block *ip_block)
+static int vega20_ih_wait_for_idle(void *handle)
 {
 	/* todo */
 	return -ETIMEDOUT;
 }
 
-static int vega20_ih_soft_reset(struct amdgpu_ip_block *ip_block)
+static int vega20_ih_soft_reset(void *handle)
 {
 	/* todo */
 
@@ -701,10 +703,10 @@ static void vega20_ih_update_clockgating_state(struct amdgpu_device *adev,
 	}
 }
 
-static int vega20_ih_set_clockgating_state(struct amdgpu_ip_block *ip_block,
+static int vega20_ih_set_clockgating_state(void *handle,
 					  enum amd_clockgating_state state)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	vega20_ih_update_clockgating_state(adev,
 				state == AMD_CG_STATE_GATE);
@@ -712,7 +714,7 @@ static int vega20_ih_set_clockgating_state(struct amdgpu_ip_block *ip_block,
 
 }
 
-static int vega20_ih_set_powergating_state(struct amdgpu_ip_block *ip_block,
+static int vega20_ih_set_powergating_state(void *handle,
 					  enum amd_powergating_state state)
 {
 	return 0;
@@ -721,6 +723,7 @@ static int vega20_ih_set_powergating_state(struct amdgpu_ip_block *ip_block,
 const struct amd_ip_funcs vega20_ih_ip_funcs = {
 	.name = "vega20_ih",
 	.early_init = vega20_ih_early_init,
+	.late_init = NULL,
 	.sw_init = vega20_ih_sw_init,
 	.sw_fini = vega20_ih_sw_fini,
 	.hw_init = vega20_ih_hw_init,

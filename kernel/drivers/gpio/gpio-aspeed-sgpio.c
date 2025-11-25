@@ -6,7 +6,6 @@
  */
 
 #include <linux/bitfield.h>
-#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/gpio/driver.h>
 #include <linux/hashtable.h>
@@ -171,13 +170,16 @@ static int aspeed_sgpio_get(struct gpio_chip *gc, unsigned int offset)
 {
 	struct aspeed_sgpio *gpio = gpiochip_get_data(gc);
 	const struct aspeed_sgpio_bank *bank = to_bank(offset);
+	unsigned long flags;
 	enum aspeed_sgpio_reg reg;
 	int rc = 0;
 
-	guard(raw_spinlock_irqsave)(&gpio->lock);
+	raw_spin_lock_irqsave(&gpio->lock, flags);
 
 	reg = aspeed_sgpio_is_input(offset) ? reg_val : reg_rdata;
 	rc = !!(ioread32(bank_reg(gpio, bank, reg)) & GPIO_BIT(offset));
+
+	raw_spin_unlock_irqrestore(&gpio->lock, flags);
 
 	return rc;
 }
@@ -209,13 +211,16 @@ static int sgpio_set_value(struct gpio_chip *gc, unsigned int offset, int val)
 	return 0;
 }
 
-static int aspeed_sgpio_set(struct gpio_chip *gc, unsigned int offset, int val)
+static void aspeed_sgpio_set(struct gpio_chip *gc, unsigned int offset, int val)
 {
 	struct aspeed_sgpio *gpio = gpiochip_get_data(gc);
+	unsigned long flags;
 
-	guard(raw_spinlock_irqsave)(&gpio->lock);
+	raw_spin_lock_irqsave(&gpio->lock, flags);
 
-	return sgpio_set_value(gc, offset, val);
+	sgpio_set_value(gc, offset, val);
+
+	raw_spin_unlock_irqrestore(&gpio->lock, flags);
 }
 
 static int aspeed_sgpio_dir_in(struct gpio_chip *gc, unsigned int offset)
@@ -226,14 +231,15 @@ static int aspeed_sgpio_dir_in(struct gpio_chip *gc, unsigned int offset)
 static int aspeed_sgpio_dir_out(struct gpio_chip *gc, unsigned int offset, int val)
 {
 	struct aspeed_sgpio *gpio = gpiochip_get_data(gc);
+	unsigned long flags;
 	int rc;
 
 	/* No special action is required for setting the direction; we'll
 	 * error-out in sgpio_set_value if this isn't an output GPIO */
 
-	guard(raw_spinlock_irqsave)(&gpio->lock);
-
+	raw_spin_lock_irqsave(&gpio->lock, flags);
 	rc = sgpio_set_value(gc, offset, val);
+	raw_spin_unlock_irqrestore(&gpio->lock, flags);
 
 	return rc;
 }
@@ -263,6 +269,7 @@ static void aspeed_sgpio_irq_ack(struct irq_data *d)
 {
 	const struct aspeed_sgpio_bank *bank;
 	struct aspeed_sgpio *gpio;
+	unsigned long flags;
 	void __iomem *status_addr;
 	int offset;
 	u32 bit;
@@ -271,15 +278,18 @@ static void aspeed_sgpio_irq_ack(struct irq_data *d)
 
 	status_addr = bank_reg(gpio, bank, reg_irq_status);
 
-	guard(raw_spinlock_irqsave)(&gpio->lock);
+	raw_spin_lock_irqsave(&gpio->lock, flags);
 
 	iowrite32(bit, status_addr);
+
+	raw_spin_unlock_irqrestore(&gpio->lock, flags);
 }
 
 static void aspeed_sgpio_irq_set_mask(struct irq_data *d, bool set)
 {
 	const struct aspeed_sgpio_bank *bank;
 	struct aspeed_sgpio *gpio;
+	unsigned long flags;
 	u32 reg, bit;
 	void __iomem *addr;
 	int offset;
@@ -291,15 +301,17 @@ static void aspeed_sgpio_irq_set_mask(struct irq_data *d, bool set)
 	if (set)
 		gpiochip_enable_irq(&gpio->chip, irqd_to_hwirq(d));
 
-	scoped_guard(raw_spinlock_irqsave, &gpio->lock) {
-		reg = ioread32(addr);
-		if (set)
-			reg |= bit;
-		else
-			reg &= ~bit;
+	raw_spin_lock_irqsave(&gpio->lock, flags);
 
-		iowrite32(reg, addr);
-	}
+	reg = ioread32(addr);
+	if (set)
+		reg |= bit;
+	else
+		reg &= ~bit;
+
+	iowrite32(reg, addr);
+
+	raw_spin_unlock_irqrestore(&gpio->lock, flags);
 
 	/* Masking the IRQ */
 	if (!set)
@@ -327,6 +339,7 @@ static int aspeed_sgpio_set_type(struct irq_data *d, unsigned int type)
 	const struct aspeed_sgpio_bank *bank;
 	irq_flow_handler_t handler;
 	struct aspeed_sgpio *gpio;
+	unsigned long flags;
 	void __iomem *addr;
 	int offset;
 
@@ -353,22 +366,24 @@ static int aspeed_sgpio_set_type(struct irq_data *d, unsigned int type)
 		return -EINVAL;
 	}
 
-	scoped_guard(raw_spinlock_irqsave, &gpio->lock) {
-		addr = bank_reg(gpio, bank, reg_irq_type0);
-		reg = ioread32(addr);
-		reg = (reg & ~bit) | type0;
-		iowrite32(reg, addr);
+	raw_spin_lock_irqsave(&gpio->lock, flags);
 
-		addr = bank_reg(gpio, bank, reg_irq_type1);
-		reg = ioread32(addr);
-		reg = (reg & ~bit) | type1;
-		iowrite32(reg, addr);
+	addr = bank_reg(gpio, bank, reg_irq_type0);
+	reg = ioread32(addr);
+	reg = (reg & ~bit) | type0;
+	iowrite32(reg, addr);
 
-		addr = bank_reg(gpio, bank, reg_irq_type2);
-		reg = ioread32(addr);
-		reg = (reg & ~bit) | type2;
-		iowrite32(reg, addr);
-	}
+	addr = bank_reg(gpio, bank, reg_irq_type1);
+	reg = ioread32(addr);
+	reg = (reg & ~bit) | type1;
+	iowrite32(reg, addr);
+
+	addr = bank_reg(gpio, bank, reg_irq_type2);
+	reg = ioread32(addr);
+	reg = (reg & ~bit) | type2;
+	iowrite32(reg, addr);
+
+	raw_spin_unlock_irqrestore(&gpio->lock, flags);
 
 	irq_set_handler_locked(d, handler);
 
@@ -405,7 +420,7 @@ static void aspeed_sgpio_irq_print_chip(struct irq_data *d, struct seq_file *p)
 	int offset;
 
 	irqd_to_aspeed_sgpio_data(d, &gpio, &bank, &bit, &offset);
-	seq_puts(p, dev_name(gpio->dev));
+	seq_printf(p, dev_name(gpio->dev));
 }
 
 static const struct irq_chip aspeed_sgpio_irq_chip = {
@@ -472,12 +487,13 @@ static int aspeed_sgpio_reset_tolerance(struct gpio_chip *chip,
 					unsigned int offset, bool enable)
 {
 	struct aspeed_sgpio *gpio = gpiochip_get_data(chip);
+	unsigned long flags;
 	void __iomem *reg;
 	u32 val;
 
 	reg = bank_reg(gpio, to_bank(offset), reg_tolerance);
 
-	guard(raw_spinlock_irqsave)(&gpio->lock);
+	raw_spin_lock_irqsave(&gpio->lock, flags);
 
 	val = readl(reg);
 
@@ -487,6 +503,8 @@ static int aspeed_sgpio_reset_tolerance(struct gpio_chip *chip,
 		val &= ~GPIO_BIT(offset);
 
 	writel(val, reg);
+
+	raw_spin_unlock_irqrestore(&gpio->lock, flags);
 
 	return 0;
 }

@@ -10,7 +10,6 @@
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/dmaengine.h>
-#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
@@ -188,8 +187,16 @@ static int jh7110_tdm_syncdiv(struct jh7110_tdm_dev *tdm)
 {
 	u32 sl, sscale, syncdiv;
 
-	sl = max(tdm->rx.sl, tdm->tx.sl);
-	sscale = max(tdm->rx.sscale, tdm->tx.sscale);
+	if (tdm->rx.sl >= tdm->tx.sl)
+		sl = tdm->rx.sl;
+	else
+		sl = tdm->tx.sl;
+
+	if (tdm->rx.sscale >= tdm->tx.sscale)
+		sscale = tdm->rx.sscale;
+	else
+		sscale = tdm->tx.sscale;
+
 	syncdiv = tdm->pcmclk / tdm->samplerate - 1;
 
 	if ((syncdiv + 1) < (sl * sscale)) {

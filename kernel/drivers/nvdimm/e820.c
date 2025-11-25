@@ -59,7 +59,7 @@ err:
 
 static struct platform_driver e820_pmem_driver = {
 	.probe = e820_pmem_probe,
-	.remove = e820_pmem_remove,
+	.remove_new = e820_pmem_remove,
 	.driver = {
 		.name = "e820_pmem",
 	},

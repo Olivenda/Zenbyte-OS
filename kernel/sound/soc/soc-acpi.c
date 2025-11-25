@@ -131,7 +131,8 @@ EXPORT_SYMBOL_GPL(snd_soc_acpi_codec_list);
 /* Check if all Slaves defined on the link can be found */
 bool snd_soc_acpi_sdw_link_slaves_found(struct device *dev,
 					const struct snd_soc_acpi_link_adr *link,
-					struct sdw_peripherals *peripherals)
+					struct sdw_extended_slave_id *ids,
+					int num_slaves)
 {
 	unsigned int part_id, link_id, unique_id, mfg_id, version;
 	int i, j, k;
@@ -145,25 +146,22 @@ bool snd_soc_acpi_sdw_link_slaves_found(struct device *dev,
 		link_id = SDW_DISCO_LINK_ID(adr);
 		version = SDW_VERSION(adr);
 
-		for (j = 0; j < peripherals->num_peripherals; j++) {
-			struct sdw_slave *peripheral = peripherals->array[j];
-
+		for (j = 0; j < num_slaves; j++) {
 			/* find out how many identical parts were reported on that link */
-			if (peripheral->bus->link_id == link_id &&
-			    peripheral->id.part_id == part_id &&
-			    peripheral->id.mfg_id == mfg_id &&
-			    peripheral->id.sdw_version == version)
+			if (ids[j].link_id == link_id &&
+			    ids[j].id.part_id == part_id &&
+			    ids[j].id.mfg_id == mfg_id &&
+			    ids[j].id.sdw_version == version)
 				reported_part_count++;
 		}
 
-		for (j = 0; j < peripherals->num_peripherals; j++) {
-			struct sdw_slave *peripheral = peripherals->array[j];
+		for (j = 0; j < num_slaves; j++) {
 			int expected_part_count = 0;
 
-			if (peripheral->bus->link_id != link_id ||
-			    peripheral->id.part_id != part_id ||
-			    peripheral->id.mfg_id != mfg_id ||
-			    peripheral->id.sdw_version != version)
+			if (ids[j].link_id != link_id ||
+			    ids[j].id.part_id != part_id ||
+			    ids[j].id.mfg_id != mfg_id ||
+			    ids[j].id.sdw_version != version)
 				continue;
 
 			/* find out how many identical parts are expected */
@@ -182,7 +180,7 @@ bool snd_soc_acpi_sdw_link_slaves_found(struct device *dev,
 				 */
 				unique_id = SDW_UNIQUE_ID(adr);
 				if (reported_part_count == 1 ||
-				    peripheral->id.unique_id == unique_id) {
+				    ids[j].id.unique_id == unique_id) {
 					dev_dbg(dev, "found part_id %#x at link %d\n", part_id, link_id);
 					break;
 				}
@@ -191,7 +189,7 @@ bool snd_soc_acpi_sdw_link_slaves_found(struct device *dev,
 					part_id, reported_part_count, expected_part_count, link_id);
 			}
 		}
-		if (j == peripherals->num_peripherals) {
+		if (j == num_slaves) {
 			dev_dbg(dev, "Slave part_id %#x not found\n", part_id);
 			return false;
 		}

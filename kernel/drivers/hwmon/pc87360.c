@@ -1606,7 +1606,7 @@ static struct platform_driver pc87360_driver = {
 		.name	= DRIVER_NAME,
 	},
 	.probe		= pc87360_probe,
-	.remove		= pc87360_remove,
+	.remove_new	= pc87360_remove,
 };
 
 /*

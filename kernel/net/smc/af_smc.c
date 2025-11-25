@@ -500,8 +500,8 @@ static void smc_copy_sock_settings(struct sock *nsk, struct sock *osk,
 {
 	/* options we don't get control via setsockopt for */
 	nsk->sk_type = osk->sk_type;
-	nsk->sk_sndtimeo = READ_ONCE(osk->sk_sndtimeo);
-	nsk->sk_rcvtimeo = READ_ONCE(osk->sk_rcvtimeo);
+	nsk->sk_sndtimeo = osk->sk_sndtimeo;
+	nsk->sk_rcvtimeo = osk->sk_rcvtimeo;
 	nsk->sk_mark = READ_ONCE(osk->sk_mark);
 	nsk->sk_priority = READ_ONCE(osk->sk_priority);
 	nsk->sk_rcvlowat = osk->sk_rcvlowat;
@@ -1136,10 +1136,7 @@ static int smc_find_proposal_devices(struct smc_sock *smc,
 	ini->check_smcrv2 = true;
 	ini->smcrv2.saddr = smc->clcsock->sk->sk_rcv_saddr;
 	if (!(ini->smcr_version & SMC_V2) ||
-#if IS_ENABLED(CONFIG_IPV6)
-	    (smc->clcsock->sk->sk_family == AF_INET6 &&
-	     !ipv6_addr_v4mapped(&smc->clcsock->sk->sk_v6_rcv_saddr)) ||
-#endif
+	    smc->clcsock->sk->sk_family != AF_INET ||
 	    !smc_clc_ueid_count() ||
 	    smc_find_rdma_device(smc, ini))
 		ini->smcr_version &= ~SMC_V2;
@@ -1599,7 +1596,7 @@ static void smc_connect_work(struct work_struct *work)
 {
 	struct smc_sock *smc = container_of(work, struct smc_sock,
 					    connect_work);
-	long timeo = READ_ONCE(smc->sk.sk_sndtimeo);
+	long timeo = smc->sk.sk_sndtimeo;
 	int rc = 0;
 
 	if (!timeo)
@@ -2750,7 +2747,8 @@ int smc_accept(struct socket *sock, struct socket *new_sock,
 
 	if (lsmc->sockopt_defer_accept && !(arg->flags & O_NONBLOCK)) {
 		/* wait till data arrives on the socket */
-		timeo = secs_to_jiffies(lsmc->sockopt_defer_accept);
+		timeo = msecs_to_jiffies(lsmc->sockopt_defer_accept *
+								MSEC_PER_SEC);
 		if (smc_sk(nsk)->use_fallback) {
 			struct sock *clcsk = smc_sk(nsk)->clcsock->sk;
 

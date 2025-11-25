@@ -8,8 +8,7 @@ title: T-HEAD TH1520 AP sub-system clock controller
 
 description: |
   The T-HEAD TH1520 AP sub-system clock controller configures the
-  CPU, DPU, GMAC and TEE PLLs. Additionally the VO subsystem configures
-  the clock gates for the HDMI, MIPI and the GPU.
+  CPU, DPU, GMAC and TEE PLLs.
 
   SoC reference manual
   https://openbeagle.org/beaglev-ahead/beaglev-ahead/-/blob/main/docs/TH1520%20System%20User%20Manual.pdf
@@ -21,24 +20,14 @@ maintainers:
 
 properties:
   compatible:
-    enum:
-      - thead,th1520-clk-ap
-      - thead,th1520-clk-vo
+    const: thead,th1520-clk-ap
 
   reg:
     maxItems: 1
 
   clocks:
     items:
-      - description: |
-          One input clock:
-          - For "thead,th1520-clk-ap": the clock input must be the 24 MHz
-            main oscillator.
-          - For "thead,th1520-clk-vo": the clock input must be the VIDEO_PLL,
-            which is configured by the AP clock controller. According to the
-            TH1520 manual, VIDEO_PLL is a Silicon Creations Sigma-Delta PLL
-            (integer PLL) typically running at 792 MHz (FOUTPOSTDIV), with
-            a maximum FOUTVCO of 2376 MHz.
+      - description: main oscillator (24MHz)
 
   "#clock-cells":
     const: 1

@@ -23,7 +23,7 @@
  *
  * The value is in byte range, however, I only figured out
  * how bits 0b10011001 work. Some other bits, probably,
- * are meaningful too.
+ * are meaningfull too.
  *
  * Possible states:
  *
@@ -95,33 +95,45 @@ static struct platform_device *slidebar_platform_dev;
 
 static u8 slidebar_pos_get(void)
 {
-	guard(spinlock_irqsave)(&io_lock);
+	u8 res;
+	unsigned long flags;
 
+	spin_lock_irqsave(&io_lock, flags);
 	outb(0xf4, 0xff29);
 	outb(0xbf, 0xff2a);
-	return inb(0xff2b);
+	res = inb(0xff2b);
+	spin_unlock_irqrestore(&io_lock, flags);
+
+	return res;
 }
 
 static u8 slidebar_mode_get(void)
 {
-	guard(spinlock_irqsave)(&io_lock);
+	u8 res;
+	unsigned long flags;
 
+	spin_lock_irqsave(&io_lock, flags);
 	outb(0xf7, 0xff29);
 	outb(0x8b, 0xff2a);
-	return inb(0xff2b);
+	res = inb(0xff2b);
+	spin_unlock_irqrestore(&io_lock, flags);
+
+	return res;
 }
 
 static void slidebar_mode_set(u8 mode)
 {
-	guard(spinlock_irqsave)(&io_lock);
+	unsigned long flags;
 
+	spin_lock_irqsave(&io_lock, flags);
 	outb(0xf7, 0xff29);
 	outb(0x8b, 0xff2a);
 	outb(mode, 0xff2b);
+	spin_unlock_irqrestore(&io_lock, flags);
 }
 
 static bool slidebar_i8042_filter(unsigned char data, unsigned char str,
-				  struct serio *port, void *context)
+				  struct serio *port)
 {
 	static bool extended = false;
 
@@ -219,7 +231,7 @@ static int __init ideapad_probe(struct platform_device* pdev)
 	input_set_capability(slidebar_input_dev, EV_ABS, ABS_X);
 	input_set_abs_params(slidebar_input_dev, ABS_X, 0, 0xff, 0, 0);
 
-	err = i8042_install_filter(slidebar_i8042_filter, NULL);
+	err = i8042_install_filter(slidebar_i8042_filter);
 	if (err) {
 		dev_err(&pdev->dev,
 			"Failed to install i8042 filter: %d\n", err);
@@ -255,7 +267,7 @@ static struct platform_driver slidebar_drv = {
 	.driver = {
 		.name = "ideapad_slidebar",
 	},
-	.remove = ideapad_remove,
+	.remove_new = ideapad_remove,
 };
 
 static int __init ideapad_dmi_check(const struct dmi_system_id *id)

@@ -109,9 +109,9 @@ static char *get_dname(struct dentry *dentry)
 	return name;
 }
 
-static struct dentry *tracefs_syscall_mkdir(struct mnt_idmap *idmap,
-					    struct inode *inode, struct dentry *dentry,
-					    umode_t mode)
+static int tracefs_syscall_mkdir(struct mnt_idmap *idmap,
+				 struct inode *inode, struct dentry *dentry,
+				 umode_t mode)
 {
 	struct tracefs_inode *ti;
 	char *name;
@@ -119,7 +119,7 @@ static struct dentry *tracefs_syscall_mkdir(struct mnt_idmap *idmap,
 
 	name = get_dname(dentry);
 	if (!name)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
 	/*
 	 * This is a new directory that does not take the default of
@@ -141,7 +141,7 @@ static struct dentry *tracefs_syscall_mkdir(struct mnt_idmap *idmap,
 
 	kfree(name);
 
-	return ERR_PTR(ret);
+	return ret;
 }
 
 static int tracefs_syscall_rmdir(struct inode *inode, struct dentry *dentry)
@@ -457,8 +457,7 @@ static void tracefs_d_release(struct dentry *dentry)
 		eventfs_d_release(dentry);
 }
 
-static int tracefs_d_revalidate(struct inode *inode, const struct qstr *name,
-				struct dentry *dentry, unsigned int flags)
+static int tracefs_d_revalidate(struct dentry *dentry, unsigned int flags)
 {
 	struct eventfs_inode *ei = dentry->d_fsdata;
 
@@ -491,7 +490,7 @@ static int tracefs_fill_super(struct super_block *sb, struct fs_context *fc)
 		return err;
 
 	sb->s_op = &tracefs_super_operations;
-	set_default_d_op(sb, &tracefs_dentry_operations);
+	sb->s_d_op = &tracefs_dentry_operations;
 
 	return 0;
 }
@@ -562,9 +561,20 @@ struct dentry *tracefs_start_creating(const char *name, struct dentry *parent)
 	if (!parent)
 		parent = tracefs_mount->mnt_root;
 
-	dentry = simple_start_creating(parent, name);
-	if (IS_ERR(dentry))
+	inode_lock(d_inode(parent));
+	if (unlikely(IS_DEADDIR(d_inode(parent))))
+		dentry = ERR_PTR(-ENOENT);
+	else
+		dentry = lookup_one_len(name, parent, strlen(name));
+	if (!IS_ERR(dentry) && d_inode(dentry)) {
+		dput(dentry);
+		dentry = ERR_PTR(-EEXIST);
+	}
+
+	if (IS_ERR(dentry)) {
+		inode_unlock(d_inode(parent));
 		simple_release_fs(&tracefs_mount, &tracefs_mount_count);
+	}
 
 	return dentry;
 }

@@ -723,8 +723,10 @@ int acpi_tie_acpi_dev(struct acpi_device *adev)
 static void acpi_store_pld_crc(struct acpi_device *adev)
 {
 	struct acpi_pld_info *pld;
+	acpi_status status;
 
-	if (!acpi_get_physical_device_location(adev->handle, &pld))
+	status = acpi_get_physical_device_location(adev->handle, &pld);
+	if (ACPI_FAILURE(status))
 		return;
 
 	adev->pld_crc = crc32(~0, pld, sizeof(*pld));
@@ -1181,19 +1183,19 @@ static void acpi_device_get_busid(struct acpi_device *device)
 	 * TBD: Shouldn't this value be unique (within the ACPI namespace)?
 	 */
 	if (!acpi_dev_parent(device)) {
-		strscpy(device->pnp.bus_id, "ACPI");
+		strcpy(device->pnp.bus_id, "ACPI");
 		return;
 	}
 
 	switch (device->device_type) {
 	case ACPI_BUS_TYPE_POWER_BUTTON:
-		strscpy(device->pnp.bus_id, "PWRF");
+		strcpy(device->pnp.bus_id, "PWRF");
 		break;
 	case ACPI_BUS_TYPE_SLEEP_BUTTON:
-		strscpy(device->pnp.bus_id, "SLPF");
+		strcpy(device->pnp.bus_id, "SLPF");
 		break;
 	case ACPI_BUS_TYPE_ECDT_EC:
-		strscpy(device->pnp.bus_id, "ECDT");
+		strcpy(device->pnp.bus_id, "ECDT");
 		break;
 	default:
 		acpi_get_name(device->handle, ACPI_SINGLE_NAME, &buffer);
@@ -1204,7 +1206,7 @@ static void acpi_device_get_busid(struct acpi_device *device)
 			else
 				break;
 		}
-		strscpy(device->pnp.bus_id, bus_id);
+		strcpy(device->pnp.bus_id, bus_id);
 		break;
 	}
 }
@@ -1455,8 +1457,8 @@ static void acpi_set_pnp_ids(acpi_handle handle, struct acpi_device_pnp *pnp,
 			 acpi_object_is_system_bus(handle)) {
 			/* \_SB, \_TZ, LNXSYBUS */
 			acpi_add_id(pnp, ACPI_BUS_HID);
-			strscpy(pnp->device_name, ACPI_BUS_DEVICE_NAME);
-			strscpy(pnp->device_class, ACPI_BUS_CLASS);
+			strcpy(pnp->device_name, ACPI_BUS_DEVICE_NAME);
+			strcpy(pnp->device_class, ACPI_BUS_CLASS);
 		}
 
 		break;
@@ -1636,6 +1638,13 @@ static int acpi_iommu_configure_id(struct device *dev, const u32 *id_in)
 		err = viot_iommu_configure(dev);
 	mutex_unlock(&iommu_probe_device_lock);
 
+	/*
+	 * If we have reason to believe the IOMMU driver missed the initial
+	 * iommu_probe_device() call for dev, replay it to get things in order.
+	 */
+	if (!err && dev->bus)
+		err = iommu_probe_device(dev);
+
 	return err;
 }
 
@@ -1764,7 +1773,6 @@ static bool acpi_device_enumeration_by_parent(struct acpi_device *device)
 		{"CSC3557", },
 		{"INT33FE", },
 		{"INT3515", },
-		{"TXNW2781", },
 		/* Non-conforming _HID for Cirrus Logic already released */
 		{"CLSA0100", },
 		{"CLSA0101", },

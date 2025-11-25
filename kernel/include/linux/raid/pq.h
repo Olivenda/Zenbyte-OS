@@ -11,13 +11,8 @@
 #ifdef __KERNEL__
 
 #include <linux/blkdev.h>
-#include <linux/mm.h>
 
-/* This should be const but the raid6 code is too convoluted for that. */
-static inline void *raid6_get_zero_page(void)
-{
-	return page_address(ZERO_PAGE(0));
-}
+extern const char raid6_empty_zero_page[PAGE_SIZE];
 
 #else /* ! __KERNEL__ */
 /* Used for testing in user space */
@@ -113,10 +108,6 @@ extern const struct raid6_calls raid6_vpermxor4;
 extern const struct raid6_calls raid6_vpermxor8;
 extern const struct raid6_calls raid6_lsx;
 extern const struct raid6_calls raid6_lasx;
-extern const struct raid6_calls raid6_rvvx1;
-extern const struct raid6_calls raid6_rvvx2;
-extern const struct raid6_calls raid6_rvvx4;
-extern const struct raid6_calls raid6_rvvx8;
 
 struct raid6_recov_calls {
 	void (*data2)(int, size_t, int, int, void **);
@@ -134,7 +125,6 @@ extern const struct raid6_recov_calls raid6_recov_s390xc;
 extern const struct raid6_recov_calls raid6_recov_neon;
 extern const struct raid6_recov_calls raid6_recov_lsx;
 extern const struct raid6_recov_calls raid6_recov_lasx;
-extern const struct raid6_recov_calls raid6_recov_rvv;
 
 extern const struct raid6_calls raid6_neonx1;
 extern const struct raid6_calls raid6_neonx2;
@@ -194,11 +184,6 @@ static inline uint32_t raid6_jiffies(void)
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec*1000 + tv.tv_usec/1000;
-}
-
-static inline void *raid6_get_zero_page(void)
-{
-	return raid6_empty_zero_page;
 }
 
 #endif /* ! __KERNEL__ */

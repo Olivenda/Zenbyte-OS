@@ -23,13 +23,12 @@
 #define SRAM_GRANULARITY	32
 
 static ssize_t sram_read(struct file *filp, struct kobject *kobj,
-			 const struct bin_attribute *attr,
+			 struct bin_attribute *attr,
 			 char *buf, loff_t pos, size_t count)
 {
 	struct sram_partition *part;
 
-	/* Cast away the const as the attribute is part of a larger structure */
-	part = (struct sram_partition *)container_of(attr, struct sram_partition, battr);
+	part = container_of(attr, struct sram_partition, battr);
 
 	mutex_lock(&part->lock);
 	memcpy_fromio(buf, part->base + pos, count);
@@ -39,13 +38,12 @@ static ssize_t sram_read(struct file *filp, struct kobject *kobj,
 }
 
 static ssize_t sram_write(struct file *filp, struct kobject *kobj,
-			  const struct bin_attribute *attr,
+			  struct bin_attribute *attr,
 			  char *buf, loff_t pos, size_t count)
 {
 	struct sram_partition *part;
 
-	/* Cast away the const as the attribute is part of a larger structure */
-	part = (struct sram_partition *)container_of(attr, struct sram_partition, battr);
+	part = container_of(attr, struct sram_partition, battr);
 
 	mutex_lock(&part->lock);
 	memcpy_toio(part->base + pos, buf, count);
@@ -166,8 +164,8 @@ static void sram_free_partitions(struct sram_dev *sram)
 static int sram_reserve_cmp(void *priv, const struct list_head *a,
 					const struct list_head *b)
 {
-	const struct sram_reserve *ra = list_entry(a, struct sram_reserve, list);
-	const struct sram_reserve *rb = list_entry(b, struct sram_reserve, list);
+	struct sram_reserve *ra = list_entry(a, struct sram_reserve, list);
+	struct sram_reserve *rb = list_entry(b, struct sram_reserve, list);
 
 	return ra->start - rb->start;
 }
@@ -453,7 +451,7 @@ static struct platform_driver sram_driver = {
 		.of_match_table = sram_dt_ids,
 	},
 	.probe = sram_probe,
-	.remove = sram_remove,
+	.remove_new = sram_remove,
 };
 
 static int __init sram_init(void)

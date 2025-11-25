@@ -132,55 +132,35 @@ void print_skip(const char *fmt, ...)
 	puts(", skipping test");
 }
 
-static bool test_sysfs_path(const char *path)
+bool thp_configured(void)
 {
-	struct stat statbuf;
 	int ret;
+	struct stat statbuf;
 
-	ret = stat(path, &statbuf);
+	ret = stat("/sys/kernel/mm/transparent_hugepage", &statbuf);
 	TEST_ASSERT(ret == 0 || (ret == -1 && errno == ENOENT),
-		    "Error in stat()ing '%s'", path);
+		    "Error in stating /sys/kernel/mm/transparent_hugepage");
 
 	return ret == 0;
 }
 
-bool thp_configured(void)
-{
-	return test_sysfs_path("/sys/kernel/mm/transparent_hugepage");
-}
-
-static size_t get_sysfs_val(const char *path)
+size_t get_trans_hugepagesz(void)
 {
 	size_t size;
 	FILE *f;
 	int ret;
 
-	f = fopen(path, "r");
-	TEST_ASSERT(f, "Error opening '%s'", path);
-
-	ret = fscanf(f, "%ld", &size);
-	TEST_ASSERT(ret > 0, "Error reading '%s'", path);
-
-	/* Re-scan the input stream to verify the entire file was read. */
-	ret = fscanf(f, "%ld", &size);
-	TEST_ASSERT(ret < 1, "Error reading '%s'", path);
-
-	fclose(f);
-	return size;
-}
-
-size_t get_trans_hugepagesz(void)
-{
 	TEST_ASSERT(thp_configured(), "THP is not configured in host kernel");
 
-	return get_sysfs_val("/sys/kernel/mm/transparent_hugepage/hpage_pmd_size");
-}
+	f = fopen("/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", "r");
+	TEST_ASSERT(f != NULL, "Error in opening transparent_hugepage/hpage_pmd_size");
 
-bool is_numa_balancing_enabled(void)
-{
-	if (!test_sysfs_path("/proc/sys/kernel/numa_balancing"))
-		return false;
-	return get_sysfs_val("/proc/sys/kernel/numa_balancing") == 1;
+	ret = fscanf(f, "%ld", &size);
+	ret = fscanf(f, "%ld", &size);
+	TEST_ASSERT(ret < 1, "Error reading transparent_hugepage/hpage_pmd_size");
+	fclose(f);
+
+	return size;
 }
 
 size_t get_def_hugetlb_pagesz(void)

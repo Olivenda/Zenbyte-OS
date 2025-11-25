@@ -18,6 +18,7 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
+#include <linux/ath9k_platform.h>
 #include <linux/nvmem-consumer.h>
 #include <linux/workqueue.h>
 

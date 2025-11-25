@@ -933,15 +933,7 @@ int usb4_switch_dealloc_dp_resource(struct tb_switch *sw, struct tb_port *in)
 	return status ? -EIO : 0;
 }
 
-/**
- * usb4_port_index() - Finds matching USB4 port index
- * @sw: USB4 router
- * @port: USB4 protocol or lane adapter
- *
- * Finds matching USB4 port index (starting from %0) that given @port goes
- * through.
- */
-int usb4_port_index(const struct tb_switch *sw, const struct tb_port *port)
+static int usb4_port_idx(const struct tb_switch *sw, const struct tb_port *port)
 {
 	struct tb_port *p;
 	int usb4_idx = 0;
@@ -975,7 +967,7 @@ int usb4_port_index(const struct tb_switch *sw, const struct tb_port *port)
 struct tb_port *usb4_switch_map_pcie_down(struct tb_switch *sw,
 					  const struct tb_port *port)
 {
-	int usb4_idx = usb4_port_index(sw, port);
+	int usb4_idx = usb4_port_idx(sw, port);
 	struct tb_port *p;
 	int pcie_idx = 0;
 
@@ -1006,7 +998,7 @@ struct tb_port *usb4_switch_map_pcie_down(struct tb_switch *sw,
 struct tb_port *usb4_switch_map_usb3_down(struct tb_switch *sw,
 					  const struct tb_port *port)
 {
-	int usb4_idx = usb4_port_index(sw, port);
+	int usb4_idx = usb4_port_idx(sw, port);
 	struct tb_port *p;
 	int usb_idx = 0;
 
@@ -1637,12 +1629,11 @@ int usb4_port_asym_start(struct tb_port *port)
  * @target: Sideband target
  * @index: Retimer index if taget is %USB4_SB_TARGET_RETIMER
  * @caps: Array with at least two elements to hold the results
- * @ncaps: Number of elements in the caps array
  *
  * Reads the USB4 port lane margining capabilities into @caps.
  */
 int usb4_port_margining_caps(struct tb_port *port, enum usb4_sb_target target,
-			     u8 index, u32 *caps, size_t ncaps)
+			     u8 index, u32 *caps)
 {
 	int ret;
 
@@ -1652,7 +1643,7 @@ int usb4_port_margining_caps(struct tb_port *port, enum usb4_sb_target target,
 		return ret;
 
 	return usb4_port_sb_read(port, target, index, USB4_SB_DATA, caps,
-				 sizeof(*caps) * ncaps);
+				 sizeof(*caps) * 2);
 }
 
 /**
@@ -1661,15 +1652,14 @@ int usb4_port_margining_caps(struct tb_port *port, enum usb4_sb_target target,
  * @target: Sideband target
  * @index: Retimer index if taget is %USB4_SB_TARGET_RETIMER
  * @params: Parameters for USB4 hardware margining
- * @results: Array to hold the results
- * @nresults: Number of elements in the results array
+ * @results: Array with at least two elements to hold the results
  *
  * Runs hardware lane margining on USB4 port and returns the result in
  * @results.
  */
 int usb4_port_hw_margin(struct tb_port *port, enum usb4_sb_target target,
 			u8 index, const struct usb4_port_margining_params *params,
-			u32 *results, size_t nresults)
+			u32 *results)
 {
 	u32 val;
 	int ret;
@@ -1680,8 +1670,8 @@ int usb4_port_hw_margin(struct tb_port *port, enum usb4_sb_target target,
 	val = params->lanes;
 	if (params->time)
 		val |= USB4_MARGIN_HW_TIME;
-	if (params->right_high || params->upper_eye)
-		val |= USB4_MARGIN_HW_RHU;
+	if (params->right_high)
+		val |= USB4_MARGIN_HW_RH;
 	if (params->ber_level)
 		val |= FIELD_PREP(USB4_MARGIN_HW_BER_MASK, params->ber_level);
 	if (params->optional_voltage_offset_range)
@@ -1698,7 +1688,7 @@ int usb4_port_hw_margin(struct tb_port *port, enum usb4_sb_target target,
 		return ret;
 
 	return usb4_port_sb_read(port, target, index, USB4_SB_DATA, results,
-				 sizeof(*results) * nresults);
+				 sizeof(*results) * 2);
 }
 
 /**
@@ -1730,8 +1720,6 @@ int usb4_port_sw_margin(struct tb_port *port, enum usb4_sb_target target,
 		val |= USB4_MARGIN_SW_OPT_VOLTAGE;
 	if (params->right_high)
 		val |= USB4_MARGIN_SW_RH;
-	if (params->upper_eye)
-		val |= USB4_MARGIN_SW_UPPER_EYE;
 	val |= FIELD_PREP(USB4_MARGIN_SW_COUNTER_MASK, params->error_counter);
 	val |= FIELD_PREP(USB4_MARGIN_SW_VT_MASK, params->voltage_time_offset);
 

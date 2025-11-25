@@ -44,7 +44,6 @@
 #include <linux/ipv6.h>
 #include <linux/indirect_call_wrapper.h>
 #include <net/ipv6.h>
-#include <net/page_pool/helpers.h>
 
 #include "mlx4_en.h"
 
@@ -351,10 +350,16 @@ u32 mlx4_en_recycle_tx_desc(struct mlx4_en_priv *priv,
 			    int napi_mode)
 {
 	struct mlx4_en_tx_info *tx_info = &ring->tx_info[index];
-	struct page_pool *pool = ring->recycle_ring->pp;
+	struct mlx4_en_rx_alloc frame = {
+		.page = tx_info->page,
+		.dma = tx_info->map0_dma,
+	};
 
-	/* Note that napi_mode = 0 means ndo_close() path, not budget = 0 */
-	page_pool_put_full_page(pool, tx_info->page, !!napi_mode);
+	if (!napi_mode || !mlx4_en_rx_recycle(ring->recycle_ring, &frame)) {
+		dma_unmap_page(priv->ddev, tx_info->map0_dma,
+			       PAGE_SIZE, priv->dma_dir);
+		put_page(tx_info->page);
+	}
 
 	return tx_info->nr_txbb;
 }
@@ -1191,7 +1196,7 @@ netdev_tx_t mlx4_en_xmit_frame(struct mlx4_en_rx_ring *rx_ring,
 	tx_desc = ring->buf + (index << LOG_TXBB_SIZE);
 	data = &tx_desc->data;
 
-	dma = page_pool_get_dma_addr(frame->page);
+	dma = frame->dma;
 
 	tx_info->page = frame->page;
 	frame->page = NULL;

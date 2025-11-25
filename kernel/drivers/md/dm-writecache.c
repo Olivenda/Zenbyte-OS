@@ -13,6 +13,7 @@
 #include <linux/dm-io.h>
 #include <linux/dm-kcopyd.h>
 #include <linux/dax.h>
+#include <linux/pfn_t.h>
 #include <linux/libnvdimm.h>
 #include <linux/delay.h>
 #include "dm-io-tracker.h"
@@ -255,7 +256,7 @@ static int persistent_memory_claim(struct dm_writecache *wc)
 	int r;
 	loff_t s;
 	long p, da;
-	unsigned long pfn;
+	pfn_t pfn;
 	int id;
 	struct page **pages;
 	sector_t offset;
@@ -289,7 +290,7 @@ static int persistent_memory_claim(struct dm_writecache *wc)
 		r = da;
 		goto err2;
 	}
-	if (!pfn_valid(pfn)) {
+	if (!pfn_t_has_page(pfn)) {
 		wc->memory_map = NULL;
 		r = -EOPNOTSUPP;
 		goto err2;
@@ -313,13 +314,13 @@ static int persistent_memory_claim(struct dm_writecache *wc)
 				r = daa ? daa : -EINVAL;
 				goto err3;
 			}
-			if (!pfn_valid(pfn)) {
+			if (!pfn_t_has_page(pfn)) {
 				r = -EOPNOTSUPP;
 				goto err3;
 			}
 			while (daa-- && i < p) {
-				pages[i++] = pfn_to_page(pfn);
-				pfn++;
+				pages[i++] = pfn_t_to_page(pfn);
+				pfn.val++;
 				if (!(i & 15))
 					cond_resched();
 			}
@@ -705,7 +706,7 @@ static inline void writecache_verify_watermark(struct dm_writecache *wc)
 
 static void writecache_max_age_timer(struct timer_list *t)
 {
-	struct dm_writecache *wc = timer_container_of(wc, t, max_age_timer);
+	struct dm_writecache *wc = from_timer(wc, t, max_age_timer);
 
 	if (!dm_suspended(wc->ti) && !writecache_has_error(wc)) {
 		queue_work(wc->writeback_wq, &wc->writeback_work);
@@ -796,7 +797,7 @@ static void writecache_flush(struct dm_writecache *wc)
 	bool need_flush_after_free;
 
 	wc->uncommitted_blocks = 0;
-	timer_delete(&wc->autocommit_timer);
+	del_timer(&wc->autocommit_timer);
 
 	if (list_empty(&wc->lru))
 		return;
@@ -865,7 +866,7 @@ static void writecache_flush_work(struct work_struct *work)
 
 static void writecache_autocommit_timer(struct timer_list *t)
 {
-	struct dm_writecache *wc = timer_container_of(wc, t, autocommit_timer);
+	struct dm_writecache *wc = from_timer(wc, t, autocommit_timer);
 
 	if (!writecache_has_error(wc))
 		queue_work(wc->writeback_wq, &wc->flush_work);
@@ -926,8 +927,8 @@ static void writecache_suspend(struct dm_target *ti)
 	struct dm_writecache *wc = ti->private;
 	bool flush_on_suspend;
 
-	timer_delete_sync(&wc->autocommit_timer);
-	timer_delete_sync(&wc->max_age_timer);
+	del_timer_sync(&wc->autocommit_timer);
+	del_timer_sync(&wc->max_age_timer);
 
 	wc_lock(wc);
 	writecache_flush(wc);

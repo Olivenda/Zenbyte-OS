@@ -6,8 +6,6 @@
 
 #include <linux/delay.h>
 
-#include <drm/drm_bridge.h>
-#include <drm/drm_bridge_connector.h>
 #include <drm/drm_vblank.h>
 
 #include "msm_drv.h"
@@ -122,16 +120,15 @@ static void mdp4_destroy(struct msm_kms *kms)
 {
 	struct mdp4_kms *mdp4_kms = to_mdp4_kms(to_mdp_kms(kms));
 	struct device *dev = mdp4_kms->dev->dev;
+	struct msm_gem_address_space *aspace = kms->aspace;
 
 	if (mdp4_kms->blank_cursor_iova)
-		msm_gem_unpin_iova(mdp4_kms->blank_cursor_bo, kms->vm);
+		msm_gem_unpin_iova(mdp4_kms->blank_cursor_bo, kms->aspace);
 	drm_gem_object_put(mdp4_kms->blank_cursor_bo);
 
-	if (kms->vm) {
-		struct msm_mmu *mmu = to_msm_vm(kms->vm)->mmu;
-
-		mmu->funcs->detach(mmu);
-		drm_gpuvm_put(kms->vm);
+	if (aspace) {
+		aspace->mmu->funcs->detach(aspace->mmu);
+		msm_gem_address_space_put(aspace);
 	}
 
 	if (mdp4_kms->rpm_enabled)
@@ -192,7 +189,7 @@ static int mdp4_modeset_init_intf(struct mdp4_kms *mdp4_kms,
 	struct msm_drm_private *priv = dev->dev_private;
 	struct drm_encoder *encoder;
 	struct drm_connector *connector;
-	struct drm_bridge *next_bridge;
+	struct device_node *panel_node;
 	int dsi_id;
 	int ret;
 
@@ -202,41 +199,25 @@ static int mdp4_modeset_init_intf(struct mdp4_kms *mdp4_kms,
 		 * bail out early if there is no panel node (no need to
 		 * initialize LCDC encoder and LVDS connector)
 		 */
-		next_bridge = devm_drm_of_get_bridge(dev->dev, dev->dev->of_node, 0, 0);
-		if (IS_ERR(next_bridge)) {
-			ret = PTR_ERR(next_bridge);
-			if (ret == -ENODEV)
-				return 0;
-			return ret;
-		}
+		panel_node = of_graph_get_remote_node(dev->dev->of_node, 0, 0);
+		if (!panel_node)
+			return 0;
 
-		encoder = mdp4_lcdc_encoder_init(dev);
+		encoder = mdp4_lcdc_encoder_init(dev, panel_node);
 		if (IS_ERR(encoder)) {
 			DRM_DEV_ERROR(dev->dev, "failed to construct LCDC encoder\n");
+			of_node_put(panel_node);
 			return PTR_ERR(encoder);
 		}
 
 		/* LCDC can be hooked to DMA_P (TODO: Add DMA_S later?) */
 		encoder->possible_crtcs = 1 << DMA_P;
 
-		ret = drm_bridge_attach(encoder, next_bridge, NULL, DRM_BRIDGE_ATTACH_NO_CONNECTOR);
-		if (ret) {
-			DRM_DEV_ERROR(dev->dev, "failed to attach LVDS panel/bridge: %d\n", ret);
-
-			return ret;
-		}
-
-		connector = drm_bridge_connector_init(dev, encoder);
+		connector = mdp4_lvds_connector_init(dev, panel_node, encoder);
 		if (IS_ERR(connector)) {
 			DRM_DEV_ERROR(dev->dev, "failed to initialize LVDS connector\n");
+			of_node_put(panel_node);
 			return PTR_ERR(connector);
-		}
-
-		ret = drm_connector_attach_encoder(connector, encoder);
-		if (ret) {
-			DRM_DEV_ERROR(dev->dev, "failed to attach LVDS connector: %d\n", ret);
-
-			return ret;
 		}
 
 		break;
@@ -250,9 +231,9 @@ static int mdp4_modeset_init_intf(struct mdp4_kms *mdp4_kms,
 		/* DTV can be hooked to DMA_E: */
 		encoder->possible_crtcs = 1 << 1;
 
-		if (priv->kms->hdmi) {
+		if (priv->hdmi) {
 			/* Construct bridge/connector for HDMI: */
-			ret = msm_hdmi_modeset_init(priv->kms->hdmi, dev, encoder);
+			ret = msm_hdmi_modeset_init(priv->hdmi, dev, encoder);
 			if (ret) {
 				DRM_DEV_ERROR(dev->dev, "failed to initialize HDMI: %d\n", ret);
 				return ret;
@@ -264,7 +245,7 @@ static int mdp4_modeset_init_intf(struct mdp4_kms *mdp4_kms,
 		/* only DSI1 supported for now */
 		dsi_id = 0;
 
-		if (!priv->kms->dsi[dsi_id])
+		if (!priv->dsi[dsi_id])
 			break;
 
 		encoder = mdp4_dsi_encoder_init(dev);
@@ -278,7 +259,7 @@ static int mdp4_modeset_init_intf(struct mdp4_kms *mdp4_kms,
 		/* TODO: Add DMA_S later? */
 		encoder->possible_crtcs = 1 << DMA_P;
 
-		ret = msm_dsi_modeset_init(priv->kms->dsi[dsi_id], dev, encoder);
+		ret = msm_dsi_modeset_init(priv->dsi[dsi_id], dev, encoder);
 		if (ret) {
 			DRM_DEV_ERROR(dev->dev, "failed to initialize DSI: %d\n",
 				ret);
@@ -297,6 +278,7 @@ static int mdp4_modeset_init_intf(struct mdp4_kms *mdp4_kms,
 static int modeset_init(struct mdp4_kms *mdp4_kms)
 {
 	struct drm_device *dev = mdp4_kms->dev;
+	struct msm_drm_private *priv = dev->dev_private;
 	struct drm_plane *plane;
 	struct drm_crtc *crtc;
 	int i, ret;
@@ -338,7 +320,7 @@ static int modeset_init(struct mdp4_kms *mdp4_kms)
 			goto fail;
 		}
 
-		crtc  = mdp4_crtc_init(dev, plane, i,
+		crtc  = mdp4_crtc_init(dev, plane, priv->num_crtcs, i,
 				mdp4_crtcs[i]);
 		if (IS_ERR(crtc)) {
 			DRM_DEV_ERROR(dev->dev, "failed to construct crtc for %s\n",
@@ -346,6 +328,8 @@ static int modeset_init(struct mdp4_kms *mdp4_kms)
 			ret = PTR_ERR(crtc);
 			goto fail;
 		}
+
+		priv->num_crtcs++;
 	}
 
 	/*
@@ -396,7 +380,7 @@ static int mdp4_kms_init(struct drm_device *dev)
 	struct mdp4_kms *mdp4_kms = to_mdp4_kms(to_mdp_kms(priv->kms));
 	struct msm_kms *kms = NULL;
 	struct msm_mmu *mmu;
-	struct drm_gpuvm *vm;
+	struct msm_gem_address_space *aspace;
 	int ret;
 	u32 major, minor;
 	unsigned long max_clk;
@@ -463,22 +447,21 @@ static int mdp4_kms_init(struct drm_device *dev)
 		ret = PTR_ERR(mmu);
 		goto fail;
 	} else if (!mmu) {
-		DRM_DEV_INFO(dev->dev, "no IOMMU, bailing out\n");
-		ret = -ENODEV;
-		goto fail;
+		DRM_DEV_INFO(dev->dev, "no iommu, fallback to phys "
+				"contig buffers for scanout\n");
+		aspace = NULL;
 	} else {
-		vm  = msm_gem_vm_create(dev, mmu, "mdp4",
-					0x1000, 0x100000000 - 0x1000,
-					true);
+		aspace  = msm_gem_address_space_create(mmu,
+			"mdp4", 0x1000, 0x100000000 - 0x1000);
 
-		if (IS_ERR(vm)) {
+		if (IS_ERR(aspace)) {
 			if (!IS_ERR(mmu))
 				mmu->funcs->destroy(mmu);
-			ret = PTR_ERR(vm);
+			ret = PTR_ERR(aspace);
 			goto fail;
 		}
 
-		kms->vm = vm;
+		kms->aspace = aspace;
 	}
 
 	ret = modeset_init(mdp4_kms);
@@ -495,7 +478,7 @@ static int mdp4_kms_init(struct drm_device *dev)
 		goto fail;
 	}
 
-	ret = msm_gem_get_and_pin_iova(mdp4_kms->blank_cursor_bo, kms->vm,
+	ret = msm_gem_get_and_pin_iova(mdp4_kms->blank_cursor_bo, kms->aspace,
 			&mdp4_kms->blank_cursor_iova);
 	if (ret) {
 		DRM_DEV_ERROR(dev->dev, "could not pin blank-cursor bo: %d\n", ret);
@@ -585,7 +568,7 @@ MODULE_DEVICE_TABLE(of, mdp4_dt_match);
 
 static struct platform_driver mdp4_platform_driver = {
 	.probe      = mdp4_probe,
-	.remove     = mdp4_remove,
+	.remove_new = mdp4_remove,
 	.shutdown   = msm_kms_shutdown,
 	.driver     = {
 		.name   = "mdp4",

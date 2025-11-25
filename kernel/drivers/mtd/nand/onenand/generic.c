@@ -104,7 +104,7 @@ static struct platform_driver generic_onenand_driver = {
 		.name		= DRIVER_NAME,
 	},
 	.probe		= generic_onenand_probe,
-	.remove		= generic_onenand_remove,
+	.remove_new	= generic_onenand_remove,
 };
 
 module_platform_driver(generic_onenand_driver);

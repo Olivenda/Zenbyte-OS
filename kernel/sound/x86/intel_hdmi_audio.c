@@ -22,7 +22,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/dma-mapping.h>
 #include <linux/delay.h>
-#include <linux/string.h>
 #include <sound/core.h>
 #include <sound/asoundef.h>
 #include <sound/pcm.h>
@@ -1102,6 +1101,7 @@ static int had_pcm_open(struct snd_pcm_substream *substream)
 
 	return retval;
  error:
+	pm_runtime_mark_last_busy(intelhaddata->dev);
 	pm_runtime_put_autosuspend(intelhaddata->dev);
 	return retval;
 }
@@ -1126,6 +1126,7 @@ static int had_pcm_close(struct snd_pcm_substream *substream)
 	}
 	spin_unlock_irq(&intelhaddata->had_spinlock);
 
+	pm_runtime_mark_last_busy(intelhaddata->dev);
 	pm_runtime_put_autosuspend(intelhaddata->dev);
 	return 0;
 }
@@ -1587,6 +1588,7 @@ static void had_audio_wq(struct work_struct *work)
 	}
 
 	mutex_unlock(&ctx->mutex);
+	pm_runtime_mark_last_busy(ctx->dev);
 	pm_runtime_put_autosuspend(ctx->dev);
 }
 
@@ -1615,7 +1617,7 @@ static int had_create_jack(struct snd_intelhad *ctx,
  * PM callbacks
  */
 
-static int hdmi_lpe_audio_suspend(struct device *dev)
+static int __maybe_unused hdmi_lpe_audio_suspend(struct device *dev)
 {
 	struct snd_intelhad_card *card_ctx = dev_get_drvdata(dev);
 
@@ -1624,7 +1626,7 @@ static int hdmi_lpe_audio_suspend(struct device *dev)
 	return 0;
 }
 
-static int hdmi_lpe_audio_resume(struct device *dev)
+static int __maybe_unused hdmi_lpe_audio_resume(struct device *dev)
 {
 	struct snd_intelhad_card *card_ctx = dev_get_drvdata(dev);
 
@@ -1696,9 +1698,9 @@ static int __hdmi_lpe_audio_probe(struct platform_device *pdev)
 	card_ctx = card->private_data;
 	card_ctx->dev = &pdev->dev;
 	card_ctx->card = card;
-	strscpy(card->driver, INTEL_HAD);
-	strscpy(card->shortname, "Intel HDMI/DP LPE Audio");
-	strscpy(card->longname, "Intel HDMI/DP LPE Audio");
+	strcpy(card->driver, INTEL_HAD);
+	strcpy(card->shortname, "Intel HDMI/DP LPE Audio");
+	strcpy(card->longname, "Intel HDMI/DP LPE Audio");
 
 	card_ctx->irq = -1;
 
@@ -1831,13 +1833,13 @@ static int hdmi_lpe_audio_probe(struct platform_device *pdev)
 }
 
 static const struct dev_pm_ops hdmi_lpe_audio_pm = {
-	SYSTEM_SLEEP_PM_OPS(hdmi_lpe_audio_suspend, hdmi_lpe_audio_resume)
+	SET_SYSTEM_SLEEP_PM_OPS(hdmi_lpe_audio_suspend, hdmi_lpe_audio_resume)
 };
 
 static struct platform_driver hdmi_lpe_audio_driver = {
 	.driver		= {
 		.name  = "hdmi-lpe-audio",
-		.pm = pm_ptr(&hdmi_lpe_audio_pm),
+		.pm = &hdmi_lpe_audio_pm,
 	},
 	.probe          = hdmi_lpe_audio_probe,
 };

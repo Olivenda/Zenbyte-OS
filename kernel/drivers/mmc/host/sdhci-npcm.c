@@ -48,7 +48,8 @@ static int npcm_sdhci_probe(struct platform_device *pdev)
 
 	pltfm_host->clk = devm_clk_get_optional_enabled(dev, NULL);
 	if (IS_ERR(pltfm_host->clk)) {
-		return PTR_ERR(pltfm_host->clk);
+		ret = PTR_ERR(pltfm_host->clk);
+		goto err_sdhci;
 	}
 
 	caps = sdhci_readl(host, SDHCI_CAPABILITIES);
@@ -57,9 +58,17 @@ static int npcm_sdhci_probe(struct platform_device *pdev)
 
 	ret = mmc_of_parse(host->mmc);
 	if (ret)
-		return ret;
+		goto err_sdhci;
 
-	return sdhci_add_host(host);
+	ret = sdhci_add_host(host);
+	if (ret)
+		goto err_sdhci;
+
+	return 0;
+
+err_sdhci:
+	sdhci_pltfm_free(pdev);
+	return ret;
 }
 
 static const struct of_device_id npcm_sdhci_of_match[] = {
@@ -76,7 +85,7 @@ static struct platform_driver npcm_sdhci_driver = {
 		.pm	= &sdhci_pltfm_pmops,
 	},
 	.probe		= npcm_sdhci_probe,
-	.remove		= sdhci_pltfm_remove,
+	.remove_new	= sdhci_pltfm_remove,
 };
 module_platform_driver(npcm_sdhci_driver);
 

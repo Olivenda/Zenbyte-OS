@@ -22,13 +22,7 @@ struct core_boot_config {
 	struct vpe_boot_config *vpe_config;
 };
 
-struct cluster_boot_config {
-	unsigned long *core_power;
-	struct cpumask cpumask;
-	struct core_boot_config *core_config;
-};
-
-extern struct cluster_boot_config *mips_cps_cluster_bootcfg;
+extern struct core_boot_config *mips_cps_core_bootcfg;
 
 extern void mips_cps_core_boot(int cca, void __iomem *gcr_base);
 extern void mips_cps_core_init(void);

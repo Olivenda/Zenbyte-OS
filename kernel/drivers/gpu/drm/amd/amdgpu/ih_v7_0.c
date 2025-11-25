@@ -528,19 +528,19 @@ static void ih_v7_0_set_self_irq_funcs(struct amdgpu_device *adev)
 	adev->irq.self_irq.funcs = &ih_v7_0_self_irq_funcs;
 }
 
-static int ih_v7_0_early_init(struct amdgpu_ip_block *ip_block)
+static int ih_v7_0_early_init(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	ih_v7_0_set_interrupt_funcs(adev);
 	ih_v7_0_set_self_irq_funcs(adev);
 	return 0;
 }
 
-static int ih_v7_0_sw_init(struct amdgpu_ip_block *ip_block)
+static int ih_v7_0_sw_init(void *handle)
 {
 	int r;
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	bool use_bus_addr;
 
 	r = amdgpu_irq_add_id(adev, SOC21_IH_CLIENTID_IH, 0,
@@ -583,19 +583,19 @@ static int ih_v7_0_sw_init(struct amdgpu_ip_block *ip_block)
 	return r;
 }
 
-static int ih_v7_0_sw_fini(struct amdgpu_ip_block *ip_block)
+static int ih_v7_0_sw_fini(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	amdgpu_irq_fini_sw(adev);
 
 	return 0;
 }
 
-static int ih_v7_0_hw_init(struct amdgpu_ip_block *ip_block)
+static int ih_v7_0_hw_init(void *handle)
 {
 	int r;
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	r = ih_v7_0_irq_init(adev);
 	if (r)
@@ -604,36 +604,42 @@ static int ih_v7_0_hw_init(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int ih_v7_0_hw_fini(struct amdgpu_ip_block *ip_block)
+static int ih_v7_0_hw_fini(void *handle)
 {
-	ih_v7_0_irq_disable(ip_block->adev);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	ih_v7_0_irq_disable(adev);
 
 	return 0;
 }
 
-static int ih_v7_0_suspend(struct amdgpu_ip_block *ip_block)
+static int ih_v7_0_suspend(void *handle)
 {
-	return ih_v7_0_hw_fini(ip_block);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	return ih_v7_0_hw_fini(adev);
 }
 
-static int ih_v7_0_resume(struct amdgpu_ip_block *ip_block)
+static int ih_v7_0_resume(void *handle)
 {
-	return ih_v7_0_hw_init(ip_block);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	return ih_v7_0_hw_init(adev);
 }
 
-static bool ih_v7_0_is_idle(struct amdgpu_ip_block *ip_block)
+static bool ih_v7_0_is_idle(void *handle)
 {
 	/* todo */
 	return true;
 }
 
-static int ih_v7_0_wait_for_idle(struct amdgpu_ip_block *ip_block)
+static int ih_v7_0_wait_for_idle(void *handle)
 {
 	/* todo */
 	return -ETIMEDOUT;
 }
 
-static int ih_v7_0_soft_reset(struct amdgpu_ip_block *ip_block)
+static int ih_v7_0_soft_reset(void *handle)
 {
 	/* todo */
 	return 0;
@@ -664,10 +670,10 @@ static void ih_v7_0_update_clockgating_state(struct amdgpu_device *adev,
 	return;
 }
 
-static int ih_v7_0_set_clockgating_state(struct amdgpu_ip_block *ip_block,
+static int ih_v7_0_set_clockgating_state(void *handle,
 					   enum amd_clockgating_state state)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	ih_v7_0_update_clockgating_state(adev,
 				state == AMD_CG_STATE_GATE);
@@ -727,10 +733,10 @@ static void ih_v7_0_update_ih_mem_power_gating(struct amdgpu_device *adev,
 	WREG32_SOC15(OSSSYS, 0, regIH_MEM_POWER_CTRL, ih_mem_pwr_cntl);
 }
 
-static int ih_v7_0_set_powergating_state(struct amdgpu_ip_block *ip_block,
+static int ih_v7_0_set_powergating_state(void *handle,
 					 enum amd_powergating_state state)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	bool enable = (state == AMD_PG_STATE_GATE);
 
 	if (adev->pg_flags & AMD_PG_SUPPORT_IH_SRAM_PG)
@@ -739,9 +745,9 @@ static int ih_v7_0_set_powergating_state(struct amdgpu_ip_block *ip_block,
 	return 0;
 }
 
-static void ih_v7_0_get_clockgating_state(struct amdgpu_ip_block *ip_block, u64 *flags)
+static void ih_v7_0_get_clockgating_state(void *handle, u64 *flags)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	if (!RREG32_SOC15(OSSSYS, 0, regIH_CLK_CTRL))
 		*flags |= AMD_CG_SUPPORT_IH_CG;
@@ -752,6 +758,7 @@ static void ih_v7_0_get_clockgating_state(struct amdgpu_ip_block *ip_block, u64 
 static const struct amd_ip_funcs ih_v7_0_ip_funcs = {
 	.name = "ih_v7_0",
 	.early_init = ih_v7_0_early_init,
+	.late_init = NULL,
 	.sw_init = ih_v7_0_sw_init,
 	.sw_fini = ih_v7_0_sw_fini,
 	.hw_init = ih_v7_0_hw_init,
@@ -764,6 +771,8 @@ static const struct amd_ip_funcs ih_v7_0_ip_funcs = {
 	.set_clockgating_state = ih_v7_0_set_clockgating_state,
 	.set_powergating_state = ih_v7_0_set_powergating_state,
 	.get_clockgating_state = ih_v7_0_get_clockgating_state,
+	.dump_ip_state = NULL,
+	.print_ip_state = NULL,
 };
 
 static const struct amdgpu_ih_funcs ih_v7_0_funcs = {

@@ -219,26 +219,26 @@ static int hfs_create(struct mnt_idmap *idmap, struct inode *dir,
  * in a directory, given the inode for the parent directory and the
  * name (and its length) of the new directory.
  */
-static struct dentry *hfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
-				struct dentry *dentry, umode_t mode)
+static int hfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
+		     struct dentry *dentry, umode_t mode)
 {
 	struct inode *inode;
 	int res;
 
 	inode = hfs_new_inode(dir, &dentry->d_name, S_IFDIR | mode);
 	if (!inode)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
 	res = hfs_cat_create(inode->i_ino, dir, &dentry->d_name, inode);
 	if (res) {
 		clear_nlink(inode);
 		hfs_delete_inode(inode);
 		iput(inode);
-		return ERR_PTR(res);
+		return res;
 	}
 	d_instantiate(dentry, inode);
 	mark_inode_dirty(inode);
-	return NULL;
+	return 0;
 }
 
 /*

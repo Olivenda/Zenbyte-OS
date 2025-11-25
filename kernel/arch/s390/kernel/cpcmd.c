@@ -20,7 +20,6 @@
 #include <asm/diag.h>
 #include <asm/ebcdic.h>
 #include <asm/cpcmd.h>
-#include <asm/asm.h>
 
 static DEFINE_SPINLOCK(cpcmd_lock);
 static char cpcmd_buf[241];
@@ -46,11 +45,12 @@ static int diag8_response(int cmdlen, char *response, int *rlen)
 	ry.odd	= *rlen;
 	asm volatile(
 		"	diag	%[rx],%[ry],0x8\n"
-		CC_IPM(cc)
-		: CC_OUT(cc, cc), [ry] "+d" (ry.pair)
+		"	ipm	%[cc]\n"
+		"	srl	%[cc],28\n"
+		: [cc] "=&d" (cc), [ry] "+&d" (ry.pair)
 		: [rx] "d" (rx.pair)
-		: CC_CLOBBER);
-	if (CC_TRANSFORM(cc))
+		: "cc");
+	if (cc)
 		*rlen += ry.odd;
 	else
 		*rlen = ry.odd;

@@ -13,7 +13,6 @@
 #include <linux/usb/hcd.h>
 #include <linux/usb/chipidea.h>
 #include <linux/regulator/consumer.h>
-#include <linux/string_choices.h>
 #include <linux/pinctrl/consumer.h>
 
 #include "../host/ehci.h"
@@ -57,7 +56,7 @@ static int ehci_ci_portpower(struct usb_hcd *hcd, int portnum, bool enable)
 		if (ret) {
 			dev_err(dev,
 				"Failed to %s vbus regulator, ret=%d\n",
-				str_enable_disable(enable), ret);
+				enable ? "enable" : "disable", ret);
 			return ret;
 		}
 		priv->enabled = enable;
@@ -257,14 +256,8 @@ static int ci_ehci_hub_control(
 	struct device *dev = hcd->self.controller;
 	struct ci_hdrc *ci = dev_get_drvdata(dev);
 
-	/*
-	 * Avoid out-of-bounds values while calculating the port index
-	 * from wIndex. The compiler doesn't like pointers to invalid
-	 * addresses, even if they are never used.
-	 */
-	port_index = (wIndex - 1) & 0xff;
-	if (port_index >= HCS_N_PORTS_MAX)
-		port_index = 0;
+	port_index = wIndex & 0xff;
+	port_index -= (port_index > 0);
 	status_reg = &ehci->regs->port_status[port_index];
 
 	spin_lock_irqsave(&ehci->lock, flags);

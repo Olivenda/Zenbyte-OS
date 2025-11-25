@@ -26,6 +26,7 @@
 #define __DCN20_DPP_H__
 
 #include "dcn10/dcn10_dpp.h"
+#include "spl/dc_spl_types.h"
 #define TO_DCN20_DPP(dpp)\
 	container_of(dpp, struct dcn20_dpp, base)
 
@@ -689,7 +690,6 @@ struct dcn20_dpp {
 	int lb_memory_size;
 	int lb_bits_per_entry;
 	bool is_write_to_ram_a_safe;
-	bool dispclk_r_gate_disable;
 	struct scaler_data scl_data;
 	struct pwl_params pwl_data;
 };

@@ -50,13 +50,7 @@ static int led_pwm_mc_set(struct led_classdev *cdev,
 			duty = priv->leds[i].state.period - duty;
 
 		priv->leds[i].state.duty_cycle = duty;
-		/*
-		 * Disabling a PWM doesn't guarantee that it emits the inactive level.
-		 * So keep it on. Only for suspending the PWM should be disabled because
-		 * otherwise it refuses to suspend. The possible downside is that the
-		 * LED might stay (or even go) on.
-		 */
-		priv->leds[i].state.enabled = !(cdev->flags & LED_SUSPENDED);
+		priv->leds[i].state.enabled = duty > 0;
 		ret = pwm_apply_might_sleep(priv->leds[i].pwm,
 					    &priv->leds[i].state);
 		if (ret)
@@ -107,12 +101,12 @@ release_fwnode:
 
 static int led_pwm_mc_probe(struct platform_device *pdev)
 {
-	struct fwnode_handle *mcnode;
+	struct fwnode_handle *mcnode, *fwnode;
 	struct led_init_data init_data = {};
 	struct led_classdev *cdev;
 	struct mc_subled *subled;
 	struct pwm_mc_led *priv;
-	unsigned int count;
+	int count = 0;
 	int ret = 0;
 
 	mcnode = device_get_named_child_node(&pdev->dev, "multi-led");
@@ -121,7 +115,8 @@ static int led_pwm_mc_probe(struct platform_device *pdev)
 				     "expected multi-led node\n");
 
 	/* count the nodes inside the multi-led node */
-	count = fwnode_get_child_node_count(mcnode);
+	fwnode_for_each_child_node(mcnode, fwnode)
+		count++;
 
 	priv = devm_kzalloc(&pdev->dev, struct_size(priv, leds, count),
 			    GFP_KERNEL);

@@ -110,17 +110,17 @@ static const struct scsi_host_template ahci_sht = {
 
 static struct ata_port_operations ahci_vt8251_ops = {
 	.inherits		= &ahci_ops,
-	.reset.hardreset	= ahci_vt8251_hardreset,
+	.hardreset		= ahci_vt8251_hardreset,
 };
 
 static struct ata_port_operations ahci_p5wdh_ops = {
 	.inherits		= &ahci_ops,
-	.reset.hardreset	= ahci_p5wdh_hardreset,
+	.hardreset		= ahci_p5wdh_hardreset,
 };
 
 static struct ata_port_operations ahci_avn_ops = {
 	.inherits		= &ahci_ops,
-	.reset.hardreset	= ahci_avn_hardreset,
+	.hardreset		= ahci_avn_hardreset,
 };
 
 static const struct ata_port_info ahci_port_info[] = {
@@ -674,9 +674,7 @@ MODULE_PARM_DESC(marvell_enable, "Marvell SATA via AHCI (1 = enabled)");
 
 static int mobile_lpm_policy = -1;
 module_param(mobile_lpm_policy, int, 0644);
-MODULE_PARM_DESC(mobile_lpm_policy,
-		 "Default LPM policy. Despite its name, this parameter applies "
-		 "to all chipsets, including desktop and server chipsets");
+MODULE_PARM_DESC(mobile_lpm_policy, "Default LPM policy for mobile chipsets");
 
 static char *ahci_mask_port_map;
 module_param_named(mask_port_map, ahci_mask_port_map, charp, 0444);
@@ -689,50 +687,40 @@ MODULE_PARM_DESC(mask_port_map,
 		 "where <pci_dev> is the PCI ID of an AHCI controller in the "
 		 "form \"domain:bus:dev.func\"");
 
-static char *ahci_mask_port_ext;
-module_param_named(mask_port_ext, ahci_mask_port_ext, charp, 0444);
-MODULE_PARM_DESC(mask_port_ext,
-		 "32-bits mask to ignore the external/hotplug capability of ports. "
-		 "Valid values are: "
-		 "\"<mask>\" to apply the same mask to all AHCI controller "
-		 "devices, and \"<pci_dev>=<mask>,<pci_dev>=<mask>,...\" to "
-		 "specify different masks for the controllers specified, "
-		 "where <pci_dev> is the PCI ID of an AHCI controller in the "
-		 "form \"domain:bus:dev.func\"");
-
-static u32 ahci_port_mask(struct device *dev, char *mask_s)
+static void ahci_apply_port_map_mask(struct device *dev,
+				     struct ahci_host_priv *hpriv, char *mask_s)
 {
 	unsigned int mask;
 
 	if (kstrtouint(mask_s, 0, &mask)) {
 		dev_err(dev, "Invalid port map mask\n");
-		return 0;
+		return;
 	}
 
-	return mask;
+	hpriv->mask_port_map = mask;
 }
 
-static u32 ahci_get_port_mask(struct device *dev, char *mask_p)
+static void ahci_get_port_map_mask(struct device *dev,
+				   struct ahci_host_priv *hpriv)
 {
 	char *param, *end, *str, *mask_s;
 	char *name;
-	u32 mask = 0;
 
-	if (!mask_p || !strlen(mask_p))
-		return 0;
+	if (!strlen(ahci_mask_port_map))
+		return;
 
-	str = kstrdup(mask_p, GFP_KERNEL);
+	str = kstrdup(ahci_mask_port_map, GFP_KERNEL);
 	if (!str)
-		return 0;
+		return;
 
 	/* Handle single mask case */
 	if (!strchr(str, '=')) {
-		mask = ahci_port_mask(dev, str);
+		ahci_apply_port_map_mask(dev, hpriv, str);
 		goto free;
 	}
 
 	/*
-	 * Mask list case: parse the parameter to get the mask only if
+	 * Mask list case: parse the parameter to apply the mask only if
 	 * the device name matches.
 	 */
 	param = str;
@@ -762,13 +750,11 @@ static u32 ahci_get_port_mask(struct device *dev, char *mask_p)
 			param++;
 		}
 
-		mask = ahci_port_mask(dev, mask_s);
+		ahci_apply_port_map_mask(dev, hpriv, mask_s);
 	}
 
 free:
 	kfree(str);
-
-	return mask;
 }
 
 static void ahci_pci_save_initial_config(struct pci_dev *pdev,
@@ -794,10 +780,8 @@ static void ahci_pci_save_initial_config(struct pci_dev *pdev,
 	}
 
 	/* Handle port map masks passed as module parameter. */
-	hpriv->mask_port_map =
-		ahci_get_port_mask(&pdev->dev, ahci_mask_port_map);
-	hpriv->mask_port_ext =
-		ahci_get_port_mask(&pdev->dev, ahci_mask_port_ext);
+	if (ahci_mask_port_map)
+		ahci_get_port_map_mask(&pdev->dev, hpriv);
 
 	ahci_save_initial_config(&pdev->dev, hpriv);
 }
@@ -1461,7 +1445,13 @@ static bool ahci_broken_lpm(struct pci_dev *pdev)
 				DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
 				DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad W541"),
 			},
-			.driver_data = "20180409", /* 2.35 */
+			/*
+			 * Note date based on release notes, 2.35 has been
+			 * reported to be good, but I've been unable to get
+			 * a hold of the reporter to get the DMI BIOS date.
+			 * TODO: fix this.
+			 */
+			.driver_data = "20180310", /* 2.35 */
 		},
 		{
 			.matches = {
@@ -1719,20 +1709,18 @@ static int ahci_get_irq_vector(struct ata_host *host, int port)
 	return pci_irq_vector(to_pci_dev(host->dev), port);
 }
 
-static void ahci_init_irq(struct pci_dev *pdev, unsigned int n_ports,
+static int ahci_init_msi(struct pci_dev *pdev, unsigned int n_ports,
 			struct ahci_host_priv *hpriv)
 {
 	int nvec;
 
-	if (hpriv->flags & AHCI_HFLAG_NO_MSI) {
-		pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_INTX);
-		return;
-	}
+	if (hpriv->flags & AHCI_HFLAG_NO_MSI)
+		return -ENODEV;
 
 	/*
 	 * If number of MSIs is less than number of ports then Sharing Last
 	 * Message mode could be enforced. In this case assume that advantage
-	 * of multiple MSIs is negated and use single MSI mode instead.
+	 * of multipe MSIs is negated and use single MSI mode instead.
 	 */
 	if (n_ports > 1) {
 		nvec = pci_alloc_irq_vectors(pdev, n_ports, INT_MAX,
@@ -1741,7 +1729,7 @@ static void ahci_init_irq(struct pci_dev *pdev, unsigned int n_ports,
 			if (!(readl(hpriv->mmio + HOST_CTL) & HOST_MRSM)) {
 				hpriv->get_irq_vector = ahci_get_irq_vector;
 				hpriv->flags |= AHCI_HFLAG_MULTI_MSI;
-				return;
+				return nvec;
 			}
 
 			/*
@@ -1756,13 +1744,12 @@ static void ahci_init_irq(struct pci_dev *pdev, unsigned int n_ports,
 
 	/*
 	 * If the host is not capable of supporting per-port vectors, fall
-	 * back to single MSI before finally attempting single MSI-X or
-	 * a legacy INTx.
+	 * back to single MSI before finally attempting single MSI-X.
 	 */
 	nvec = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI);
 	if (nvec == 1)
-		return;
-	pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSIX | PCI_IRQ_INTX);
+		return nvec;
+	return pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSIX);
 }
 
 static void ahci_mark_external_port(struct ata_port *ap)
@@ -1771,20 +1758,11 @@ static void ahci_mark_external_port(struct ata_port *ap)
 	void __iomem *port_mmio = ahci_port_base(ap);
 	u32 tmp;
 
-	/*
-	 * Mark external ports (hotplug-capable, eSATA), unless we were asked to
-	 * ignore this feature.
-	 */
+	/* mark external ports (hotplug-capable, eSATA) */
 	tmp = readl(port_mmio + PORT_CMD);
 	if (((tmp & PORT_CMD_ESP) && (hpriv->cap & HOST_CAP_SXS)) ||
-	    (tmp & PORT_CMD_HPCP)) {
-		if (hpriv->mask_port_ext & (1U << ap->port_no)) {
-			ata_port_info(ap,
-				"Ignoring external/hotplug capability\n");
-			return;
-		}
+	    (tmp & PORT_CMD_HPCP))
 		ap->pflags |= ATA_PFLAG_EXTERNAL;
-	}
 }
 
 static void ahci_update_initial_lpm_policy(struct ata_port *ap)
@@ -1799,8 +1777,7 @@ static void ahci_update_initial_lpm_policy(struct ata_port *ap)
 	 * LPM if the port advertises itself as an external port.
 	 */
 	if (ap->pflags & ATA_PFLAG_EXTERNAL) {
-		ap->flags |= ATA_FLAG_NO_LPM;
-		ap->target_lpm_policy = ATA_LPM_MAX_POWER;
+		ata_port_dbg(ap, "external port, not enabling LPM\n");
 		return;
 	}
 
@@ -1946,7 +1923,7 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* AHCI controllers often implement SFF compatible interface.
 	 * Grab all PCI BARs just in case.
 	 */
-	rc = pcim_request_all_regions(pdev, DRV_NAME);
+	rc = pcim_iomap_regions_request_all(pdev, 1 << ahci_pci_bar, DRV_NAME);
 	if (rc == -EBUSY)
 		pcim_pin_device(pdev);
 	if (rc)
@@ -1970,9 +1947,7 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ahci_sb600_enable_64bit(pdev))
 		hpriv->flags &= ~AHCI_HFLAG_32BIT_ONLY;
 
-	hpriv->mmio = pcim_iomap(pdev, ahci_pci_bar, 0);
-	if (!hpriv->mmio)
-		return -ENOMEM;
+	hpriv->mmio = pcim_iomap_table(pdev)[ahci_pci_bar];
 
 	/* detect remapped nvme devices */
 	ahci_remap_check(pdev, ahci_pci_bar, hpriv);
@@ -2062,8 +2037,10 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 	host->private_data = hpriv;
 
-	ahci_init_irq(pdev, n_ports, hpriv);
-
+	if (ahci_init_msi(pdev, n_ports, hpriv) < 0) {
+		/* legacy intx interrupts */
+		pci_intx(pdev, 1);
+	}
 	hpriv->irq = pci_irq_vector(pdev, 0);
 
 	if (!(hpriv->cap & HOST_CAP_SSS) || ahci_ignore_sss)

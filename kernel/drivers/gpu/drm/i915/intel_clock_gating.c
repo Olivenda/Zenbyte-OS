@@ -27,7 +27,6 @@
 
 #include "display/i9xx_plane_regs.h"
 #include "display/intel_display.h"
-#include "display/intel_display_core.h"
 
 #include "gt/intel_engine_regs.h"
 #include "gt/intel_gt.h"
@@ -38,7 +37,7 @@
 #include "i915_reg.h"
 #include "intel_clock_gating.h"
 #include "intel_mchbar_regs.h"
-#include "vlv_iosf_sb.h"
+#include "vlv_sideband.h"
 
 struct drm_i915_clock_gating_funcs {
 	void (*init_clock_gating)(struct drm_i915_private *i915);
@@ -202,7 +201,6 @@ static void ilk_init_clock_gating(struct drm_i915_private *i915)
 
 static void cpt_init_clock_gating(struct drm_i915_private *i915)
 {
-	struct intel_display *display = i915->display;
 	enum pipe pipe;
 	u32 val;
 
@@ -222,7 +220,7 @@ static void cpt_init_clock_gating(struct drm_i915_private *i915)
 		val = intel_uncore_read(&i915->uncore, TRANS_CHICKEN2(pipe));
 		val |= TRANS_CHICKEN2_TIMING_OVERRIDE;
 		val &= ~TRANS_CHICKEN2_FDI_POLARITY_REVERSED;
-		if (display->vbt.fdi_rx_polarity_inverted)
+		if (i915->display.vbt.fdi_rx_polarity_inverted)
 			val |= TRANS_CHICKEN2_FDI_POLARITY_REVERSED;
 		val &= ~TRANS_CHICKEN2_DISABLE_DEEP_COLOR_COUNTER;
 		val &= ~TRANS_CHICKEN2_DISABLE_DEEP_COLOR_MODESWITCH;
@@ -504,7 +502,7 @@ static void ivb_init_clock_gating(struct drm_i915_private *i915)
 			   CHICKEN3_DGMG_REQ_OUT_FIX_DISABLE |
 			   CHICKEN3_DGMG_DONE_FIX_DISABLE);
 
-	if (INTEL_INFO(i915)->gt == 1)
+	if (IS_IVB_GT1(i915))
 		intel_uncore_write(&i915->uncore, GEN7_ROW_CHICKEN2,
 				   _MASKED_BIT_ENABLE(DOP_CLOCK_GATING_DISABLE));
 	else {
@@ -684,7 +682,7 @@ static void i85x_init_clock_gating(struct drm_i915_private *i915)
 	 * Have FBC ignore 3D activity since we use software
 	 * render tracking, and otherwise a pure 3D workload
 	 * (even if it just renders a single frame and then does
-	 * absolutely nothing) would not allow FBC to recompress
+	 * abosultely nothing) would not allow FBC to recompress
 	 * until a 2D blit occurs.
 	 */
 	intel_uncore_write(&i915->uncore, SCPD0,

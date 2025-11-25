@@ -88,7 +88,7 @@
 			status = "okay";
 		};
 
-		gmac: ethernet@e0800000 {
+		gmac: eth@e0800000 {
 			status = "okay";
 		};
 
@@ -133,15 +133,15 @@
 			status = "okay";
 		};
 
-		usb@e1800000 {
+		ehci@e1800000 {
 			status = "okay";
 		};
 
-		usb@e1900000 {
+		ohci@e1900000 {
 			status = "okay";
 		};
 
-		usb@e2100000 {
+		ohci@e2100000 {
 			status = "okay";
 		};
 

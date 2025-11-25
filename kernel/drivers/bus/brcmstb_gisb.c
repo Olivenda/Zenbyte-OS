@@ -395,7 +395,10 @@ static struct attribute *gisb_arb_sysfs_attrs[] = {
 	&dev_attr_gisb_arb_timeout.attr,
 	NULL,
 };
-ATTRIBUTE_GROUPS(gisb_arb_sysfs);
+
+static struct attribute_group gisb_arb_sysfs_attr_group = {
+	.attrs = gisb_arb_sysfs_attrs,
+};
 
 static const struct of_device_id brcmstb_gisb_arb_of_match[] = {
 	{ .compatible = "brcm,gisb-arb",         .data = gisb_offsets_bcm7445 },
@@ -487,6 +490,10 @@ static int __init brcmstb_gisb_arb_probe(struct platform_device *pdev)
 		}
 	}
 
+	err = sysfs_create_group(&pdev->dev.kobj, &gisb_arb_sysfs_attr_group);
+	if (err)
+		return err;
+
 	platform_set_drvdata(pdev, gdev);
 
 	list_add_tail(&gdev->next, &brcmstb_gisb_arb_device_list);
@@ -543,7 +550,6 @@ static struct platform_driver brcmstb_gisb_arb_driver = {
 		.name	= "brcm-gisb-arb",
 		.of_match_table = brcmstb_gisb_arb_of_match,
 		.pm	= &brcmstb_gisb_arb_pm_ops,
-		.dev_groups = gisb_arb_sysfs_groups,
 	},
 };
 

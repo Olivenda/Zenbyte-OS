@@ -13,6 +13,7 @@
         "Counter": "4,5,6,7",
         "EventCode": "0x41",
         "EventName": "UNC_CXLCM_RxC_PACK_BUF_INSERTS.MEM_DATA",
+        "Experimental": "1",
         "PerPkg": "1",
         "UMask": "0x10",
         "Unit": "CXLCM"
@@ -22,6 +23,7 @@
         "Counter": "0,1,2,3",
         "EventCode": "0x02",
         "EventName": "UNC_CXLDP_TxC_AGF_INSERTS.M2S_DATA",
+        "Experimental": "1",
         "PerPkg": "1",
         "UMask": "0x20",
         "Unit": "CXLDP"

@@ -63,7 +63,9 @@ get_file_raw_ptr(struct task_struct *task, unsigned int idx)
 {
 	struct file *file;
 
-	file = fget_task(task, idx);
+	rcu_read_lock();
+	file = task_lookup_fdget_rcu(task, idx);
+	rcu_read_unlock();
 	if (file)
 		fput(file);
 
@@ -145,7 +147,7 @@ SYSCALL_DEFINE5(kcmp, pid_t, pid1, pid_t, pid2, int, type,
 	 */
 	task1 = find_task_by_vpid(pid1);
 	task2 = find_task_by_vpid(pid2);
-	if (unlikely(!task1 || !task2))
+	if (!task1 || !task2)
 		goto err_no_task;
 
 	get_task_struct(task1);

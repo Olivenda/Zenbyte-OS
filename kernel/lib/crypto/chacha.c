@@ -5,17 +5,16 @@
  * Copyright (C) 2015 Martin Willi
  */
 
-#include <crypto/chacha.h>
-#include <linux/bitops.h>
 #include <linux/bug.h>
-#include <linux/export.h>
 #include <linux/kernel.h>
+#include <linux/export.h>
+#include <linux/bitops.h>
 #include <linux/string.h>
 #include <linux/unaligned.h>
+#include <crypto/chacha.h>
 
-static void chacha_permute(struct chacha_state *state, int nrounds)
+static void chacha_permute(u32 *x, int nrounds)
 {
-	u32 *x = state->x;
 	int i;
 
 	/* whitelist the allowed round counts */
@@ -66,34 +65,34 @@ static void chacha_permute(struct chacha_state *state, int nrounds)
 
 /**
  * chacha_block_generic - generate one keystream block and increment block counter
- * @state: input state matrix
- * @out: output keystream block
+ * @state: input state matrix (16 32-bit words)
+ * @stream: output keystream block (64 bytes)
  * @nrounds: number of rounds (20 or 12; 20 is recommended)
  *
  * This is the ChaCha core, a function from 64-byte strings to 64-byte strings.
  * The caller has already converted the endianness of the input.  This function
  * also handles incrementing the block counter in the input matrix.
  */
-void chacha_block_generic(struct chacha_state *state,
-			  u8 out[CHACHA_BLOCK_SIZE], int nrounds)
+void chacha_block_generic(u32 *state, u8 *stream, int nrounds)
 {
-	struct chacha_state permuted_state = *state;
+	u32 x[16];
 	int i;
 
-	chacha_permute(&permuted_state, nrounds);
+	memcpy(x, state, 64);
 
-	for (i = 0; i < ARRAY_SIZE(state->x); i++)
-		put_unaligned_le32(permuted_state.x[i] + state->x[i],
-				   &out[i * sizeof(u32)]);
+	chacha_permute(x, nrounds);
 
-	state->x[12]++;
+	for (i = 0; i < ARRAY_SIZE(x); i++)
+		put_unaligned_le32(x[i] + state[i], &stream[i * sizeof(u32)]);
+
+	state[12]++;
 }
 EXPORT_SYMBOL(chacha_block_generic);
 
 /**
  * hchacha_block_generic - abbreviated ChaCha core, for XChaCha
- * @state: input state matrix
- * @out: the output words
+ * @state: input state matrix (16 32-bit words)
+ * @stream: output (8 32-bit words)
  * @nrounds: number of rounds (20 or 12; 20 is recommended)
  *
  * HChaCha is the ChaCha equivalent of HSalsa and is an intermediate step
@@ -101,14 +100,15 @@ EXPORT_SYMBOL(chacha_block_generic);
  * skips the final addition of the initial state, and outputs only certain words
  * of the state.  It should not be used for streaming directly.
  */
-void hchacha_block_generic(const struct chacha_state *state,
-			   u32 out[HCHACHA_OUT_WORDS], int nrounds)
+void hchacha_block_generic(const u32 *state, u32 *stream, int nrounds)
 {
-	struct chacha_state permuted_state = *state;
+	u32 x[16];
 
-	chacha_permute(&permuted_state, nrounds);
+	memcpy(x, state, 64);
 
-	memcpy(&out[0], &permuted_state.x[0], 16);
-	memcpy(&out[4], &permuted_state.x[12], 16);
+	chacha_permute(x, nrounds);
+
+	memcpy(&stream[0], &x[0], 16);
+	memcpy(&stream[4], &x[12], 16);
 }
 EXPORT_SYMBOL(hchacha_block_generic);

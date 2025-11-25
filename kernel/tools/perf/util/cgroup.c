@@ -413,7 +413,8 @@ static bool has_pattern_string(const char *str)
 	return !!strpbrk(str, "{}[]()|*+?^$");
 }
 
-int evlist__expand_cgroup(struct evlist *evlist, const char *str, bool open_cgroup)
+int evlist__expand_cgroup(struct evlist *evlist, const char *str,
+			  struct rblist *metric_events, bool open_cgroup)
 {
 	struct evlist *orig_list, *tmp_list;
 	struct evsel *pos, *evsel, *leader;
@@ -439,8 +440,12 @@ int evlist__expand_cgroup(struct evlist *evlist, const char *str, bool open_cgro
 	evlist__splice_list_tail(orig_list, &evlist->core.entries);
 	evlist->core.nr_entries = 0;
 
-	orig_metric_events = evlist->metric_events;
-	metricgroup__rblist_init(&evlist->metric_events);
+	if (metric_events) {
+		orig_metric_events = *metric_events;
+		rblist__init(metric_events);
+	} else {
+		rblist__init(&orig_metric_events);
+	}
 
 	if (has_pattern_string(str))
 		prefix_len = match_cgroups(str);
@@ -468,7 +473,7 @@ int evlist__expand_cgroup(struct evlist *evlist, const char *str, bool open_cgro
 
 		leader = NULL;
 		evlist__for_each_entry(orig_list, pos) {
-			evsel = evsel__clone(/*dest=*/NULL, pos);
+			evsel = evsel__clone(pos);
 			if (evsel == NULL)
 				goto out_err;
 
@@ -485,10 +490,12 @@ int evlist__expand_cgroup(struct evlist *evlist, const char *str, bool open_cgro
 		cgroup__put(cgrp);
 		nr_cgroups++;
 
-		if (metricgroup__copy_metric_events(tmp_list, cgrp,
-						    &evlist->metric_events,
-						    &orig_metric_events) < 0)
-			goto out_err;
+		if (metric_events) {
+			if (metricgroup__copy_metric_events(tmp_list, cgrp,
+							    metric_events,
+							    &orig_metric_events) < 0)
+				goto out_err;
+		}
 
 		evlist__splice_list_tail(evlist, &tmp_list->core.entries);
 		tmp_list->core.nr_entries = 0;
@@ -505,7 +512,7 @@ int evlist__expand_cgroup(struct evlist *evlist, const char *str, bool open_cgro
 out_err:
 	evlist__delete(orig_list);
 	evlist__delete(tmp_list);
-	metricgroup__rblist_exit(&orig_metric_events);
+	rblist__exit(&orig_metric_events);
 	release_cgroup_list();
 
 	return ret;

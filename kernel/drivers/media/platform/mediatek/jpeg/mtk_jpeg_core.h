@@ -34,8 +34,6 @@
 
 #define MTK_JPEG_MAX_EXIF_SIZE	(64 * 1024)
 
-#define MTK_JPEG_ADDR_MASK GENMASK(1, 0)
-
 /**
  * enum mtk_jpeg_ctx_state - states of the context state machine
  * @MTK_JPEG_INIT:		current state is initialized
@@ -64,7 +62,6 @@ enum mtk_jpeg_ctx_state {
  * @cap_q_default_fourcc:	capture queue default fourcc
  * @multi_core:		mark jpeg hw is multi_core or not
  * @jpeg_worker:		jpeg dec or enc worker
- * @support_34bit:	flag to check support for 34-bit DMA address
  */
 struct mtk_jpeg_variant {
 	struct clk_bulk_data *clks;
@@ -81,7 +78,6 @@ struct mtk_jpeg_variant {
 	u32 cap_q_default_fourcc;
 	bool multi_core;
 	void (*jpeg_worker)(struct work_struct *work);
-	bool support_34bit;
 };
 
 struct mtk_jpeg_src_buf {

@@ -11,6 +11,8 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
+#include "leds.h"
+
 int led_mc_calc_color_components(struct led_classdev_mc *mcled_cdev,
 				 enum led_brightness brightness)
 {

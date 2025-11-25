@@ -194,7 +194,7 @@ static struct platform_driver dma_driver = {
 	},
 };
 
-static int __init gptu_init(void)
+int __init gptu_init(void)
 {
 	int ret = platform_driver_register(&dma_driver);
 

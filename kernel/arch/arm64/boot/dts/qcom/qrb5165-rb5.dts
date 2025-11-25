@@ -32,7 +32,7 @@
 	};
 
 	/* Fixed crystal oscillator dedicated to MCP2518FD */
-	clk40m: can-clock {
+	clk40M: can-clock {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <40000000>;
@@ -964,11 +964,6 @@
 	};
 };
 
-&pon {
-	mode-bootloader = <0x2>;
-	mode-recovery = <0x1>;
-};
-
 &pon_pwrkey {
 	status = "okay";
 };
@@ -1008,21 +1003,15 @@
 
 &q6asmdai {
 	dai@0 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
+		reg = <0>;
 	};
 
 	dai@1 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA2>;
+		reg = <1>;
 	};
 
 	dai@2 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
-	};
-
-	dai@3 {
-		direction = <Q6ASM_DAI_RX>;
-		is-compress-dai;
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA4>;
+		reg = <2>;
 	};
 };
 
@@ -1038,12 +1027,6 @@
 	no-mmc;
 };
 
-&slpi {
-	firmware-name = "qcom/sm8250/Thundercomm/RB5/slpi.mbn";
-
-	status = "okay";
-};
-
 &sound {
 	compatible = "qcom,qrb5165-rb5-sndcard";
 	pinctrl-0 = <&tert_mi2s_active>;
@@ -1053,7 +1036,10 @@
 		"SpkrLeft IN", "WSA_SPK1 OUT",
 		"SpkrRight IN", "WSA_SPK2 OUT",
 		"VA DMIC0", "vdd-micb",
-		"VA DMIC1", "vdd-micb";
+		"VA DMIC1", "vdd-micb",
+		"MM_DL1",  "MultiMedia1 Playback",
+		"MM_DL2",  "MultiMedia2 Playback",
+		"MultiMedia3 Capture", "MM_UL3";
 
 	mm1-dai-link {
 		link-name = "MultiMedia1";
@@ -1073,14 +1059,6 @@
 		link-name = "MultiMedia3";
 		cpu {
 			sound-dai = <&q6asmdai  MSM_FRONTEND_DAI_MULTIMEDIA3>;
-		};
-	};
-
-	mm4-dai-link {
-		link-name = "MultiMedia4";
-
-		cpu {
-			sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA4>;
 		};
 	};
 
@@ -1140,7 +1118,7 @@
 	can@0 {
 		compatible = "microchip,mcp2518fd";
 		reg = <0>;
-		clocks = <&clk40m>;
+		clocks = <&clk40M>;
 		interrupts-extended = <&tlmm 15 IRQ_TYPE_LEVEL_LOW>;
 		spi-max-frequency = <10000000>;
 		vdd-supply = <&vdc_5v>;

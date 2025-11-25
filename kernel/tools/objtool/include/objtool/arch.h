@@ -19,8 +19,7 @@ enum insn_type {
 	INSN_CALL,
 	INSN_CALL_DYNAMIC,
 	INSN_RETURN,
-	INSN_SYSCALL,
-	INSN_SYSRET,
+	INSN_CONTEXT_SWITCH,
 	INSN_BUG,
 	INSN_NOP,
 	INSN_STAC,
@@ -29,7 +28,6 @@ enum insn_type {
 	INSN_CLD,
 	INSN_TRAP,
 	INSN_ENDBR,
-	INSN_LEA_RIP,
 	INSN_OTHER,
 };
 
@@ -97,8 +95,5 @@ bool arch_is_embedded_insn(struct symbol *sym);
 int arch_rewrite_retpolines(struct objtool_file *file);
 
 bool arch_pc_relative_reloc(struct reloc *reloc);
-
-unsigned int arch_reloc_size(struct reloc *reloc);
-unsigned long arch_jump_table_sym_offset(struct reloc *reloc, struct reloc *table);
 
 #endif /* _ARCH_H */

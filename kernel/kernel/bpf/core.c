@@ -21,7 +21,7 @@
 #include <linux/filter.h>
 #include <linux/skbuff.h>
 #include <linux/vmalloc.h>
-#include <linux/prandom.h>
+#include <linux/random.h>
 #include <linux/bpf.h>
 #include <linux/btf.h>
 #include <linux/objtool.h>
@@ -133,10 +133,6 @@ struct bpf_prog *bpf_prog_alloc_no_stats(unsigned int size, gfp_t gfp_extra_flag
 	mutex_init(&fp->aux->used_maps_mutex);
 	mutex_init(&fp->aux->ext_mutex);
 	mutex_init(&fp->aux->dst_mutex);
-
-#ifdef CONFIG_BPF_SYSCALL
-	bpf_prog_stream_init(fp);
-#endif
 
 	return fp;
 }
@@ -308,7 +304,7 @@ int bpf_prog_calc_tag(struct bpf_prog *fp)
 	if (!raw)
 		return -ENOMEM;
 
-	sha1_init_raw(digest);
+	sha1_init(digest);
 	memset(ws, 0, sizeof(ws));
 
 	/* We need to take out the map fd for the digest calculation
@@ -1297,13 +1293,6 @@ int bpf_jit_get_func_addr(const struct bpf_prog *prog,
 	return 0;
 }
 
-const char *bpf_jit_get_prog_name(struct bpf_prog *prog)
-{
-	if (prog->aux->ksym.prog)
-		return prog->aux->ksym.name;
-	return prog->aux->name;
-}
-
 static int bpf_jit_blind_insn(const struct bpf_insn *from,
 			      const struct bpf_insn *aux,
 			      struct bpf_insn *to_buff,
@@ -1677,17 +1666,14 @@ EXPORT_SYMBOL_GPL(__bpf_call_base);
 	INSN_3(JMP, JSET, K),			\
 	INSN_2(JMP, JA),			\
 	INSN_2(JMP32, JA),			\
-	/* Atomic operations. */		\
-	INSN_3(STX, ATOMIC, B),			\
-	INSN_3(STX, ATOMIC, H),			\
-	INSN_3(STX, ATOMIC, W),			\
-	INSN_3(STX, ATOMIC, DW),		\
 	/* Store instructions. */		\
 	/*   Register based. */			\
 	INSN_3(STX, MEM,  B),			\
 	INSN_3(STX, MEM,  H),			\
 	INSN_3(STX, MEM,  W),			\
 	INSN_3(STX, MEM,  DW),			\
+	INSN_3(STX, ATOMIC, W),			\
+	INSN_3(STX, ATOMIC, DW),		\
 	/*   Immediate based. */		\
 	INSN_3(ST, MEM, B),			\
 	INSN_3(ST, MEM, H),			\
@@ -2116,15 +2102,14 @@ out:
 #undef COND_JMP
 	/* ST, STX and LDX*/
 	ST_NOSPEC:
-		/* Speculation barrier for mitigating Speculative Store Bypass,
-		 * Bounds-Check Bypass and Type Confusion. In case of arm64, we
-		 * rely on the firmware mitigation as controlled via the ssbd
-		 * kernel parameter. Whenever the mitigation is enabled, it
-		 * works for all of the kernel code with no need to provide any
-		 * additional instructions here. In case of x86, we use 'lfence'
-		 * insn for mitigation. We reuse preexisting logic from Spectre
-		 * v1 mitigation that happens to produce the required code on
-		 * x86 for v4 as well.
+		/* Speculation barrier for mitigating Speculative Store Bypass.
+		 * In case of arm64, we rely on the firmware mitigation as
+		 * controlled via the ssbd kernel parameter. Whenever the
+		 * mitigation is enabled, it works for all of the kernel code
+		 * with no need to provide any additional instructions here.
+		 * In case of x86, we use 'lfence' insn for mitigation. We
+		 * reuse preexisting logic from Spectre v1 mitigation that
+		 * happens to produce the required code on x86 for v4 as well.
 		 */
 		barrier_nospec();
 		CONT;
@@ -2170,33 +2155,24 @@ out:
 			if (BPF_SIZE(insn->code) == BPF_W)		\
 				atomic_##KOP((u32) SRC, (atomic_t *)(unsigned long) \
 					     (DST + insn->off));	\
-			else if (BPF_SIZE(insn->code) == BPF_DW)	\
+			else						\
 				atomic64_##KOP((u64) SRC, (atomic64_t *)(unsigned long) \
 					       (DST + insn->off));	\
-			else						\
-				goto default_label;			\
 			break;						\
 		case BOP | BPF_FETCH:					\
 			if (BPF_SIZE(insn->code) == BPF_W)		\
 				SRC = (u32) atomic_fetch_##KOP(		\
 					(u32) SRC,			\
 					(atomic_t *)(unsigned long) (DST + insn->off)); \
-			else if (BPF_SIZE(insn->code) == BPF_DW)	\
+			else						\
 				SRC = (u64) atomic64_fetch_##KOP(	\
 					(u64) SRC,			\
 					(atomic64_t *)(unsigned long) (DST + insn->off)); \
-			else						\
-				goto default_label;			\
 			break;
 
 	STX_ATOMIC_DW:
 	STX_ATOMIC_W:
-	STX_ATOMIC_H:
-	STX_ATOMIC_B:
 		switch (IMM) {
-		/* Atomic read-modify-write instructions support only W and DW
-		 * size modifiers.
-		 */
 		ATOMIC_ALU_OP(BPF_ADD, add)
 		ATOMIC_ALU_OP(BPF_AND, and)
 		ATOMIC_ALU_OP(BPF_OR, or)
@@ -2208,63 +2184,20 @@ out:
 				SRC = (u32) atomic_xchg(
 					(atomic_t *)(unsigned long) (DST + insn->off),
 					(u32) SRC);
-			else if (BPF_SIZE(insn->code) == BPF_DW)
+			else
 				SRC = (u64) atomic64_xchg(
 					(atomic64_t *)(unsigned long) (DST + insn->off),
 					(u64) SRC);
-			else
-				goto default_label;
 			break;
 		case BPF_CMPXCHG:
 			if (BPF_SIZE(insn->code) == BPF_W)
 				BPF_R0 = (u32) atomic_cmpxchg(
 					(atomic_t *)(unsigned long) (DST + insn->off),
 					(u32) BPF_R0, (u32) SRC);
-			else if (BPF_SIZE(insn->code) == BPF_DW)
+			else
 				BPF_R0 = (u64) atomic64_cmpxchg(
 					(atomic64_t *)(unsigned long) (DST + insn->off),
 					(u64) BPF_R0, (u64) SRC);
-			else
-				goto default_label;
-			break;
-		/* Atomic load and store instructions support all size
-		 * modifiers.
-		 */
-		case BPF_LOAD_ACQ:
-			switch (BPF_SIZE(insn->code)) {
-#define LOAD_ACQUIRE(SIZEOP, SIZE)				\
-			case BPF_##SIZEOP:			\
-				DST = (SIZE)smp_load_acquire(	\
-					(SIZE *)(unsigned long)(SRC + insn->off));	\
-				break;
-			LOAD_ACQUIRE(B,   u8)
-			LOAD_ACQUIRE(H,  u16)
-			LOAD_ACQUIRE(W,  u32)
-#ifdef CONFIG_64BIT
-			LOAD_ACQUIRE(DW, u64)
-#endif
-#undef LOAD_ACQUIRE
-			default:
-				goto default_label;
-			}
-			break;
-		case BPF_STORE_REL:
-			switch (BPF_SIZE(insn->code)) {
-#define STORE_RELEASE(SIZEOP, SIZE)			\
-			case BPF_##SIZEOP:		\
-				smp_store_release(	\
-					(SIZE *)(unsigned long)(DST + insn->off), (SIZE)SRC);	\
-				break;
-			STORE_RELEASE(B,   u8)
-			STORE_RELEASE(H,  u16)
-			STORE_RELEASE(W,  u32)
-#ifdef CONFIG_64BIT
-			STORE_RELEASE(DW, u64)
-#endif
-#undef STORE_RELEASE
-			default:
-				goto default_label;
-			}
 			break;
 
 		default:
@@ -2899,7 +2832,6 @@ static void bpf_prog_free_deferred(struct work_struct *work)
 	aux = container_of(work, struct bpf_prog_aux, work);
 #ifdef CONFIG_BPF_SYSCALL
 	bpf_free_kfunc_btf_tab(aux->kfunc_btf_tab);
-	bpf_prog_stream_free(aux->prog);
 #endif
 #ifdef CONFIG_CGROUP_BPF
 	if (aux->cgroup_atype != CGROUP_BPF_ATTACH_TYPE_INVALID)
@@ -3016,11 +2948,6 @@ const struct bpf_func_proto * __weak bpf_get_trace_vprintk_proto(void)
 	return NULL;
 }
 
-const struct bpf_func_proto * __weak bpf_get_perf_event_read_value_proto(void)
-{
-	return NULL;
-}
-
 u64 __weak
 bpf_event_output(struct bpf_map *map, u64 flags, void *meta, u64 meta_size,
 		 void *ctx, u64 ctx_size, bpf_ctx_copy_t ctx_copy)
@@ -3072,21 +2999,6 @@ bool __weak bpf_helper_changes_pkt_data(enum bpf_func_id func_id)
  * them using insn_is_zext.
  */
 bool __weak bpf_jit_needs_zext(void)
-{
-	return false;
-}
-
-/* By default, enable the verifier's mitigations against Spectre v1 and v4 for
- * all archs. The value returned must not change at runtime as there is
- * currently no support for reloading programs that were loaded without
- * mitigations.
- */
-bool __weak bpf_jit_bypass_spec_v1(void)
-{
-	return false;
-}
-
-bool __weak bpf_jit_bypass_spec_v4(void)
 {
 	return false;
 }
@@ -3191,50 +3103,6 @@ void __weak arch_bpf_stack_walk(bool (*consume_fn)(void *cookie, u64 ip, u64 sp,
 {
 }
 
-bool __weak bpf_jit_supports_timed_may_goto(void)
-{
-	return false;
-}
-
-u64 __weak arch_bpf_timed_may_goto(void)
-{
-	return 0;
-}
-
-static noinline void bpf_prog_report_may_goto_violation(void)
-{
-#ifdef CONFIG_BPF_SYSCALL
-	struct bpf_stream_stage ss;
-	struct bpf_prog *prog;
-
-	prog = bpf_prog_find_from_stack();
-	if (!prog)
-		return;
-	bpf_stream_stage(ss, prog, BPF_STDERR, ({
-		bpf_stream_printk(ss, "ERROR: Timeout detected for may_goto instruction\n");
-		bpf_stream_dump_stack(ss);
-	}));
-#endif
-}
-
-u64 bpf_check_timed_may_goto(struct bpf_timed_may_goto *p)
-{
-	u64 time = ktime_get_mono_fast_ns();
-
-	/* Populate the timestamp for this stack frame, and refresh count. */
-	if (!p->timestamp) {
-		p->timestamp = time;
-		return BPF_MAX_TIMED_LOOPS;
-	}
-	/* Check if we've exhausted our time slice, and zero count. */
-	if (unlikely(time - p->timestamp >= (NSEC_PER_SEC / 4))) {
-		bpf_prog_report_may_goto_violation();
-		return 0;
-	}
-	/* Refresh the count for the stack frame. */
-	return BPF_MAX_TIMED_LOOPS;
-}
-
 /* for configs without MMU or 32-bit */
 __weak const struct bpf_map_ops arena_map_ops;
 __weak u64 bpf_arena_get_user_vm_start(struct bpf_arena *arena)
@@ -3267,85 +3135,3 @@ EXPORT_SYMBOL(bpf_stats_enabled_key);
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(xdp_exception);
 EXPORT_TRACEPOINT_SYMBOL_GPL(xdp_bulk_tx);
-
-#ifdef CONFIG_BPF_SYSCALL
-
-int bpf_prog_get_file_line(struct bpf_prog *prog, unsigned long ip, const char **filep,
-			   const char **linep, int *nump)
-{
-	int idx = -1, insn_start, insn_end, len;
-	struct bpf_line_info *linfo;
-	void **jited_linfo;
-	struct btf *btf;
-	int nr_linfo;
-
-	btf = prog->aux->btf;
-	linfo = prog->aux->linfo;
-	jited_linfo = prog->aux->jited_linfo;
-
-	if (!btf || !linfo || !jited_linfo)
-		return -EINVAL;
-	len = prog->aux->func ? prog->aux->func[prog->aux->func_idx]->len : prog->len;
-
-	linfo = &prog->aux->linfo[prog->aux->linfo_idx];
-	jited_linfo = &prog->aux->jited_linfo[prog->aux->linfo_idx];
-
-	insn_start = linfo[0].insn_off;
-	insn_end = insn_start + len;
-	nr_linfo = prog->aux->nr_linfo - prog->aux->linfo_idx;
-
-	for (int i = 0; i < nr_linfo &&
-	     linfo[i].insn_off >= insn_start && linfo[i].insn_off < insn_end; i++) {
-		if (jited_linfo[i] >= (void *)ip)
-			break;
-		idx = i;
-	}
-
-	if (idx == -1)
-		return -ENOENT;
-
-	/* Get base component of the file path. */
-	*filep = btf_name_by_offset(btf, linfo[idx].file_name_off);
-	*filep = kbasename(*filep);
-	/* Obtain the source line, and strip whitespace in prefix. */
-	*linep = btf_name_by_offset(btf, linfo[idx].line_off);
-	while (isspace(**linep))
-		*linep += 1;
-	*nump = BPF_LINE_INFO_LINE_NUM(linfo[idx].line_col);
-	return 0;
-}
-
-struct walk_stack_ctx {
-	struct bpf_prog *prog;
-};
-
-static bool find_from_stack_cb(void *cookie, u64 ip, u64 sp, u64 bp)
-{
-	struct walk_stack_ctx *ctxp = cookie;
-	struct bpf_prog *prog;
-
-	/*
-	 * The RCU read lock is held to safely traverse the latch tree, but we
-	 * don't need its protection when accessing the prog, since it has an
-	 * active stack frame on the current stack trace, and won't disappear.
-	 */
-	rcu_read_lock();
-	prog = bpf_prog_ksym_find(ip);
-	rcu_read_unlock();
-	if (!prog)
-		return true;
-	if (bpf_is_subprog(prog))
-		return true;
-	ctxp->prog = prog;
-	return false;
-}
-
-struct bpf_prog *bpf_prog_find_from_stack(void)
-{
-	struct walk_stack_ctx ctx = {};
-
-	arch_bpf_stack_walk(find_from_stack_cb, &ctx);
-	return ctx.prog;
-}
-
-#endif

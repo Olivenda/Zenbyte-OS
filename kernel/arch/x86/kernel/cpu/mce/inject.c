@@ -24,11 +24,10 @@
 #include <linux/pci.h>
 #include <linux/uaccess.h>
 
-#include <asm/amd/nb.h>
+#include <asm/amd_nb.h>
 #include <asm/apic.h>
 #include <asm/irq_vectors.h>
 #include <asm/mce.h>
-#include <asm/msr.h>
 #include <asm/nmi.h>
 #include <asm/smp.h>
 
@@ -230,6 +229,7 @@ static int raise_local(void)
 	} else if (m->status) {
 		pr_info("Starting machine check poll CPU %d\n", cpu);
 		raise_poll(m);
+		mce_notify_irq();
 		pr_info("Machine check poll done on CPU %d\n", cpu);
 	} else
 		m->finished = 0;
@@ -476,35 +476,34 @@ static void prepare_msrs(void *info)
 	struct mce m = *(struct mce *)info;
 	u8 b = m.bank;
 
-	wrmsrq(MSR_IA32_MCG_STATUS, m.mcgstatus);
+	wrmsrl(MSR_IA32_MCG_STATUS, m.mcgstatus);
 
 	if (boot_cpu_has(X86_FEATURE_SMCA)) {
 		if (m.inject_flags == DFR_INT_INJ) {
-			wrmsrq(MSR_AMD64_SMCA_MCx_DESTAT(b), m.status);
-			wrmsrq(MSR_AMD64_SMCA_MCx_DEADDR(b), m.addr);
+			wrmsrl(MSR_AMD64_SMCA_MCx_DESTAT(b), m.status);
+			wrmsrl(MSR_AMD64_SMCA_MCx_DEADDR(b), m.addr);
 		} else {
-			wrmsrq(MSR_AMD64_SMCA_MCx_STATUS(b), m.status);
-			wrmsrq(MSR_AMD64_SMCA_MCx_ADDR(b), m.addr);
+			wrmsrl(MSR_AMD64_SMCA_MCx_STATUS(b), m.status);
+			wrmsrl(MSR_AMD64_SMCA_MCx_ADDR(b), m.addr);
 		}
 
-		wrmsrq(MSR_AMD64_SMCA_MCx_SYND(b), m.synd);
+		wrmsrl(MSR_AMD64_SMCA_MCx_SYND(b), m.synd);
 
 		if (m.misc)
-			wrmsrq(MSR_AMD64_SMCA_MCx_MISC(b), m.misc);
+			wrmsrl(MSR_AMD64_SMCA_MCx_MISC(b), m.misc);
 	} else {
-		wrmsrq(MSR_IA32_MCx_STATUS(b), m.status);
-		wrmsrq(MSR_IA32_MCx_ADDR(b), m.addr);
+		wrmsrl(MSR_IA32_MCx_STATUS(b), m.status);
+		wrmsrl(MSR_IA32_MCx_ADDR(b), m.addr);
 
 		if (m.misc)
-			wrmsrq(MSR_IA32_MCx_MISC(b), m.misc);
+			wrmsrl(MSR_IA32_MCx_MISC(b), m.misc);
 	}
 }
 
 static void do_inject(void)
 {
-	unsigned int cpu = i_mce.extcpu;
-	struct mce_hw_err err;
 	u64 mcg_status = 0;
+	unsigned int cpu = i_mce.extcpu;
 	u8 b = i_mce.bank;
 
 	i_mce.tsc = rdtsc_ordered();
@@ -518,8 +517,7 @@ static void do_inject(void)
 		i_mce.status |= MCI_STATUS_SYNDV;
 
 	if (inj_type == SW_INJ) {
-		err.m = i_mce;
-		mce_log(&err);
+		mce_log(&i_mce);
 		return;
 	}
 
@@ -590,7 +588,7 @@ static int inj_bank_set(void *data, u64 val)
 	u64 cap;
 
 	/* Get bank count on target CPU so we can handle non-uniform values. */
-	rdmsrq_on_cpu(m->extcpu, MSR_IA32_MCG_CAP, &cap);
+	rdmsrl_on_cpu(m->extcpu, MSR_IA32_MCG_CAP, &cap);
 	n_banks = cap & MCG_BANKCNT_MASK;
 
 	if (val >= n_banks) {
@@ -614,7 +612,7 @@ static int inj_bank_set(void *data, u64 val)
 	if (cpu_feature_enabled(X86_FEATURE_SMCA)) {
 		u64 ipid;
 
-		if (rdmsrq_on_cpu(m->extcpu, MSR_AMD64_SMCA_MCx_IPID(val), &ipid)) {
+		if (rdmsrl_on_cpu(m->extcpu, MSR_AMD64_SMCA_MCx_IPID(val), &ipid)) {
 			pr_err("Error reading IPID on CPU%d\n", m->extcpu);
 			return -EINVAL;
 		}
@@ -742,15 +740,15 @@ static void check_hw_inj_possible(void)
 		u64 status = MCI_STATUS_VAL, ipid;
 
 		/* Check whether bank is populated */
-		rdmsrq(MSR_AMD64_SMCA_MCx_IPID(bank), ipid);
+		rdmsrl(MSR_AMD64_SMCA_MCx_IPID(bank), ipid);
 		if (!ipid)
 			continue;
 
 		toggle_hw_mce_inject(cpu, true);
 
-		wrmsrq_safe(mca_msr_reg(bank, MCA_STATUS), status);
-		rdmsrq_safe(mca_msr_reg(bank, MCA_STATUS), &status);
-		wrmsrq_safe(mca_msr_reg(bank, MCA_STATUS), 0);
+		wrmsrl_safe(mca_msr_reg(bank, MCA_STATUS), status);
+		rdmsrl_safe(mca_msr_reg(bank, MCA_STATUS), &status);
+		wrmsrl_safe(mca_msr_reg(bank, MCA_STATUS), 0);
 
 		if (!status) {
 			hw_injection_possible = false;

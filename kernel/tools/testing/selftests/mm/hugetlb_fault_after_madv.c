@@ -5,35 +5,19 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <setjmp.h>
-#include <signal.h>
 
 #include "vm_util.h"
 #include "../kselftest.h"
 
+#define MMAP_SIZE (1 << 21)
 #define INLOOP_ITER 100
 
-static char *huge_ptr;
-static size_t huge_page_size;
-
-static sigjmp_buf sigbuf;
-static bool sigbus_triggered;
-
-static void signal_handler(int signal)
-{
-	if (signal == SIGBUS) {
-		sigbus_triggered = true;
-		siglongjmp(sigbuf, 1);
-	}
-}
+char *huge_ptr;
 
 /* Touch the memory while it is being madvised() */
 void *touch(void *unused)
 {
 	char *ptr = (char *)huge_ptr;
-
-	if (sigsetjmp(sigbuf, 1))
-		return NULL;
 
 	for (int i = 0; i < INLOOP_ITER; i++)
 		ptr[0] = '.';
@@ -46,7 +30,7 @@ void *madv(void *unused)
 	usleep(rand() % 10);
 
 	for (int i = 0; i < INLOOP_ITER; i++)
-		madvise(huge_ptr, huge_page_size, MADV_DONTNEED);
+		madvise(huge_ptr, MMAP_SIZE, MADV_DONTNEED);
 
 	return NULL;
 }
@@ -60,22 +44,8 @@ int main(void)
 	 * interactions
 	 */
 	int max = 10000;
-	int err;
-
-	ksft_print_header();
-	ksft_set_plan(1);
 
 	srand(getpid());
-
-	if (signal(SIGBUS, signal_handler) == SIG_ERR)
-		ksft_exit_skip("Could not register signal handler.");
-
-	huge_page_size = default_huge_page_size();
-	if (!huge_page_size)
-		ksft_exit_skip("Could not detect default hugetlb page size.");
-
-	ksft_print_msg("[INFO] detected default hugetlb page size: %zu KiB\n",
-		       huge_page_size / 1024);
 
 	free_hugepages = get_free_hugepages();
 	if (free_hugepages != 1) {
@@ -84,7 +54,7 @@ int main(void)
 	}
 
 	while (max--) {
-		huge_ptr = mmap(NULL, huge_page_size, PROT_READ | PROT_WRITE,
+		huge_ptr = mmap(NULL, MMAP_SIZE, PROT_READ | PROT_WRITE,
 				MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
 				-1, 0);
 
@@ -96,14 +66,8 @@ int main(void)
 
 		pthread_join(thread1, NULL);
 		pthread_join(thread2, NULL);
-		munmap(huge_ptr, huge_page_size);
+		munmap(huge_ptr, MMAP_SIZE);
 	}
 
-	ksft_test_result(!sigbus_triggered, "SIGBUS behavior\n");
-
-	err = ksft_get_fail_cnt();
-	if (err)
-		ksft_exit_fail_msg("%d out of %d tests failed\n",
-				   err, ksft_test_num());
-	ksft_exit_pass();
+	return KSFT_PASS;
 }

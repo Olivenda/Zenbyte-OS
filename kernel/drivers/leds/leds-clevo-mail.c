@@ -165,7 +165,7 @@ static void clevo_mail_led_remove(struct platform_device *pdev)
 }
 
 static struct platform_driver clevo_mail_led_driver = {
-	.remove		= clevo_mail_led_remove,
+	.remove_new	= clevo_mail_led_remove,
 	.driver		= {
 		.name		= KBUILD_MODNAME,
 	},

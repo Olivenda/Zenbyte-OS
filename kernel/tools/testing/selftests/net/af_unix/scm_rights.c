@@ -23,7 +23,6 @@ FIXTURE_VARIANT(scm_rights)
 	int type;
 	int flags;
 	bool test_listener;
-	bool disabled;
 };
 
 FIXTURE_VARIANT_ADD(scm_rights, dgram)
@@ -32,16 +31,6 @@ FIXTURE_VARIANT_ADD(scm_rights, dgram)
 	.type = SOCK_DGRAM,
 	.flags = 0,
 	.test_listener = false,
-	.disabled = false,
-};
-
-FIXTURE_VARIANT_ADD(scm_rights, dgram_disabled)
-{
-	.name = "UNIX ",
-	.type = SOCK_DGRAM,
-	.flags = 0,
-	.test_listener = false,
-	.disabled = true,
 };
 
 FIXTURE_VARIANT_ADD(scm_rights, stream)
@@ -50,16 +39,6 @@ FIXTURE_VARIANT_ADD(scm_rights, stream)
 	.type = SOCK_STREAM,
 	.flags = 0,
 	.test_listener = false,
-	.disabled = false,
-};
-
-FIXTURE_VARIANT_ADD(scm_rights, stream_disabled)
-{
-	.name = "UNIX-STREAM ",
-	.type = SOCK_STREAM,
-	.flags = 0,
-	.test_listener = false,
-	.disabled = true,
 };
 
 FIXTURE_VARIANT_ADD(scm_rights, stream_oob)
@@ -68,16 +47,6 @@ FIXTURE_VARIANT_ADD(scm_rights, stream_oob)
 	.type = SOCK_STREAM,
 	.flags = MSG_OOB,
 	.test_listener = false,
-	.disabled = false,
-};
-
-FIXTURE_VARIANT_ADD(scm_rights, stream_oob_disabled)
-{
-	.name = "UNIX-STREAM ",
-	.type = SOCK_STREAM,
-	.flags = MSG_OOB,
-	.test_listener = false,
-	.disabled = true,
 };
 
 FIXTURE_VARIANT_ADD(scm_rights, stream_listener)
@@ -86,16 +55,6 @@ FIXTURE_VARIANT_ADD(scm_rights, stream_listener)
 	.type = SOCK_STREAM,
 	.flags = 0,
 	.test_listener = true,
-	.disabled = false,
-};
-
-FIXTURE_VARIANT_ADD(scm_rights, stream_listener_disabled)
-{
-	.name = "UNIX-STREAM ",
-	.type = SOCK_STREAM,
-	.flags = 0,
-	.test_listener = true,
-	.disabled = true,
 };
 
 FIXTURE_VARIANT_ADD(scm_rights, stream_listener_oob)
@@ -104,16 +63,6 @@ FIXTURE_VARIANT_ADD(scm_rights, stream_listener_oob)
 	.type = SOCK_STREAM,
 	.flags = MSG_OOB,
 	.test_listener = true,
-	.disabled = false,
-};
-
-FIXTURE_VARIANT_ADD(scm_rights, stream_listener_oob_disabled)
-{
-	.name = "UNIX-STREAM ",
-	.type = SOCK_STREAM,
-	.flags = MSG_OOB,
-	.test_listener = true,
-	.disabled = true,
 };
 
 static int count_sockets(struct __test_metadata *_metadata,
@@ -156,9 +105,6 @@ FIXTURE_SETUP(scm_rights)
 	ret = unshare(CLONE_NEWNET);
 	ASSERT_EQ(0, ret);
 
-	if (variant->disabled)
-		return;
-
 	ret = count_sockets(_metadata, variant);
 	ASSERT_EQ(0, ret);
 }
@@ -166,9 +112,6 @@ FIXTURE_SETUP(scm_rights)
 FIXTURE_TEARDOWN(scm_rights)
 {
 	int ret;
-
-	if (variant->disabled)
-		return;
 
 	sleep(1);
 
@@ -178,7 +121,6 @@ FIXTURE_TEARDOWN(scm_rights)
 
 static void create_listeners(struct __test_metadata *_metadata,
 			     FIXTURE_DATA(scm_rights) *self,
-			     const FIXTURE_VARIANT(scm_rights) *variant,
 			     int n)
 {
 	struct sockaddr_un addr = {
@@ -197,12 +139,6 @@ static void create_listeners(struct __test_metadata *_metadata,
 
 		ret = listen(self->fd[i], -1);
 		ASSERT_EQ(0, ret);
-
-		if (variant->disabled) {
-			ret = setsockopt(self->fd[i], SOL_SOCKET, SO_PASSRIGHTS,
-					 &(int){0}, sizeof(int));
-			ASSERT_EQ(0, ret);
-		}
 
 		addrlen = sizeof(addr);
 		ret = getsockname(self->fd[i], (struct sockaddr *)&addr, &addrlen);
@@ -228,12 +164,6 @@ static void create_socketpairs(struct __test_metadata *_metadata,
 	for (i = 0; i < n * 2; i += 2) {
 		ret = socketpair(AF_UNIX, variant->type, 0, self->fd + i);
 		ASSERT_EQ(0, ret);
-
-		if (variant->disabled) {
-			ret = setsockopt(self->fd[i], SOL_SOCKET, SO_PASSRIGHTS,
-					 &(int){0}, sizeof(int));
-			ASSERT_EQ(0, ret);
-		}
 	}
 }
 
@@ -245,7 +175,7 @@ static void __create_sockets(struct __test_metadata *_metadata,
 	ASSERT_LE(n * 2, sizeof(self->fd) / sizeof(self->fd[0]));
 
 	if (variant->test_listener)
-		create_listeners(_metadata, self, variant, n);
+		create_listeners(_metadata, self, n);
 	else
 		create_socketpairs(_metadata, self, variant, n);
 }
@@ -300,13 +230,7 @@ void __send_fd(struct __test_metadata *_metadata,
 	int ret;
 
 	ret = sendmsg(self->fd[receiver * 2 + 1], &msg, variant->flags);
-
-	if (variant->disabled) {
-		ASSERT_EQ(-1, ret);
-		ASSERT_EQ(-EPERM, -errno);
-	} else {
-		ASSERT_EQ(MSGLEN, ret);
-	}
+	ASSERT_EQ(MSGLEN, ret);
 }
 
 #define create_sockets(n)					\

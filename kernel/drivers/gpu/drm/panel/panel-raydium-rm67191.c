@@ -527,11 +527,9 @@ static int rad_panel_probe(struct mipi_dsi_device *dsi)
 	int ret;
 	u32 video_mode;
 
-	panel = devm_drm_panel_alloc(dev, struct rad_panel, panel,
-				     &rad_panel_funcs,
-				     DRM_MODE_CONNECTOR_DSI);
-	if (IS_ERR(panel))
-		return PTR_ERR(panel);
+	panel = devm_kzalloc(&dsi->dev, sizeof(*panel), GFP_KERNEL);
+	if (!panel)
+		return -ENOMEM;
 
 	mipi_dsi_set_drvdata(dsi, panel);
 
@@ -588,6 +586,8 @@ static int rad_panel_probe(struct mipi_dsi_device *dsi)
 	if (ret)
 		return ret;
 
+	drm_panel_init(&panel->panel, dev, &rad_panel_funcs,
+		       DRM_MODE_CONNECTOR_DSI);
 	dev_set_drvdata(dev, panel);
 
 	drm_panel_add(&panel->panel);

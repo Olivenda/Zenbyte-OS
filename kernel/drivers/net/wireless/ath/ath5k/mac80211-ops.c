@@ -192,7 +192,7 @@ ath5k_remove_interface(struct ieee80211_hw *hw,
  * TODO: Phy disable/diversity etc
  */
 static int
-ath5k_config(struct ieee80211_hw *hw, int radio_idx, u32 changed)
+ath5k_config(struct ieee80211_hw *hw, u32 changed)
 {
 	struct ath5k_hw *ah = hw->priv;
 	struct ieee80211_conf *conf = &hw->conf;
@@ -686,7 +686,6 @@ ath5k_get_survey(struct ieee80211_hw *hw, int idx, struct survey_info *survey)
  * ath5k_set_coverage_class - Set IEEE 802.11 coverage class
  *
  * @hw: struct ieee80211_hw pointer
- * @radio_idx: Radio index
  * @coverage_class: IEEE 802.11 coverage class number
  *
  * Mac80211 callback. Sets slot time, ACK timeout and CTS timeout for given
@@ -694,8 +693,7 @@ ath5k_get_survey(struct ieee80211_hw *hw, int idx, struct survey_info *survey)
  * reset.
  */
 static void
-ath5k_set_coverage_class(struct ieee80211_hw *hw, int radio_idx,
-			 s16 coverage_class)
+ath5k_set_coverage_class(struct ieee80211_hw *hw, s16 coverage_class)
 {
 	struct ath5k_hw *ah = hw->priv;
 
@@ -706,8 +704,7 @@ ath5k_set_coverage_class(struct ieee80211_hw *hw, int radio_idx,
 
 
 static int
-ath5k_set_antenna(struct ieee80211_hw *hw, int radio_idx, u32 tx_ant,
-		  u32 rx_ant)
+ath5k_set_antenna(struct ieee80211_hw *hw, u32 tx_ant, u32 rx_ant)
 {
 	struct ath5k_hw *ah = hw->priv;
 
@@ -724,8 +721,7 @@ ath5k_set_antenna(struct ieee80211_hw *hw, int radio_idx, u32 tx_ant,
 
 
 static int
-ath5k_get_antenna(struct ieee80211_hw *hw, int radio_idx,
-		  u32 *tx_ant, u32 *rx_ant)
+ath5k_get_antenna(struct ieee80211_hw *hw, u32 *tx_ant, u32 *rx_ant)
 {
 	struct ath5k_hw *ah = hw->priv;
 

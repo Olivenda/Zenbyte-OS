@@ -744,27 +744,20 @@ static int apds9306_event_period_set(struct apds9306_data *data, int val)
 	return regmap_field_write(rf->int_persist_val, val);
 }
 
-static int apds9306_get_thresh_reg(int dir)
-{
-	if (dir == IIO_EV_DIR_RISING)
-		return APDS9306_ALS_THRES_UP_0_REG;
-	else if (dir == IIO_EV_DIR_FALLING)
-		return APDS9306_ALS_THRES_LOW_0_REG;
-	else
-		return -EINVAL;
-}
-
 static int apds9306_event_thresh_get(struct apds9306_data *data, int dir,
 				     int *val)
 {
-	int reg, ret;
+	int var, ret;
 	u8 buff[3];
 
-	reg = apds9306_get_thresh_reg(dir);
-	if (reg < 0)
-		return reg;
+	if (dir == IIO_EV_DIR_RISING)
+		var = APDS9306_ALS_THRES_UP_0_REG;
+	else if (dir == IIO_EV_DIR_FALLING)
+		var = APDS9306_ALS_THRES_LOW_0_REG;
+	else
+		return -EINVAL;
 
-	ret = regmap_bulk_read(data->regmap, reg, buff, sizeof(buff));
+	ret = regmap_bulk_read(data->regmap, var, buff, sizeof(buff));
 	if (ret)
 		return ret;
 
@@ -776,19 +769,22 @@ static int apds9306_event_thresh_get(struct apds9306_data *data, int dir,
 static int apds9306_event_thresh_set(struct apds9306_data *data, int dir,
 				     int val)
 {
-	int reg;
+	int var;
 	u8 buff[3];
 
-	reg = apds9306_get_thresh_reg(dir);
-	if (reg < 0)
-		return reg;
+	if (dir == IIO_EV_DIR_RISING)
+		var = APDS9306_ALS_THRES_UP_0_REG;
+	else if (dir == IIO_EV_DIR_FALLING)
+		var = APDS9306_ALS_THRES_LOW_0_REG;
+	else
+		return -EINVAL;
 
 	if (!in_range(val, 0, APDS9306_ALS_THRES_VAL_MAX))
 		return -EINVAL;
 
 	put_unaligned_le24(val, buff);
 
-	return regmap_bulk_write(data->regmap, reg, buff, sizeof(buff));
+	return regmap_bulk_write(data->regmap, var, buff, sizeof(buff));
 }
 
 static int apds9306_event_thresh_adaptive_get(struct apds9306_data *data, int *val)
@@ -835,10 +831,11 @@ static int apds9306_read_raw(struct iio_dev *indio_dev,
 		 * Changing device parameters during adc operation, resets
 		 * the ADC which has to avoided.
 		 */
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
 		ret = apds9306_read_data(data, val, reg);
-		iio_device_release_direct(indio_dev);
+		iio_device_release_direct_mode(indio_dev);
 		if (ret)
 			return ret;
 
@@ -1074,7 +1071,7 @@ static int apds9306_write_event_config(struct iio_dev *indio_dev,
 				       const struct iio_chan_spec *chan,
 				       enum iio_event_type type,
 				       enum iio_event_direction dir,
-				       bool state)
+				       int state)
 {
 	struct apds9306_data *data = iio_priv(indio_dev);
 	struct apds9306_regfields *rf = &data->rf;
@@ -1128,7 +1125,10 @@ static int apds9306_write_event_config(struct iio_dev *indio_dev,
 		}
 	}
 	case IIO_EV_TYPE_THRESH_ADAPTIVE:
-		return regmap_field_write(rf->int_thresh_var_en, state);
+		if (state)
+			return regmap_field_write(rf->int_thresh_var_en, 1);
+		else
+			return regmap_field_write(rf->int_thresh_var_en, 0);
 	default:
 		return -EINVAL;
 	}
@@ -1358,4 +1358,4 @@ module_i2c_driver(apds9306_driver);
 MODULE_AUTHOR("Subhajit Ghosh <subhajit.ghosh@tweaklogic.com>");
 MODULE_DESCRIPTION("APDS9306 Ambient Light Sensor driver");
 MODULE_LICENSE("GPL");
-MODULE_IMPORT_NS("IIO_GTS_HELPER");
+MODULE_IMPORT_NS(IIO_GTS_HELPER);

@@ -25,8 +25,6 @@ select:
           - rockchip,rk3288-pmu
           - rockchip,rk3368-pmu
           - rockchip,rk3399-pmu
-          - rockchip,rk3528-pmu
-          - rockchip,rk3562-pmu
           - rockchip,rk3568-pmu
           - rockchip,rk3576-pmu
           - rockchip,rk3588-pmu
@@ -45,8 +43,6 @@ properties:
           - rockchip,rk3288-pmu
           - rockchip,rk3368-pmu
           - rockchip,rk3399-pmu
-          - rockchip,rk3528-pmu
-          - rockchip,rk3562-pmu
           - rockchip,rk3568-pmu
           - rockchip,rk3576-pmu
           - rockchip,rk3588-pmu
@@ -57,17 +53,11 @@ properties:
   reg:
     maxItems: 1
 
-  power-controller:
-    type: object
-
-  reboot-mode:
-    type: object
-
 required:
   - compatible
   - reg
 
-additionalProperties: false
+additionalProperties: true
 
 examples:
   - |

@@ -633,7 +633,7 @@ static struct platform_driver hv_driver = {
 		.of_match_table = hv_match,
 	},
 	.probe		= hv_probe,
-	.remove		= hv_remove,
+	.remove_new	= hv_remove,
 };
 
 static int __init sunhv_init(void)

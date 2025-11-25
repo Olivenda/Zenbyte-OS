@@ -10,6 +10,7 @@
 
 / {
 	model = "Toradex Colibri iMX6DL/S Module";
+	compatible = "toradex,colibri_imx6dl", "fsl,imx6dl";
 
 	aliases {
 		mmc0 = &usdhc3; /* eMMC */
@@ -135,7 +136,7 @@
 			"LINE_IN", "Line In Jack",
 			"MIC_IN", "Mic Jack",
 			"Mic Jack", "Mic Bias";
-		model = "colibri-imx6";
+		model = "imx6dl-colibri-sgtl5000";
 		mux-int-port = <1>;
 		mux-ext-port = <5>;
 		ssi-controller = <&ssi1>;
@@ -587,6 +588,7 @@
 			st,settling = <3>;
 			/* 5 ms touch detect interrupt delay */
 			st,touch-det-delay = <5>;
+			status = "disabled";
 		};
 
 		stmpe_adc: stmpe_adc {

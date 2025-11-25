@@ -8,7 +8,6 @@
 
 #include <uapi/drm/xe_drm.h>
 
-#include "xe_eu_stall.h"
 #include "xe_oa.h"
 #include "xe_observation.h"
 
@@ -25,17 +24,6 @@ static int xe_oa_ioctl(struct drm_device *dev, struct drm_xe_observation_param *
 		return xe_oa_add_config_ioctl(dev, arg->param, file);
 	case DRM_XE_OBSERVATION_OP_REMOVE_CONFIG:
 		return xe_oa_remove_config_ioctl(dev, arg->param, file);
-	default:
-		return -EINVAL;
-	}
-}
-
-static int xe_eu_stall_ioctl(struct drm_device *dev, struct drm_xe_observation_param *arg,
-			     struct drm_file *file)
-{
-	switch (arg->observation_op) {
-	case DRM_XE_OBSERVATION_OP_STREAM_OPEN:
-		return xe_eu_stall_stream_open(dev, arg->param, file);
 	default:
 		return -EINVAL;
 	}
@@ -63,14 +51,12 @@ int xe_observation_ioctl(struct drm_device *dev, void *data, struct drm_file *fi
 	switch (arg->observation_type) {
 	case DRM_XE_OBSERVATION_TYPE_OA:
 		return xe_oa_ioctl(dev, arg, file);
-	case DRM_XE_OBSERVATION_TYPE_EU_STALL:
-		return xe_eu_stall_ioctl(dev, arg, file);
 	default:
 		return -EINVAL;
 	}
 }
 
-static const struct ctl_table observation_ctl_table[] = {
+static struct ctl_table observation_ctl_table[] = {
 	{
 	 .procname = "observation_paranoid",
 	 .data = &xe_observation_paranoid,

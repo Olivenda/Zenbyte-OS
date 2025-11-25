@@ -23,6 +23,13 @@ struct sl28cpld_hwmon {
 	u32 offset;
 };
 
+static umode_t sl28cpld_hwmon_is_visible(const void *data,
+					 enum hwmon_sensor_types type,
+					 u32 attr, int channel)
+{
+	return 0444;
+}
+
 static int sl28cpld_hwmon_read(struct device *dev,
 			       enum hwmon_sensor_types type, u32 attr,
 			       int channel, long *input)
@@ -66,7 +73,7 @@ static const struct hwmon_channel_info * const sl28cpld_hwmon_info[] = {
 };
 
 static const struct hwmon_ops sl28cpld_hwmon_ops = {
-	.visible = 0444,
+	.is_visible = sl28cpld_hwmon_is_visible,
 	.read = sl28cpld_hwmon_read,
 };
 

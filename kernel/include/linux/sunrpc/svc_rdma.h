@@ -202,8 +202,7 @@ struct svc_rdma_recv_ctxt {
 	struct svc_rdma_pcl	rc_reply_pcl;
 
 	unsigned int		rc_page_count;
-	unsigned long		rc_maxpages;
-	struct page		*rc_pages[] __counted_by(rc_maxpages);
+	struct page		*rc_pages[RPCSVC_MAXPAGES];
 };
 
 /*
@@ -245,8 +244,7 @@ struct svc_rdma_send_ctxt {
 	void			*sc_xprt_buf;
 	int			sc_page_count;
 	int			sc_cur_sge_no;
-	unsigned long		sc_maxpages;
-	struct page		**sc_pages;
+	struct page		*sc_pages[RPCSVC_MAXPAGES];
 	struct ib_sge		sc_sges[];
 };
 

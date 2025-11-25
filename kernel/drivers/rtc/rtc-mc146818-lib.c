@@ -216,7 +216,7 @@ int mc146818_set_time(struct rtc_time *time)
 	unsigned char save_control, save_freq_select;
 	unsigned int yrs;
 #ifdef CONFIG_MACH_DECSTATION
-	unsigned int real_yrs;
+	unsigned int real_yrs, leap_yr;
 #endif
 	unsigned char century = 0;
 
@@ -232,6 +232,8 @@ int mc146818_set_time(struct rtc_time *time)
 
 #ifdef CONFIG_MACH_DECSTATION
 	real_yrs = yrs;
+	leap_yr = ((!((yrs + 1900) % 4) && ((yrs + 1900) % 100)) ||
+			!((yrs + 1900) % 400));
 	yrs = 72;
 
 	/*
@@ -239,7 +241,7 @@ int mc146818_set_time(struct rtc_time *time)
 	 * for non-leap years, so that Feb, 29th is handled
 	 * correctly.
 	 */
-	if (!is_leap_year(real_yrs + 1900) && mon < 3) {
+	if (!leap_yr && mon < 3) {
 		real_yrs--;
 		yrs = 73;
 	}

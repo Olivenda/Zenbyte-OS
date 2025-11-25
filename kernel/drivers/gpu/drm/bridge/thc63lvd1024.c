@@ -43,12 +43,11 @@ static inline struct thc63_dev *to_thc63(struct drm_bridge *bridge)
 }
 
 static int thc63_attach(struct drm_bridge *bridge,
-			struct drm_encoder *encoder,
 			enum drm_bridge_attach_flags flags)
 {
 	struct thc63_dev *thc63 = to_thc63(bridge);
 
-	return drm_bridge_attach(encoder, thc63->next, bridge, flags);
+	return drm_bridge_attach(bridge->encoder, thc63->next, bridge, flags);
 }
 
 static enum drm_mode_status thc63_mode_valid(struct drm_bridge *bridge,
@@ -181,10 +180,9 @@ static int thc63_probe(struct platform_device *pdev)
 	struct thc63_dev *thc63;
 	int ret;
 
-	thc63 = devm_drm_bridge_alloc(&pdev->dev, struct thc63_dev, bridge,
-				      &thc63_bridge_func);
-	if (IS_ERR(thc63))
-		return PTR_ERR(thc63);
+	thc63 = devm_kzalloc(&pdev->dev, sizeof(*thc63), GFP_KERNEL);
+	if (!thc63)
+		return -ENOMEM;
 
 	thc63->dev = &pdev->dev;
 	platform_set_drvdata(pdev, thc63);
@@ -209,6 +207,7 @@ static int thc63_probe(struct platform_device *pdev)
 
 	thc63->bridge.driver_private = thc63;
 	thc63->bridge.of_node = pdev->dev.of_node;
+	thc63->bridge.funcs = &thc63_bridge_func;
 	thc63->bridge.timings = &thc63->timings;
 
 	drm_bridge_add(&thc63->bridge);
@@ -231,7 +230,7 @@ MODULE_DEVICE_TABLE(of, thc63_match);
 
 static struct platform_driver thc63_driver = {
 	.probe	= thc63_probe,
-	.remove = thc63_remove,
+	.remove_new = thc63_remove,
 	.driver	= {
 		.name		= "thc63lvd1024",
 		.of_match_table	= thc63_match,

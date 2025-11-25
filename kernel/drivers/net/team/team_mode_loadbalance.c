@@ -301,7 +301,8 @@ static int lb_bpf_func_set(struct team *team, struct team_gsetter_ctx *ctx)
 	if (lb_priv->ex->orig_fprog) {
 		/* Clear old filter data */
 		__fprog_destroy(lb_priv->ex->orig_fprog);
-		orig_fp = rtnl_dereference(lb_priv->fp);
+		orig_fp = rcu_dereference_protected(lb_priv->fp,
+						lockdep_is_held(&team->lock));
 	}
 
 	rcu_assign_pointer(lb_priv->fp, fp);
@@ -323,7 +324,8 @@ static void lb_bpf_func_free(struct team *team)
 		return;
 
 	__fprog_destroy(lb_priv->ex->orig_fprog);
-	fp = rtnl_dereference(lb_priv->fp);
+	fp = rcu_dereference_protected(lb_priv->fp,
+				       lockdep_is_held(&team->lock));
 	bpf_prog_destroy(fp);
 }
 
@@ -333,7 +335,8 @@ static void lb_tx_method_get(struct team *team, struct team_gsetter_ctx *ctx)
 	lb_select_tx_port_func_t *func;
 	char *name;
 
-	func = rtnl_dereference(lb_priv->select_tx_port_func);
+	func = rcu_dereference_protected(lb_priv->select_tx_port_func,
+					 lockdep_is_held(&team->lock));
 	name = lb_select_tx_port_get_name(func);
 	BUG_ON(!name);
 	ctx->data.str_val = name;
@@ -475,7 +478,7 @@ static void lb_stats_refresh(struct work_struct *work)
 	team = lb_priv_ex->team;
 	lb_priv = get_lb_priv(team);
 
-	if (!rtnl_trylock()) {
+	if (!mutex_trylock(&team->lock)) {
 		schedule_delayed_work(&lb_priv_ex->stats.refresh_dw, 0);
 		return;
 	}
@@ -512,7 +515,7 @@ static void lb_stats_refresh(struct work_struct *work)
 	schedule_delayed_work(&lb_priv_ex->stats.refresh_dw,
 			      (lb_priv_ex->stats.refresh_interval * HZ) / 10);
 
-	rtnl_unlock();
+	mutex_unlock(&team->lock);
 }
 
 static void lb_stats_refresh_interval_get(struct team *team,

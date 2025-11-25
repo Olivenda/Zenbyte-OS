@@ -19,7 +19,7 @@ bool hsw_ips_pre_update(struct intel_atomic_state *state,
 void hsw_ips_post_update(struct intel_atomic_state *state,
 			 struct intel_crtc *crtc);
 bool hsw_crtc_supports_ips(struct intel_crtc *crtc);
-int hsw_ips_min_cdclk(const struct intel_crtc_state *crtc_state);
+bool hsw_crtc_state_ips_capable(const struct intel_crtc_state *crtc_state);
 int hsw_ips_compute_config(struct intel_atomic_state *state,
 			   struct intel_crtc *crtc);
 void hsw_ips_get_config(struct intel_crtc_state *crtc_state);
@@ -42,9 +42,9 @@ static inline bool hsw_crtc_supports_ips(struct intel_crtc *crtc)
 {
 	return false;
 }
-static inline int hsw_ips_min_cdclk(const struct intel_crtc_state *crtc_state)
+static inline bool hsw_crtc_state_ips_capable(const struct intel_crtc_state *crtc_state)
 {
-	return 0;
+	return false;
 }
 static inline int hsw_ips_compute_config(struct intel_atomic_state *state,
 					 struct intel_crtc *crtc)

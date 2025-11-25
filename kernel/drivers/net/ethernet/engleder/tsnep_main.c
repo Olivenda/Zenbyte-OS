@@ -223,19 +223,20 @@ static void tsnep_phy_link_status_change(struct net_device *netdev)
 
 static int tsnep_phy_loopback(struct tsnep_adapter *adapter, bool enable)
 {
-	int speed;
+	int retval;
 
-	if (enable) {
-		if (adapter->phydev->autoneg == AUTONEG_DISABLE &&
-		    adapter->phydev->speed == SPEED_100)
-			speed = SPEED_100;
-		else
-			speed = SPEED_1000;
-	} else {
-		speed = 0;
+	retval = phy_loopback(adapter->phydev, enable);
+
+	/* PHY link state change is not signaled if loopback is enabled, it
+	 * would delay a working loopback anyway, let's ensure that loopback
+	 * is working immediately by setting link mode directly
+	 */
+	if (!retval && enable) {
+		netif_carrier_on(adapter->netdev);
+		tsnep_set_link_mode(adapter);
 	}
 
-	return phy_loopback(adapter->phydev, enable, speed);
+	return retval;
 }
 
 static int tsnep_phy_open(struct tsnep_adapter *adapter)
@@ -859,8 +860,8 @@ static bool tsnep_tx_poll(struct tsnep_tx *tx, int napi_budget)
 			struct skb_shared_hwtstamps hwtstamps;
 			u64 timestamp;
 
-			if (entry->skb->sk &&
-			    READ_ONCE(entry->skb->sk->sk_tsflags) & SOF_TIMESTAMPING_BIND_PHC)
+			if (skb_shinfo(entry->skb)->tx_flags &
+			    SKBTX_HW_TSTAMP_USE_CYCLES)
 				timestamp =
 					__le64_to_cpu(entry->desc_wb->counter);
 			else
@@ -1973,41 +1974,23 @@ failed:
 
 static void tsnep_queue_enable(struct tsnep_queue *queue)
 {
-	struct tsnep_adapter *adapter = queue->adapter;
-
-	netif_napi_set_irq(&queue->napi, queue->irq);
 	napi_enable(&queue->napi);
-	tsnep_enable_irq(adapter, queue->irq_mask);
+	tsnep_enable_irq(queue->adapter, queue->irq_mask);
 
-	if (queue->tx) {
-		netif_queue_set_napi(adapter->netdev, queue->tx->queue_index,
-				     NETDEV_QUEUE_TYPE_TX, &queue->napi);
+	if (queue->tx)
 		tsnep_tx_enable(queue->tx);
-	}
 
-	if (queue->rx) {
-		netif_queue_set_napi(adapter->netdev, queue->rx->queue_index,
-				     NETDEV_QUEUE_TYPE_RX, &queue->napi);
+	if (queue->rx)
 		tsnep_rx_enable(queue->rx);
-	}
 }
 
 static void tsnep_queue_disable(struct tsnep_queue *queue)
 {
-	struct tsnep_adapter *adapter = queue->adapter;
-
-	if (queue->rx)
-		netif_queue_set_napi(adapter->netdev, queue->rx->queue_index,
-				     NETDEV_QUEUE_TYPE_RX, NULL);
-
-	if (queue->tx) {
+	if (queue->tx)
 		tsnep_tx_disable(queue->tx, &queue->napi);
-		netif_queue_set_napi(adapter->netdev, queue->tx->queue_index,
-				     NETDEV_QUEUE_TYPE_TX, NULL);
-	}
 
 	napi_disable(&queue->napi);
-	tsnep_disable_irq(adapter, queue->irq_mask);
+	tsnep_disable_irq(queue->adapter, queue->irq_mask);
 
 	/* disable RX after NAPI polling has been disabled, because RX can be
 	 * enabled during NAPI polling
@@ -2714,7 +2697,7 @@ static struct platform_driver tsnep_driver = {
 		.of_match_table = tsnep_of_match,
 	},
 	.probe = tsnep_probe,
-	.remove = tsnep_remove,
+	.remove_new = tsnep_remove,
 };
 module_platform_driver(tsnep_driver);
 

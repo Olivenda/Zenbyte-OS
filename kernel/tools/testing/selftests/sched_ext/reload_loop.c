@@ -18,10 +18,11 @@ bool force_exit = false;
 
 static enum scx_test_status setup(void **ctx)
 {
-	skel = maximal__open();
-	SCX_FAIL_IF(!skel, "Failed to open");
-	SCX_ENUM_INIT(skel);
-	SCX_FAIL_IF(maximal__load(skel), "Failed to load skel");
+	skel = maximal__open_and_load();
+	if (!skel) {
+		SCX_ERR("Failed to open and load skel");
+		return SCX_TEST_FAIL;
+	}
 
 	return SCX_TEST_PASS;
 }

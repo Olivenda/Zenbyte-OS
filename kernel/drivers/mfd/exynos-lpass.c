@@ -183,7 +183,7 @@ static const struct of_device_id exynos_lpass_of_match[] = {
 MODULE_DEVICE_TABLE(of, exynos_lpass_of_match);
 
 static struct platform_driver exynos_lpass_driver = {
-	.driver	= {
+	.driver = {
 		.name		= "exynos-lpass",
 		.pm		= &lpass_pm_ops,
 		.of_match_table	= exynos_lpass_of_match,

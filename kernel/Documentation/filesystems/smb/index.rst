@@ -8,4 +8,3 @@ CIFS
 
    ksmbd
    cifsroot
-   smbdirect

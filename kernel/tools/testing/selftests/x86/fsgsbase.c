@@ -28,8 +28,6 @@
 #include <sys/wait.h>
 #include <setjmp.h>
 
-#include "helpers.h"
-
 #ifndef __x86_64__
 # error This test is 64-bit only
 #endif
@@ -40,6 +38,28 @@ static volatile unsigned long segv_addr;
 static unsigned short *shared_scratch;
 
 static int nerrs;
+
+static void sethandler(int sig, void (*handler)(int, siginfo_t *, void *),
+		       int flags)
+{
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_sigaction = handler;
+	sa.sa_flags = SA_SIGINFO | flags;
+	sigemptyset(&sa.sa_mask);
+	if (sigaction(sig, &sa, 0))
+		err(1, "sigaction");
+}
+
+static void clearhandler(int sig)
+{
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = SIG_DFL;
+	sigemptyset(&sa.sa_mask);
+	if (sigaction(sig, &sa, 0))
+		err(1, "sigaction");
+}
 
 static void sigsegv(int sig, siginfo_t *si, void *ctx_void)
 {

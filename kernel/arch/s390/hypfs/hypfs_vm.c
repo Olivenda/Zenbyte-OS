@@ -11,7 +11,6 @@
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <asm/extable.h>
-#include <asm/machine.h>
 #include <asm/diag.h>
 #include <asm/ebcdic.h>
 #include <asm/timex.h>
@@ -122,7 +121,7 @@ static struct hypfs_dbfs_file dbfs_file_2fc = {
 
 int hypfs_vm_init(void)
 {
-	if (!machine_is_vm())
+	if (!MACHINE_IS_VM)
 		return 0;
 	if (diag2fc(0, all_guests, NULL) > 0)
 		diag2fc_guest_query = all_guests;
@@ -136,7 +135,7 @@ int hypfs_vm_init(void)
 
 void hypfs_vm_exit(void)
 {
-	if (!machine_is_vm())
+	if (!MACHINE_IS_VM)
 		return;
 	hypfs_dbfs_remove_file(&dbfs_file_2fc);
 }

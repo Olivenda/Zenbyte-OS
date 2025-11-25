@@ -1776,7 +1776,7 @@ static struct macio_driver pmz_driver = {
 
 static struct platform_driver pmz_driver = {
 	.probe		= pmz_attach,
-	.remove		= pmz_detach,
+	.remove_new	= pmz_detach,
 	.driver		= {
 		.name		= "scc",
 	},

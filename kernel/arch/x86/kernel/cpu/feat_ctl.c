@@ -4,7 +4,6 @@
 #include <asm/cpu.h>
 #include <asm/cpufeature.h>
 #include <asm/msr-index.h>
-#include <asm/msr.h>
 #include <asm/processor.h>
 #include <asm/vmx.h>
 
@@ -119,7 +118,7 @@ void init_ia32_feat_ctl(struct cpuinfo_x86 *c)
 	bool enable_vmx;
 	u64 msr;
 
-	if (rdmsrq_safe(MSR_IA32_FEAT_CTL, &msr)) {
+	if (rdmsrl_safe(MSR_IA32_FEAT_CTL, &msr)) {
 		clear_cpu_cap(c, X86_FEATURE_VMX);
 		clear_cpu_cap(c, X86_FEATURE_SGX);
 		return;
@@ -166,7 +165,7 @@ void init_ia32_feat_ctl(struct cpuinfo_x86 *c)
 			msr |= FEAT_CTL_SGX_LC_ENABLED;
 	}
 
-	wrmsrq(MSR_IA32_FEAT_CTL, msr);
+	wrmsrl(MSR_IA32_FEAT_CTL, msr);
 
 update_caps:
 	set_cpu_cap(c, X86_FEATURE_MSR_IA32_FEAT_CTL);

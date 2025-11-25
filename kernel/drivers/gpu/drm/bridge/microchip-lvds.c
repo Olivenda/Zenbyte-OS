@@ -104,12 +104,11 @@ static void lvds_serialiser_on(struct mchp_lvds *lvds)
 }
 
 static int mchp_lvds_attach(struct drm_bridge *bridge,
-			    struct drm_encoder *encoder,
 			    enum drm_bridge_attach_flags flags)
 {
 	struct mchp_lvds *lvds = bridge_to_lvds(bridge);
 
-	return drm_bridge_attach(encoder, lvds->panel_bridge,
+	return drm_bridge_attach(bridge->encoder, lvds->panel_bridge,
 				 bridge, flags);
 }
 
@@ -157,14 +156,14 @@ static int mchp_lvds_probe(struct platform_device *pdev)
 	if (!dev->of_node)
 		return -ENODEV;
 
-	lvds = devm_drm_bridge_alloc(&pdev->dev, struct mchp_lvds, bridge,
-				     &mchp_lvds_bridge_funcs);
-	if (IS_ERR(lvds))
-		return PTR_ERR(lvds);
+	lvds = devm_kzalloc(&pdev->dev, sizeof(*lvds), GFP_KERNEL);
+	if (!lvds)
+		return -ENOMEM;
 
 	lvds->dev = dev;
 
-	lvds->regs = devm_platform_ioremap_resource(pdev, 0);
+	lvds->regs = devm_ioremap_resource(lvds->dev,
+			platform_get_resource(pdev, IORESOURCE_MEM, 0));
 	if (IS_ERR(lvds->regs))
 		return PTR_ERR(lvds->regs);
 
@@ -193,6 +192,7 @@ static int mchp_lvds_probe(struct platform_device *pdev)
 
 	lvds->bridge.of_node = dev->of_node;
 	lvds->bridge.type = DRM_MODE_CONNECTOR_LVDS;
+	lvds->bridge.funcs = &mchp_lvds_bridge_funcs;
 
 	dev_set_drvdata(dev, lvds);
 	ret = devm_pm_runtime_enable(dev);

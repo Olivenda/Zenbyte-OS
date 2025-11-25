@@ -1408,12 +1408,8 @@ static void evdev_disconnect(struct input_handle *handle)
 }
 
 static const struct input_device_id evdev_ids[] = {
-	{
-		/* Matches all devices */
-		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
-		.evbit = { BIT_MASK(EV_SYN) },
-	},
-	{ }	/* Terminating zero entry */
+	{ .driver_info = 1 },	/* Matches all devices */
+	{ },			/* Terminating zero entry */
 };
 
 MODULE_DEVICE_TABLE(input, evdev_ids);

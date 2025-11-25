@@ -40,7 +40,7 @@
 
 #define ISA_INIT_STATUS_BITS	STATUS_IE_MASK
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 /******************************************************************
  * IRQ Control Macros
@@ -196,6 +196,6 @@ static inline int arch_irqs_disabled(void)
 	flag	\scratch
 .endm
 
-#endif	/* __ASSEMBLER__ */
+#endif	/* __ASSEMBLY__ */
 
 #endif

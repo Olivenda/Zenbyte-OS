@@ -112,36 +112,11 @@ static __always_inline void *get_stub_data(void)
 	unsigned long ret;
 
 	asm volatile (
-		"call _here_%=;"
-		"_here_%=:"
-		"popl %0;"
-		"andl %1, %0 ;"
-		"addl %2, %0 ;"
+		"movl %%esp,%0 ;"
+		"andl %1,%0"
 		: "=a" (ret)
-		: "g" (~(UM_KERN_PAGE_SIZE - 1)),
-		  "g" (UM_KERN_PAGE_SIZE));
+		: "g" (~(STUB_DATA_PAGES * UM_KERN_PAGE_SIZE - 1)));
 
 	return (void *)ret;
 }
-
-#define stub_start(fn)							\
-	asm volatile (							\
-		"subl %0,%%esp ;"					\
-		"movl %1, %%eax ; "					\
-		"call *%%eax ;"						\
-		:: "i" ((1 + STUB_DATA_PAGES) * UM_KERN_PAGE_SIZE),	\
-		   "i" (&fn))
-
-static __always_inline void
-stub_seccomp_restore_state(struct stub_data_arch *arch)
-{
-	for (int i = 0; i < sizeof(arch->tls) / sizeof(arch->tls[0]); i++) {
-		if (arch->sync & (1 << i))
-			stub_syscall1(__NR_set_thread_area,
-				      (unsigned long) &arch->tls[i]);
-	}
-
-	arch->sync = 0;
-}
-
 #endif

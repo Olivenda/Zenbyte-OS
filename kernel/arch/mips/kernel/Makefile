@@ -3,7 +3,7 @@
 # Makefile for the Linux/MIPS kernel.
 #
 
-always-$(KBUILD_BUILTIN)	:= vmlinux.lds
+extra-y		:= vmlinux.lds
 
 obj-y		+= head.o branch.o cmpxchg.o elf.o entry.o genex.o idle.o irq.o \
 		   process.o prom.o ptrace.o reset.o setup.o signal.o \

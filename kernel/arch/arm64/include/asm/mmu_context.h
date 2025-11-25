@@ -20,7 +20,6 @@
 #include <asm/cacheflush.h>
 #include <asm/cpufeature.h>
 #include <asm/daifflags.h>
-#include <asm/gcs.h>
 #include <asm/proc-fns.h>
 #include <asm/cputype.h>
 #include <asm/sysreg.h>
@@ -271,25 +270,17 @@ switch_mm(struct mm_struct *prev, struct mm_struct *next,
 }
 
 static inline const struct cpumask *
-__task_cpu_possible_mask(struct task_struct *p, const struct cpumask *mask)
+task_cpu_possible_mask(struct task_struct *p)
 {
 	if (!static_branch_unlikely(&arm64_mismatched_32bit_el0))
-		return mask;
+		return cpu_possible_mask;
 
 	if (!is_compat_thread(task_thread_info(p)))
-		return mask;
+		return cpu_possible_mask;
 
 	return system_32bit_el0_cpumask();
 }
-
-static inline const struct cpumask *
-task_cpu_possible_mask(struct task_struct *p)
-{
-	return __task_cpu_possible_mask(p, cpu_possible_mask);
-}
 #define task_cpu_possible_mask	task_cpu_possible_mask
-
-const struct cpumask *task_cpu_fallback_mask(struct task_struct *p);
 
 void verify_cpu_asid_bits(void);
 void post_ttbr_update_workaround(void);
@@ -319,14 +310,6 @@ static inline bool arch_vma_access_permitted(struct vm_area_struct *vma,
 
 	return por_el0_allows_pkey(vma_pkey(vma), write, execute);
 }
-
-#define deactivate_mm deactivate_mm
-static inline void deactivate_mm(struct task_struct *tsk,
-			struct mm_struct *mm)
-{
-	gcs_free(tsk);
-}
-
 
 #include <asm-generic/mmu_context.h>
 

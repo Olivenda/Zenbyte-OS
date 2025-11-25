@@ -177,6 +177,7 @@ static int sti_compositor_probe(struct platform_device *pdev)
 	struct device_node *np = dev->of_node;
 	struct device_node *vtg_np;
 	struct sti_compositor *compo;
+	struct resource *res;
 	unsigned int i;
 
 	compo = devm_kzalloc(dev, sizeof(*compo), GFP_KERNEL);
@@ -193,10 +194,17 @@ static int sti_compositor_probe(struct platform_device *pdev)
 
 	memcpy(&compo->data, of_match_node(compositor_of_match, np)->data,
 	       sizeof(struct sti_compositor_data));
-	compo->regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(compo->regs)) {
+
+	/* Get Memory ressources */
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (res == NULL) {
+		DRM_ERROR("Get memory resource failed\n");
+		return -ENXIO;
+	}
+	compo->regs = devm_ioremap(dev, res->start, resource_size(res));
+	if (compo->regs == NULL) {
 		DRM_ERROR("Register mapping failed\n");
-		return PTR_ERR(compo->regs);
+		return -ENXIO;
 	}
 
 	/* Get clock resources */
@@ -261,7 +269,7 @@ struct platform_driver sti_compositor_driver = {
 		.of_match_table = compositor_of_match,
 	},
 	.probe = sti_compositor_probe,
-	.remove = sti_compositor_remove,
+	.remove_new = sti_compositor_remove,
 };
 
 MODULE_AUTHOR("Benjamin Gaignard <benjamin.gaignard@st.com>");

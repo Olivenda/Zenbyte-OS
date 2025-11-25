@@ -27,36 +27,29 @@ use kernel::{
 module! {
     type: NullBlkModule,
     name: "rnull_mod",
-    authors: ["Andreas Hindborg"],
-    description: "Rust implementation of the C null block driver",
+    author: "Andreas Hindborg",
     license: "GPL v2",
 }
 
-#[pin_data]
 struct NullBlkModule {
-    #[pin]
-    _disk: Mutex<GenDisk<NullBlkDevice>>,
+    _disk: Pin<KBox<Mutex<GenDisk<NullBlkDevice>>>>,
 }
 
-impl kernel::InPlaceModule for NullBlkModule {
-    fn init(_module: &'static ThisModule) -> impl PinInit<Self, Error> {
+impl kernel::Module for NullBlkModule {
+    fn init(_module: &'static ThisModule) -> Result<Self> {
         pr_info!("Rust null_blk loaded\n");
+        let tagset = Arc::pin_init(TagSet::new(1, 256, 1), flags::GFP_KERNEL)?;
 
-        // Use a immediately-called closure as a stable `try` block
-        let disk = /* try */ (|| {
-            let tagset = Arc::pin_init(TagSet::new(1, 256, 1), flags::GFP_KERNEL)?;
+        let disk = gen_disk::GenDiskBuilder::new()
+            .capacity_sectors(4096 << 11)
+            .logical_block_size(4096)?
+            .physical_block_size(4096)?
+            .rotational(false)
+            .build(format_args!("rnullb{}", 0), tagset)?;
 
-            gen_disk::GenDiskBuilder::new()
-                .capacity_sectors(4096 << 11)
-                .logical_block_size(4096)?
-                .physical_block_size(4096)?
-                .rotational(false)
-                .build(format_args!("rnullb{}", 0), tagset)
-        })();
+        let disk = KBox::pin_init(new_mutex!(disk, "nullb:disk"), flags::GFP_KERNEL)?;
 
-        try_pin_init!(Self {
-            _disk <- new_mutex!(disk?, "nullb:disk"),
-        })
+        Ok(Self { _disk: disk })
     }
 }
 

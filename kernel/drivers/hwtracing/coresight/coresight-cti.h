@@ -9,14 +9,13 @@
 
 #include <linux/coresight.h>
 #include <linux/device.h>
+#include <linux/fwnode.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
 
 #include "coresight-priv.h"
-
-struct fwnode_handle;
 
 /*
  * Device registers
@@ -176,7 +175,7 @@ struct cti_drvdata {
 	void __iomem *base;
 	struct coresight_device	*csdev;
 	struct cti_device ctidev;
-	raw_spinlock_t spinlock;
+	spinlock_t spinlock;
 	struct cti_config config;
 	struct list_head node;
 	void (*csdev_release)(struct device *dev);

@@ -54,7 +54,6 @@ struct channel_path {
 	int extended;
 	unsigned long speed;
 	struct cmg_chars cmg_chars;
-	struct cmg_cmcb cmcb;
 };
 
 /* Return channel_path struct for given chpid. */

@@ -809,14 +809,14 @@ static unsigned char sd_setup_protect_cmnd(struct scsi_cmnd *scmd,
 		if (bio_integrity_flagged(bio, BIP_IP_CHECKSUM))
 			scmd->prot_flags |= SCSI_PROT_IP_CHECKSUM;
 
-		if (bio_integrity_flagged(bio, BIP_CHECK_GUARD))
+		if (bio_integrity_flagged(bio, BIP_CTRL_NOCHECK) == false)
 			scmd->prot_flags |= SCSI_PROT_GUARD_CHECK;
 	}
 
 	if (dif != T10_PI_TYPE3_PROTECTION) {	/* DIX/DIF Type 0, 1, 2 */
 		scmd->prot_flags |= SCSI_PROT_REF_INCREMENT;
 
-		if (bio_integrity_flagged(bio, BIP_CHECK_REFTAG))
+		if (bio_integrity_flagged(bio, BIP_CTRL_NOCHECK) == false)
 			scmd->prot_flags |= SCSI_PROT_REF_CHECK;
 	}
 
@@ -991,7 +991,6 @@ static void sd_config_atomic(struct scsi_disk *sdkp, struct queue_limits *lim)
 	lim->atomic_write_hw_boundary = 0;
 	lim->atomic_write_hw_unit_min = unit_min * logical_block_size;
 	lim->atomic_write_hw_unit_max = unit_max * logical_block_size;
-	lim->features |= BLK_FEAT_ATOMIC_WRITES;
 }
 
 static blk_status_t sd_setup_write_same16_cmnd(struct scsi_cmnd *cmd,
@@ -1141,11 +1140,6 @@ static void sd_config_write_same(struct scsi_disk *sdkp,
 out:
 	lim->max_write_zeroes_sectors =
 		sdkp->max_ws_blocks * (logical_block_size >> SECTOR_SHIFT);
-
-	if (sdkp->zeroing_mode == SD_ZERO_WS16_UNMAP ||
-	    sdkp->zeroing_mode == SD_ZERO_WS10_UNMAP)
-		lim->max_hw_wzeroes_unmap_sectors =
-				lim->max_write_zeroes_sectors;
 }
 
 static blk_status_t sd_setup_flush_cmnd(struct scsi_cmnd *cmd)
@@ -3220,7 +3214,7 @@ static bool sd_is_perm_stream(struct scsi_disk *sdkp, unsigned int stream_id)
 		return false;
 	if (get_unaligned_be32(&buf.h.len) < sizeof(struct scsi_stream_status))
 		return false;
-	return buf.s.perm;
+	return buf.h.stream_status[0].perm;
 }
 
 static void sd_read_io_hints(struct scsi_disk *sdkp, unsigned char *buffer)
@@ -3464,14 +3458,19 @@ static void sd_read_write_same(struct scsi_disk *sdkp, unsigned char *buffer)
 	}
 
 	if (scsi_report_opcode(sdev, buffer, SD_BUF_SIZE, INQUIRY, 0) < 0) {
+		struct scsi_vpd *vpd;
+
 		sdev->no_report_opcodes = 1;
 
-		/*
-		 * Disable WRITE SAME if REPORT SUPPORTED OPERATION CODES is
-		 * unsupported and this is an ATA device.
+		/* Disable WRITE SAME if REPORT SUPPORTED OPERATION
+		 * CODES is unsupported and the device has an ATA
+		 * Information VPD page (SAT).
 		 */
-		if (sdev->is_ata)
+		rcu_read_lock();
+		vpd = rcu_dereference(sdev->vpd_pg89);
+		if (vpd)
 			sdev->no_write_same = 1;
+		rcu_read_unlock();
 	}
 
 	if (scsi_report_opcode(sdev, buffer, SD_BUF_SIZE, WRITE_SAME_16, 0) == 1)

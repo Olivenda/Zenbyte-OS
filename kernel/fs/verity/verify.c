@@ -7,8 +7,8 @@
 
 #include "fsverity_private.h"
 
+#include <crypto/hash.h>
 #include <linux/bio.h>
-#include <linux/export.h>
 
 static struct workqueue_struct *fsverity_read_workqueue;
 
@@ -202,7 +202,8 @@ descend:
 		unsigned long hblock_idx = hblocks[level - 1].index;
 		unsigned int hoffset = hblocks[level - 1].hoffset;
 
-		fsverity_hash_block(params, inode, haddr, real_hash);
+		if (fsverity_hash_block(params, inode, haddr, real_hash) != 0)
+			goto error;
 		if (memcmp(want_hash, real_hash, hsize) != 0)
 			goto corrupted;
 		/*
@@ -221,7 +222,8 @@ descend:
 	}
 
 	/* Finally, verify the data block. */
-	fsverity_hash_block(params, inode, data, real_hash);
+	if (fsverity_hash_block(params, inode, data, real_hash) != 0)
+		goto error;
 	if (memcmp(want_hash, real_hash, hsize) != 0)
 		goto corrupted;
 	return true;

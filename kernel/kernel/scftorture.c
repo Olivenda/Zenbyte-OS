@@ -97,7 +97,6 @@ struct scf_statistics {
 static struct scf_statistics *scf_stats_p;
 static struct task_struct *scf_torture_stats_task;
 static DEFINE_PER_CPU(long long, scf_invoked_count);
-static DEFINE_PER_CPU(struct llist_head, scf_free_pool);
 
 // Data for random primitive selection
 #define SCF_PRIM_RESCHED	0
@@ -134,7 +133,6 @@ struct scf_check {
 	bool scfc_wait;
 	bool scfc_rpc;
 	struct completion scfc_completion;
-	struct llist_node scf_node;
 };
 
 // Use to wait for all threads to start.
@@ -149,33 +147,6 @@ static char *bangstr = "";
 static DEFINE_TORTURE_RANDOM_PERCPU(scf_torture_rand);
 
 extern void resched_cpu(int cpu); // An alternative IPI vector.
-
-static void scf_add_to_free_list(struct scf_check *scfcp)
-{
-	struct llist_head *pool;
-	unsigned int cpu;
-
-	if (!scfcp)
-		return;
-	cpu = raw_smp_processor_id() % nthreads;
-	pool = &per_cpu(scf_free_pool, cpu);
-	llist_add(&scfcp->scf_node, pool);
-}
-
-static void scf_cleanup_free_list(unsigned int cpu)
-{
-	struct llist_head *pool;
-	struct llist_node *node;
-	struct scf_check *scfcp;
-
-	pool = &per_cpu(scf_free_pool, cpu);
-	node = llist_del_all(pool);
-	while (node) {
-		scfcp = llist_entry(node, struct scf_check, scf_node);
-		node = node->next;
-		kfree(scfcp);
-	}
-}
 
 // Print torture statistics.  Caller must ensure serialization.
 static void scf_torture_stats_print(void)
@@ -325,7 +296,7 @@ out:
 		if (scfcp->scfc_rpc)
 			complete(&scfcp->scfc_completion);
 	} else {
-		scf_add_to_free_list(scfcp);
+		kfree(scfcp);
 	}
 }
 
@@ -349,6 +320,10 @@ static void scftorture_invoke_one(struct scf_statistics *scfp, struct torture_ra
 	struct scf_check *scfcp = NULL;
 	struct scf_selector *scfsp = scf_sel_rand(trsp);
 
+	if (use_cpus_read_lock)
+		cpus_read_lock();
+	else
+		preempt_disable();
 	if (scfsp->scfs_prim == SCF_PRIM_SINGLE || scfsp->scfs_wait) {
 		scfcp = kmalloc(sizeof(*scfcp), GFP_ATOMIC);
 		if (!scfcp) {
@@ -362,10 +337,6 @@ static void scftorture_invoke_one(struct scf_statistics *scfp, struct torture_ra
 			scfcp->scfc_rpc = false;
 		}
 	}
-	if (use_cpus_read_lock)
-		cpus_read_lock();
-	else
-		preempt_disable();
 	switch (scfsp->scfs_prim) {
 	case SCF_PRIM_RESCHED:
 		if (IS_BUILTIN(CONFIG_SCF_TORTURE_TEST)) {
@@ -392,7 +363,7 @@ static void scftorture_invoke_one(struct scf_statistics *scfp, struct torture_ra
 				scfp->n_single_wait_ofl++;
 			else
 				scfp->n_single_ofl++;
-			scf_add_to_free_list(scfcp);
+			kfree(scfcp);
 			scfcp = NULL;
 		}
 		break;
@@ -420,7 +391,7 @@ static void scftorture_invoke_one(struct scf_statistics *scfp, struct torture_ra
 				preempt_disable();
 		} else {
 			scfp->n_single_rpc_ofl++;
-			scf_add_to_free_list(scfcp);
+			kfree(scfcp);
 			scfcp = NULL;
 		}
 		break;
@@ -457,7 +428,7 @@ static void scftorture_invoke_one(struct scf_statistics *scfp, struct torture_ra
 			pr_warn("%s: Memory-ordering failure, scfs_prim: %d.\n", __func__, scfsp->scfs_prim);
 			atomic_inc(&n_mb_out_errs); // Leak rather than trash!
 		} else {
-			scf_add_to_free_list(scfcp);
+			kfree(scfcp);
 		}
 		barrier(); // Prevent race-reduction compiler optimizations.
 	}
@@ -492,7 +463,7 @@ static int scftorture_invoker(void *arg)
 
 	// Make sure that the CPU is affinitized appropriately during testing.
 	curcpu = raw_smp_processor_id();
-	WARN_ONCE(curcpu != cpu,
+	WARN_ONCE(curcpu != scfp->cpu % nr_cpu_ids,
 		  "%s: Wanted CPU %d, running on %d, nr_cpu_ids = %d\n",
 		  __func__, scfp->cpu, curcpu, nr_cpu_ids);
 
@@ -508,8 +479,6 @@ static int scftorture_invoker(void *arg)
 	VERBOSE_SCFTORTOUT("scftorture_invoker %d started", scfp->cpu);
 
 	do {
-		scf_cleanup_free_list(cpu);
-
 		scftorture_invoke_one(scfp, &rand);
 		while (cpu_is_offline(cpu) && !torture_must_stop()) {
 			schedule_timeout_interruptible(HZ / 5);
@@ -554,14 +523,11 @@ static void scf_torture_cleanup(void)
 			torture_stop_kthread("scftorture_invoker", scf_stats_p[i].task);
 	else
 		goto end;
-	smp_call_function(scf_cleanup_handler, NULL, 1);
+	smp_call_function(scf_cleanup_handler, NULL, 0);
 	torture_stop_kthread(scf_torture_stats, scf_torture_stats_task);
 	scf_torture_stats_print();  // -After- the stats thread is stopped!
 	kfree(scf_stats_p);  // -After- the last stats print has completed!
 	scf_stats_p = NULL;
-
-	for (i = 0; i < nr_cpu_ids; i++)
-		scf_cleanup_free_list(i);
 
 	if (atomic_read(&n_errs) || atomic_read(&n_mb_in_errs) || atomic_read(&n_mb_out_errs))
 		scftorture_print_module_parms("End of test: FAILURE");

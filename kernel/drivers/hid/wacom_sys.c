@@ -69,34 +69,16 @@ static void wacom_wac_queue_flush(struct hid_device *hdev,
 				  struct kfifo_rec_ptr_2 *fifo)
 {
 	while (!kfifo_is_empty(fifo)) {
-		int size = kfifo_peek_len(fifo);
-		u8 *buf;
-		unsigned int count;
+		u8 buf[WACOM_PKGLEN_MAX];
+		int size;
 		int err;
 
-		buf = kzalloc(size, GFP_KERNEL);
-		if (!buf) {
-			kfifo_skip(fifo);
-			continue;
-		}
-
-		count = kfifo_out(fifo, buf, size);
-		if (count != size) {
-			// Hard to say what is the "right" action in this
-			// circumstance. Skipping the entry and continuing
-			// to flush seems reasonable enough, however.
-			hid_warn(hdev, "%s: removed fifo entry with unexpected size\n",
-				 __func__);
-			kfree(buf);
-			continue;
-		}
+		size = kfifo_out(fifo, buf, sizeof(buf));
 		err = hid_report_raw_event(hdev, HID_INPUT_REPORT, buf, size, false);
 		if (err) {
 			hid_warn(hdev, "%s: unable to flush event due to error %d\n",
 				 __func__, err);
 		}
-
-		kfree(buf);
 	}
 }
 
@@ -176,10 +158,13 @@ static int wacom_raw_event(struct hid_device *hdev, struct hid_report *report,
 	if (wacom->wacom_wac.features.type == BOOTLOADER)
 		return 0;
 
+	if (size > WACOM_PKGLEN_MAX)
+		return 1;
+
 	if (wacom_wac_pen_serial_enforce(hdev, report, raw_data, size))
 		return -1;
 
-	wacom->wacom_wac.data = raw_data;
+	memcpy(wacom->wacom_wac.data, raw_data, size);
 
 	wacom_wac_irq(&wacom->wacom_wac, size);
 
@@ -1099,17 +1084,6 @@ static ssize_t wacom_luminance_store(struct wacom *wacom, u8 *dest,
 	mutex_lock(&wacom->lock);
 
 	*dest = value & 0x7f;
-	for (unsigned int i = 0; i < wacom->led.count; i++) {
-		struct wacom_group_leds *group = &wacom->led.groups[i];
-
-		for (unsigned int j = 0; j < group->count; j++) {
-			if (dest == &wacom->led.llv)
-				group->leds[j].llv = *dest;
-			else if (dest == &wacom->led.hlv)
-				group->leds[j].hlv = *dest;
-		}
-	}
-
 	err = wacom_led_control(wacom);
 
 	mutex_unlock(&wacom->lock);
@@ -1301,7 +1275,6 @@ static void wacom_devm_kfifo_release(struct device *dev, void *res)
 static int wacom_devm_kfifo_alloc(struct wacom *wacom)
 {
 	struct wacom_wac *wacom_wac = &wacom->wacom_wac;
-	int fifo_size = min(PAGE_SIZE, 10 * wacom_wac->features.pktlen);
 	struct kfifo_rec_ptr_2 *pen_fifo;
 	int error;
 
@@ -1312,7 +1285,7 @@ static int wacom_devm_kfifo_alloc(struct wacom *wacom)
 	if (!pen_fifo)
 		return -ENOMEM;
 
-	error = kfifo_alloc(pen_fifo, fifo_size, GFP_KERNEL);
+	error = kfifo_alloc(pen_fifo, WACOM_PKGLEN_MAX, GFP_KERNEL);
 	if (error) {
 		devres_free(pen_fifo);
 		return error;
@@ -1329,10 +1302,10 @@ enum led_brightness wacom_leds_brightness_get(struct wacom_led *led)
 	struct wacom *wacom = led->wacom;
 
 	if (wacom->led.max_hlv)
-		return wacom_rescale(led->hlv, wacom->led.max_hlv, LED_FULL);
+		return led->hlv * LED_FULL / wacom->led.max_hlv;
 
 	if (wacom->led.max_llv)
-		return wacom_rescale(led->llv, wacom->led.max_llv, LED_FULL);
+		return led->llv * LED_FULL / wacom->led.max_llv;
 
 	/* device doesn't support brightness tuning */
 	return LED_FULL;
@@ -1364,8 +1337,8 @@ static int wacom_led_brightness_set(struct led_classdev *cdev,
 		goto out;
 	}
 
-	led->llv = wacom->led.llv = wacom_rescale(brightness, LED_FULL, wacom->led.max_llv);
-	led->hlv = wacom->led.hlv = wacom_rescale(brightness, LED_FULL, wacom->led.max_hlv);
+	led->llv = wacom->led.llv = wacom->led.max_llv * brightness / LED_FULL;
+	led->hlv = wacom->led.hlv = wacom->led.max_hlv * brightness / LED_FULL;
 
 	wacom->led.groups[led->group].select = led->id;
 
@@ -2372,15 +2345,11 @@ static int wacom_parse_and_register(struct wacom *wacom, bool wireless)
 	unsigned int connect_mask = HID_CONNECT_HIDRAW;
 
 	features->pktlen = wacom_compute_pktlen(hdev);
-	if (!features->pktlen)
-		return -ENODEV;
+	if (features->pktlen > WACOM_PKGLEN_MAX)
+		return -EINVAL;
 
 	if (!devres_open_group(&hdev->dev, wacom, GFP_KERNEL))
 		return -ENOMEM;
-
-	error = wacom_devm_kfifo_alloc(wacom);
-	if (error)
-		goto fail;
 
 	wacom->resources = true;
 
@@ -2845,6 +2814,10 @@ static int wacom_probe(struct hid_device *hdev,
 	if (features->check_for_hid_type && features->hid_type != hdev->type)
 		return -ENODEV;
 
+	error = wacom_devm_kfifo_alloc(wacom);
+	if (error)
+		return error;
+
 	wacom_wac->hid_data.inputmode = -1;
 	wacom_wac->mode_report = -1;
 
@@ -2910,7 +2883,7 @@ static void wacom_remove(struct hid_device *hdev)
 	cancel_work_sync(&wacom->battery_work);
 	cancel_work_sync(&wacom->remote_work);
 	cancel_work_sync(&wacom->mode_change_work);
-	timer_delete_sync(&wacom->idleprox_timer);
+	del_timer_sync(&wacom->idleprox_timer);
 	if (hdev->bus == BUS_BLUETOOTH)
 		device_remove_file(&hdev->dev, &dev_attr_speed);
 

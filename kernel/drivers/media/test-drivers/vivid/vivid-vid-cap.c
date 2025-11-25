@@ -10,7 +10,6 @@
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
 #include <linux/videodev2.h>
-#include <linux/prandom.h>
 #include <linux/v4l2-dv-timings.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-event.h>
@@ -25,18 +24,16 @@
 /* Sizes must be in increasing order */
 static const struct v4l2_frmsize_discrete webcam_sizes[] = {
 	{  320, 180 },
-	{  320, 240 },
 	{  640, 360 },
 	{  640, 480 },
 	{ 1280, 720 },
-	{ 1280, 960 },
-	{ 1600, 1200 },
 	{ 1920, 1080 },
 	{ 3840, 2160 },
 };
 
 /*
- * Intervals must be in increasing order.
+ * Intervals must be in increasing order and there must be twice as many
+ * elements in this array as there are in webcam_sizes.
  */
 static const struct v4l2_fract webcam_intervals[] = {
 	{  1, 1 },
@@ -260,6 +257,8 @@ const struct vb2_ops vivid_vid_cap_qops = {
 	.start_streaming	= vid_cap_start_streaming,
 	.stop_streaming		= vid_cap_stop_streaming,
 	.buf_request_complete	= vid_cap_buf_request_complete,
+	.wait_prepare		= vb2_ops_wait_prepare,
+	.wait_finish		= vb2_ops_wait_finish,
 };
 
 /*

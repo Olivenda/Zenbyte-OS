@@ -107,15 +107,6 @@
 #define QCLR_PCE		BIT(1)
 #define QCLR_INT		BIT(0)
 
-#define QEPSTS_UPEVNT		BIT(7)
-#define QEPSTS_FDF		BIT(6)
-#define QEPSTS_QDF		BIT(5)
-#define QEPSTS_QDLF		BIT(4)
-#define QEPSTS_COEF		BIT(3)
-#define QEPSTS_CDEF		BIT(2)
-#define QEPSTS_FIMF		BIT(1)
-#define QEPSTS_PCEF		BIT(0)
-
 /* EQEP Inputs */
 enum {
 	TI_EQEP_SIGNAL_QEPA,	/* QEPA/XCLK */
@@ -295,9 +286,6 @@ static int ti_eqep_events_configure(struct counter_device *counter)
 		case COUNTER_EVENT_UNDERFLOW:
 			qeint |= QEINT_PCU;
 			break;
-		case COUNTER_EVENT_DIRECTION_CHANGE:
-			qeint |= QEINT_QDC;
-			break;
 		}
 	}
 
@@ -310,7 +298,6 @@ static int ti_eqep_watch_validate(struct counter_device *counter,
 	switch (watch->event) {
 	case COUNTER_EVENT_OVERFLOW:
 	case COUNTER_EVENT_UNDERFLOW:
-	case COUNTER_EVENT_DIRECTION_CHANGE:
 		if (watch->channel != 0)
 			return -EINVAL;
 
@@ -381,27 +368,11 @@ static int ti_eqep_position_enable_write(struct counter_device *counter,
 	return 0;
 }
 
-static int ti_eqep_direction_read(struct counter_device *counter,
-				  struct counter_count *count,
-				  enum counter_count_direction *direction)
-{
-	struct ti_eqep_cnt *priv = counter_priv(counter);
-	u32 qepsts;
-
-	regmap_read(priv->regmap16, QEPSTS, &qepsts);
-
-	*direction = (qepsts & QEPSTS_QDF) ? COUNTER_COUNT_DIRECTION_FORWARD
-					   : COUNTER_COUNT_DIRECTION_BACKWARD;
-
-	return 0;
-}
-
 static struct counter_comp ti_eqep_position_ext[] = {
 	COUNTER_COMP_CEILING(ti_eqep_position_ceiling_read,
 			     ti_eqep_position_ceiling_write),
 	COUNTER_COMP_ENABLE(ti_eqep_position_enable_read,
 			    ti_eqep_position_enable_write),
-	COUNTER_COMP_DIRECTION(ti_eqep_direction_read),
 };
 
 static struct counter_signal ti_eqep_signals[] = {
@@ -467,9 +438,6 @@ static irqreturn_t ti_eqep_irq_handler(int irq, void *dev_id)
 
 	if (qflg & QFLG_PCU)
 		counter_push_event(counter, COUNTER_EVENT_UNDERFLOW, 0);
-
-	if (qflg & QFLG_QDC)
-		counter_push_event(counter, COUNTER_EVENT_DIRECTION_CHANGE, 0);
 
 	regmap_write(priv->regmap16, QCLR, qflg);
 
@@ -580,7 +548,7 @@ MODULE_DEVICE_TABLE(of, ti_eqep_of_match);
 
 static struct platform_driver ti_eqep_driver = {
 	.probe = ti_eqep_probe,
-	.remove = ti_eqep_remove,
+	.remove_new = ti_eqep_remove,
 	.driver = {
 		.name = "ti-eqep-cnt",
 		.of_match_table = ti_eqep_of_match,
@@ -591,4 +559,4 @@ module_platform_driver(ti_eqep_driver);
 MODULE_AUTHOR("David Lechner <david@lechnology.com>");
 MODULE_DESCRIPTION("TI eQEP counter driver");
 MODULE_LICENSE("GPL v2");
-MODULE_IMPORT_NS("COUNTER");
+MODULE_IMPORT_NS(COUNTER);

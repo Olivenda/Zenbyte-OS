@@ -214,5 +214,4 @@ static struct kunit_suite fpga_region_suite = {
 
 kunit_test_suite(fpga_region_suite);
 
-MODULE_DESCRIPTION("KUnit test for the FPGA Region");
 MODULE_LICENSE("GPL");

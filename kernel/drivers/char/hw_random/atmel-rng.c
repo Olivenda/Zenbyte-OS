@@ -37,7 +37,6 @@ struct atmel_trng {
 	struct clk *clk;
 	void __iomem *base;
 	struct hwrng rng;
-	struct device *dev;
 	bool has_half_rate;
 };
 
@@ -60,9 +59,9 @@ static int atmel_trng_read(struct hwrng *rng, void *buf, size_t max,
 	u32 *data = buf;
 	int ret;
 
-	ret = pm_runtime_get_sync(trng->dev);
+	ret = pm_runtime_get_sync((struct device *)trng->rng.priv);
 	if (ret < 0) {
-		pm_runtime_put_sync(trng->dev);
+		pm_runtime_put_sync((struct device *)trng->rng.priv);
 		return ret;
 	}
 
@@ -80,7 +79,8 @@ static int atmel_trng_read(struct hwrng *rng, void *buf, size_t max,
 	ret = 4;
 
 out:
-	pm_runtime_put_sync_autosuspend(trng->dev);
+	pm_runtime_mark_last_busy((struct device *)trng->rng.priv);
+	pm_runtime_put_sync_autosuspend((struct device *)trng->rng.priv);
 	return ret;
 }
 
@@ -134,9 +134,9 @@ static int atmel_trng_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	trng->has_half_rate = data->has_half_rate;
-	trng->dev = &pdev->dev;
 	trng->rng.name = pdev->name;
 	trng->rng.read = atmel_trng_read;
+	trng->rng.priv = (unsigned long)&pdev->dev;
 	platform_set_drvdata(pdev, trng);
 
 #ifndef CONFIG_PM
@@ -216,7 +216,7 @@ MODULE_DEVICE_TABLE(of, atmel_trng_dt_ids);
 
 static struct platform_driver atmel_trng_driver = {
 	.probe		= atmel_trng_probe,
-	.remove		= atmel_trng_remove,
+	.remove_new	= atmel_trng_remove,
 	.driver		= {
 		.name	= "atmel-trng",
 		.pm	= pm_ptr(&atmel_trng_pm_ops),

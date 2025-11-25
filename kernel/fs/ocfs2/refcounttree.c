@@ -2420,7 +2420,7 @@ static int ocfs2_calc_refcount_meta_credits(struct super_block *sb,
 		 *
 		 * If we will insert a new one, this is easy and only happens
 		 * during adding refcounted flag to the extent, so we don't
-		 * have a chance of splitting. We just need one record.
+		 * have a chance of spliting. We just need one record.
 		 *
 		 * If the refcount rec already exists, that would be a little
 		 * complicated. we may have to:
@@ -2610,11 +2610,11 @@ static inline unsigned int ocfs2_cow_align_length(struct super_block *sb,
 /*
  * Calculate out the start and number of virtual clusters we need to CoW.
  *
- * cpos is virtual start cluster position we want to do CoW in a
+ * cpos is vitual start cluster position we want to do CoW in a
  * file and write_len is the cluster length.
  * max_cpos is the place where we want to stop CoW intentionally.
  *
- * Normal we will start CoW from the beginning of extent record containing cpos.
+ * Normal we will start CoW from the beginning of extent record cotaining cpos.
  * We try to break up extents on boundaries of MAX_CONTIG_BYTES so that we
  * get good I/O from the resulting extent tree.
  */
@@ -2902,6 +2902,7 @@ int ocfs2_duplicate_clusters_by_page(handle_t *handle,
 	int ret = 0, partial;
 	struct super_block *sb = inode->i_sb;
 	u64 new_block = ocfs2_clusters_to_blocks(sb, new_cluster);
+	struct page *page;
 	pgoff_t page_index;
 	unsigned int from, to;
 	loff_t offset, end, map_end;
@@ -2920,7 +2921,6 @@ int ocfs2_duplicate_clusters_by_page(handle_t *handle,
 		end = i_size_read(inode);
 
 	while (offset < end) {
-		struct folio *folio;
 		page_index = offset >> PAGE_SHIFT;
 		map_end = ((loff_t)page_index + 1) << PAGE_SHIFT;
 		if (map_end > end)
@@ -2933,10 +2933,9 @@ int ocfs2_duplicate_clusters_by_page(handle_t *handle,
 			to = map_end & (PAGE_SIZE - 1);
 
 retry:
-		folio = __filemap_get_folio(mapping, page_index,
-				FGP_LOCK | FGP_ACCESSED | FGP_CREAT, GFP_NOFS);
-		if (IS_ERR(folio)) {
-			ret = PTR_ERR(folio);
+		page = find_or_create_page(mapping, page_index, GFP_NOFS);
+		if (!page) {
+			ret = -ENOMEM;
 			mlog_errno(ret);
 			break;
 		}
@@ -2946,9 +2945,9 @@ retry:
 		 * page, so write it back.
 		 */
 		if (PAGE_SIZE <= OCFS2_SB(sb)->s_clustersize) {
-			if (folio_test_dirty(folio)) {
-				folio_unlock(folio);
-				folio_put(folio);
+			if (PageDirty(page)) {
+				unlock_page(page);
+				put_page(page);
 
 				ret = filemap_write_and_wait_range(mapping,
 						offset, map_end - 1);
@@ -2956,7 +2955,9 @@ retry:
 			}
 		}
 
-		if (!folio_test_uptodate(folio)) {
+		if (!PageUptodate(page)) {
+			struct folio *folio = page_folio(page);
+
 			ret = block_read_full_folio(folio, ocfs2_get_block);
 			if (ret) {
 				mlog_errno(ret);
@@ -2965,8 +2966,8 @@ retry:
 			folio_lock(folio);
 		}
 
-		if (folio_buffers(folio)) {
-			ret = walk_page_buffers(handle, folio_buffers(folio),
+		if (page_has_buffers(page)) {
+			ret = walk_page_buffers(handle, page_buffers(page),
 						from, to, &partial,
 						ocfs2_clear_cow_buffer);
 			if (ret) {
@@ -2975,12 +2976,14 @@ retry:
 			}
 		}
 
-		ocfs2_map_and_dirty_folio(inode, handle, from, to,
-				folio, 0, &new_block);
-		folio_mark_accessed(folio);
+		ocfs2_map_and_dirty_page(inode,
+					 handle, from, to,
+					 page, 0, &new_block);
+		mark_page_accessed(page);
 unlock:
-		folio_unlock(folio);
-		folio_put(folio);
+		unlock_page(page);
+		put_page(page);
+		page = NULL;
 		offset = map_end;
 		if (ret)
 			break;

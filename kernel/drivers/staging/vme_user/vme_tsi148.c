@@ -761,7 +761,8 @@ static int tsi148_alloc_resource(struct vme_master_resource *image,
 		goto err_resource;
 	}
 
-	image->kern_base = ioremap(image->bus_resource.start, size);
+	image->kern_base = ioremap(
+		image->bus_resource.start, size);
 	if (!image->kern_base) {
 		dev_err(tsi148_bridge->parent, "Failed to remap resource\n");
 		retval = -ENOMEM;

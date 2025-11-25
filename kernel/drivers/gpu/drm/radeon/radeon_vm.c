@@ -142,9 +142,10 @@ struct radeon_bo_list *radeon_vm_get_bos(struct radeon_device *rdev,
 	list[0].robj = vm->page_directory;
 	list[0].preferred_domains = RADEON_GEM_DOMAIN_VRAM;
 	list[0].allowed_domains = RADEON_GEM_DOMAIN_VRAM;
-	list[0].shared = true;
+	list[0].tv.bo = &vm->page_directory->tbo;
+	list[0].tv.num_shared = 1;
 	list[0].tiling_flags = 0;
-	list_add(&list[0].list, head);
+	list_add(&list[0].tv.head, head);
 
 	for (i = 0, idx = 1; i <= vm->max_pde_used; i++) {
 		if (!vm->page_tables[i].bo)
@@ -153,9 +154,10 @@ struct radeon_bo_list *radeon_vm_get_bos(struct radeon_device *rdev,
 		list[idx].robj = vm->page_tables[i].bo;
 		list[idx].preferred_domains = RADEON_GEM_DOMAIN_VRAM;
 		list[idx].allowed_domains = RADEON_GEM_DOMAIN_VRAM;
-		list[idx].shared = true;
+		list[idx].tv.bo = &list[idx].robj->tbo;
+		list[idx].tv.num_shared = 1;
 		list[idx].tiling_flags = 0;
-		list_add(&list[idx++].list, head);
+		list_add(&list[idx++].tv.head, head);
 	}
 
 	return list;

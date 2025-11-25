@@ -14,7 +14,7 @@
 #include "dso.h"
 
 #ifdef HAVE_LIBTRACEEVENT
-#include <event-parse.h>
+#include <traceevent/event-parse.h>
 #endif
 
 static int comma_fprintf(FILE *fp, bool *first, const char *fmt, ...)
@@ -81,15 +81,13 @@ int evsel__fprintf(struct evsel *evsel, struct perf_attr_details *details, FILE 
 #ifdef HAVE_LIBTRACEEVENT
 	if (details->trace_fields) {
 		struct tep_format_field *field;
-		const struct tep_event *tp_format;
 
 		if (evsel->core.attr.type != PERF_TYPE_TRACEPOINT) {
 			printed += comma_fprintf(fp, &first, " (not a tracepoint)");
 			goto out;
 		}
 
-		tp_format = evsel__tp_format(evsel);
-		field = tp_format ? tp_format->format.fields : NULL;
+		field = evsel->tp_format->format.fields;
 		if (field == NULL) {
 			printed += comma_fprintf(fp, &first, " (no trace field)");
 			goto out;

@@ -108,9 +108,6 @@ Kernel objects manipulation
 .. kernel-doc:: lib/kobject.c
    :export:
 
-.. kernel-doc:: lib/kobject_uevent.c
-   :export:
-
 Kernel utility functions
 ------------------------
 

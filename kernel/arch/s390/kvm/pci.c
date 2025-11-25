@@ -103,7 +103,7 @@ static int zpci_reset_aipb(u8 nisc)
 	/*
 	 * AEN registration can only happen once per system boot.  If
 	 * an aipb already exists then AEN was already registered and
-	 * we can reuse the aipb contents.  This can only happen if
+	 * we can re-use the aipb contents.  This can only happen if
 	 * the KVM module was removed and re-inserted.  However, we must
 	 * ensure that the same forwarding ISC is used as this is assigned
 	 * during KVM module load.
@@ -208,12 +208,13 @@ static inline int account_mem(unsigned long nr_pages)
 
 	page_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
 
-	cur_pages = atomic_long_read(&user->locked_vm);
 	do {
+		cur_pages = atomic_long_read(&user->locked_vm);
 		new_pages = cur_pages + nr_pages;
 		if (new_pages > page_limit)
 			return -ENOMEM;
-	} while (!atomic_long_try_cmpxchg(&user->locked_vm, &cur_pages, new_pages));
+	} while (atomic_long_cmpxchg(&user->locked_vm, cur_pages,
+					new_pages) != cur_pages);
 
 	atomic64_add(nr_pages, &current->mm->pinned_vm);
 
@@ -433,6 +434,7 @@ static void kvm_s390_pci_dev_release(struct zpci_dev *zdev)
 static int kvm_s390_pci_register_kvm(void *opaque, struct kvm *kvm)
 {
 	struct zpci_dev *zdev = opaque;
+	u8 status;
 	int rc;
 
 	if (!zdev)
@@ -479,7 +481,13 @@ static int kvm_s390_pci_register_kvm(void *opaque, struct kvm *kvm)
 	 */
 	zdev->gisa = (u32)virt_to_phys(&kvm->arch.sie_page2->gisa);
 
-	rc = zpci_reenable_device(zdev);
+	rc = zpci_enable_device(zdev);
+	if (rc)
+		goto clear_gisa;
+
+	/* Re-register the IOMMU that was already created */
+	rc = zpci_register_ioat(zdev, 0, zdev->start_dma, zdev->end_dma,
+				virt_to_phys(zdev->dma_table), &status);
 	if (rc)
 		goto clear_gisa;
 
@@ -509,6 +517,7 @@ static void kvm_s390_pci_unregister_kvm(void *opaque)
 {
 	struct zpci_dev *zdev = opaque;
 	struct kvm *kvm;
+	u8 status;
 
 	if (!zdev)
 		return;
@@ -542,7 +551,12 @@ static void kvm_s390_pci_unregister_kvm(void *opaque)
 			goto out;
 	}
 
-	zpci_reenable_device(zdev);
+	if (zpci_enable_device(zdev))
+		goto out;
+
+	/* Re-register the IOMMU that was already created */
+	zpci_register_ioat(zdev, 0, zdev->start_dma, zdev->end_dma,
+			   virt_to_phys(zdev->dma_table), &status);
 
 out:
 	spin_lock(&kvm->arch.kzdev_list_lock);

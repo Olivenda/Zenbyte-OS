@@ -154,7 +154,7 @@ static struct platform_driver tps65911_comparator_driver = {
 		.name = "tps65911-comparator",
 	},
 	.probe = tps65911_comparator_probe,
-	.remove = tps65911_comparator_remove,
+	.remove_new = tps65911_comparator_remove,
 };
 
 static int __init tps65911_comparator_init(void)

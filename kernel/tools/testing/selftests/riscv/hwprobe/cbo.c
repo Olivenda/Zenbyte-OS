@@ -50,14 +50,6 @@ static void cbo_clean(char *base) { cbo_insn(base, 1); }
 static void cbo_flush(char *base) { cbo_insn(base, 2); }
 static void cbo_zero(char *base)  { cbo_insn(base, 4); }
 
-static void test_no_cbo_inval(void *arg)
-{
-	ksft_print_msg("Testing cbo.inval instruction remain privileged\n");
-	illegal_insn = false;
-	cbo_inval(&mem[0]);
-	ksft_test_result(illegal_insn, "No cbo.inval\n");
-}
-
 static void test_no_zicbom(void *arg)
 {
 	ksft_print_msg("Testing Zicbom instructions remain privileged\n");
@@ -69,6 +61,10 @@ static void test_no_zicbom(void *arg)
 	illegal_insn = false;
 	cbo_flush(&mem[0]);
 	ksft_test_result(illegal_insn, "No cbo.flush\n");
+
+	illegal_insn = false;
+	cbo_inval(&mem[0]);
+	ksft_test_result(illegal_insn, "No cbo.inval\n");
 }
 
 static void test_no_zicboz(void *arg)
@@ -83,30 +79,6 @@ static void test_no_zicboz(void *arg)
 static bool is_power_of_2(__u64 n)
 {
 	return n != 0 && (n & (n - 1)) == 0;
-}
-
-static void test_zicbom(void *arg)
-{
-	struct riscv_hwprobe pair = {
-		.key = RISCV_HWPROBE_KEY_ZICBOM_BLOCK_SIZE,
-	};
-	cpu_set_t *cpus = (cpu_set_t *)arg;
-	__u64 block_size;
-	long rc;
-
-	rc = riscv_hwprobe(&pair, 1, sizeof(cpu_set_t), (unsigned long *)cpus, 0);
-	block_size = pair.value;
-	ksft_test_result(rc == 0 && pair.key == RISCV_HWPROBE_KEY_ZICBOM_BLOCK_SIZE &&
-			 is_power_of_2(block_size), "Zicbom block size\n");
-	ksft_print_msg("Zicbom block size: %llu\n", block_size);
-
-	illegal_insn = false;
-	cbo_clean(&mem[block_size]);
-	ksft_test_result(!illegal_insn, "cbo.clean\n");
-
-	illegal_insn = false;
-	cbo_flush(&mem[block_size]);
-	ksft_test_result(!illegal_insn, "cbo.flush\n");
 }
 
 static void test_zicboz(void *arg)
@@ -157,7 +129,7 @@ static void test_zicboz(void *arg)
 	ksft_test_result_pass("cbo.zero check\n");
 }
 
-static void check_no_zicbo_cpus(cpu_set_t *cpus, __u64 cbo)
+static void check_no_zicboz_cpus(cpu_set_t *cpus)
 {
 	struct riscv_hwprobe pair = {
 		.key = RISCV_HWPROBE_KEY_IMA_EXT_0,
@@ -165,7 +137,6 @@ static void check_no_zicbo_cpus(cpu_set_t *cpus, __u64 cbo)
 	cpu_set_t one_cpu;
 	int i = 0, c = 0;
 	long rc;
-	char *cbostr;
 
 	while (i++ < CPU_COUNT(cpus)) {
 		while (!CPU_ISSET(c, cpus))
@@ -177,13 +148,10 @@ static void check_no_zicbo_cpus(cpu_set_t *cpus, __u64 cbo)
 		rc = riscv_hwprobe(&pair, 1, sizeof(cpu_set_t), (unsigned long *)&one_cpu, 0);
 		assert(rc == 0 && pair.key == RISCV_HWPROBE_KEY_IMA_EXT_0);
 
-		cbostr = cbo == RISCV_HWPROBE_EXT_ZICBOZ ? "Zicboz" : "Zicbom";
-
-		if (pair.value & cbo)
-			ksft_exit_fail_msg("%s is only present on a subset of harts.\n"
-					   "Use taskset to select a set of harts where %s\n"
-					   "presence (present or not) is consistent for each hart\n",
-					   cbostr, cbostr);
+		if (pair.value & RISCV_HWPROBE_EXT_ZICBOZ)
+			ksft_exit_fail_msg("Zicboz is only present on a subset of harts.\n"
+					   "Use taskset to select a set of harts where Zicboz\n"
+					   "presence (present or not) is consistent for each hart\n");
 		++c;
 	}
 }
@@ -191,9 +159,7 @@ static void check_no_zicbo_cpus(cpu_set_t *cpus, __u64 cbo)
 enum {
 	TEST_ZICBOZ,
 	TEST_NO_ZICBOZ,
-	TEST_ZICBOM,
 	TEST_NO_ZICBOM,
-	TEST_NO_CBO_INVAL,
 };
 
 static struct test_info {
@@ -203,9 +169,7 @@ static struct test_info {
 } tests[] = {
 	[TEST_ZICBOZ]		= { .nr_tests = 3, test_zicboz },
 	[TEST_NO_ZICBOZ]	= { .nr_tests = 1, test_no_zicboz },
-	[TEST_ZICBOM]		= { .nr_tests = 3, test_zicbom },
-	[TEST_NO_ZICBOM]	= { .nr_tests = 2, test_no_zicbom },
-	[TEST_NO_CBO_INVAL]	= { .nr_tests = 1, test_no_cbo_inval },
+	[TEST_NO_ZICBOM]	= { .nr_tests = 3, test_no_zicbom },
 };
 
 int main(int argc, char **argv)
@@ -225,7 +189,6 @@ int main(int argc, char **argv)
 		assert(rc == 0);
 		tests[TEST_NO_ZICBOZ].enabled = true;
 		tests[TEST_NO_ZICBOM].enabled = true;
-		tests[TEST_NO_CBO_INVAL].enabled = true;
 	}
 
 	rc = sched_getaffinity(0, sizeof(cpu_set_t), &cpus);
@@ -243,14 +206,7 @@ int main(int argc, char **argv)
 		tests[TEST_ZICBOZ].enabled = true;
 		tests[TEST_NO_ZICBOZ].enabled = false;
 	} else {
-		check_no_zicbo_cpus(&cpus, RISCV_HWPROBE_EXT_ZICBOZ);
-	}
-
-	if (pair.value & RISCV_HWPROBE_EXT_ZICBOM) {
-		tests[TEST_ZICBOM].enabled = true;
-		tests[TEST_NO_ZICBOM].enabled = false;
-	} else {
-		check_no_zicbo_cpus(&cpus, RISCV_HWPROBE_EXT_ZICBOM);
+		check_no_zicboz_cpus(&cpus);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(tests); ++i)

@@ -8,7 +8,6 @@
  */
 #include <linux/export.h>
 #include <linux/linkage.h>
-#include <linux/cfi_types.h>
 #include <asm/cpufeatures.h>
 #include <asm/alternative.h>
 
@@ -27,7 +26,7 @@
  * Output:
  * rax: dest
  */
-SYM_TYPED_FUNC_START(__memmove)
+SYM_FUNC_START(__memmove)
 
 	mov %rdi, %rax
 

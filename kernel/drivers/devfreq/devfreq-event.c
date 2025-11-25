@@ -244,9 +244,13 @@ struct devfreq_event_dev *devfreq_event_get_edev_by_phandle(struct device *dev,
 	edev = NULL;
 out:
 	mutex_unlock(&devfreq_event_list_lock);
-	of_node_put(node);
-	if (!edev)
+
+	if (!edev) {
+		of_node_put(node);
 		return ERR_PTR(-ENODEV);
+	}
+
+	of_node_put(node);
 
 	return edev;
 }

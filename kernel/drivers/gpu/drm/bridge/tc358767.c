@@ -344,14 +344,6 @@
 #define COLOR_BAR_MODE_BARS	2
 #define PLL_DBG			0x0a04
 
-enum tc_mode {
-	mode_dpi_to_edp = BIT(1) | BIT(2),
-	mode_dpi_to_dp  = BIT(1),
-	mode_dsi_to_edp = BIT(0) | BIT(2),
-	mode_dsi_to_dp  = BIT(0),
-	mode_dsi_to_dpi = BIT(0) | BIT(1),
-};
-
 static bool tc_test_pattern;
 module_param_named(test, tc_test_pattern, bool, 0644);
 
@@ -1556,8 +1548,9 @@ static int tc_edp_stream_disable(struct tc_data *tc)
 	return 0;
 }
 
-static void tc_dpi_bridge_atomic_enable(struct drm_bridge *bridge,
-					struct drm_atomic_state *state)
+static void
+tc_dpi_bridge_atomic_enable(struct drm_bridge *bridge,
+			    struct drm_bridge_state *old_bridge_state)
 
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
@@ -1571,8 +1564,9 @@ static void tc_dpi_bridge_atomic_enable(struct drm_bridge *bridge,
 	}
 }
 
-static void tc_dpi_bridge_atomic_disable(struct drm_bridge *bridge,
-					 struct drm_atomic_state *state)
+static void
+tc_dpi_bridge_atomic_disable(struct drm_bridge *bridge,
+			     struct drm_bridge_state *old_bridge_state)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 	int ret;
@@ -1582,8 +1576,9 @@ static void tc_dpi_bridge_atomic_disable(struct drm_bridge *bridge,
 		dev_err(tc->dev, "main link stream stop error: %d\n", ret);
 }
 
-static void tc_edp_bridge_atomic_enable(struct drm_bridge *bridge,
-					struct drm_atomic_state *state)
+static void
+tc_edp_bridge_atomic_enable(struct drm_bridge *bridge,
+			    struct drm_bridge_state *old_bridge_state)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 	int ret;
@@ -1608,8 +1603,9 @@ static void tc_edp_bridge_atomic_enable(struct drm_bridge *bridge,
 	}
 }
 
-static void tc_edp_bridge_atomic_disable(struct drm_bridge *bridge,
-					 struct drm_atomic_state *state)
+static void
+tc_edp_bridge_atomic_disable(struct drm_bridge *bridge,
+			     struct drm_bridge_state *old_bridge_state)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 	int ret;
@@ -1711,7 +1707,7 @@ static void tc_bridge_mode_set(struct drm_bridge *bridge,
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 
-	drm_mode_copy(&tc->mode, adj);
+	drm_mode_copy(&tc->mode, mode);
 }
 
 static const struct drm_edid *tc_edid_read(struct drm_bridge *bridge,
@@ -1760,8 +1756,7 @@ static const struct drm_connector_helper_funcs tc_connector_helper_funcs = {
 	.get_modes = tc_connector_get_modes,
 };
 
-static enum drm_connector_status
-tc_bridge_detect(struct drm_bridge *bridge, struct drm_connector *connector)
+static enum drm_connector_status tc_bridge_detect(struct drm_bridge *bridge)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 	bool conn;
@@ -1786,7 +1781,7 @@ tc_connector_detect(struct drm_connector *connector, bool force)
 	struct tc_data *tc = connector_to_tc(connector);
 
 	if (tc->hpd_pin >= 0)
-		return tc_bridge_detect(&tc->bridge, connector);
+		return tc_bridge_detect(&tc->bridge);
 
 	if (tc->panel_bridge)
 		return connector_status_connected;
@@ -1804,7 +1799,6 @@ static const struct drm_connector_funcs tc_connector_funcs = {
 };
 
 static int tc_dpi_bridge_attach(struct drm_bridge *bridge,
-				struct drm_encoder *encoder,
 				enum drm_bridge_attach_flags flags)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
@@ -1817,7 +1811,6 @@ static int tc_dpi_bridge_attach(struct drm_bridge *bridge,
 }
 
 static int tc_edp_bridge_attach(struct drm_bridge *bridge,
-				struct drm_encoder *encoder,
 				enum drm_bridge_attach_flags flags)
 {
 	u32 bus_format = MEDIA_BUS_FMT_RGB888_1X24;
@@ -2183,31 +2176,19 @@ static const struct regmap_access_table tc_precious_table = {
 	.n_yes_ranges = ARRAY_SIZE(tc_precious_ranges),
 };
 
-static bool tc_writeable_reg(struct device *dev, unsigned int reg)
-{
-	/* RO reg */
-	switch (reg) {
-	case PPI_BUSYPPI:
-	case DSI_BUSYDSI:
-	case DSI_LANESTATUS0:
-	case DSI_LANESTATUS1:
-	case DSI_INTSTATUS:
-	case TC_IDREG:
-	case SYSBOOT:
-	case SYSSTAT:
-	case GPIOI:
-	case DP0_LTSTAT:
-	case DP0_SNKLTCHGREQ:
-		return false;
-	}
-	/* WO reg */
-	switch (reg) {
-	case DSI_STARTDSI:
-	case DSI_INTCLR:
-		return true;
-	}
-	return tc_readable_reg(dev, reg);
-}
+static const struct regmap_range tc_non_writeable_ranges[] = {
+	regmap_reg_range(PPI_BUSYPPI, PPI_BUSYPPI),
+	regmap_reg_range(DSI_BUSYDSI, DSI_BUSYDSI),
+	regmap_reg_range(DSI_LANESTATUS0, DSI_INTSTATUS),
+	regmap_reg_range(TC_IDREG, SYSSTAT),
+	regmap_reg_range(GPIOI, GPIOI),
+	regmap_reg_range(DP0_LTSTAT, DP0_SNKLTCHGREQ),
+};
+
+static const struct regmap_access_table tc_writeable_table = {
+	.no_ranges = tc_non_writeable_ranges,
+	.n_no_ranges = ARRAY_SIZE(tc_non_writeable_ranges),
+};
 
 static const struct regmap_config tc_regmap_config = {
 	.name = "tc358767",
@@ -2217,9 +2198,9 @@ static const struct regmap_config tc_regmap_config = {
 	.max_register = PLL_DBG,
 	.cache_type = REGCACHE_MAPLE,
 	.readable_reg = tc_readable_reg,
-	.writeable_reg = tc_writeable_reg,
 	.volatile_table = &tc_volatile_table,
 	.precious_table = &tc_precious_table,
+	.wr_table = &tc_writeable_table,
 	.reg_format_endian = REGMAP_ENDIAN_BIG,
 	.val_format_endian = REGMAP_ENDIAN_LITTLE,
 };
@@ -2255,11 +2236,11 @@ static irqreturn_t tc_irq_handler(int irq, void *arg)
 		bool h = val & INT_GPIO_H(tc->hpd_pin);
 		bool lc = val & INT_GPIO_LC(tc->hpd_pin);
 
-		if (h || lc) {
-			dev_dbg(tc->dev, "GPIO%d: %s %s\n", tc->hpd_pin,
-				h ? "H" : "", lc ? "LC" : "");
+		dev_dbg(tc->dev, "GPIO%d: %s %s\n", tc->hpd_pin,
+			h ? "H" : "", lc ? "LC" : "");
+
+		if (h || lc)
 			drm_kms_helper_hotplug_event(tc->bridge.dev);
-		}
 	}
 
 	regmap_write(tc->regmap, INTSTS_G, val);
@@ -2324,8 +2305,7 @@ static int tc_probe_dpi_bridge_endpoint(struct tc_data *tc)
 	/* port@1 is the DPI input/output port */
 	ret = drm_of_find_panel_or_bridge(dev->of_node, 1, 0, &panel, &bridge);
 	if (ret && ret != -ENODEV)
-		return dev_err_probe(dev, ret,
-				     "Could not find DPI panel or bridge\n");
+		return ret;
 
 	if (panel) {
 		bridge = devm_drm_panel_bridge_add(dev, panel);
@@ -2336,6 +2316,7 @@ static int tc_probe_dpi_bridge_endpoint(struct tc_data *tc)
 	if (bridge) {
 		tc->panel_bridge = bridge;
 		tc->bridge.type = DRM_MODE_CONNECTOR_DPI;
+		tc->bridge.funcs = &tc_dpi_bridge_funcs;
 
 		return 0;
 	}
@@ -2352,8 +2333,7 @@ static int tc_probe_edp_bridge_endpoint(struct tc_data *tc)
 	/* port@2 is the output port */
 	ret = drm_of_find_panel_or_bridge(dev->of_node, 2, 0, &panel, NULL);
 	if (ret && ret != -ENODEV)
-		return dev_err_probe(dev, ret,
-				     "Could not find DSI panel or bridge\n");
+		return ret;
 
 	if (panel) {
 		struct drm_bridge *panel_bridge;
@@ -2368,6 +2348,7 @@ static int tc_probe_edp_bridge_endpoint(struct tc_data *tc)
 		tc->bridge.type = DRM_MODE_CONNECTOR_DisplayPort;
 	}
 
+	tc->bridge.funcs = &tc_edp_bridge_funcs;
 	if (tc->hpd_pin >= 0)
 		tc->bridge.ops |= DRM_BRIDGE_OP_DETECT;
 	tc->bridge.ops |= DRM_BRIDGE_OP_EDID;
@@ -2375,11 +2356,17 @@ static int tc_probe_edp_bridge_endpoint(struct tc_data *tc)
 	return 0;
 }
 
-static enum tc_mode tc_probe_get_mode(struct device *dev)
+static int tc_probe_bridge_endpoint(struct tc_data *tc)
 {
+	struct device *dev = tc->dev;
 	struct of_endpoint endpoint;
 	struct device_node *node = NULL;
-	enum tc_mode mode = 0;
+	const u8 mode_dpi_to_edp = BIT(1) | BIT(2);
+	const u8 mode_dpi_to_dp = BIT(1);
+	const u8 mode_dsi_to_edp = BIT(0) | BIT(2);
+	const u8 mode_dsi_to_dp = BIT(0);
+	const u8 mode_dsi_to_dpi = BIT(0) | BIT(1);
+	u8 mode = 0;
 
 	/*
 	 * Determine bridge configuration.
@@ -2402,28 +2389,7 @@ static enum tc_mode tc_probe_get_mode(struct device *dev)
 			return -EINVAL;
 		}
 		mode |= BIT(endpoint.port);
-	}
 
-	if (mode != mode_dpi_to_edp &&
-	    mode != mode_dpi_to_dp  &&
-	    mode != mode_dsi_to_dpi &&
-	    mode != mode_dsi_to_edp &&
-	    mode != mode_dsi_to_dp) {
-		dev_warn(dev, "Invalid mode (0x%x) is not supported!\n", mode);
-		return -EINVAL;
-	}
-
-	return mode;
-}
-
-static int tc_probe_bridge_endpoint(struct tc_data *tc, enum tc_mode mode)
-{
-	struct device *dev = tc->dev;
-	struct of_endpoint endpoint;
-	struct device_node *node = NULL;
-
-	for_each_endpoint_of_node(dev->of_node, node) {
-		of_graph_parse_endpoint(node, &endpoint);
 		if (endpoint.port == 2) {
 			of_property_read_u8_array(node, "toshiba,pre-emphasis",
 						  tc->pre_emphasis,
@@ -2449,28 +2415,24 @@ static int tc_probe_bridge_endpoint(struct tc_data *tc, enum tc_mode mode)
 		return tc_probe_edp_bridge_endpoint(tc);
 	}
 
-	/* Should never happen, mode was validated by tc_probe_get_mode() */
+	dev_warn(dev, "Invalid mode (0x%x) is not supported!\n", mode);
+
 	return -EINVAL;
 }
 
 static int tc_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
-	const struct drm_bridge_funcs *funcs;
 	struct tc_data *tc;
-	int mode;
 	int ret;
 
-	mode = tc_probe_get_mode(dev);
-	funcs = (mode == mode_dsi_to_dpi) ? &tc_dpi_bridge_funcs : &tc_edp_bridge_funcs;
-
-	tc = devm_drm_bridge_alloc(dev, struct tc_data, bridge, funcs);
-	if (IS_ERR(tc))
-		return PTR_ERR(tc);
+	tc = devm_kzalloc(dev, sizeof(*tc), GFP_KERNEL);
+	if (!tc)
+		return -ENOMEM;
 
 	tc->dev = dev;
 
-	ret = tc_probe_bridge_endpoint(tc, mode);
+	ret = tc_probe_bridge_endpoint(tc);
 	if (ret)
 		return ret;
 
@@ -2596,7 +2558,7 @@ static int tc_probe(struct i2c_client *client)
 		ret = tc_mipi_dsi_host_attach(tc);
 		if (ret) {
 			drm_bridge_remove(&tc->bridge);
-			return dev_err_probe(dev, ret, "Failed to attach DSI host\n");
+			return ret;
 		}
 	}
 
@@ -2611,7 +2573,7 @@ static void tc_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id tc358767_i2c_ids[] = {
-	{ "tc358767" },
+	{ "tc358767", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tc358767_i2c_ids);

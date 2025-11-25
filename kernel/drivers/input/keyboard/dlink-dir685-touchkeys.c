@@ -14,7 +14,6 @@
 #include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 #include <linux/bitops.h>
 
 struct dir685_touchkeys {
@@ -49,7 +48,7 @@ static irqreturn_t dir685_tk_irq_thread(int irq, void *data)
 	changed = tk->cur_key ^ key;
 	for_each_set_bit(i, &changed, num_bits) {
 		dev_dbg(tk->dev, "key %d is %s\n", i,
-			str_down_up(test_bit(i, &key)));
+			test_bit(i, &key) ? "down" : "up");
 		input_report_key(tk->input, tk->codes[i], test_bit(i, &key));
 	}
 

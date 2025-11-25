@@ -6,7 +6,7 @@
 
 #ifndef _ASM_S390X_DCSS_H
 #define _ASM_S390X_DCSS_H
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 /*
  * DCSS segment is defined as a contiguous range of pages using DEFSEG command.

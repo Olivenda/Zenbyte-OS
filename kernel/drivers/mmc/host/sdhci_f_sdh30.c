@@ -133,18 +133,20 @@ static int sdhci_f_sdh30_probe(struct platform_device *pdev)
 
 	ret = mmc_of_parse(host->mmc);
 	if (ret)
-		return ret;
+		goto err;
 
 	if (dev_of_node(dev)) {
 		sdhci_get_of_property(pdev);
 
 		priv->clk_iface = devm_clk_get(&pdev->dev, "iface");
-		if (IS_ERR(priv->clk_iface))
-			return PTR_ERR(priv->clk_iface);
+		if (IS_ERR(priv->clk_iface)) {
+			ret = PTR_ERR(priv->clk_iface);
+			goto err;
+		}
 
 		ret = clk_prepare_enable(priv->clk_iface);
 		if (ret)
-			return ret;
+			goto err;
 
 		priv->clk = devm_clk_get(&pdev->dev, "core");
 		if (IS_ERR(priv->clk)) {
@@ -198,6 +200,9 @@ err_rst:
 	clk_disable_unprepare(priv->clk);
 err_clk:
 	clk_disable_unprepare(priv->clk_iface);
+err:
+	sdhci_pltfm_free(pdev);
+
 	return ret;
 }
 
@@ -242,7 +247,7 @@ static struct platform_driver sdhci_f_sdh30_driver = {
 		.pm	= &sdhci_pltfm_pmops,
 	},
 	.probe = sdhci_f_sdh30_probe,
-	.remove = sdhci_f_sdh30_remove,
+	.remove_new = sdhci_f_sdh30_remove,
 };
 
 module_platform_driver(sdhci_f_sdh30_driver);

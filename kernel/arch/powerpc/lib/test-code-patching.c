@@ -6,7 +6,7 @@
 #include <linux/vmalloc.h>
 #include <linux/init.h>
 
-#include <asm/text-patching.h>
+#include <asm/code-patching.h>
 
 static int __init instr_is_branch_to_addr(const u32 *instr, unsigned long addr)
 {

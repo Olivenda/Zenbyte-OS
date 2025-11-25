@@ -534,11 +534,15 @@ static const struct rproc_ops adsp_ops = {
 static int adsp_init_clock(struct qcom_adsp *adsp, const char **clk_ids)
 {
 	int num_clks = 0;
-	int i;
+	int i, ret;
 
 	adsp->xo = devm_clk_get(adsp->dev, "xo");
-	if (IS_ERR(adsp->xo))
-		return dev_err_probe(adsp->dev, PTR_ERR(adsp->xo), "failed to get xo clock");
+	if (IS_ERR(adsp->xo)) {
+		ret = PTR_ERR(adsp->xo);
+		if (ret != -EPROBE_DEFER)
+			dev_err(adsp->dev, "failed to get xo clock");
+		return ret;
+	}
 
 	for (i = 0; clk_ids[i]; i++)
 		num_clks++;
@@ -704,9 +708,10 @@ static int adsp_probe(struct platform_device *pdev)
 		return ret;
 
 	ret = qcom_rproc_pds_attach(adsp, desc->pd_names, desc->num_pds);
-	if (ret < 0)
-		return dev_err_probe(&pdev->dev, ret,
-				     "Failed to attach proxy power domains\n");
+	if (ret < 0) {
+		dev_err(&pdev->dev, "Failed to attach proxy power domains\n");
+		return ret;
+	}
 
 	ret = adsp_init_reset(adsp);
 	if (ret)
@@ -842,7 +847,7 @@ MODULE_DEVICE_TABLE(of, adsp_of_match);
 
 static struct platform_driver adsp_pil_driver = {
 	.probe = adsp_probe,
-	.remove = adsp_remove,
+	.remove_new = adsp_remove,
 	.driver = {
 		.name = "qcom_q6v5_adsp",
 		.of_match_table = adsp_of_match,

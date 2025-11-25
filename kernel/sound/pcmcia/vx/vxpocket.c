@@ -187,7 +187,7 @@ static int vxpocket_config(struct pcmcia_device *link)
 		/* overwrite the hardware information */
 		chip->hw = &vxp440_hw;
 		chip->type = vxp440_hw.type;
-		strscpy(chip->card->driver, vxp440_hw.name);
+		strcpy(chip->card->driver, vxp440_hw.name);
 	}
 
 	ret = pcmcia_request_io(link);

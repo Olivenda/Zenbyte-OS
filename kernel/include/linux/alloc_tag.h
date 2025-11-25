@@ -30,21 +30,6 @@ struct alloc_tag {
 	struct alloc_tag_counters __percpu	*counters;
 } __aligned(8);
 
-struct alloc_tag_kernel_section {
-	struct alloc_tag *first_tag;
-	unsigned long count;
-};
-
-struct alloc_tag_module_section {
-	union {
-		unsigned long start_addr;
-		struct alloc_tag *first_tag;
-	};
-	unsigned long end_addr;
-	/* used size */
-	unsigned long size;
-};
-
 #ifdef CONFIG_MEM_ALLOC_PROFILING_DEBUG
 
 #define CODETAG_EMPTY	((void *)1)
@@ -74,8 +59,6 @@ static inline void set_codetag_empty(union codetag_ref *ref)
 
 #ifdef CONFIG_MEM_ALLOC_PROFILING
 
-#define ALLOC_TAG_SECTION_NAME	"alloc_tags"
-
 struct codetag_bytes {
 	struct codetag *ct;
 	s64 bytes;
@@ -88,7 +71,7 @@ static inline struct alloc_tag *ct_to_alloc_tag(struct codetag *ct)
 	return container_of(ct, struct alloc_tag, ct);
 }
 
-#if defined(CONFIG_ARCH_MODULE_NEEDS_WEAK_PER_CPU) && defined(MODULE)
+#ifdef ARCH_NEEDS_WEAK_PER_CPU
 /*
  * When percpu variables are required to be defined as weak, static percpu
  * variables can't be used inside a function (see comments for DECLARE_PER_CPU_SECTION).
@@ -98,32 +81,20 @@ DECLARE_PER_CPU(struct alloc_tag_counters, _shared_alloc_tag);
 
 #define DEFINE_ALLOC_TAG(_alloc_tag)						\
 	static struct alloc_tag _alloc_tag __used __aligned(8)			\
-	__section(ALLOC_TAG_SECTION_NAME) = {					\
+	__section("alloc_tags") = {						\
 		.ct = CODE_TAG_INIT,						\
 		.counters = &_shared_alloc_tag };
 
-#else /* CONFIG_ARCH_MODULE_NEEDS_WEAK_PER_CPU && MODULE */
-
-#ifdef MODULE
-
-#define DEFINE_ALLOC_TAG(_alloc_tag)						\
-	static struct alloc_tag _alloc_tag __used __aligned(8)			\
-	__section(ALLOC_TAG_SECTION_NAME) = {					\
-		.ct = CODE_TAG_INIT,						\
-		.counters = NULL };
-
-#else  /* MODULE */
+#else /* ARCH_NEEDS_WEAK_PER_CPU */
 
 #define DEFINE_ALLOC_TAG(_alloc_tag)						\
 	static DEFINE_PER_CPU(struct alloc_tag_counters, _alloc_tag_cntr);	\
 	static struct alloc_tag _alloc_tag __used __aligned(8)			\
-	__section(ALLOC_TAG_SECTION_NAME) = {					\
+	__section("alloc_tags") = {						\
 		.ct = CODE_TAG_INIT,						\
 		.counters = &_alloc_tag_cntr };
 
-#endif /* MODULE */
-
-#endif /* CONFIG_ARCH_MODULE_NEEDS_WEAK_PER_CPU && MODULE */
+#endif /* ARCH_NEEDS_WEAK_PER_CPU */
 
 DECLARE_STATIC_KEY_MAYBE(CONFIG_MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT,
 			mem_alloc_profiling_key);
@@ -152,7 +123,7 @@ static inline struct alloc_tag_counters alloc_tag_read(struct alloc_tag *tag)
 #ifdef CONFIG_MEM_ALLOC_PROFILING_DEBUG
 static inline void alloc_tag_add_check(union codetag_ref *ref, struct alloc_tag *tag)
 {
-	WARN_ONCE(ref && ref->ct && !is_codetag_empty(ref),
+	WARN_ONCE(ref && ref->ct,
 		  "alloc_tag was not cleared (got tag for %s:%u)\n",
 		  ref->ct->filename, ref->ct->lineno);
 
@@ -236,14 +207,9 @@ static inline void alloc_tag_sub(union codetag_ref *ref, size_t bytes) {}
 
 #define alloc_hooks_tag(_tag, _do_alloc)				\
 ({									\
-	typeof(_do_alloc) _res;						\
-	if (mem_alloc_profiling_enabled()) {				\
-		struct alloc_tag * __maybe_unused _old;			\
-		_old = alloc_tag_save(_tag);				\
-		_res = _do_alloc;					\
-		alloc_tag_restore(_tag, _old);				\
-	} else								\
-		_res = _do_alloc;					\
+	struct alloc_tag * __maybe_unused _old = alloc_tag_save(_tag);	\
+	typeof(_do_alloc) _res = _do_alloc;				\
+	alloc_tag_restore(_tag, _old);					\
 	_res;								\
 })
 

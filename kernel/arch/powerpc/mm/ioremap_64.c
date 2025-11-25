@@ -52,6 +52,6 @@ void iounmap(volatile void __iomem *token)
 	if (!slab_is_available())
 		return;
 
-	generic_iounmap(token);
+	generic_iounmap(PCI_FIX_ADDR(token));
 }
 EXPORT_SYMBOL(iounmap);

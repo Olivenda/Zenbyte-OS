@@ -278,6 +278,7 @@ failed:
 
 	pci_walk_bridge(bridge, report_perm_failure_detected, NULL);
 
+	/* TODO: Should kernel panic here? */
 	pci_info(bridge, "device recovery failed\n");
 
 	return status;

@@ -85,49 +85,49 @@
 	};
 };
 
-&cpu0 {
+&CPU0 {
 	compatible = "qcom,kryo260";
 	capacity-dmips-mhz = <1024>;
 	/delete-property/ operating-points-v2;
 };
 
-&cpu1 {
+&CPU1 {
 	compatible = "qcom,kryo260";
 	capacity-dmips-mhz = <1024>;
 	/delete-property/ operating-points-v2;
 };
 
-&cpu2 {
+&CPU2 {
 	compatible = "qcom,kryo260";
 	capacity-dmips-mhz = <1024>;
 	/delete-property/ operating-points-v2;
 };
 
-&cpu3 {
+&CPU3 {
 	compatible = "qcom,kryo260";
 	capacity-dmips-mhz = <1024>;
 	/delete-property/ operating-points-v2;
 };
 
-&cpu4 {
+&CPU4 {
 	compatible = "qcom,kryo260";
 	capacity-dmips-mhz = <640>;
 	/delete-property/ operating-points-v2;
 };
 
-&cpu5 {
+&CPU5 {
 	compatible = "qcom,kryo260";
 	capacity-dmips-mhz = <640>;
 	/delete-property/ operating-points-v2;
 };
 
-&cpu6 {
+&CPU6 {
 	compatible = "qcom,kryo260";
 	capacity-dmips-mhz = <640>;
 	/delete-property/ operating-points-v2;
 };
 
-&cpu7 {
+&CPU7 {
 	compatible = "qcom,kryo260";
 	capacity-dmips-mhz = <640>;
 	/delete-property/ operating-points-v2;
@@ -170,8 +170,8 @@
 
 		assigned-clocks = <&mmcc BYTE1_CLK_SRC>,
 					<&mmcc PCLK1_CLK_SRC>;
-		assigned-clock-parents = <&mdss_dsi1_phy DSI_BYTE_PLL_CLK>,
-					 <&mdss_dsi1_phy DSI_PIXEL_PLL_CLK>;
+		assigned-clock-parents = <&mdss_dsi1_phy 0>,
+						<&mdss_dsi1_phy 1>;
 
 		clocks = <&mmcc MDSS_MDP_CLK>,
 				<&mmcc MDSS_BYTE1_CLK>,
@@ -239,10 +239,10 @@
 			<&sleep_clk>,
 			<&gcc GCC_MMSS_GPLL0_CLK>,
 			<&gcc GCC_MMSS_GPLL0_DIV_CLK>,
-			<&mdss_dsi0_phy DSI_PIXEL_PLL_CLK>,
-			<&mdss_dsi0_phy DSI_BYTE_PLL_CLK>,
-			<&mdss_dsi1_phy DSI_PIXEL_PLL_CLK>,
-			<&mdss_dsi1_phy DSI_BYTE_PLL_CLK>,
+			<&mdss_dsi0_phy 1>,
+			<&mdss_dsi0_phy 0>,
+			<&mdss_dsi1_phy 1>,
+			<&mdss_dsi1_phy 0>,
 			<0>,
 			<0>;
 };

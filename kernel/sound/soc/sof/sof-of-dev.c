@@ -16,26 +16,20 @@
 
 static char *fw_path;
 module_param(fw_path, charp, 0444);
-MODULE_PARM_DESC(fw_path, "deprecated - moved to snd-sof module.");
-
-static char *fw_filename;
-module_param(fw_filename, charp, 0444);
-MODULE_PARM_DESC(fw_filename, "deprecated - moved to snd-sof module.");
+MODULE_PARM_DESC(fw_path, "alternate path for SOF firmware.");
 
 static char *tplg_path;
 module_param(tplg_path, charp, 0444);
-MODULE_PARM_DESC(tplg_path, "deprecated - moved to snd-sof module.");
+MODULE_PARM_DESC(tplg_path, "alternate path for SOF topology.");
 
-static char *tplg_filename;
-module_param(tplg_filename, charp, 0444);
-MODULE_PARM_DESC(tplg_filename, "deprecated - moved to snd-sof module.");
-
-EXPORT_DEV_PM_OPS(sof_of_pm) = {
+const struct dev_pm_ops sof_of_pm = {
 	.prepare = snd_sof_prepare,
 	.complete = snd_sof_complete,
-	SYSTEM_SLEEP_PM_OPS(snd_sof_suspend, snd_sof_resume)
-	RUNTIME_PM_OPS(snd_sof_runtime_suspend, snd_sof_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(snd_sof_suspend, snd_sof_resume)
+	SET_RUNTIME_PM_OPS(snd_sof_runtime_suspend, snd_sof_runtime_resume,
+			   NULL)
 };
+EXPORT_SYMBOL(sof_of_pm);
 
 static void sof_of_probe_complete(struct device *dev)
 {
@@ -74,8 +68,6 @@ int sof_of_probe(struct platform_device *pdev)
 	sof_pdata->ipc_file_profile_base.ipc_type = desc->ipc_default;
 	sof_pdata->ipc_file_profile_base.fw_path = fw_path;
 	sof_pdata->ipc_file_profile_base.tplg_path = tplg_path;
-	sof_pdata->ipc_file_profile_base.fw_name = fw_filename;
-	sof_pdata->ipc_file_profile_base.tplg_name = tplg_filename;
 
 	/* set callback to be called on successful device probe to enable runtime_pm */
 	sof_pdata->sof_probe_complete = sof_of_probe_complete;

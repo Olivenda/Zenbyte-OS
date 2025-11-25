@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/async.h>
+#include <linux/export.h>
 #include <linux/mutex.h>
 
 #include <asm/pgalloc.h>
@@ -475,7 +476,7 @@ static struct kobj_type sclp_sd_file_ktype = {
  * on EOF.
  */
 static ssize_t data_read(struct file *file, struct kobject *kobj,
-			 const struct bin_attribute *attr, char *buffer,
+			 struct bin_attribute *attr, char *buffer,
 			 loff_t off, size_t size)
 {
 	struct sclp_sd_file *sd_file = to_sd_file(kobj);

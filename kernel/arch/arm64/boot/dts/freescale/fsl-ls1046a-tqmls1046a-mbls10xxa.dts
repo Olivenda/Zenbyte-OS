@@ -44,22 +44,6 @@
 	wp-gpios = <&gpio3 3 GPIO_ACTIVE_HIGH>;
 };
 
-&sfp1 {
-	status = "okay";
-};
-
-&sfp2 {
-	status = "okay";
-};
-
-&sfp1_i2c {
-	status = "okay";
-};
-
-&sfp2_i2c {
-	status = "okay";
-};
-
 &usb2 {
 	status = "okay";
 };
@@ -67,10 +51,6 @@
 #include "fsl-ls1046-post.dtsi"
 #include "tqmls104xa-mbls10xxa-fman.dtsi"
 
-&enet6 {
-	status = "okay";
-};
-
 &enet7 {
-	status = "okay";
+	status = "disabled";
 };

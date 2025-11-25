@@ -387,15 +387,33 @@ static const struct iio_info ad9833_info = {
 	.attrs = &ad9833_attribute_group,
 };
 
+static void ad9834_disable_reg(void *data)
+{
+	struct regulator *reg = data;
+
+	regulator_disable(reg);
+}
+
 static int ad9834_probe(struct spi_device *spi)
 {
 	struct ad9834_state *st;
 	struct iio_dev *indio_dev;
+	struct regulator *reg;
 	int ret;
 
-	ret = devm_regulator_get_enable(&spi->dev, "avdd");
+	reg = devm_regulator_get(&spi->dev, "avdd");
+	if (IS_ERR(reg))
+		return PTR_ERR(reg);
+
+	ret = regulator_enable(reg);
+	if (ret) {
+		dev_err(&spi->dev, "Failed to enable specified AVDD supply\n");
+		return ret;
+	}
+
+	ret = devm_add_action_or_reset(&spi->dev, ad9834_disable_reg, reg);
 	if (ret)
-		return dev_err_probe(&spi->dev, ret, "Failed to enable specified AVDD supply\n");
+		return ret;
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
 	if (!indio_dev) {
@@ -479,7 +497,7 @@ static const struct spi_device_id ad9834_id[] = {
 	{"ad9834", ID_AD9834},
 	{"ad9837", ID_AD9837},
 	{"ad9838", ID_AD9838},
-	{ }
+	{}
 };
 MODULE_DEVICE_TABLE(spi, ad9834_id);
 
@@ -488,7 +506,7 @@ static const struct of_device_id ad9834_of_match[] = {
 	{.compatible = "adi,ad9834"},
 	{.compatible = "adi,ad9837"},
 	{.compatible = "adi,ad9838"},
-	{ }
+	{}
 };
 
 MODULE_DEVICE_TABLE(of, ad9834_of_match);

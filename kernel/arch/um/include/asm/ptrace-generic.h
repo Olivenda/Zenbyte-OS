@@ -6,7 +6,7 @@
 #ifndef __UM_PTRACE_GENERIC_H
 #define __UM_PTRACE_GENERIC_H
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <sysdep/ptrace.h>
 

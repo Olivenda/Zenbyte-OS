@@ -275,7 +275,7 @@ setup_sym()
 
 
 	# Wait for ip config to settle
-	slowwait 5 ip netns exec $h1 "${ping6}" -c1 -w1 ${H2_N2_IP6} >/dev/null 2>&1
+	sleep 2
 }
 
 setup_asym()
@@ -370,7 +370,7 @@ setup_asym()
 	ip -netns $r2 -6 addr add dev eth1 ${R2_N2_IP6}/64 nodad
 
 	# Wait for ip config to settle
-	slowwait 5 ip netns exec $h1 "${ping6}" -c1 -w1 ${H2_N2_IP6} >/dev/null 2>&1
+	sleep 2
 }
 
 check_connectivity()

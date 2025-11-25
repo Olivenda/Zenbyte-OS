@@ -52,7 +52,6 @@ static inline bool is_sed_ioctl(unsigned int cmd)
 	case IOC_OPAL_GET_GEOMETRY:
 	case IOC_OPAL_DISCOVERY:
 	case IOC_OPAL_REVERT_LSP:
-	case IOC_OPAL_SET_SID_PW:
 		return true;
 	}
 	return false;

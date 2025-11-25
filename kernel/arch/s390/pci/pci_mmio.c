@@ -14,7 +14,6 @@
 #include <asm/asm-extable.h>
 #include <asm/pci_io.h>
 #include <asm/pci_debug.h>
-#include <asm/asm.h>
 
 static inline void zpci_err_mmio(u8 cc, u8 status, u64 offset)
 {
@@ -31,24 +30,20 @@ static inline int __pcistb_mio_inuser(
 		void __iomem *ioaddr, const void __user *src,
 		u64 len, u8 *status)
 {
-	int cc, exception;
-	bool sacf_flag;
+	int cc = -ENXIO;
 
-	exception = 1;
-	sacf_flag = enable_sacf_uaccess();
-	asm_inline volatile (
-		"	sacf	256\n"
-		"0:	.insn	rsy,0xeb00000000d4,%[len],%[ioaddr],%[src]\n"
-		"1:	lhi	%[exc],0\n"
-		"2:	sacf	768\n"
-		CC_IPM(cc)
+	asm volatile (
+		"       sacf 256\n"
+		"0:     .insn   rsy,0xeb00000000d4,%[len],%[ioaddr],%[src]\n"
+		"1:     ipm     %[cc]\n"
+		"       srl     %[cc],28\n"
+		"2:     sacf 768\n"
 		EX_TABLE(0b, 2b) EX_TABLE(1b, 2b)
-		: CC_OUT(cc, cc), [len] "+d" (len), [exc] "+d" (exception)
+		: [cc] "+d" (cc), [len] "+d" (len)
 		: [ioaddr] "a" (ioaddr), [src] "Q" (*((u8 __force *)src))
-		: CC_CLOBBER_LIST("memory"));
-	disable_sacf_uaccess(sacf_flag);
+		: "cc", "memory");
 	*status = len >> 24 & 0xff;
-	return exception ? -ENXIO : CC_TRANSFORM(cc);
+	return cc;
 }
 
 static inline int __pcistg_mio_inuser(
@@ -56,8 +51,7 @@ static inline int __pcistg_mio_inuser(
 		u64 ulen, u8 *status)
 {
 	union register_pair ioaddr_len = {.even = (u64 __force)ioaddr, .odd = ulen};
-	int cc, exception;
-	bool sacf_flag;
+	int cc = -ENXIO;
 	u64 val = 0;
 	u64 cnt = ulen;
 	u8 tmp;
@@ -67,29 +61,25 @@ static inline int __pcistg_mio_inuser(
 	 * a register, then store it to PCI at @ioaddr while in secondary
 	 * address space. pcistg then uses the user mappings.
 	 */
-	exception = 1;
-	sacf_flag = enable_sacf_uaccess();
-	asm_inline volatile (
-		"	sacf	256\n"
-		"0:	llgc	%[tmp],0(%[src])\n"
+	asm volatile (
+		"       sacf    256\n"
+		"0:     llgc    %[tmp],0(%[src])\n"
 		"4:	sllg	%[val],%[val],8\n"
-		"	aghi	%[src],1\n"
-		"	ogr	%[val],%[tmp]\n"
-		"	brctg	%[cnt],0b\n"
-		"1:	.insn	rre,0xb9d40000,%[val],%[ioaddr_len]\n"
-		"2:	lhi	%[exc],0\n"
-		"3:	sacf	768\n"
-		CC_IPM(cc)
+		"       aghi    %[src],1\n"
+		"       ogr     %[val],%[tmp]\n"
+		"       brctg   %[cnt],0b\n"
+		"1:     .insn   rre,0xb9d40000,%[val],%[ioaddr_len]\n"
+		"2:     ipm     %[cc]\n"
+		"       srl     %[cc],28\n"
+		"3:     sacf    768\n"
 		EX_TABLE(0b, 3b) EX_TABLE(4b, 3b) EX_TABLE(1b, 3b) EX_TABLE(2b, 3b)
-		: [src] "+a" (src), [cnt] "+d" (cnt),
-		  [val] "+d" (val), [tmp] "=d" (tmp), [exc] "+d" (exception),
-		  CC_OUT(cc, cc), [ioaddr_len] "+&d" (ioaddr_len.pair)
 		:
-		: CC_CLOBBER_LIST("memory"));
-	disable_sacf_uaccess(sacf_flag);
+		[src] "+a" (src), [cnt] "+d" (cnt),
+		[val] "+d" (val), [tmp] "=d" (tmp),
+		[cc] "+d" (cc), [ioaddr_len] "+&d" (ioaddr_len.pair)
+		:: "cc", "memory");
 	*status = ioaddr_len.odd >> 24 & 0xff;
 
-	cc = exception ? -ENXIO : CC_TRANSFORM(cc);
 	/* did we read everything from user memory? */
 	if (!cc && cnt != 0)
 		cc = -EFAULT;
@@ -210,10 +200,9 @@ static inline int __pcilg_mio_inuser(
 		u64 ulen, u8 *status)
 {
 	union register_pair ioaddr_len = {.even = (u64 __force)ioaddr, .odd = ulen};
-	bool sacf_flag;
 	u64 cnt = ulen;
 	int shift = ulen * 8;
-	int cc, exception;
+	int cc = -ENXIO;
 	u64 val, tmp;
 
 	/*
@@ -221,34 +210,27 @@ static inline int __pcilg_mio_inuser(
 	 * user space) into a register using pcilg then store these bytes at
 	 * user address @dst
 	 */
-	exception = 1;
-	sacf_flag = enable_sacf_uaccess();
-	asm_inline volatile (
-		"	sacf	256\n"
-		"0:	.insn	rre,0xb9d60000,%[val],%[ioaddr_len]\n"
-		"1:	lhi	%[exc],0\n"
-		"	jne	4f\n"
-		"2:	ahi	%[shift],-8\n"
-		"	srlg	%[tmp],%[val],0(%[shift])\n"
-		"3:	stc	%[tmp],0(%[dst])\n"
+	asm volatile (
+		"       sacf    256\n"
+		"0:     .insn   rre,0xb9d60000,%[val],%[ioaddr_len]\n"
+		"1:     ipm     %[cc]\n"
+		"       srl     %[cc],28\n"
+		"       ltr     %[cc],%[cc]\n"
+		"       jne     4f\n"
+		"2:     ahi     %[shift],-8\n"
+		"       srlg    %[tmp],%[val],0(%[shift])\n"
+		"3:     stc     %[tmp],0(%[dst])\n"
 		"5:	aghi	%[dst],1\n"
-		"	brctg	%[cnt],2b\n"
-		/*
-		 * Use xr to clear exc and set condition code to zero
-		 * to ensure flag output is correct for this branch.
-		 */
-		"	xr	%[exc],%[exc]\n"
-		"4:	sacf	768\n"
-		CC_IPM(cc)
+		"       brctg   %[cnt],2b\n"
+		"4:     sacf    768\n"
 		EX_TABLE(0b, 4b) EX_TABLE(1b, 4b) EX_TABLE(3b, 4b) EX_TABLE(5b, 4b)
-		: [ioaddr_len] "+&d" (ioaddr_len.pair), [exc] "+d" (exception),
-		  CC_OUT(cc, cc), [val] "=d" (val),
-		  [dst] "+a" (dst), [cnt] "+d" (cnt), [tmp] "=d" (tmp),
-		  [shift] "+a" (shift)
 		:
-		: CC_CLOBBER_LIST("memory"));
-	disable_sacf_uaccess(sacf_flag);
-	cc = exception ? -ENXIO : CC_TRANSFORM(cc);
+		[ioaddr_len] "+&d" (ioaddr_len.pair),
+		[cc] "+d" (cc), [val] "=d" (val),
+		[dst] "+a" (dst), [cnt] "+d" (cnt), [tmp] "=d" (tmp),
+		[shift] "+a" (shift)
+		:: "cc", "memory");
+
 	/* did we write everything to the user space buffer? */
 	if (!cc && cnt != 0)
 		cc = -EFAULT;

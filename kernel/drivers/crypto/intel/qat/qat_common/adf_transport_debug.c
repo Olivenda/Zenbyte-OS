@@ -10,21 +10,16 @@
 static DEFINE_MUTEX(ring_read_lock);
 static DEFINE_MUTEX(bank_read_lock);
 
-#define ADF_RING_NUM_MSGS(ring)					\
-	(ADF_SIZE_TO_RING_SIZE_IN_BYTES(ring->ring_size) /	\
-	ADF_MSG_SIZE_TO_BYTES(ring->msg_size))
-
 static void *adf_ring_start(struct seq_file *sfile, loff_t *pos)
 {
 	struct adf_etr_ring_data *ring = sfile->private;
-	unsigned int num_msg = ADF_RING_NUM_MSGS(ring);
-	loff_t val = *pos;
 
 	mutex_lock(&ring_read_lock);
-	if (val == 0)
+	if (*pos == 0)
 		return SEQ_START_TOKEN;
 
-	if (val >= num_msg)
+	if (*pos >= (ADF_SIZE_TO_RING_SIZE_IN_BYTES(ring->ring_size) /
+		     ADF_MSG_SIZE_TO_BYTES(ring->msg_size)))
 		return NULL;
 
 	return ring->base_addr +
@@ -34,15 +29,15 @@ static void *adf_ring_start(struct seq_file *sfile, loff_t *pos)
 static void *adf_ring_next(struct seq_file *sfile, void *v, loff_t *pos)
 {
 	struct adf_etr_ring_data *ring = sfile->private;
-	unsigned int num_msg = ADF_RING_NUM_MSGS(ring);
-	loff_t val = *pos;
 
-	(*pos)++;
-
-	if (val >= num_msg)
+	if (*pos >= (ADF_SIZE_TO_RING_SIZE_IN_BYTES(ring->ring_size) /
+		     ADF_MSG_SIZE_TO_BYTES(ring->msg_size))) {
+		(*pos)++;
 		return NULL;
+	}
 
-	return ring->base_addr + (ADF_MSG_SIZE_TO_BYTES(ring->msg_size) * val);
+	return ring->base_addr +
+		(ADF_MSG_SIZE_TO_BYTES(ring->msg_size) * (*pos)++);
 }
 
 static int adf_ring_show(struct seq_file *sfile, void *v)

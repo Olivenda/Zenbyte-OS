@@ -2,7 +2,7 @@
 menuconfig I2C_HID
 	tristate "I2C HID support"
 	default y
-	depends on I2C
+	depends on I2C && INPUT && HID
 
 if I2C_HID
 

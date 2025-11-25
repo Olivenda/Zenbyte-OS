@@ -3,22 +3,19 @@
  * Copyright 2019 Advanced Micro Devices, Inc.
  */
 
- #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/errno.h>
-#include <linux/device.h>
-#include <linux/firmware.h>
 #include <linux/io.h>
-#include <linux/mm.h>
 #include <linux/module.h>
-#include <linux/psp-tee.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/device.h>
 #include <linux/tee_core.h>
 #include <linux/types.h>
+#include <linux/mm.h>
 #include <linux/uaccess.h>
-
+#include <linux/firmware.h>
 #include "amdtee_private.h"
+#include <linux/psp-tee.h>
 
 static struct amdtee_driver_data *drv_data;
 static DEFINE_MUTEX(session_list_mutex);
@@ -461,7 +458,7 @@ static int __init amdtee_driver_init(void)
 
 	rc = psp_check_tee_status();
 	if (rc) {
-		pr_err("tee not present\n");
+		pr_err("amd-tee driver: tee not present\n");
 		return rc;
 	}
 
@@ -497,6 +494,7 @@ static int __init amdtee_driver_init(void)
 
 	drv_data->amdtee = amdtee;
 
+	pr_info("amd-tee driver initialization successful\n");
 	return 0;
 
 err_device_unregister:
@@ -512,7 +510,7 @@ err_kfree_drv_data:
 	kfree(drv_data);
 	drv_data = NULL;
 
-	pr_err("initialization failed\n");
+	pr_err("amd-tee driver initialization failed\n");
 	return rc;
 }
 module_init(amdtee_driver_init);

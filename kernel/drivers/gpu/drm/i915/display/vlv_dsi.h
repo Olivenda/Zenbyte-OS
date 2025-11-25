@@ -6,24 +6,25 @@
 #ifndef __VLV_DSI_H__
 #define __VLV_DSI_H__
 
+#include <linux/types.h>
+
 enum port;
-struct intel_crtc_state;
-struct intel_display;
+struct drm_i915_private;
 struct intel_dsi;
 
 #ifdef I915
 void vlv_dsi_wait_for_fifo_empty(struct intel_dsi *intel_dsi, enum port port);
-int vlv_dsi_min_cdclk(const struct intel_crtc_state *crtc_state);
-void vlv_dsi_init(struct intel_display *display);
+enum mipi_dsi_pixel_format pixel_format_from_register_bits(u32 fmt);
+void vlv_dsi_init(struct drm_i915_private *dev_priv);
 #else
 static inline void vlv_dsi_wait_for_fifo_empty(struct intel_dsi *intel_dsi, enum port port)
 {
 }
-static inline int vlv_dsi_min_cdclk(const struct intel_crtc_state *crtc_state)
+static inline enum mipi_dsi_pixel_format pixel_format_from_register_bits(u32 fmt)
 {
 	return 0;
 }
-static inline void vlv_dsi_init(struct intel_display *display)
+static inline void vlv_dsi_init(struct drm_i915_private *dev_priv)
 {
 }
 #endif

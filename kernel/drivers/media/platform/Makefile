@@ -28,7 +28,6 @@ obj-y += rockchip/
 obj-y += samsung/
 obj-y += st/
 obj-y += sunxi/
-obj-y += synopsys/
 obj-y += ti/
 obj-y += verisilicon/
 obj-y += via/

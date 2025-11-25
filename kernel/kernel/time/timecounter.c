@@ -6,7 +6,7 @@
 #include <linux/timecounter.h>
 
 void timecounter_init(struct timecounter *tc,
-		      struct cyclecounter *cc,
+		      const struct cyclecounter *cc,
 		      u64 start_tstamp)
 {
 	tc->cc = cc;

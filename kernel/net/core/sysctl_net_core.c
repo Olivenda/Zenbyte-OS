@@ -28,7 +28,6 @@
 #include <net/rps.h>
 
 #include "dev.h"
-#include "net-sysfs.h"
 
 static int int_3600 = 3600;
 static int min_sndbuf = SOCK_MIN_SNDBUF;
@@ -53,84 +52,78 @@ int sysctl_devconf_inherit_init_net __read_mostly;
 EXPORT_SYMBOL(sysctl_devconf_inherit_init_net);
 
 #if IS_ENABLED(CONFIG_NET_FLOW_LIMIT) || IS_ENABLED(CONFIG_RPS)
-static int dump_cpumask(void *buffer, size_t *lenp, loff_t *ppos,
-			struct cpumask *mask)
+static void dump_cpumask(void *buffer, size_t *lenp, loff_t *ppos,
+			 struct cpumask *mask)
 {
-	char *kbuf;
+	char kbuf[128];
 	int len;
 
 	if (*ppos || !*lenp) {
 		*lenp = 0;
-		return 0;
+		return;
 	}
 
-	/* CPUs are displayed as a hex bitmap + a comma between each groups of 8
-	 * nibbles (except the last one which has a newline instead).
-	 * Guesstimate the buffer size at the group granularity level.
-	 */
-	len = min(DIV_ROUND_UP(nr_cpumask_bits, 32) * (8 + 1), *lenp);
-	kbuf = kmalloc(len, GFP_KERNEL);
-	if (!kbuf) {
-		*lenp = 0;
-		return -ENOMEM;
-	}
-
+	len = min(sizeof(kbuf) - 1, *lenp);
 	len = scnprintf(kbuf, len, "%*pb", cpumask_pr_args(mask));
 	if (!len) {
 		*lenp = 0;
-		goto free_buf;
+		return;
 	}
 
-	/* scnprintf writes a trailing null char not counted in the returned
-	 * length, override it with a newline.
-	 */
-	kbuf[len++] = '\n';
+	if (len < *lenp)
+		kbuf[len++] = '\n';
 	memcpy(buffer, kbuf, len);
 	*lenp = len;
 	*ppos += len;
-
-free_buf:
-	kfree(kbuf);
-	return 0;
 }
 #endif
 
 #ifdef CONFIG_RPS
 
-DEFINE_MUTEX(rps_default_mask_mutex);
+static struct cpumask *rps_default_mask_cow_alloc(struct net *net)
+{
+	struct cpumask *rps_default_mask;
+
+	if (net->core.rps_default_mask)
+		return net->core.rps_default_mask;
+
+	rps_default_mask = kzalloc(cpumask_size(), GFP_KERNEL);
+	if (!rps_default_mask)
+		return NULL;
+
+	/* pairs with READ_ONCE in rx_queue_default_mask() */
+	WRITE_ONCE(net->core.rps_default_mask, rps_default_mask);
+	return rps_default_mask;
+}
 
 static int rps_default_mask_sysctl(const struct ctl_table *table, int write,
 				   void *buffer, size_t *lenp, loff_t *ppos)
 {
 	struct net *net = (struct net *)table->data;
-	struct cpumask *mask;
 	int err = 0;
 
-	mutex_lock(&rps_default_mask_mutex);
-	mask = net->core.rps_default_mask;
+	rtnl_lock();
 	if (write) {
-		if (!mask) {
-			mask = kzalloc(cpumask_size(), GFP_KERNEL);
-			net->core.rps_default_mask = mask;
-		}
+		struct cpumask *rps_default_mask = rps_default_mask_cow_alloc(net);
+
 		err = -ENOMEM;
-		if (!mask)
+		if (!rps_default_mask)
 			goto done;
 
-		err = cpumask_parse(buffer, mask);
+		err = cpumask_parse(buffer, rps_default_mask);
 		if (err)
 			goto done;
 
-		err = rps_cpumask_housekeeping(mask);
+		err = rps_cpumask_housekeeping(rps_default_mask);
 		if (err)
 			goto done;
 	} else {
-		err = dump_cpumask(buffer, lenp, ppos,
-				   mask ?: cpu_none_mask);
+		dump_cpumask(buffer, lenp, ppos,
+			     net->core.rps_default_mask ? : cpu_none_mask);
 	}
 
 done:
-	mutex_unlock(&rps_default_mask_mutex);
+	rtnl_unlock();
 	return err;
 }
 
@@ -192,7 +185,7 @@ static int rps_sock_flow_sysctl(const struct ctl_table *table, int write,
 			if (orig_sock_table) {
 				static_branch_dec(&rps_needed);
 				static_branch_dec(&rfs_needed);
-				kvfree_rcu(orig_sock_table, rcu);
+				kvfree_rcu_mightsleep(orig_sock_table);
 			}
 		}
 	}
@@ -230,7 +223,7 @@ static int flow_limit_cpu_sysctl(const struct ctl_table *table, int write,
 				     lockdep_is_held(&flow_limit_update_mutex));
 			if (cur && !cpumask_test_cpu(i, mask)) {
 				RCU_INIT_POINTER(sd->flow_limit, NULL);
-				kfree_rcu(cur, rcu);
+				kfree_rcu_mightsleep(cur);
 			} else if (!cur && cpumask_test_cpu(i, mask)) {
 				cur = kzalloc_node(len, GFP_KERNEL,
 						   cpu_to_node(i));
@@ -239,7 +232,7 @@ static int flow_limit_cpu_sysctl(const struct ctl_table *table, int write,
 					ret = -ENOMEM;
 					goto write_unlock;
 				}
-				cur->log_buckets = ilog2(netdev_flow_limit_table_len);
+				cur->num_buckets = netdev_flow_limit_table_len;
 				rcu_assign_pointer(sd->flow_limit, cur);
 			}
 		}
@@ -255,7 +248,7 @@ write_unlock:
 		}
 		rcu_read_unlock();
 
-		ret = dump_cpumask(buffer, lenp, ppos, mask);
+		dump_cpumask(buffer, lenp, ppos, mask);
 	}
 
 done:
@@ -502,6 +495,15 @@ static struct ctl_table net_core_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
+	{
+		.procname	= "tstamp_allow_data",
+		.data		= &sysctl_tstamp_allow_data,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE
+	},
 #ifdef CONFIG_RPS
 	{
 		.procname	= "rps_sock_flow_entries",
@@ -666,15 +668,6 @@ static struct ctl_table netns_core_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
 		.proc_handler	= proc_dou8vec_minmax,
-	},
-	{
-		.procname	= "tstamp_allow_data",
-		.data		= &init_net.core.sysctl_tstamp_allow_data,
-		.maxlen		= sizeof(u8),
-		.mode		= 0644,
-		.proc_handler	= proc_dou8vec_minmax,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_ONE
 	},
 	/* sysctl_core_net_init() will set the values after this
 	 * to readonly in network namespaces

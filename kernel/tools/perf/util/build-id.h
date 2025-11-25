@@ -13,7 +13,7 @@
 
 struct build_id {
 	u8	data[BUILD_ID_SIZE];
-	u8	size;
+	size_t	size;
 };
 
 struct dso;
@@ -21,10 +21,10 @@ struct feat_fd;
 struct nsinfo;
 
 void build_id__init(struct build_id *bid, const u8 *data, size_t size);
-int build_id__snprintf(const struct build_id *build_id, char *bf, size_t bf_size);
+int build_id__sprintf(const struct build_id *build_id, char *bf);
 bool build_id__is_defined(const struct build_id *bid);
-int sysfs__snprintf_build_id(const char *root_dir, char *sbuild_id, size_t sbuild_id_size);
-int filename__snprintf_build_id(const char *pathname, char *sbuild_id, size_t sbuild_id_size);
+int sysfs__sprintf_build_id(const char *root_dir, char *sbuild_id);
+int filename__sprintf_build_id(const char *pathname, char *sbuild_id);
 char *build_id_cache__kallsyms_path(const char *sbuild_id, char *bf,
 				    size_t size);
 

@@ -117,7 +117,6 @@
 		#clock-cells = <0>;
 		/* This value must be overridden by the board. */
 		clock-frequency = <0>;
-		bootph-all;
 	};
 
 	pmu {
@@ -138,7 +137,6 @@
 	soc {
 		compatible = "simple-bus";
 		interrupt-parent = <&gic>;
-		bootph-all;
 
 		#address-cells = <2>;
 		#size-cells = <2>;
@@ -278,7 +276,6 @@
 		pfc: pinctrl@e6060000 {
 			compatible = "renesas,pfc-r8a7793";
 			reg = <0 0xe6060000 0 0x250>;
-			bootph-all;
 		};
 
 		/* Special CPG clocks */
@@ -290,7 +287,6 @@
 			#clock-cells = <2>;
 			#power-domain-cells = <0>;
 			#reset-cells = <1>;
-			bootph-all;
 		};
 
 		apmu@e6152000 {
@@ -302,7 +298,6 @@
 		rst: reset-controller@e6160000 {
 			compatible = "renesas,r8a7793-rst";
 			reg = <0 0xe6160000 0 0x0100>;
-			bootph-all;
 		};
 
 		sysc: system-controller@e6180000 {
@@ -1348,6 +1343,7 @@
 			dma-names = "tx", "rx", "tx", "rx";
 			power-domains = <&sysc R8A7793_PD_ALWAYS_ON>;
 			resets = <&cpg 315>;
+			reg-io-width = <4>;
 			status = "disabled";
 			max-frequency = <97500000>;
 		};
@@ -1459,7 +1455,6 @@
 		prr: chipid@ff000044 {
 			compatible = "renesas,prr";
 			reg = <0 0xff000044 0 4>;
-			bootph-all;
 		};
 
 		cmt0: timer@ffca0000 {
@@ -1530,6 +1525,5 @@
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <48000000>;
-		bootph-all;
 	};
 };

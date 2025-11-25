@@ -7,7 +7,7 @@
 
 .text
 
-#ifndef CONFIG_X86_CX8
+#ifndef CONFIG_X86_CMPXCHG64
 
 /*
  * Emulate 'cmpxchg8b (%esi)' on UP

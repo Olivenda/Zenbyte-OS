@@ -205,6 +205,7 @@
 #	Check that PMTU exceptions are created for both paths.
 
 source lib.sh
+source net_helper.sh
 
 PAUSE_ON_FAIL=no
 VERBOSE=0

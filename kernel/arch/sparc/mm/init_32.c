@@ -232,7 +232,19 @@ static void __init taint_real_pages(void)
 	}
 }
 
-void __init arch_mm_preinit(void)
+static void map_high_region(unsigned long start_pfn, unsigned long end_pfn)
+{
+	unsigned long tmp;
+
+#ifdef CONFIG_DEBUG_HIGHMEM
+	printk("mapping high region %08lx - %08lx\n", start_pfn, end_pfn);
+#endif
+
+	for (tmp = start_pfn; tmp < end_pfn; tmp++)
+		free_highmem_page(pfn_to_page(tmp));
+}
+
+void __init mem_init(void)
 {
 	int i;
 
@@ -262,6 +274,23 @@ void __init arch_mm_preinit(void)
 	memset(sparc_valid_addr_bitmap, 0, i << 2);
 
 	taint_real_pages();
+
+	max_mapnr = last_valid_pfn - pfn_base;
+	high_memory = __va(max_low_pfn << PAGE_SHIFT);
+	memblock_free_all();
+
+	for (i = 0; sp_banks[i].num_bytes != 0; i++) {
+		unsigned long start_pfn = sp_banks[i].base_addr >> PAGE_SHIFT;
+		unsigned long end_pfn = (sp_banks[i].base_addr + sp_banks[i].num_bytes) >> PAGE_SHIFT;
+
+		if (end_pfn <= highstart_pfn)
+			continue;
+
+		if (start_pfn < highstart_pfn)
+			start_pfn = highstart_pfn;
+
+		map_high_region(start_pfn, end_pfn);
+	}
 }
 
 void sparc_flush_page_to_ram(struct page *page)

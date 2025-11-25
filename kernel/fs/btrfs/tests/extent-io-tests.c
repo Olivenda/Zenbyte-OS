@@ -23,8 +23,8 @@ static noinline int process_page_range(struct inode *inode, u64 start, u64 end,
 {
 	int ret;
 	struct folio_batch fbatch;
-	pgoff_t index = start >> PAGE_SHIFT;
-	pgoff_t end_index = end >> PAGE_SHIFT;
+	unsigned long index = start >> PAGE_SHIFT;
+	unsigned long end_index = end >> PAGE_SHIFT;
 	int i;
 	int count = 0;
 	int loops = 0;
@@ -74,9 +74,9 @@ static void extent_flag_to_str(const struct extent_state *state, char *dest)
 
 	dest[0] = 0;
 	PRINT_ONE_FLAG(state, dest, cur, DIRTY);
+	PRINT_ONE_FLAG(state, dest, cur, UPTODATE);
 	PRINT_ONE_FLAG(state, dest, cur, LOCKED);
-	PRINT_ONE_FLAG(state, dest, cur, DIRTY_LOG1);
-	PRINT_ONE_FLAG(state, dest, cur, DIRTY_LOG2);
+	PRINT_ONE_FLAG(state, dest, cur, NEW);
 	PRINT_ONE_FLAG(state, dest, cur, DELALLOC);
 	PRINT_ONE_FLAG(state, dest, cur, DEFRAG);
 	PRINT_ONE_FLAG(state, dest, cur, BOUNDARY);
@@ -114,6 +114,7 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	struct extent_io_tree *tmp;
 	struct page *page;
 	struct page *locked_page = NULL;
+	unsigned long index = 0;
 	/* In this test we need at least 2 file extents at its maximum size */
 	u64 max_bytes = BTRFS_MAX_EXTENT_SIZE;
 	u64 total_dirty = 2 * max_bytes;
@@ -149,14 +150,14 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	 * Passing NULL as we don't have fs_info but tracepoints are not used
 	 * at this point
 	 */
-	btrfs_extent_io_tree_init(NULL, tmp, IO_TREE_SELFTEST);
+	extent_io_tree_init(NULL, tmp, IO_TREE_SELFTEST);
 
 	/*
 	 * First go through and create and mark all of our pages dirty, we pin
 	 * everything to make sure our pages don't get evicted and screw up our
 	 * test.
 	 */
-	for (pgoff_t index = 0; index < (total_dirty >> PAGE_SHIFT); index++) {
+	for (index = 0; index < (total_dirty >> PAGE_SHIFT); index++) {
 		page = find_or_create_page(inode->i_mapping, index, GFP_KERNEL);
 		if (!page) {
 			test_err("failed to allocate test page");
@@ -176,7 +177,7 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	 * |--- delalloc ---|
 	 * |---  search  ---|
 	 */
-	btrfs_set_extent_bit(tmp, 0, sectorsize - 1, EXTENT_DELALLOC, NULL);
+	set_extent_bit(tmp, 0, sectorsize - 1, EXTENT_DELALLOC, NULL);
 	start = 0;
 	end = start + PAGE_SIZE - 1;
 	found = find_lock_delalloc_range(inode, page_folio(locked_page), &start,
@@ -190,7 +191,7 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 			sectorsize - 1, start, end);
 		goto out_bits;
 	}
-	btrfs_unlock_extent(tmp, start, end, NULL);
+	unlock_extent(tmp, start, end, NULL);
 	unlock_page(locked_page);
 	put_page(locked_page);
 
@@ -207,7 +208,7 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 		test_err("couldn't find the locked page");
 		goto out_bits;
 	}
-	btrfs_set_extent_bit(tmp, sectorsize, max_bytes - 1, EXTENT_DELALLOC, NULL);
+	set_extent_bit(tmp, sectorsize, max_bytes - 1, EXTENT_DELALLOC, NULL);
 	start = test_start;
 	end = start + PAGE_SIZE - 1;
 	found = find_lock_delalloc_range(inode, page_folio(locked_page), &start,
@@ -226,7 +227,7 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 		test_err("there were unlocked pages in the range");
 		goto out_bits;
 	}
-	btrfs_unlock_extent(tmp, start, end, NULL);
+	unlock_extent(tmp, start, end, NULL);
 	/* locked_page was unlocked above */
 	put_page(locked_page);
 
@@ -262,7 +263,7 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 	 *
 	 * We are re-using our test_start from above since it works out well.
 	 */
-	btrfs_set_extent_bit(tmp, max_bytes, total_dirty - 1, EXTENT_DELALLOC, NULL);
+	set_extent_bit(tmp, max_bytes, total_dirty - 1, EXTENT_DELALLOC, NULL);
 	start = test_start;
 	end = start + PAGE_SIZE - 1;
 	found = find_lock_delalloc_range(inode, page_folio(locked_page), &start,
@@ -281,7 +282,7 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 		test_err("pages in range were not all locked");
 		goto out_bits;
 	}
-	btrfs_unlock_extent(tmp, start, end, NULL);
+	unlock_extent(tmp, start, end, NULL);
 
 	/*
 	 * Now to test where we run into a page that is no longer dirty in the
@@ -326,7 +327,7 @@ static int test_find_delalloc(u32 sectorsize, u32 nodesize)
 out_bits:
 	if (ret)
 		dump_extent_io_tree(tmp);
-	btrfs_clear_extent_bit(tmp, 0, total_dirty - 1, (unsigned)-1, NULL);
+	clear_extent_bits(tmp, 0, total_dirty - 1, (unsigned)-1);
 out:
 	if (locked_page)
 		put_page(locked_page);
@@ -343,11 +344,11 @@ static int check_eb_bitmap(unsigned long *bitmap, struct extent_buffer *eb)
 	unsigned long i;
 
 	for (i = 0; i < eb->len * BITS_PER_BYTE; i++) {
-		bool bit_set, bit1_set;
+		int bit, bit1;
 
-		bit_set = test_bit(i, bitmap);
-		bit1_set = extent_buffer_test_bit(eb, 0, i);
-		if (bit1_set != bit_set) {
+		bit = !!test_bit(i, bitmap);
+		bit1 = !!extent_buffer_test_bit(eb, 0, i);
+		if (bit1 != bit) {
 			u8 has;
 			u8 expect;
 
@@ -360,9 +361,9 @@ static int check_eb_bitmap(unsigned long *bitmap, struct extent_buffer *eb)
 			return -EINVAL;
 		}
 
-		bit1_set = extent_buffer_test_bit(eb, i / BITS_PER_BYTE,
-						  i % BITS_PER_BYTE);
-		if (bit1_set != bit_set) {
+		bit1 = !!extent_buffer_test_bit(eb, i / BITS_PER_BYTE,
+						i % BITS_PER_BYTE);
+		if (bit1 != bit) {
 			u8 has;
 			u8 expect;
 
@@ -524,7 +525,7 @@ static int test_eb_bitmaps(u32 sectorsize, u32 nodesize)
 		goto out;
 	}
 
-	eb = alloc_dummy_extent_buffer(fs_info, 0);
+	eb = __alloc_dummy_extent_buffer(fs_info, 0, nodesize);
 	if (!eb) {
 		test_std_err(TEST_ALLOC_ROOT);
 		ret = -ENOMEM;
@@ -541,7 +542,7 @@ static int test_eb_bitmaps(u32 sectorsize, u32 nodesize)
 	 * Test again for case where the tree block is sectorsize aligned but
 	 * not nodesize aligned.
 	 */
-	eb = alloc_dummy_extent_buffer(fs_info, sectorsize);
+	eb = __alloc_dummy_extent_buffer(fs_info, sectorsize, nodesize);
 	if (!eb) {
 		test_std_err(TEST_ALLOC_ROOT);
 		ret = -ENOMEM;
@@ -564,10 +565,10 @@ static int test_find_first_clear_extent_bit(void)
 
 	test_msg("running find_first_clear_extent_bit test");
 
-	btrfs_extent_io_tree_init(NULL, &tree, IO_TREE_SELFTEST);
+	extent_io_tree_init(NULL, &tree, IO_TREE_SELFTEST);
 
 	/* Test correct handling of empty tree */
-	btrfs_find_first_clear_extent_bit(&tree, 0, &start, &end, CHUNK_TRIMMED);
+	find_first_clear_extent_bit(&tree, 0, &start, &end, CHUNK_TRIMMED);
 	if (start != 0 || end != -1) {
 		test_err(
 	"error getting a range from completely empty tree: start %llu end %llu",
@@ -578,11 +579,11 @@ static int test_find_first_clear_extent_bit(void)
 	 * Set 1M-4M alloc/discard and 32M-64M thus leaving a hole between
 	 * 4M-32M
 	 */
-	btrfs_set_extent_bit(&tree, SZ_1M, SZ_4M - 1,
-			     CHUNK_TRIMMED | CHUNK_ALLOCATED, NULL);
+	set_extent_bit(&tree, SZ_1M, SZ_4M - 1,
+		       CHUNK_TRIMMED | CHUNK_ALLOCATED, NULL);
 
-	btrfs_find_first_clear_extent_bit(&tree, SZ_512K, &start, &end,
-					  CHUNK_TRIMMED | CHUNK_ALLOCATED);
+	find_first_clear_extent_bit(&tree, SZ_512K, &start, &end,
+				    CHUNK_TRIMMED | CHUNK_ALLOCATED);
 
 	if (start != 0 || end != SZ_1M - 1) {
 		test_err("error finding beginning range: start %llu end %llu",
@@ -591,14 +592,14 @@ static int test_find_first_clear_extent_bit(void)
 	}
 
 	/* Now add 32M-64M so that we have a hole between 4M-32M */
-	btrfs_set_extent_bit(&tree, SZ_32M, SZ_64M - 1,
-			     CHUNK_TRIMMED | CHUNK_ALLOCATED, NULL);
+	set_extent_bit(&tree, SZ_32M, SZ_64M - 1,
+		       CHUNK_TRIMMED | CHUNK_ALLOCATED, NULL);
 
 	/*
 	 * Request first hole starting at 12M, we should get 4M-32M
 	 */
-	btrfs_find_first_clear_extent_bit(&tree, 12 * SZ_1M, &start, &end,
-					  CHUNK_TRIMMED | CHUNK_ALLOCATED);
+	find_first_clear_extent_bit(&tree, 12 * SZ_1M, &start, &end,
+				    CHUNK_TRIMMED | CHUNK_ALLOCATED);
 
 	if (start != SZ_4M || end != SZ_32M - 1) {
 		test_err("error finding trimmed range: start %llu end %llu",
@@ -610,8 +611,8 @@ static int test_find_first_clear_extent_bit(void)
 	 * Search in the middle of allocated range, should get the next one
 	 * available, which happens to be unallocated -> 4M-32M
 	 */
-	btrfs_find_first_clear_extent_bit(&tree, SZ_2M, &start, &end,
-					  CHUNK_TRIMMED | CHUNK_ALLOCATED);
+	find_first_clear_extent_bit(&tree, SZ_2M, &start, &end,
+				    CHUNK_TRIMMED | CHUNK_ALLOCATED);
 
 	if (start != SZ_4M || end != SZ_32M - 1) {
 		test_err("error finding next unalloc range: start %llu end %llu",
@@ -623,9 +624,9 @@ static int test_find_first_clear_extent_bit(void)
 	 * Set 64M-72M with CHUNK_ALLOC flag, then search for CHUNK_TRIMMED flag
 	 * being unset in this range, we should get the entry in range 64M-72M
 	 */
-	btrfs_set_extent_bit(&tree, SZ_64M, SZ_64M + SZ_8M - 1, CHUNK_ALLOCATED, NULL);
-	btrfs_find_first_clear_extent_bit(&tree, SZ_64M + SZ_1M, &start, &end,
-					  CHUNK_TRIMMED);
+	set_extent_bit(&tree, SZ_64M, SZ_64M + SZ_8M - 1, CHUNK_ALLOCATED, NULL);
+	find_first_clear_extent_bit(&tree, SZ_64M + SZ_1M, &start, &end,
+				    CHUNK_TRIMMED);
 
 	if (start != SZ_64M || end != SZ_64M + SZ_8M - 1) {
 		test_err("error finding exact range: start %llu end %llu",
@@ -633,8 +634,8 @@ static int test_find_first_clear_extent_bit(void)
 		goto out;
 	}
 
-	btrfs_find_first_clear_extent_bit(&tree, SZ_64M - SZ_8M, &start, &end,
-					  CHUNK_TRIMMED);
+	find_first_clear_extent_bit(&tree, SZ_64M - SZ_8M, &start, &end,
+				    CHUNK_TRIMMED);
 
 	/*
 	 * Search in the middle of set range whose immediate neighbour doesn't
@@ -650,7 +651,7 @@ static int test_find_first_clear_extent_bit(void)
 	 * Search beyond any known range, shall return after last known range
 	 * and end should be -1
 	 */
-	btrfs_find_first_clear_extent_bit(&tree, -1, &start, &end, CHUNK_TRIMMED);
+	find_first_clear_extent_bit(&tree, -1, &start, &end, CHUNK_TRIMMED);
 	if (start != SZ_64M + SZ_8M || end != -1) {
 		test_err(
 		"error handling beyond end of range search: start %llu end %llu",
@@ -662,7 +663,7 @@ static int test_find_first_clear_extent_bit(void)
 out:
 	if (ret)
 		dump_extent_io_tree(&tree);
-	btrfs_clear_extent_bit(&tree, 0, (u64)-1, CHUNK_TRIMMED | CHUNK_ALLOCATED, NULL);
+	clear_extent_bits(&tree, 0, (u64)-1, CHUNK_TRIMMED | CHUNK_ALLOCATED);
 
 	return ret;
 }
@@ -729,7 +730,7 @@ static int test_eb_mem_ops(u32 sectorsize, u32 nodesize)
 		goto out;
 	}
 
-	eb = alloc_dummy_extent_buffer(fs_info, SZ_1M);
+	eb = __alloc_dummy_extent_buffer(fs_info, SZ_1M, nodesize);
 	if (!eb) {
 		test_std_err(TEST_ALLOC_EXTENT_BUFFER);
 		ret = -ENOMEM;

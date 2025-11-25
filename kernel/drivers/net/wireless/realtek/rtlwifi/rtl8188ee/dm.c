@@ -1684,8 +1684,7 @@ static void rtl88e_dm_fast_ant_training(struct ieee80211_hw *hw)
 void rtl88e_dm_fast_antenna_training_callback(struct timer_list *t)
 {
 	struct rtl_priv *rtlpriv =
-		timer_container_of(rtlpriv, t,
-				   works.fast_antenna_training_timer);
+		from_timer(rtlpriv, t, works.fast_antenna_training_timer);
 	struct ieee80211_hw *hw = rtlpriv->hw;
 
 	rtl88e_dm_fast_ant_training(hw);

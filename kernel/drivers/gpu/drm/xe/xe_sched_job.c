@@ -113,8 +113,7 @@ struct xe_sched_job *xe_sched_job_create(struct xe_exec_queue *q,
 	kref_init(&job->refcount);
 	xe_exec_queue_get(job->q);
 
-	err = drm_sched_job_init(&job->drm, q->entity, 1, NULL,
-				 q->xef ? q->xef->drm->client_id : 0);
+	err = drm_sched_job_init(&job->drm, q->entity, 1, NULL);
 	if (err)
 		goto err_free;
 
@@ -217,17 +216,15 @@ void xe_sched_job_set_error(struct xe_sched_job *job, int error)
 
 bool xe_sched_job_started(struct xe_sched_job *job)
 {
-	struct dma_fence *fence = dma_fence_chain_contained(job->fence);
 	struct xe_lrc *lrc = job->q->lrc[0];
 
-	return !__dma_fence_is_later(fence,
-				     xe_sched_job_lrc_seqno(job),
-				     xe_lrc_start_seqno(lrc));
+	return !__dma_fence_is_later(xe_sched_job_lrc_seqno(job),
+				     xe_lrc_start_seqno(lrc),
+				     dma_fence_chain_contained(job->fence)->ops);
 }
 
 bool xe_sched_job_completed(struct xe_sched_job *job)
 {
-	struct dma_fence *fence = dma_fence_chain_contained(job->fence);
 	struct xe_lrc *lrc = job->q->lrc[0];
 
 	/*
@@ -235,9 +232,9 @@ bool xe_sched_job_completed(struct xe_sched_job *job)
 	 * parallel handshake is done.
 	 */
 
-	return !__dma_fence_is_later(fence,
-				     xe_sched_job_lrc_seqno(job),
-				     xe_lrc_seqno(lrc));
+	return !__dma_fence_is_later(xe_sched_job_lrc_seqno(job),
+				     xe_lrc_seqno(lrc),
+				     dma_fence_chain_contained(job->fence)->ops);
 }
 
 void xe_sched_job_arm(struct xe_sched_job *job)
@@ -283,7 +280,7 @@ void xe_sched_job_arm(struct xe_sched_job *job)
 		fence = &chain->base;
 	}
 
-	job->fence = dma_fence_get(fence);	/* Pairs with put in scheduler */
+	job->fence = fence;
 	drm_sched_job_arm(&job->drm);
 }
 

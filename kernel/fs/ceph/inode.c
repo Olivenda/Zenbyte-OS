@@ -206,7 +206,7 @@ struct inode *ceph_get_inode(struct super_block *sb, struct ceph_vino vino,
 }
 
 /*
- * get/construct snapdir inode for a given directory
+ * get/constuct snapdir inode for a given directory
  */
 struct inode *ceph_get_snapdir(struct inode *parent)
 {
@@ -1902,9 +1902,10 @@ static int readdir_prepopulate_inodes_only(struct ceph_mds_request *req,
 
 void ceph_readdir_cache_release(struct ceph_readdir_cache_control *ctl)
 {
-	if (ctl->folio) {
-		folio_release_kmap(ctl->folio, ctl->dentries);
-		ctl->folio = NULL;
+	if (ctl->page) {
+		kunmap(ctl->page);
+		put_page(ctl->page);
+		ctl->page = NULL;
 	}
 }
 
@@ -1918,26 +1919,20 @@ static int fill_readdir_cache(struct inode *dir, struct dentry *dn,
 	unsigned idx = ctl->index % nsize;
 	pgoff_t pgoff = ctl->index / nsize;
 
-	if (!ctl->folio || pgoff != ctl->folio->index) {
+	if (!ctl->page || pgoff != ctl->page->index) {
 		ceph_readdir_cache_release(ctl);
-		fgf_t fgf = FGP_LOCK;
-
 		if (idx == 0)
-			fgf |= FGP_ACCESSED | FGP_CREAT;
-
-		ctl->folio = __filemap_get_folio(&dir->i_data, pgoff,
-				fgf, mapping_gfp_mask(&dir->i_data));
-		if (IS_ERR(ctl->folio)) {
-			int err = PTR_ERR(ctl->folio);
-
-			ctl->folio = NULL;
+			ctl->page = grab_cache_page(&dir->i_data, pgoff);
+		else
+			ctl->page = find_lock_page(&dir->i_data, pgoff);
+		if (!ctl->page) {
 			ctl->index = -1;
-			return idx == 0 ? err : 0;
+			return idx == 0 ? -ENOMEM : 0;
 		}
 		/* reading/filling the cache are serialized by
-		 * i_rwsem, no need to use folio lock */
-		folio_unlock(ctl->folio);
-		ctl->dentries = kmap_local_folio(ctl->folio, 0);
+		 * i_rwsem, no need to use page lock */
+		unlock_page(ctl->page);
+		ctl->dentries = kmap(ctl->page);
 		if (idx == 0)
 			memset(ctl->dentries, 0, PAGE_SIZE);
 	}
@@ -2493,7 +2488,8 @@ static int fill_fscrypt_truncate(struct inode *inode,
 		/* encrypt the last block */
 		ret = ceph_fscrypt_encrypt_block_inplace(inode, page,
 						    CEPH_FSCRYPT_BLOCK_SIZE,
-						    0, block);
+						    0, block,
+						    GFP_KERNEL);
 		if (ret)
 			goto out;
 	}

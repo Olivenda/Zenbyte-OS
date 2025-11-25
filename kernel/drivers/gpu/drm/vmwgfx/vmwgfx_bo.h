@@ -84,6 +84,7 @@ struct vmw_bo {
 
 	struct ttm_placement placement;
 	struct ttm_place places[5];
+	struct ttm_place busy_places[5];
 
 	/* Protected by reservation */
 	struct ttm_bo_kmap_obj map;
@@ -204,12 +205,12 @@ static inline void vmw_bo_unreference(struct vmw_bo **buf)
 
 	*buf = NULL;
 	if (tmp_buf)
-		drm_gem_object_put(&tmp_buf->tbo.base);
+		ttm_bo_put(&tmp_buf->tbo);
 }
 
 static inline struct vmw_bo *vmw_bo_reference(struct vmw_bo *buf)
 {
-	drm_gem_object_get(&buf->tbo.base);
+	ttm_bo_get(&buf->tbo);
 	return buf;
 }
 
@@ -232,7 +233,5 @@ static inline struct vmw_bo *to_vmw_bo(struct drm_gem_object *gobj)
 {
 	return container_of((gobj), struct vmw_bo, tbo.base);
 }
-
-s32 vmw_bo_mobid(struct vmw_bo *vbo);
 
 #endif // VMWGFX_BO_H

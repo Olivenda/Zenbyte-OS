@@ -20,7 +20,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 
-#include <linux/irqchip/irq-msi-lib.h>
+#include "irq-msi-lib.h"
 
 #include <dt-bindings/interrupt-controller/mvebu-icu.h>
 

@@ -697,7 +697,7 @@ int oxygen_pcm_init(struct oxygen *chip)
 			snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_CAPTURE,
 					&oxygen_rec_b_ops);
 		pcm->private_data = chip;
-		strscpy(pcm->name, "Multichannel");
+		strcpy(pcm->name, "Multichannel");
 		if (outs)
 			snd_pcm_set_managed_buffer(pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream,
 						   SNDRV_DMA_TYPE_DEV,
@@ -725,7 +725,7 @@ int oxygen_pcm_init(struct oxygen *chip)
 			snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_CAPTURE,
 					&oxygen_rec_c_ops);
 		pcm->private_data = chip;
-		strscpy(pcm->name, "Digital");
+		strcpy(pcm->name, "Digital");
 		snd_pcm_set_managed_buffer_all(pcm, SNDRV_DMA_TYPE_DEV,
 					       &chip->pci->dev,
 					       DEFAULT_BUFFER_BYTES,
@@ -755,7 +755,7 @@ int oxygen_pcm_init(struct oxygen *chip)
 			snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_CAPTURE,
 					&oxygen_rec_b_ops);
 		pcm->private_data = chip;
-		strscpy(pcm->name, outs ? "Front Panel" : "Analog 2");
+		strcpy(pcm->name, outs ? "Front Panel" : "Analog 2");
 		snd_pcm_set_managed_buffer_all(pcm, SNDRV_DMA_TYPE_DEV,
 					       &chip->pci->dev,
 					       DEFAULT_BUFFER_BYTES,
@@ -773,7 +773,7 @@ int oxygen_pcm_init(struct oxygen *chip)
 				     OXYGEN_REC_C_ROUTE_I2S_ADC_3,
 				     OXYGEN_REC_C_ROUTE_MASK);
 		pcm->private_data = chip;
-		strscpy(pcm->name, "Analog 3");
+		strcpy(pcm->name, "Analog 3");
 		snd_pcm_set_managed_buffer_all(pcm, SNDRV_DMA_TYPE_DEV,
 					       &chip->pci->dev,
 					       DEFAULT_BUFFER_BYTES,

@@ -177,7 +177,8 @@ static struct mctp_i2c_client *mctp_i2c_new_client(struct i2c_client *client)
 	return mcli;
 err:
 	if (mcli) {
-		i2c_unregister_device(mcli->client);
+		if (mcli->client)
+			i2c_unregister_device(mcli->client);
 		kfree(mcli);
 	}
 	return ERR_PTR(rc);
@@ -884,8 +885,7 @@ static int mctp_i2c_add_netdev(struct mctp_i2c_client *mcli,
 		goto err;
 	}
 
-	rc = mctp_register_netdev(ndev, &mctp_i2c_mctp_ops,
-				  MCTP_PHYS_BINDING_SMBUS);
+	rc = mctp_register_netdev(ndev, &mctp_i2c_mctp_ops);
 	if (rc < 0) {
 		dev_err(&mcli->client->dev,
 			"register netdev \"%s\" failed %d\n",

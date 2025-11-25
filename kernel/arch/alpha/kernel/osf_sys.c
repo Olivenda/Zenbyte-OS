@@ -152,7 +152,7 @@ SYSCALL_DEFINE4(osf_getdirentries, unsigned int, fd,
 		long __user *, basep)
 {
 	int error;
-	CLASS(fd_pos, arg)(fd);
+	struct fd arg = fdget_pos(fd);
 	struct osf_dirent_callback buf = {
 		.ctx.actor = osf_filldir,
 		.dirent = dirent,
@@ -160,7 +160,7 @@ SYSCALL_DEFINE4(osf_getdirentries, unsigned int, fd,
 		.count = count
 	};
 
-	if (fd_empty(arg))
+	if (!fd_file(arg))
 		return -EBADF;
 
 	error = iterate_dir(fd_file(arg), &buf.ctx);
@@ -169,6 +169,7 @@ SYSCALL_DEFINE4(osf_getdirentries, unsigned int, fd,
 	if (count != buf.count)
 		error = count - buf.count;
 
+	fdput_pos(arg);
 	return error;
 }
 

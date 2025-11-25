@@ -21,9 +21,9 @@
 static inline struct nilfs_inode *
 nilfs_ifile_map_inode(struct inode *ifile, ino_t ino, struct buffer_head *ibh)
 {
-	size_t __offset_in_folio = nilfs_palloc_entry_offset(ifile, ino, ibh);
+	void *kaddr = kmap_local_page(ibh->b_page);
 
-	return kmap_local_folio(ibh->b_folio, __offset_in_folio);
+	return nilfs_palloc_block_get_entry(ifile, ino, ibh, kaddr);
 }
 
 static inline void nilfs_ifile_unmap_inode(struct nilfs_inode *raw_inode)

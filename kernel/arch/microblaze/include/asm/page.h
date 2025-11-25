@@ -19,7 +19,10 @@
 
 #ifdef __KERNEL__
 
-#include <vdso/page.h>
+/* PAGE_SHIFT determines the page size */
+#define PAGE_SHIFT	CONFIG_PAGE_SHIFT
+#define PAGE_SIZE	(ASM_CONST(1) << PAGE_SHIFT)
+#define PAGE_MASK	(~(PAGE_SIZE-1))
 
 #define LOAD_OFFSET	ASM_CONST((CONFIG_KERNEL_START-CONFIG_KERNEL_BASE_ADDR))
 
@@ -98,6 +101,7 @@ extern int page_is_ram(unsigned long pfn);
 
 #  define virt_to_page(kaddr)	(pfn_to_page(__pa(kaddr) >> PAGE_SHIFT))
 #  define page_to_virt(page)   __va(page_to_pfn(page) << PAGE_SHIFT)
+#  define page_to_phys(page)     (page_to_pfn(page) << PAGE_SHIFT)
 
 #  define ARCH_PFN_OFFSET	(memory_start >> PAGE_SHIFT)
 # endif /* __ASSEMBLY__ */

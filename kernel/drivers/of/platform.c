@@ -24,6 +24,16 @@
 
 #include "of_private.h"
 
+const struct of_device_id of_default_bus_match_table[] = {
+	{ .compatible = "simple-bus", },
+	{ .compatible = "simple-mfd", },
+	{ .compatible = "isa", },
+#ifdef CONFIG_ARM_AMBA
+	{ .compatible = "arm,amba-bus", },
+#endif /* CONFIG_ARM_AMBA */
+	{} /* Empty terminated list */
+};
+
 /**
  * of_find_device_by_node - Find the platform_device associated with a node
  * @np: Pointer to device tree node
@@ -334,7 +344,7 @@ static int of_platform_bus_create(struct device_node *bus,
 	int rc = 0;
 
 	/* Make sure it has a compatible property */
-	if (strict && (!of_property_present(bus, "compatible"))) {
+	if (strict && (!of_get_property(bus, "compatible", NULL))) {
 		pr_debug("%s() - skipping %pOF, no compatible prop\n",
 			 __func__, bus);
 		return 0;
@@ -474,17 +484,8 @@ int of_platform_default_populate(struct device_node *root,
 				 const struct of_dev_auxdata *lookup,
 				 struct device *parent)
 {
-	static const struct of_device_id match_table[] = {
-		{ .compatible = "simple-bus", },
-		{ .compatible = "simple-mfd", },
-		{ .compatible = "isa", },
-#ifdef CONFIG_ARM_AMBA
-		{ .compatible = "arm,amba-bus", },
-#endif /* CONFIG_ARM_AMBA */
-		{} /* Empty terminated list */
-	};
-
-	return of_platform_populate(root, match_table, lookup, parent);
+	return of_platform_populate(root, of_default_bus_match_table, lookup,
+				    parent);
 }
 EXPORT_SYMBOL_GPL(of_platform_default_populate);
 
@@ -536,8 +537,8 @@ static int __init of_platform_default_populate_init(void)
 		 * ignore errors for the rest.
 		 */
 		for_each_node_by_type(node, "display") {
-			if (!of_property_read_bool(node, "linux,opened") ||
-			    !of_property_read_bool(node, "linux,boot-display"))
+			if (!of_get_property(node, "linux,opened", NULL) ||
+			    !of_get_property(node, "linux,boot-display", NULL))
 				continue;
 			dev = of_platform_device_create(node, "of-display", NULL);
 			of_node_put(node);
@@ -551,7 +552,7 @@ static int __init of_platform_default_populate_init(void)
 			char buf[14];
 			const char *of_display_format = "of-display.%d";
 
-			if (!of_property_read_bool(node, "linux,opened") || node == boot_display)
+			if (!of_get_property(node, "linux,opened", NULL) || node == boot_display)
 				continue;
 			ret = snprintf(buf, sizeof(buf), of_display_format, display_number++);
 			if (ret < sizeof(buf))

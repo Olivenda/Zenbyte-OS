@@ -56,14 +56,6 @@ properties:
         - tx
         - mem
 
-  interrupts:
-    maxItems: 2
-
-  interrupt-names:
-    items:
-      - const: macirq
-      - const: eth_wake_irq
-
   intf_mode:
     $ref: /schemas/types.yaml#/definitions/phandle-array
     items:

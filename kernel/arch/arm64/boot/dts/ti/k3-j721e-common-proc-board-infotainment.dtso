@@ -15,11 +15,12 @@
 #include "k3-pinctrl.h"
 
 &{/} {
-	connector-hdmi {
+	hdmi-connector {
 		compatible = "hdmi-connector";
 		label = "hdmi";
 		type = "a";
 		ddc-i2c-bus = <&main_i2c1>;
+		digital;
 		/* P12 - HDMI_HPD */
 		hpd-gpios = <&exp6 10 GPIO_ACTIVE_HIGH>;
 
@@ -30,32 +31,28 @@
 		};
 	};
 
-	bridge-dvi {
+	dvi-bridge {
+		#address-cells = <1>;
+		#size-cells = <0>;
 		compatible = "ti,tfp410";
 		/* P10 - HDMI_PDn */
 		powerdown-gpios = <&exp6 8 GPIO_ACTIVE_LOW>;
-		ti,deskew = <0>;
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+		port@0 {
+			reg = <0>;
 
-			port@0 {
-				reg = <0>;
-
-				tfp410_in: endpoint {
-					remote-endpoint = <&dpi_out0>;
-					pclk-sample = <1>;
-				};
+			tfp410_in: endpoint {
+				remote-endpoint = <&dpi_out0>;
+				pclk-sample = <1>;
 			};
+		};
 
-			port@1 {
-				reg = <1>;
+		port@1 {
+			reg = <1>;
 
-				tfp410_out: endpoint {
-					remote-endpoint =
-						<&hdmi_connector_in>;
-				};
+			tfp410_out: endpoint {
+				remote-endpoint =
+					<&hdmi_connector_in>;
 			};
 		};
 	};
@@ -151,23 +148,17 @@
 &dss {
 	pinctrl-names = "default";
 	pinctrl-0 = <&dss_vout0_pins_default>;
+};
 
-	ports {
-		#address-cells = <1>;
-		#size-cells = <0>;
+&dss_ports {
+	#address-cells = <1>;
+	#size-cells = <0>;
 
-		port@0 {
-			reg = <0>;
-			dpi0_out: endpoint {
-				remote-endpoint = <&dp0_in>;
-			};
-		};
+	port@1 {
+		reg = <1>;
 
-		port@1 {
-			reg = <1>;
-			dpi_out0: endpoint {
-				remote-endpoint = <&tfp410_in>;
-			};
+		dpi_out0: endpoint {
+			remote-endpoint = <&tfp410_in>;
 		};
 	};
 };

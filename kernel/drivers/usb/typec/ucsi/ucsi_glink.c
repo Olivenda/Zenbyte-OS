@@ -185,11 +185,6 @@ static void pmic_glink_ucsi_connector_status(struct ucsi_connector *con)
 	struct pmic_glink_ucsi *ucsi = ucsi_get_drvdata(con->ucsi);
 	int orientation;
 
-	if (!UCSI_CONSTAT(con, CONNECTED)) {
-		typec_set_orientation(con->port, TYPEC_ORIENTATION_NONE);
-		return;
-	}
-
 	if (con->num > PMIC_GLINK_MAX_PORTS ||
 	    !ucsi->port_orientation[con->num - 1])
 		return;
@@ -328,6 +323,7 @@ static int pmic_glink_ucsi_probe(struct auxiliary_device *adev,
 	struct pmic_glink_ucsi *ucsi;
 	struct device *dev = &adev->dev;
 	const struct of_device_id *match;
+	struct fwnode_handle *fwnode;
 	int ret;
 
 	ucsi = devm_kzalloc(dev, sizeof(*ucsi), GFP_KERNEL);
@@ -359,13 +355,14 @@ static int pmic_glink_ucsi_probe(struct auxiliary_device *adev,
 
 	ucsi_set_drvdata(ucsi->ucsi, ucsi);
 
-	device_for_each_child_node_scoped(dev, fwnode) {
+	device_for_each_child_node(dev, fwnode) {
 		struct gpio_desc *desc;
 		u32 port;
 
 		ret = fwnode_property_read_u32(fwnode, "reg", &port);
 		if (ret < 0) {
 			dev_err(dev, "missing reg property of %pOFn\n", fwnode);
+			fwnode_handle_put(fwnode);
 			return ret;
 		}
 
@@ -380,10 +377,11 @@ static int pmic_glink_ucsi_probe(struct auxiliary_device *adev,
 		if (!desc)
 			continue;
 
-		if (IS_ERR(desc))
+		if (IS_ERR(desc)) {
+			fwnode_handle_put(fwnode);
 			return dev_err_probe(dev, PTR_ERR(desc),
 					     "unable to acquire orientation gpio\n");
-
+		}
 		ucsi->port_orientation[port] = desc;
 	}
 

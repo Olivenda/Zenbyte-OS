@@ -35,6 +35,12 @@ FEATURE_TESTS	+= libtracefs
 FEATURE_DISPLAY	:= libtraceevent
 FEATURE_DISPLAY	+= libtracefs
 
+ifeq ($(V),1)
+  Q		=
+else
+  Q		= @
+endif
+
 all: $(RV)
 
 include $(srctree)/tools/build/Makefile.include

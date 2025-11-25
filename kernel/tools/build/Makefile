@@ -17,7 +17,13 @@ $(call allow-override,LD,$(CROSS_COMPILE)ld)
 
 export HOSTCC HOSTLD HOSTAR
 
-export srctree CC LD
+ifeq ($(V),1)
+  Q =
+else
+  Q = @
+endif
+
+export Q srctree CC LD
 
 MAKEFLAGS := --no-print-directory
 build     := -f $(srctree)/tools/build/Makefile.build dir=. obj

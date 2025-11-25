@@ -19,7 +19,6 @@ set +e
 cat /sys/kernel/debug/dri/*/state
 set -e
 
-mkdir -p /lib/modules
 case "$DRIVER_NAME" in
     amdgpu|vkms)
         # Cannot use HWCI_KERNEL_MODULES as at that point we don't have the module in /lib
@@ -48,7 +47,7 @@ else
     ARCH="x86_64"
 fi
 
-curl -L --retry 4 -f --retry-all-errors --retry-delay 60 -s $PIPELINE_ARTIFACTS_BASE/$ARCH/igt.tar.gz | tar --zstd -v -x -C /
+curl -L --retry 4 -f --retry-all-errors --retry-delay 60 -s ${FDO_HTTP_CACHE_URI:-}$PIPELINE_ARTIFACTS_BASE/$ARCH/igt.tar.gz | tar --zstd -v -x -C /
 
 TESTLIST="/igt/libexec/igt-gpu-tools/ci-testlist.txt"
 
@@ -70,7 +69,7 @@ igt-runner \
     run \
     --igt-folder /igt/libexec/igt-gpu-tools \
     --caselist $TESTLIST \
-    --output $RESULTS_DIR \
+    --output /results \
     -vvvv \
     $IGT_SKIPS \
     $IGT_FLAKES \
@@ -81,21 +80,13 @@ set -e
 
 deqp-runner junit \
    --testsuite IGT \
-   --results $RESULTS_DIR/failures.csv \
-   --output $RESULTS_DIR/junit.xml \
+   --results /results/failures.csv \
+   --output /results/junit.xml \
    --limit 50 \
-   --template "See $ARTIFACTS_BASE_URL/results/{{testcase}}.xml"
+   --template "See https://$CI_PROJECT_ROOT_NAMESPACE.pages.freedesktop.org/-/$CI_PROJECT_NAME/-/jobs/$CI_JOB_ID/artifacts/results/{{testcase}}.xml"
 
-# Check if /proc/lockdep_stats exists
-if [ -f /proc/lockdep_stats ]; then
-    # If debug_locks is 0, it indicates lockdep is detected and it turns itself off.
-    debug_locks=$(grep 'debug_locks:' /proc/lockdep_stats | awk '{print $2}')
-    if [ "$debug_locks" -eq 0 ] && [ "$ret" -eq 0 ]; then
-        echo "Warning: LOCKDEP issue detected. Please check dmesg logs for more information."
-        cat /proc/lockdep_stats
-        ret=101
-    fi
-fi
+# Store the results also in the simpler format used by the runner in ChromeOS CI
+#sed -r 's/(dmesg-warn|pass)/success/g' /results/results.txt > /results/results_simple.txt
 
 cd $oldpath
 exit $ret

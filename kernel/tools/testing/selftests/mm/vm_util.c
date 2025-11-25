@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <string.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <dirent.h>
-#include <inttypes.h>
 #include <sys/ioctl.h>
 #include <linux/userfaultfd.h>
 #include <linux/fs.h>
@@ -140,7 +138,7 @@ void clear_softdirty(void)
 		ksft_exit_fail_msg("opening clear_refs failed\n");
 	ret = write(fd, ctrl, strlen(ctrl));
 	close(fd);
-	if (ret != (signed int)strlen(ctrl))
+	if (ret != strlen(ctrl))
 		ksft_exit_fail_msg("writing clear_refs failed\n");
 }
 
@@ -203,13 +201,14 @@ char *__get_smap_entry(void *addr, const char *pattern, char *buf, size_t len)
 	char addr_pattern[MAX_LINE_LENGTH];
 
 	ret = snprintf(addr_pattern, MAX_LINE_LENGTH, "%08lx-",
-		       (unsigned long) addr);
+		       (unsigned long)addr);
 	if (ret >= MAX_LINE_LENGTH)
 		ksft_exit_fail_msg("%s: Pattern is too long\n", __func__);
 
 	fp = fopen(SMAP_FILE_PATH, "r");
 	if (!fp)
-		ksft_exit_fail_msg("%s: Failed to open file %s\n", __func__, SMAP_FILE_PATH);
+		ksft_exit_fail_msg("%s: Failed to open file %s\n", __func__,
+				   SMAP_FILE_PATH);
 
 	if (!check_for_pattern(fp, addr_pattern, buf, len))
 		goto err_out;
@@ -233,18 +232,38 @@ err_out:
 bool __check_huge(void *addr, char *pattern, int nr_hpages,
 		  uint64_t hpage_size)
 {
-	char buffer[MAX_LINE_LENGTH];
 	uint64_t thp = -1;
-	char *entry;
+	int ret;
+	FILE *fp;
+	char buffer[MAX_LINE_LENGTH];
+	char addr_pattern[MAX_LINE_LENGTH];
 
-	entry = __get_smap_entry(addr, pattern, buffer, sizeof(buffer));
-	if (!entry)
+	ret = snprintf(addr_pattern, MAX_LINE_LENGTH, "%08lx-",
+		       (unsigned long) addr);
+	if (ret >= MAX_LINE_LENGTH)
+		ksft_exit_fail_msg("%s: Pattern is too long\n", __func__);
+
+	fp = fopen(SMAP_FILE_PATH, "r");
+	if (!fp)
+		ksft_exit_fail_msg("%s: Failed to open file %s\n", __func__, SMAP_FILE_PATH);
+
+	if (!check_for_pattern(fp, addr_pattern, buffer, sizeof(buffer)))
 		goto err_out;
 
-	if (sscanf(entry, "%9" SCNu64 " kB", &thp) != 1)
+	/*
+	 * Fetch the pattern in the same block and check the number of
+	 * hugepages.
+	 */
+	if (!check_for_pattern(fp, pattern, buffer, sizeof(buffer)))
+		goto err_out;
+
+	snprintf(addr_pattern, MAX_LINE_LENGTH, "%s%%9ld kB", pattern);
+
+	if (sscanf(buffer, addr_pattern, &thp) != 1)
 		ksft_exit_fail_msg("Reading smap error\n");
 
 err_out:
+	fclose(fp);
 	return thp == (nr_hpages * (hpage_size >> 10));
 }
 
@@ -402,7 +421,7 @@ unsigned long get_free_hugepages(void)
 	return fhp;
 }
 
-bool check_vmflag_io(void *addr)
+static bool check_vmflag(void *addr, const char *flag)
 {
 	char buffer[MAX_LINE_LENGTH];
 	const char *flags;
@@ -419,7 +438,7 @@ bool check_vmflag_io(void *addr)
 		if (!flaglen)
 			return false;
 
-		if (flaglen == strlen("io") && !memcmp(flags, "io", flaglen))
+		if (flaglen == strlen(flag) && !memcmp(flags, flag, flaglen))
 			return true;
 
 		flags += flaglen;
@@ -441,134 +460,4 @@ bool softdirty_supported(void)
 	supported = check_vmflag(addr, "sd");
 	munmap(addr, pagesize);
 	return supported;
-}
-
-/*
- * Open an fd at /proc/$pid/maps and configure procmap_out ready for
- * PROCMAP_QUERY query. Returns 0 on success, or an error code otherwise.
- */
-int open_procmap(pid_t pid, struct procmap_fd *procmap_out)
-{
-	char path[256];
-	int ret = 0;
-
-	memset(procmap_out, '\0', sizeof(*procmap_out));
-	sprintf(path, "/proc/%d/maps", pid);
-	procmap_out->query.size = sizeof(procmap_out->query);
-	procmap_out->fd = open(path, O_RDONLY);
-	if (procmap_out->fd < 0)
-		ret = -errno;
-
-	return ret;
-}
-
-/* Perform PROCMAP_QUERY. Returns 0 on success, or an error code otherwise. */
-int query_procmap(struct procmap_fd *procmap)
-{
-	int ret = 0;
-
-	if (ioctl(procmap->fd, PROCMAP_QUERY, &procmap->query) == -1)
-		ret = -errno;
-
-	return ret;
-}
-
-/*
- * Try to find the VMA at specified address, returns true if found, false if not
- * found, and the test is failed if any other error occurs.
- *
- * On success, procmap->query is populated with the results.
- */
-bool find_vma_procmap(struct procmap_fd *procmap, void *address)
-{
-	int err;
-
-	procmap->query.query_flags = 0;
-	procmap->query.query_addr = (unsigned long)address;
-	err = query_procmap(procmap);
-	if (!err)
-		return true;
-
-	if (err != -ENOENT)
-		ksft_exit_fail_msg("%s: Error %d on ioctl(PROCMAP_QUERY)\n",
-				   __func__, err);
-	return false;
-}
-
-/*
- * Close fd used by PROCMAP_QUERY mechanism. Returns 0 on success, or an error
- * code otherwise.
- */
-int close_procmap(struct procmap_fd *procmap)
-{
-	return close(procmap->fd);
-}
-
-int write_sysfs(const char *file_path, unsigned long val)
-{
-	FILE *f = fopen(file_path, "w");
-
-	if (!f) {
-		fprintf(stderr, "f %s\n", file_path);
-		perror("fopen");
-		return 1;
-	}
-	if (fprintf(f, "%lu", val) < 0) {
-		perror("fprintf");
-		fclose(f);
-		return 1;
-	}
-	fclose(f);
-
-	return 0;
-}
-
-int read_sysfs(const char *file_path, unsigned long *val)
-{
-	FILE *f = fopen(file_path, "r");
-
-	if (!f) {
-		fprintf(stderr, "f %s\n", file_path);
-		perror("fopen");
-		return 1;
-	}
-	if (fscanf(f, "%lu", val) != 1) {
-		perror("fscanf");
-		fclose(f);
-		return 1;
-	}
-	fclose(f);
-
-	return 0;
-}
-
-void *sys_mremap(void *old_address, unsigned long old_size,
-		 unsigned long new_size, int flags, void *new_address)
-{
-	return (void *)syscall(__NR_mremap, (unsigned long)old_address,
-			       old_size, new_size, flags,
-			       (unsigned long)new_address);
-}
-
-bool detect_huge_zeropage(void)
-{
-	int fd = open("/sys/kernel/mm/transparent_hugepage/use_zero_page",
-		      O_RDONLY);
-	bool enabled = 0;
-	char buf[15];
-	int ret;
-
-	if (fd < 0)
-		return 0;
-
-	ret = pread(fd, buf, sizeof(buf), 0);
-	if (ret > 0 && ret < sizeof(buf)) {
-		buf[ret] = 0;
-
-		if (strtoul(buf, NULL, 10) == 1)
-			enabled = 1;
-	}
-
-	close(fd);
-	return enabled;
 }

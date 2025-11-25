@@ -183,7 +183,7 @@ int snd_bebob_create_hwdep_device(struct snd_bebob *bebob)
 	err = snd_hwdep_new(bebob->card, "BeBoB", 0, &hwdep);
 	if (err < 0)
 		goto end;
-	strscpy(hwdep->name, "BeBoB");
+	strcpy(hwdep->name, "BeBoB");
 	hwdep->iface = SNDRV_HWDEP_IFACE_FW_BEBOB;
 	hwdep->ops = ops;
 	hwdep->private_data = bebob;

@@ -1,5 +1,5 @@
-#!/bin/bash -e
-# CoreSight / Thread Loop 10 Threads - Check TID (exclusive)
+#!/bin/sh -e
+# CoreSight / Thread Loop 10 Threads - Check TID
 
 # SPDX-License-Identifier: GPL-2.0
 # Carsten Haitzler <carsten.haitzler@arm.com>, 2021

@@ -10,7 +10,6 @@
 #include <linux/errno.h>
 #include <linux/module.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 #include <linux/types.h>
 
 /* include interfaces to usb layer */
@@ -72,7 +71,7 @@ static int usb_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs, int num)
 
 		dev_dbg(&adapter->dev,
 			"  %d: %s (flags %d) %d bytes to 0x%02x\n",
-			i, str_read_write(pmsg->flags & I2C_M_RD),
+			i, pmsg->flags & I2C_M_RD ? "read" : "write",
 			pmsg->flags, pmsg->len, pmsg->addr);
 
 		/* and directly send the message */

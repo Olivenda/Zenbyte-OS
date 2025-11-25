@@ -40,8 +40,7 @@ int hashtab_init(struct hashtab *h, u32 nel_hint)
 	h->htable = NULL;
 
 	if (size) {
-		h->htable = kcalloc(size, sizeof(*h->htable),
-				    GFP_KERNEL | __GFP_NOWARN);
+		h->htable = kcalloc(size, sizeof(*h->htable), GFP_KERNEL);
 		if (!h->htable)
 			return -ENOMEM;
 		h->size = size;

@@ -18,13 +18,6 @@
 #ifndef R_LARCH_32_PCREL
 #define R_LARCH_32_PCREL	99
 #endif
-#ifndef R_LARCH_64_PCREL
-#define R_LARCH_64_PCREL	109
-#endif
-
-#ifndef EM_LOONGARCH
-#define EM_LOONGARCH		258
-#endif
 
 #define R_NONE			R_LARCH_NONE
 #define R_ABS32			R_LARCH_32

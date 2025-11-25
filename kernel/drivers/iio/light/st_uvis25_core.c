@@ -117,8 +117,9 @@ static int st_uvis25_read_raw(struct iio_dev *iio_dev,
 {
 	int ret;
 
-	if (!iio_device_claim_direct(iio_dev))
-		return -EBUSY;
+	ret = iio_device_claim_direct_mode(iio_dev);
+	if (ret)
+		return ret;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_PROCESSED: {
@@ -143,7 +144,7 @@ static int st_uvis25_read_raw(struct iio_dev *iio_dev,
 		break;
 	}
 
-	iio_device_release_direct(iio_dev);
+	iio_device_release_direct_mode(iio_dev);
 
 	return ret;
 }
@@ -173,7 +174,8 @@ static int st_uvis25_allocate_trigger(struct iio_dev *iio_dev)
 	unsigned long irq_type;
 	int err;
 
-	irq_type = irq_get_trigger_type(hw->irq);
+	irq_type = irqd_get_trigger_type(irq_get_irq_data(hw->irq));
+
 	switch (irq_type) {
 	case IRQF_TRIGGER_HIGH:
 	case IRQF_TRIGGER_RISING:
@@ -321,7 +323,7 @@ int st_uvis25_probe(struct device *dev, int irq, struct regmap *regmap)
 
 	return devm_iio_device_register(dev, iio_dev);
 }
-EXPORT_SYMBOL_NS(st_uvis25_probe, "IIO_UVIS25");
+EXPORT_SYMBOL_NS(st_uvis25_probe, IIO_UVIS25);
 
 static int st_uvis25_suspend(struct device *dev)
 {

@@ -37,12 +37,10 @@
 #include <linux/shmem_fs.h>
 #include <linux/slab.h>
 
-#include <drm/clients/drm_client_setup.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fbdev_dma.h>
-#include <drm/drm_fourcc.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_module.h>
@@ -146,11 +144,11 @@ static const struct drm_driver tve200_drm_driver = {
 	.fops = &drm_fops,
 	.name = "tve200",
 	.desc = DRIVER_DESC,
+	.date = "20170703",
 	.major = 1,
 	.minor = 0,
 	.patchlevel = 0,
 	DRM_GEM_DMA_DRIVER_OPS,
-	DRM_FBDEV_DMA_DRIVER_OPS,
 };
 
 static int tve200_probe(struct platform_device *pdev)
@@ -223,7 +221,11 @@ static int tve200_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto clk_disable;
 
-	drm_client_setup_with_fourcc(drm, DRM_FORMAT_RGB565);
+	/*
+	 * Passing in 16 here will make the RGB565 mode the default
+	 * Passing in 32 will use XRGB8888 mode
+	 */
+	drm_fbdev_dma_setup(drm, 16);
 
 	return 0;
 
@@ -266,7 +268,7 @@ static struct platform_driver tve200_driver = {
 		.of_match_table = tve200_of_match,
 	},
 	.probe = tve200_probe,
-	.remove = tve200_remove,
+	.remove_new = tve200_remove,
 	.shutdown = tve200_shutdown,
 };
 drm_module_platform_driver(tve200_driver);

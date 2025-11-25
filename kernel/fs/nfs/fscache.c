@@ -314,10 +314,8 @@ static void nfs_netfs_issue_read(struct netfs_io_subrequest *sreq)
 			     &nfs_async_read_completion_ops);
 
 	netfs = nfs_netfs_alloc(sreq);
-	if (!netfs) {
-		sreq->error = -ENOMEM;
-		return netfs_read_subreq_terminated(sreq);
-	}
+	if (!netfs)
+		return netfs_read_subreq_terminated(sreq, -ENOMEM, false);
 
 	pgio.pg_netfs = netfs; /* used in completion */
 
@@ -367,7 +365,6 @@ void nfs_netfs_read_completion(struct nfs_pgio_header *hdr)
 
 	sreq = netfs->sreq;
 	if (test_bit(NFS_IOHDR_EOF, &hdr->flags) &&
-	    sreq->rreq->origin != NETFS_UNBUFFERED_READ &&
 	    sreq->rreq->origin != NETFS_DIO_READ)
 		__set_bit(NETFS_SREQ_CLEAR_TAIL, &sreq->flags);
 

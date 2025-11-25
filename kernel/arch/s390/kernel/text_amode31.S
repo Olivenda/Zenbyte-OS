@@ -18,7 +18,8 @@
  * affects a few functions that are not performance-relevant.
  */
 	.macro BR_EX_AMODE31_r14
-	exrl	0,0f
+	larl	%r1,0f
+	ex	0,0(%r1)
 	j	.
 0:	br	%r14
 	.endm

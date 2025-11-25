@@ -18,11 +18,6 @@
 #
 # By convention, a blank line in a cell means "same as the preceding line".
 #
-# Note that the syntactic representation does not always match the sets and
-# relations in linux-kernel.cat, due to redefinitions in linux-kernel.bell and
-# lock.cat. For example, the po link between LKR and LKW is upgraded to an rmw
-# link, and W[ACQUIRE] are not included in the Acquire set.
-#
 # Disclaimer.  The table includes representations of "add" and "and" operations;
 # corresponding/identical representations of "sub", "inc", "dec" and "or", "xor",
 # "andnot" operations are omitted.
@@ -32,16 +27,16 @@
     ------------------------------------------------------------------------------
     |                    Non-RMW ops |                                           |
     ------------------------------------------------------------------------------
-    |                      READ_ONCE | R[ONCE]                                   |
+    |                      READ_ONCE | R[once]                                   |
     |                    atomic_read |                                           |
-    |                     WRITE_ONCE | W[ONCE]                                   |
+    |                     WRITE_ONCE | W[once]                                   |
     |                     atomic_set |                                           |
-    |               smp_load_acquire | R[ACQUIRE]                                |
+    |               smp_load_acquire | R[acquire]                                |
     |            atomic_read_acquire |                                           |
-    |              smp_store_release | W[RELEASE]                                |
+    |              smp_store_release | W[release]                                |
     |             atomic_set_release |                                           |
-    |                   smp_store_mb | W[ONCE] ->po F[MB]                        |
-    |                         smp_mb | F[MB]                                     |
+    |                   smp_store_mb | W[once] ->po F[mb]                        |
+    |                         smp_mb | F[mb]                                     |
     |                        smp_rmb | F[rmb]                                    |
     |                        smp_wmb | F[wmb]                                    |
     |          smp_mb__before_atomic | F[before-atomic]                          |
@@ -54,8 +49,8 @@
     |                  rcu_read_lock | F[rcu-lock]                               |
     |                rcu_read_unlock | F[rcu-unlock]                             |
     |                synchronize_rcu | F[sync-rcu]                               |
-    |                rcu_dereference | R[ONCE]                                   |
-    |             rcu_assign_pointer | W[RELEASE]                                |
+    |                rcu_dereference | R[once]                                   |
+    |             rcu_assign_pointer | W[release]                                |
     |                 srcu_read_lock | R[srcu-lock]                              |
     |                 srcu_down_read |                                           |
     |               srcu_read_unlock | W[srcu-unlock]                            |
@@ -65,31 +60,32 @@
     ------------------------------------------------------------------------------
     |       RMW ops w/o return value |                                           |
     ------------------------------------------------------------------------------
-    |                     atomic_add | R*[NORETURN] ->rmw W*[NORETURN]           |
+    |                     atomic_add | R*[noreturn] ->rmw W*[once]               |
     |                     atomic_and |                                           |
     |                      spin_lock | LKR ->po LKW                              |
     ------------------------------------------------------------------------------
     |        RMW ops w/ return value |                                           |
     ------------------------------------------------------------------------------
-    |              atomic_add_return | R*[MB] ->rmw W*[MB]                       |
+    |              atomic_add_return | F[mb] ->po R*[once]                       |
+    |                                |     ->rmw W*[once] ->po F[mb]             |
     |               atomic_fetch_add |                                           |
     |               atomic_fetch_and |                                           |
     |                    atomic_xchg |                                           |
     |                           xchg |                                           |
     |            atomic_add_negative |                                           |
-    |      atomic_add_return_relaxed | R*[ONCE] ->rmw W*[ONCE]                   |
+    |      atomic_add_return_relaxed | R*[once] ->rmw W*[once]                   |
     |       atomic_fetch_add_relaxed |                                           |
     |       atomic_fetch_and_relaxed |                                           |
     |            atomic_xchg_relaxed |                                           |
     |                   xchg_relaxed |                                           |
     |    atomic_add_negative_relaxed |                                           |
-    |      atomic_add_return_acquire | R*[ACQUIRE] ->rmw W*[ACQUIRE]             |
+    |      atomic_add_return_acquire | R*[acquire] ->rmw W*[once]                |
     |       atomic_fetch_add_acquire |                                           |
     |       atomic_fetch_and_acquire |                                           |
     |            atomic_xchg_acquire |                                           |
     |                   xchg_acquire |                                           |
     |    atomic_add_negative_acquire |                                           |
-    |      atomic_add_return_release | R*[RELEASE] ->rmw W*[RELEASE]             |
+    |      atomic_add_return_release | R*[once] ->rmw W*[release]                |
     |       atomic_fetch_add_release |                                           |
     |       atomic_fetch_and_release |                                           |
     |            atomic_xchg_release |                                           |
@@ -98,16 +94,17 @@
     ------------------------------------------------------------------------------
     |            Conditional RMW ops |                                           |
     ------------------------------------------------------------------------------
-    |                 atomic_cmpxchg | On success: R*[MB] ->rmw W*[MB]           |
-    |                                | On failure: R*[MB]                        |
+    |                 atomic_cmpxchg | On success: F[mb] ->po R*[once]           |
+    |                                |                 ->rmw W*[once] ->po F[mb] |
+    |                                | On failure: R*[once]                      |
     |                        cmpxchg |                                           |
     |              atomic_add_unless |                                           |
-    |         atomic_cmpxchg_relaxed | On success: R*[ONCE] ->rmw W*[ONCE]       |
-    |                                | On failure: R*[ONCE]                      |
-    |         atomic_cmpxchg_acquire | On success: R*[ACQUIRE] ->rmw W*[ACQUIRE] |
-    |                                | On failure: R*[ACQUIRE]                   |
-    |         atomic_cmpxchg_release | On success: R*[RELEASE] ->rmw W*[RELEASE] |
-    |                                | On failure: R*[RELEASE]                   |
+    |         atomic_cmpxchg_relaxed | On success: R*[once] ->rmw W*[once]       |
+    |                                | On failure: R*[once]                      |
+    |         atomic_cmpxchg_acquire | On success: R*[acquire] ->rmw W*[once]    |
+    |                                | On failure: R*[once]                      |
+    |         atomic_cmpxchg_release | On success: R*[once] ->rmw W*[release]    |
+    |                                | On failure: R*[once]                      |
     |                   spin_trylock | On success: LKR ->po LKW                  |
     |                                | On failure: LF                            |
     ------------------------------------------------------------------------------

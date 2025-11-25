@@ -15,20 +15,22 @@ static DEFINE_PER_CPU(int, bpf_cgrp_storage_busy);
 
 static void bpf_cgrp_storage_lock(void)
 {
-	cant_migrate();
+	migrate_disable();
 	this_cpu_inc(bpf_cgrp_storage_busy);
 }
 
 static void bpf_cgrp_storage_unlock(void)
 {
 	this_cpu_dec(bpf_cgrp_storage_busy);
+	migrate_enable();
 }
 
 static bool bpf_cgrp_storage_trylock(void)
 {
-	cant_migrate();
+	migrate_disable();
 	if (unlikely(this_cpu_inc_return(bpf_cgrp_storage_busy) != 1)) {
 		this_cpu_dec(bpf_cgrp_storage_busy);
+		migrate_enable();
 		return false;
 	}
 	return true;
@@ -45,18 +47,17 @@ void bpf_cgrp_storage_free(struct cgroup *cgroup)
 {
 	struct bpf_local_storage *local_storage;
 
-	migrate_disable();
 	rcu_read_lock();
 	local_storage = rcu_dereference(cgroup->bpf_cgrp_storage);
-	if (!local_storage)
-		goto out;
+	if (!local_storage) {
+		rcu_read_unlock();
+		return;
+	}
 
 	bpf_cgrp_storage_lock();
 	bpf_local_storage_destroy(local_storage);
 	bpf_cgrp_storage_unlock();
-out:
 	rcu_read_unlock();
-	migrate_enable();
 }
 
 static struct bpf_local_storage_data *
@@ -106,7 +107,7 @@ static long bpf_cgrp_storage_update_elem(struct bpf_map *map, void *key,
 
 	bpf_cgrp_storage_lock();
 	sdata = bpf_local_storage_update(cgroup, (struct bpf_local_storage_map *)map,
-					 value, map_flags, false, GFP_ATOMIC);
+					 value, map_flags, GFP_ATOMIC);
 	bpf_cgrp_storage_unlock();
 	cgroup_put(cgroup);
 	return PTR_ERR_OR_ZERO(sdata);
@@ -180,7 +181,7 @@ BPF_CALL_5(bpf_cgrp_storage_get, struct bpf_map *, map, struct cgroup *, cgroup,
 	if (!percpu_ref_is_dying(&cgroup->self.refcnt) &&
 	    (flags & BPF_LOCAL_STORAGE_GET_F_CREATE) && nobusy)
 		sdata = bpf_local_storage_update(cgroup, (struct bpf_local_storage_map *)map,
-						 value, BPF_NOEXIST, false, gfp_flags);
+						 value, BPF_NOEXIST, gfp_flags);
 
 unlock:
 	if (nobusy)

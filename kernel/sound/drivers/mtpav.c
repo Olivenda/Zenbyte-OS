@@ -46,7 +46,6 @@
 #include <sound/initval.h>
 #include <sound/rawmidi.h>
 #include <linux/delay.h>
-#include <linux/string.h>
 
 /*
  *      globals
@@ -389,7 +388,7 @@ static void snd_mtpav_input_trigger(struct snd_rawmidi_substream *substream, int
 static void snd_mtpav_output_timer(struct timer_list *t)
 {
 	unsigned long flags;
-	struct mtpav *chip = timer_container_of(chip, t, timer);
+	struct mtpav *chip = from_timer(chip, t, timer);
 	int p;
 
 	spin_lock_irqsave(&chip->spinlock, flags);
@@ -413,7 +412,7 @@ static void snd_mtpav_add_output_timer(struct mtpav *chip)
 /* spinlock held! */
 static void snd_mtpav_remove_output_timer(struct mtpav *chip)
 {
-	timer_delete(&chip->timer);
+	del_timer(&chip->timer);
 }
 
 /*
@@ -606,11 +605,11 @@ static void snd_mtpav_set_name(struct mtpav *chip,
 	else if (substream->number >= 8 && substream->number < chip->num_ports * 2)
 		sprintf(substream->name, "MTP remote %d", (substream->number % chip->num_ports) + 1);
 	else if (substream->number == chip->num_ports * 2)
-		strscpy(substream->name, "MTP computer");
+		strcpy(substream->name, "MTP computer");
 	else if (substream->number == chip->num_ports * 2 + 1)
-		strscpy(substream->name, "MTP ADAT");
+		strcpy(substream->name, "MTP ADAT");
 	else
-		strscpy(substream->name, "MTP broadcast");
+		strcpy(substream->name, "MTP broadcast");
 }
 
 static int snd_mtpav_get_RAWMIDI(struct mtpav *mcard)
@@ -698,8 +697,8 @@ static int snd_mtpav_probe(struct platform_device *dev)
 	if (err < 0)
 		return err;
 
-	strscpy(card->driver, "MTPAV");
-	strscpy(card->shortname, "MTPAV on parallel port");
+	strcpy(card->driver, "MTPAV");
+	strcpy(card->shortname, "MTPAV on parallel port");
 	snprintf(card->longname, sizeof(card->longname),
 		 "MTPAV on parallel port at 0x%lx", port);
 

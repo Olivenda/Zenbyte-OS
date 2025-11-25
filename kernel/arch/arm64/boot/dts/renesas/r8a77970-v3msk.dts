@@ -148,7 +148,8 @@
 		compatible = "adi,adv7511w";
 		#sound-dai-cells = <0>;
 		reg = <0x39>;
-		interrupts-extended = <&gpio1 20 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <20 IRQ_TYPE_LEVEL_LOW>;
 		avdd-supply = <&vcc_d1_8v>;
 		dvdd-supply = <&vcc_d1_8v>;
 		pvdd-supply = <&vcc_d1_8v>;
@@ -296,7 +297,6 @@
 &scif0 {
 	pinctrl-0 = <&scif0_pins>;
 	pinctrl-names = "default";
-	bootph-all;
 
 	status = "okay";
 };

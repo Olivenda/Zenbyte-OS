@@ -12,17 +12,11 @@
 
 #include "coresight-trace-id.h"
 
-enum trace_id_flags {
-	TRACE_ID_ANY = 0x0,
-	TRACE_ID_PREFER_ODD = 0x1,
-	TRACE_ID_REQ_STATIC = 0x2,
-};
-
 /* Default trace ID map. Used in sysfs mode and for system sources */
 static DEFINE_PER_CPU(atomic_t, id_map_default_cpu_ids) = ATOMIC_INIT(0);
 static struct coresight_trace_id_map id_map_default = {
 	.cpu_map = &id_map_default_cpu_ids,
-	.lock = __RAW_SPIN_LOCK_UNLOCKED(id_map_default.lock)
+	.lock = __SPIN_LOCK_UNLOCKED(id_map_default.lock)
 };
 
 /* #define TRACE_ID_DEBUG 1 */
@@ -80,25 +74,21 @@ static int coresight_trace_id_find_odd_id(struct coresight_trace_id_map *id_map)
  * Otherwise allocate next available ID.
  */
 static int coresight_trace_id_alloc_new_id(struct coresight_trace_id_map *id_map,
-					   int preferred_id, unsigned int flags)
+					   int preferred_id, bool prefer_odd_id)
 {
 	int id = 0;
 
 	/* for backwards compatibility, cpu IDs may use preferred value */
-	if (IS_VALID_CS_TRACE_ID(preferred_id)) {
-		if (!test_bit(preferred_id, id_map->used_ids)) {
-			id = preferred_id;
-			goto trace_id_allocated;
-		} else if (flags & TRACE_ID_REQ_STATIC)
-			return -EBUSY;
-	} else if (flags & TRACE_ID_PREFER_ODD) {
+	if (IS_VALID_CS_TRACE_ID(preferred_id) &&
+	    !test_bit(preferred_id, id_map->used_ids)) {
+		id = preferred_id;
+		goto trace_id_allocated;
+	} else if (prefer_odd_id) {
 	/* may use odd ids to avoid preferred legacy cpu IDs */
 		id = coresight_trace_id_find_odd_id(id_map);
 		if (id)
 			goto trace_id_allocated;
-	} else if (!IS_VALID_CS_TRACE_ID(preferred_id) &&
-			(flags & TRACE_ID_REQ_STATIC))
-		return -EINVAL;
+	}
 
 	/*
 	 * skip reserved bit 0, look at bitmap length of
@@ -131,11 +121,11 @@ static void coresight_trace_id_release_all(struct coresight_trace_id_map *id_map
 	unsigned long flags;
 	int cpu;
 
-	raw_spin_lock_irqsave(&id_map->lock, flags);
+	spin_lock_irqsave(&id_map->lock, flags);
 	bitmap_zero(id_map->used_ids, CORESIGHT_TRACE_IDS_MAX);
 	for_each_possible_cpu(cpu)
 		atomic_set(per_cpu_ptr(id_map->cpu_map, cpu), 0);
-	raw_spin_unlock_irqrestore(&id_map->lock, flags);
+	spin_unlock_irqrestore(&id_map->lock, flags);
 	DUMP_ID_MAP(id_map);
 }
 
@@ -144,7 +134,7 @@ static int _coresight_trace_id_get_cpu_id(int cpu, struct coresight_trace_id_map
 	unsigned long flags;
 	int id;
 
-	raw_spin_lock_irqsave(&id_map->lock, flags);
+	spin_lock_irqsave(&id_map->lock, flags);
 
 	/* check for existing allocation for this CPU */
 	id = _coresight_trace_id_read_cpu_id(cpu, id_map);
@@ -163,7 +153,7 @@ static int _coresight_trace_id_get_cpu_id(int cpu, struct coresight_trace_id_map
 	 */
 	id = coresight_trace_id_alloc_new_id(id_map,
 					     CORESIGHT_LEGACY_CPU_TRACE_ID(cpu),
-					     TRACE_ID_ANY);
+					     false);
 	if (!IS_VALID_CS_TRACE_ID(id))
 		goto get_cpu_id_out_unlock;
 
@@ -171,7 +161,7 @@ static int _coresight_trace_id_get_cpu_id(int cpu, struct coresight_trace_id_map
 	atomic_set(per_cpu_ptr(id_map->cpu_map, cpu), id);
 
 get_cpu_id_out_unlock:
-	raw_spin_unlock_irqrestore(&id_map->lock, flags);
+	spin_unlock_irqrestore(&id_map->lock, flags);
 
 	DUMP_ID_CPU(cpu, id);
 	DUMP_ID_MAP(id_map);
@@ -188,25 +178,25 @@ static void _coresight_trace_id_put_cpu_id(int cpu, struct coresight_trace_id_ma
 	if (!id)
 		return;
 
-	raw_spin_lock_irqsave(&id_map->lock, flags);
+	spin_lock_irqsave(&id_map->lock, flags);
 
 	coresight_trace_id_free(id, id_map);
 	atomic_set(per_cpu_ptr(id_map->cpu_map, cpu), 0);
 
-	raw_spin_unlock_irqrestore(&id_map->lock, flags);
+	spin_unlock_irqrestore(&id_map->lock, flags);
 	DUMP_ID_CPU(cpu, id);
 	DUMP_ID_MAP(id_map);
 }
 
-static int coresight_trace_id_map_get_system_id(struct coresight_trace_id_map *id_map,
-					int preferred_id, unsigned int traceid_flags)
+static int coresight_trace_id_map_get_system_id(struct coresight_trace_id_map *id_map)
 {
 	unsigned long flags;
 	int id;
 
-	raw_spin_lock_irqsave(&id_map->lock, flags);
-	id = coresight_trace_id_alloc_new_id(id_map, preferred_id, traceid_flags);
-	raw_spin_unlock_irqrestore(&id_map->lock, flags);
+	spin_lock_irqsave(&id_map->lock, flags);
+	/* prefer odd IDs for system components to avoid legacy CPU IDS */
+	id = coresight_trace_id_alloc_new_id(id_map, 0, true);
+	spin_unlock_irqrestore(&id_map->lock, flags);
 
 	DUMP_ID(id);
 	DUMP_ID_MAP(id_map);
@@ -217,9 +207,9 @@ static void coresight_trace_id_map_put_system_id(struct coresight_trace_id_map *
 {
 	unsigned long flags;
 
-	raw_spin_lock_irqsave(&id_map->lock, flags);
+	spin_lock_irqsave(&id_map->lock, flags);
 	coresight_trace_id_free(id, id_map);
-	raw_spin_unlock_irqrestore(&id_map->lock, flags);
+	spin_unlock_irqrestore(&id_map->lock, flags);
 
 	DUMP_ID(id);
 	DUMP_ID_MAP(id_map);
@@ -265,18 +255,9 @@ EXPORT_SYMBOL_GPL(coresight_trace_id_read_cpu_id_map);
 
 int coresight_trace_id_get_system_id(void)
 {
-	/* prefer odd IDs for system components to avoid legacy CPU IDS */
-	return coresight_trace_id_map_get_system_id(&id_map_default, 0,
-			TRACE_ID_PREFER_ODD);
+	return coresight_trace_id_map_get_system_id(&id_map_default);
 }
 EXPORT_SYMBOL_GPL(coresight_trace_id_get_system_id);
-
-int coresight_trace_id_get_static_system_id(int trace_id)
-{
-	return coresight_trace_id_map_get_system_id(&id_map_default,
-			trace_id, TRACE_ID_REQ_STATIC);
-}
-EXPORT_SYMBOL_GPL(coresight_trace_id_get_static_system_id);
 
 void coresight_trace_id_put_system_id(int id)
 {

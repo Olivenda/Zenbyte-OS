@@ -334,7 +334,7 @@ static int nilfs_btree_node_lookup(const struct nilfs_btree_node *node,
  * @inode: host inode of btree
  * @blocknr: block number
  *
- * Return: 0 if normal, 1 if the node is broken.
+ * Return Value: If node is broken, 1 is returned. Otherwise, 0 is returned.
  */
 static int nilfs_btree_node_broken(const struct nilfs_btree_node *node,
 				   size_t size, struct inode *inode,
@@ -366,7 +366,7 @@ static int nilfs_btree_node_broken(const struct nilfs_btree_node *node,
  * @node: btree root node to be examined
  * @inode: host inode of btree
  *
- * Return: 0 if normal, 1 if the root node is broken.
+ * Return Value: If node is broken, 1 is returned. Otherwise, 0 is returned.
  */
 static int nilfs_btree_root_broken(const struct nilfs_btree_node *node,
 				   struct inode *inode)
@@ -652,7 +652,8 @@ static int nilfs_btree_do_lookup_last(const struct nilfs_bmap *btree,
  * @minlevel: start level
  * @nextkey: place to store the next valid key
  *
- * Return: 0 if the next key was found, %-ENOENT if not found.
+ * Return Value: If a next key was found, 0 is returned. Otherwise,
+ * -ENOENT is returned.
  */
 static int nilfs_btree_get_next_key(const struct nilfs_bmap *btree,
 				    const struct nilfs_btree_path *path,

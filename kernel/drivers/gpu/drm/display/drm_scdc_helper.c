@@ -21,7 +21,6 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <linux/export.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <linux/delay.h>

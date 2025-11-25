@@ -104,6 +104,9 @@ static ssize_t fault_opcodes_write(struct file *file, const char __user *buf,
 		goto free_data;
 	}
 
+	ret = debugfs_file_get(file->f_path.dentry);
+	if (unlikely(ret))
+		goto free_data;
 	ptr = data;
 	token = ptr;
 	for (ptr = data; *ptr; ptr = end + 1, token = ptr) {
@@ -151,6 +154,7 @@ static ssize_t fault_opcodes_write(struct file *file, const char __user *buf,
 	}
 	ret = len;
 
+	debugfs_file_put(file->f_path.dentry);
 free_data:
 	kfree(data);
 	return ret;
@@ -169,6 +173,9 @@ static ssize_t fault_opcodes_read(struct file *file, char __user *buf,
 	data = kcalloc(datalen, sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
+	ret = debugfs_file_get(file->f_path.dentry);
+	if (unlikely(ret))
+		goto free_data;
 	bit = find_first_bit(fault->opcodes, bitsize);
 	while (bit < bitsize) {
 		zero = find_next_zero_bit(fault->opcodes, bitsize, bit);
@@ -182,9 +189,11 @@ static ssize_t fault_opcodes_read(struct file *file, char __user *buf,
 					 bit);
 		bit = find_next_bit(fault->opcodes, bitsize, zero);
 	}
+	debugfs_file_put(file->f_path.dentry);
 	data[size - 1] = '\n';
 	data[size] = '\0';
 	ret = simple_read_from_buffer(buf, len, pos, data, size);
+free_data:
 	kfree(data);
 	return ret;
 }

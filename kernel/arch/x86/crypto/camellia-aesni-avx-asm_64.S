@@ -16,7 +16,6 @@
  */
 
 #include <linux/linkage.h>
-#include <linux/cfi_types.h>
 #include <asm/frame.h>
 
 #define CAMELLIA_TABLE_BYTE_LEN 272
@@ -883,7 +882,7 @@ SYM_FUNC_START_LOCAL(__camellia_dec_blk16)
 	jmp .Ldec_max24;
 SYM_FUNC_END(__camellia_dec_blk16)
 
-SYM_TYPED_FUNC_START(camellia_ecb_enc_16way)
+SYM_FUNC_START(camellia_ecb_enc_16way)
 	/* input:
 	 *	%rdi: ctx, CTX
 	 *	%rsi: dst (16 blocks)
@@ -908,7 +907,7 @@ SYM_TYPED_FUNC_START(camellia_ecb_enc_16way)
 	RET;
 SYM_FUNC_END(camellia_ecb_enc_16way)
 
-SYM_TYPED_FUNC_START(camellia_ecb_dec_16way)
+SYM_FUNC_START(camellia_ecb_dec_16way)
 	/* input:
 	 *	%rdi: ctx, CTX
 	 *	%rsi: dst (16 blocks)
@@ -938,7 +937,7 @@ SYM_TYPED_FUNC_START(camellia_ecb_dec_16way)
 	RET;
 SYM_FUNC_END(camellia_ecb_dec_16way)
 
-SYM_TYPED_FUNC_START(camellia_cbc_dec_16way)
+SYM_FUNC_START(camellia_cbc_dec_16way)
 	/* input:
 	 *	%rdi: ctx, CTX
 	 *	%rsi: dst (16 blocks)

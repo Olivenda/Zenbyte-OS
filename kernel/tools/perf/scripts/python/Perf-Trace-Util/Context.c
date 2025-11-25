@@ -12,7 +12,6 @@
 #define PY_SSIZE_T_CLEAN
 
 #include <Python.h>
-#include "../../../util/config.h"
 #include "../../../util/trace-event.h"
 #include "../../../util/event.h"
 #include "../../../util/symbol.h"
@@ -24,6 +23,16 @@
 #include "../../../util/srcline.h"
 #include "../../../util/srccode.h"
 
+#if PY_MAJOR_VERSION < 3
+#define _PyCapsule_GetPointer(arg1, arg2) \
+  PyCObject_AsVoidPtr(arg1)
+#define _PyBytes_FromStringAndSize(arg1, arg2) \
+  PyString_FromStringAndSize((arg1), (arg2))
+#define _PyUnicode_AsUTF8(arg) \
+  PyString_AsString(arg)
+
+PyMODINIT_FUNC initperf_trace_context(void);
+#else
 #define _PyCapsule_GetPointer(arg1, arg2) \
   PyCapsule_GetPointer((arg1), (arg2))
 #define _PyBytes_FromStringAndSize(arg1, arg2) \
@@ -32,6 +41,7 @@
   PyUnicode_AsUTF8(arg)
 
 PyMODINIT_FUNC PyInit_perf_trace_context(void);
+#endif
 
 static struct scripting_context *get_args(PyObject *args, const char *name, PyObject **arg2)
 {
@@ -93,7 +103,7 @@ static PyObject *perf_sample_insn(PyObject *obj, PyObject *args)
 	if (c->sample->ip && !c->sample->insn_len && thread__maps(c->al->thread)) {
 		struct machine *machine =  maps__machine(thread__maps(c->al->thread));
 
-		script_fetch_insn(c->sample, c->al->thread, machine, /*native_arch=*/true);
+		script_fetch_insn(c->sample, c->al->thread, machine);
 	}
 	if (!c->sample->insn_len)
 		Py_RETURN_NONE; /* N.B. This is a return statement */
@@ -172,15 +182,6 @@ static PyObject *perf_sample_srccode(PyObject *obj, PyObject *args)
 	return perf_sample_src(obj, args, true);
 }
 
-static PyObject *__perf_config_get(PyObject *obj, PyObject *args)
-{
-	const char *config_name;
-
-	if (!PyArg_ParseTuple(args, "s", &config_name))
-		return NULL;
-	return Py_BuildValue("s", perf_config_get(config_name));
-}
-
 static PyMethodDef ContextMethods[] = {
 #ifdef HAVE_LIBTRACEEVENT
 	{ "common_pc", perf_trace_context_common_pc, METH_VARARGS,
@@ -198,10 +199,15 @@ static PyMethodDef ContextMethods[] = {
 	  METH_VARARGS,	"Get source file name and line number."},
 	{ "perf_sample_srccode", perf_sample_srccode,
 	  METH_VARARGS,	"Get source file name, line number and line."},
-	{ "perf_config_get", __perf_config_get, METH_VARARGS, "Get perf config entry"},
 	{ NULL, NULL, 0, NULL}
 };
 
+#if PY_MAJOR_VERSION < 3
+PyMODINIT_FUNC initperf_trace_context(void)
+{
+	(void) Py_InitModule("perf_trace_context", ContextMethods);
+}
+#else
 PyMODINIT_FUNC PyInit_perf_trace_context(void)
 {
 	static struct PyModuleDef moduledef = {
@@ -223,3 +229,4 @@ PyMODINIT_FUNC PyInit_perf_trace_context(void)
 
 	return mod;
 }
+#endif

@@ -1274,20 +1274,6 @@ static const struct dmi_system_id i8k_dmi_table[] __initconst = {
 		},
 	},
 	{
-		.ident = "Dell OptiPlex 7050",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
-			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "OptiPlex 7050"),
-		},
-	},
-	{
-		.ident = "Dell OptiPlex 7040",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
-			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "OptiPlex 7040"),
-		},
-	},
-	{
 		.ident = "Dell Precision",
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
@@ -1546,14 +1532,6 @@ static const struct dmi_system_id i8k_whitelist_fan_control[] __initconst = {
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "XPS 13 7390"),
 		},
 		.driver_data = (void *)&i8k_fan_control_data[I8K_FAN_34A3_35A3],
-	},
-	{
-		.ident = "Dell XPS 13 9370",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
-			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "XPS 13 9370"),
-		},
-		.driver_data = (void *)&i8k_fan_control_data[I8K_FAN_30A3_31A3],
 	},
 	{
 		.ident = "Dell Optiplex 7000",

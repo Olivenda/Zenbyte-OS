@@ -52,19 +52,17 @@ pse_reg_pi_disable(struct pse_controller_dev *pcdev, int id)
 }
 
 static int
-pse_reg_pi_get_admin_state(struct pse_controller_dev *pcdev, int id,
-			   struct pse_admin_state *admin_state)
+pse_reg_pi_is_enabled(struct pse_controller_dev *pcdev, int id)
 {
 	struct pse_reg_priv *priv = to_pse_reg(pcdev);
 
-	admin_state->podl_admin_state = priv->admin_state;
-
-	return 0;
+	return regulator_is_enabled(priv->ps);
 }
 
 static int
-pse_reg_pi_get_pw_status(struct pse_controller_dev *pcdev, int id,
-			 struct pse_pw_status *pw_status)
+pse_reg_ethtool_get_status(struct pse_controller_dev *pcdev, unsigned long id,
+			   struct netlink_ext_ack *extack,
+			   struct pse_control_status *status)
 {
 	struct pse_reg_priv *priv = to_pse_reg(pcdev);
 	int ret;
@@ -74,19 +72,20 @@ pse_reg_pi_get_pw_status(struct pse_controller_dev *pcdev, int id,
 		return ret;
 
 	if (!ret)
-		pw_status->podl_pw_status =
-			ETHTOOL_PODL_PSE_PW_D_STATUS_DISABLED;
+		status->podl_pw_status = ETHTOOL_PODL_PSE_PW_D_STATUS_DISABLED;
 	else
-		pw_status->podl_pw_status =
+		status->podl_pw_status =
 			ETHTOOL_PODL_PSE_PW_D_STATUS_DELIVERING;
+
+	status->podl_admin_state = priv->admin_state;
 
 	return 0;
 }
 
 static const struct pse_controller_ops pse_reg_ops = {
-	.pi_get_admin_state = pse_reg_pi_get_admin_state,
-	.pi_get_pw_status = pse_reg_pi_get_pw_status,
+	.ethtool_get_status = pse_reg_ethtool_get_status,
 	.pi_enable = pse_reg_pi_enable,
+	.pi_is_enabled = pse_reg_pi_is_enabled,
 	.pi_disable = pse_reg_pi_disable,
 };
 

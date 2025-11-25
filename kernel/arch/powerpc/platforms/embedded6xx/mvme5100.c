@@ -14,7 +14,6 @@
 
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
-#include <linux/seq_file.h>
 
 #include <asm/i8259.h>
 #include <asm/pci-bridge.h>

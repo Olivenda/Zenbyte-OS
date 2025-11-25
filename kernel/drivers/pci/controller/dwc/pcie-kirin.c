@@ -216,9 +216,10 @@ static int hi3660_pcie_phy_start(struct hi3660_pcie_phy *phy)
 
 	usleep_range(PIPE_CLK_WAIT_MIN, PIPE_CLK_WAIT_MAX);
 	reg_val = kirin_apb_phy_readl(phy, PCIE_APB_PHY_STATUS0);
-	if (reg_val & PIPE_CLK_STABLE)
-		return dev_err_probe(dev, -ETIMEDOUT,
-				     "PIPE clk is not stable\n");
+	if (reg_val & PIPE_CLK_STABLE) {
+		dev_err(dev, "PIPE clk is not stable\n");
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -370,9 +371,10 @@ static int kirin_pcie_get_gpio_enable(struct kirin_pcie *pcie,
 	if (ret < 0)
 		return 0;
 
-	if (ret > MAX_PCI_SLOTS)
-		return dev_err_probe(dev, -EINVAL,
-				     "Too many GPIO clock requests!\n");
+	if (ret > MAX_PCI_SLOTS) {
+		dev_err(dev, "Too many GPIO clock requests!\n");
+		return -EINVAL;
+	}
 
 	pcie->n_gpio_clkreq = ret;
 
@@ -418,16 +420,17 @@ static int kirin_pcie_parse_port(struct kirin_pcie *pcie,
 						     "unable to get a valid reset gpio\n");
 			}
 
-			if (pcie->num_slots + 1 >= MAX_PCI_SLOTS)
-				return dev_err_probe(dev, -EINVAL,
-						     "Too many PCI slots!\n");
-
+			if (pcie->num_slots + 1 >= MAX_PCI_SLOTS) {
+				dev_err(dev, "Too many PCI slots!\n");
+				return -EINVAL;
+			}
 			pcie->num_slots++;
 
 			ret = of_pci_get_devfn(child);
-			if (ret < 0)
-				return dev_err_probe(dev, ret,
-						     "failed to parse devfn\n");
+			if (ret < 0) {
+				dev_err(dev, "failed to parse devfn: %d\n", ret);
+				return ret;
+			}
 
 			slot = PCI_SLOT(ret);
 
@@ -449,7 +452,7 @@ static long kirin_pcie_get_resource(struct kirin_pcie *kirin_pcie,
 				    struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct device_node *node = dev->of_node;
+	struct device_node *child, *node = dev->of_node;
 	void __iomem *apb_base;
 	int ret;
 
@@ -474,13 +477,17 @@ static long kirin_pcie_get_resource(struct kirin_pcie *kirin_pcie,
 		return ret;
 
 	/* Parse OF children */
-	for_each_available_child_of_node_scoped(node, child) {
+	for_each_available_child_of_node(node, child) {
 		ret = kirin_pcie_parse_port(kirin_pcie, pdev, child);
 		if (ret)
-			return ret;
+			goto put_node;
 	}
 
 	return 0;
+
+put_node:
+	of_node_put(child);
+	return ret;
 }
 
 static void kirin_pcie_sideband_dbi_w_mode(struct kirin_pcie *kirin_pcie,
@@ -586,13 +593,16 @@ static void kirin_pcie_write_dbi(struct dw_pcie *pci, void __iomem *base,
 	kirin_pcie_sideband_dbi_w_mode(kirin_pcie, false);
 }
 
-static bool kirin_pcie_link_up(struct dw_pcie *pci)
+static int kirin_pcie_link_up(struct dw_pcie *pci)
 {
 	struct kirin_pcie *kirin_pcie = to_kirin_pcie(pci);
 	u32 val;
 
 	regmap_read(kirin_pcie->apb, PCIE_APB_PHY_STATUS0, &val);
-	return (val & PCIE_LINKUP_ENABLE) == PCIE_LINKUP_ENABLE;
+	if ((val & PCIE_LINKUP_ENABLE) == PCIE_LINKUP_ENABLE)
+		return 1;
+
+	return 0;
 }
 
 static int kirin_pcie_start_link(struct dw_pcie *pci)
@@ -719,9 +729,16 @@ static int kirin_pcie_probe(struct platform_device *pdev)
 	struct dw_pcie *pci;
 	int ret;
 
+	if (!dev->of_node) {
+		dev_err(dev, "NULL node\n");
+		return -EINVAL;
+	}
+
 	data = of_device_get_match_data(dev);
-	if (!data)
-		return dev_err_probe(dev, -EINVAL, "OF data missing\n");
+	if (!data) {
+		dev_err(dev, "OF data missing\n");
+		return -EINVAL;
+	}
 
 	kirin_pcie = devm_kzalloc(dev, sizeof(struct kirin_pcie), GFP_KERNEL);
 	if (!kirin_pcie)
@@ -752,7 +769,7 @@ static int kirin_pcie_probe(struct platform_device *pdev)
 
 static struct platform_driver kirin_pcie_driver = {
 	.probe			= kirin_pcie_probe,
-	.remove			= kirin_pcie_remove,
+	.remove_new		= kirin_pcie_remove,
 	.driver			= {
 		.name			= "kirin-pcie",
 		.of_match_table		= kirin_pcie_match,

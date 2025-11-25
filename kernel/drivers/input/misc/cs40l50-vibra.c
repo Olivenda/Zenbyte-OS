@@ -482,6 +482,7 @@ static int cs40l50_erase(struct input_dev *dev, int effect_id)
 
 static void cs40l50_remove_wq(void *data)
 {
+	flush_workqueue(data);
 	destroy_workqueue(data);
 }
 

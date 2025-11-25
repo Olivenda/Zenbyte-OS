@@ -773,8 +773,10 @@ static int fetch_irq_intel(struct device *dev, struct ltq_uart_port *ltq_port)
 	int ret;
 
 	ret = platform_get_irq(to_platform_device(dev), 0);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(dev, "failed to fetch IRQ for serial port\n");
 		return ret;
+	}
 	ltq_port->common_irq = ret;
 	port->irq = ret;
 
@@ -913,7 +915,7 @@ MODULE_DEVICE_TABLE(of, ltq_asc_match);
 
 static struct platform_driver lqasc_driver = {
 	.probe		= lqasc_probe,
-	.remove		= lqasc_remove,
+	.remove_new	= lqasc_remove,
 	.driver		= {
 		.name	= DRVNAME,
 		.of_match_table = ltq_asc_match,

@@ -18,10 +18,9 @@ properties:
 
   clocks:
     minItems: 6
-    maxItems: 8
+    maxItems: 6
 
   clock-names:
-    minItems: 6
     items:
       - const: core_clk
       - const: iface_clk
@@ -29,12 +28,6 @@ properties:
       - const: lut_clk
       - const: hdmi_clk
       - const: tv_clk
-      - const: lcdc_clk
-      - const: pxo
-        description: XO used to drive the internal LVDS PLL
-
-  '#clock-cells':
-    const: 0
 
   reg:
     maxItems: 1

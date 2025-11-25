@@ -2,7 +2,6 @@
 
 #include <linux/dma-resv.h>
 #include <linux/dma-fence-chain.h>
-#include <linux/export.h>
 
 #include <drm/drm_atomic_state_helper.h>
 #include <drm/drm_atomic_uapi.h>

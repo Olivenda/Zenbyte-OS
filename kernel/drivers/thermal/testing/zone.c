@@ -288,14 +288,19 @@ static struct tt_thermal_zone *tt_get_tt_zone(const char *arg)
 
 	guard(mutex)(&tt_thermal_zones_lock);
 
+	ret = -EINVAL;
 	list_for_each_entry(tt_zone, &tt_thermal_zones, list_node) {
 		if (tt_zone->id == id) {
 			tt_zone->refcount++;
-			return tt_zone;
+			ret = 0;
+			break;
 		}
 	}
 
-	return ERR_PTR(-EINVAL);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return tt_zone;
 }
 
 static void tt_put_tt_zone(struct tt_thermal_zone *tt_zone)
@@ -381,7 +386,7 @@ static int tt_zone_get_temp(struct thermal_zone_device *tz, int *temp)
 	return 0;
 }
 
-static const struct thermal_zone_device_ops tt_zone_ops = {
+static struct thermal_zone_device_ops tt_zone_ops = {
 	.get_temp = tt_zone_get_temp,
 };
 

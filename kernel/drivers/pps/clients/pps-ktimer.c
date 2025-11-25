@@ -58,7 +58,7 @@ static void __exit pps_ktimer_exit(void)
 {
 	dev_dbg(&pps->dev, "ktimer PPS source unregistered\n");
 
-	timer_delete_sync(&ktimer);
+	del_timer_sync(&ktimer);
 	pps_unregister_source(pps);
 }
 

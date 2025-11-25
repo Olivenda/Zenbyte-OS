@@ -212,8 +212,8 @@ static int ucd9000_gpio_get(struct gpio_chip *gc, unsigned int offset)
 	return !!(ret & UCD9000_GPIO_CONFIG_STATUS);
 }
 
-static int ucd9000_gpio_set(struct gpio_chip *gc, unsigned int offset,
-			    int value)
+static void ucd9000_gpio_set(struct gpio_chip *gc, unsigned int offset,
+			     int value)
 {
 	struct i2c_client *client = gpiochip_get_data(gc);
 	int ret;
@@ -222,19 +222,19 @@ static int ucd9000_gpio_set(struct gpio_chip *gc, unsigned int offset,
 	if (ret < 0) {
 		dev_dbg(&client->dev, "failed to read GPIO %d config: %d\n",
 			offset, ret);
-		return ret;
+		return;
 	}
 
 	if (value) {
-		if (ret & UCD9000_GPIO_CONFIG_OUT_VALUE)
-			return 0;
+		if (ret & UCD9000_GPIO_CONFIG_STATUS)
+			return;
 
-		ret |= UCD9000_GPIO_CONFIG_OUT_VALUE;
+		ret |= UCD9000_GPIO_CONFIG_STATUS;
 	} else {
-		if (!(ret & UCD9000_GPIO_CONFIG_OUT_VALUE))
-			return 0;
+		if (!(ret & UCD9000_GPIO_CONFIG_STATUS))
+			return;
 
-		ret &= ~UCD9000_GPIO_CONFIG_OUT_VALUE;
+		ret &= ~UCD9000_GPIO_CONFIG_STATUS;
 	}
 
 	ret |= UCD9000_GPIO_CONFIG_ENABLE;
@@ -244,7 +244,7 @@ static int ucd9000_gpio_set(struct gpio_chip *gc, unsigned int offset,
 	if (ret < 0) {
 		dev_dbg(&client->dev, "Failed to write GPIO %d config: %d\n",
 			offset, ret);
-		return ret;
+		return;
 	}
 
 	ret &= ~UCD9000_GPIO_CONFIG_ENABLE;
@@ -253,8 +253,6 @@ static int ucd9000_gpio_set(struct gpio_chip *gc, unsigned int offset,
 	if (ret < 0)
 		dev_dbg(&client->dev, "Failed to write GPIO %d config: %d\n",
 			offset, ret);
-
-	return ret;
 }
 
 static int ucd9000_gpio_get_direction(struct gpio_chip *gc,
@@ -644,4 +642,4 @@ module_i2c_driver(ucd9000_driver);
 MODULE_AUTHOR("Guenter Roeck");
 MODULE_DESCRIPTION("PMBus driver for TI UCD90xxx");
 MODULE_LICENSE("GPL");
-MODULE_IMPORT_NS("PMBUS");
+MODULE_IMPORT_NS(PMBUS);

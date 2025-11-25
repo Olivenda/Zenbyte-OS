@@ -4,11 +4,6 @@
  *
  * Copyright (C) 2016 Renesas Electronics Corp.
  * Copyright (C) 2016 Cogent Embedded, Inc.
- *
- * Sample Audio settings:
- *
- *	> amixer set "DVC Out" 1%
- *	> amixer set "DVC In"  20%
  */
 
 #include <dt-bindings/gpio/gpio.h>
@@ -238,13 +233,10 @@
 		#clock-cells = <1>;
 		clocks = <&x23_clk>;
 		clock-names = "xin";
-		idt,shutdown = <0>;
-		idt,output-enable-active = <1>;
 	};
 };
 
 &i2c_dvfs {
-	bootph-all;
 	status = "okay";
 
 	clock-frequency = <400000>;
@@ -255,7 +247,8 @@
 
 		compatible = "rohm,bd9571mwv";
 		reg = <0x30>;
-		interrupts-extended = <&intc_ex 0 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&intc_ex>;
+		interrupts = <0 IRQ_TYPE_LEVEL_LOW>;
 		interrupt-controller;
 		#interrupt-cells = <2>;
 		gpio-controller;
@@ -278,7 +271,6 @@
 		compatible = "rohm,br24t01", "atmel,24c01";
 		reg = <0x50>;
 		pagesize = <8>;
-		bootph-all;
 	};
 };
 
@@ -450,7 +442,6 @@
 &scif2 {
 	pinctrl-0 = <&scif2_pins>;
 	pinctrl-names = "default";
-	bootph-all;
 
 	status = "okay";
 };

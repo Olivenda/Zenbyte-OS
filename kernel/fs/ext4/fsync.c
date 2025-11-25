@@ -132,16 +132,20 @@ int ext4_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 	bool needs_barrier = false;
 	struct inode *inode = file->f_mapping->host;
 
-	ret = ext4_emergency_state(inode->i_sb);
-	if (unlikely(ret))
-		return ret;
+	if (unlikely(ext4_forced_shutdown(inode->i_sb)))
+		return -EIO;
 
 	ASSERT(ext4_journal_current_handle() == NULL);
 
 	trace_ext4_sync_file_enter(file, datasync);
 
-	if (sb_rdonly(inode->i_sb))
+	if (sb_rdonly(inode->i_sb)) {
+		/* Make sure that we read updated s_ext4_flags value */
+		smp_rmb();
+		if (ext4_forced_shutdown(inode->i_sb))
+			ret = -EROFS;
 		goto out;
+	}
 
 	if (!EXT4_SB(inode->i_sb)->s_journal) {
 		ret = ext4_fsync_nojournal(file, start, end, datasync,

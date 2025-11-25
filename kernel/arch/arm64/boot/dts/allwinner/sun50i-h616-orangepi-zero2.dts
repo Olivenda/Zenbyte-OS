@@ -24,10 +24,6 @@
 	phy-supply = <&reg_dcdce>;
 };
 
-&gpu {
-	mali-supply = <&reg_dcdcc>;
-};
-
 &mmc0 {
 	vmmc-supply = <&reg_dcdce>;
 };

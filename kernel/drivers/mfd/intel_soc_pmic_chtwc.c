@@ -267,7 +267,7 @@ static const struct acpi_device_id cht_wc_acpi_ids[] = {
 
 static struct i2c_driver cht_wc_driver = {
 	.driver	= {
-		.name	= "intel_soc_pmic_chtwc",
+		.name	= "CHT Whiskey Cove PMIC",
 		.pm     = pm_sleep_ptr(&cht_wc_pm_ops),
 		.acpi_match_table = cht_wc_acpi_ids,
 	},

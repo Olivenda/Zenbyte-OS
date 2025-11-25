@@ -5,7 +5,6 @@
 #include <limits.h>
 #include "debug.h"
 #include "dso.h"
-#include "env.h"
 #include "machine.h"
 #include "thread.h"
 #include "symbol.h"
@@ -14,18 +13,15 @@
 #include "tests.h"
 
 struct test_info {
-	struct perf_env host_env;
 	struct machine *machine;
 	struct thread *thread;
 };
 
 static int init_test_info(struct test_info *ti)
 {
-	perf_env__init(&ti->host_env);
-	ti->machine = machine__new_host(&ti->host_env);
+	ti->machine = machine__new_host();
 	if (!ti->machine) {
 		pr_debug("machine__new_host() failed!\n");
-		perf_env__exit(&ti->host_env);
 		return TEST_FAIL;
 	}
 
@@ -33,7 +29,6 @@ static int init_test_info(struct test_info *ti)
 	ti->thread = machine__findnew_thread(ti->machine, 100, 100);
 	if (!ti->thread) {
 		pr_debug("machine__findnew_thread() failed!\n");
-		perf_env__exit(&ti->host_env);
 		return TEST_FAIL;
 	}
 
@@ -44,7 +39,6 @@ static void exit_test_info(struct test_info *ti)
 {
 	thread__put(ti->thread);
 	machine__delete(ti->machine);
-	perf_env__exit(&ti->host_env);
 }
 
 struct dso_map {
@@ -102,8 +96,8 @@ static int create_map(struct test_info *ti, char *filename, struct map **map_p)
 	dso__put(dso);
 
 	/* Create a dummy map at 0x100000 */
-	*map_p = map__new(ti->machine, 0x100000, 0xffffffff, 0, &dso_id_empty,
-			  PROT_EXEC, /*flags=*/0, filename, ti->thread);
+	*map_p = map__new(ti->machine, 0x100000, 0xffffffff, 0, NULL,
+			  PROT_EXEC, 0, NULL, filename, ti->thread);
 	if (!*map_p) {
 		pr_debug("Failed to create map!");
 		return TEST_FAIL;

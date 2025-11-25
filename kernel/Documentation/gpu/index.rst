@@ -13,7 +13,6 @@ GPU Driver Developer's Guide
    drm-usage-stats
    driver-uapi
    drm-client
-   drm-compute
    drivers
    backlight
    vga-switcheroo

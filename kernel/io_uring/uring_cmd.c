@@ -3,51 +3,51 @@
 #include <linux/errno.h>
 #include <linux/file.h>
 #include <linux/io_uring/cmd.h>
+#include <linux/io_uring/net.h>
 #include <linux/security.h>
 #include <linux/nospec.h>
+#include <net/sock.h>
 
 #include <uapi/linux/io_uring.h>
+#include <asm/ioctls.h>
 
 #include "io_uring.h"
 #include "alloc_cache.h"
 #include "rsrc.h"
 #include "uring_cmd.h"
-#include "poll.h"
 
-void io_cmd_cache_free(const void *entry)
+static struct uring_cache *io_uring_async_get(struct io_kiocb *req)
 {
-	struct io_async_cmd *ac = (struct io_async_cmd *)entry;
+	struct io_ring_ctx *ctx = req->ctx;
+	struct uring_cache *cache;
 
-	io_vec_free(&ac->vec);
-	kfree(ac);
+	cache = io_alloc_cache_get(&ctx->uring_cache);
+	if (cache) {
+		req->flags |= REQ_F_ASYNC_DATA;
+		req->async_data = cache;
+		return cache;
+	}
+	if (!io_alloc_async_data(req))
+		return req->async_data;
+	return NULL;
 }
 
 static void io_req_uring_cleanup(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_uring_cmd *ioucmd = io_kiocb_to_cmd(req, struct io_uring_cmd);
-	struct io_async_cmd *ac = req->async_data;
+	struct uring_cache *cache = req->async_data;
 
 	if (issue_flags & IO_URING_F_UNLOCKED)
 		return;
-
-	io_alloc_cache_vec_kasan(&ac->vec);
-	if (ac->vec.nr > IO_VEC_CACHE_SOFT_CAP)
-		io_vec_free(&ac->vec);
-
-	if (io_alloc_cache_put(&req->ctx->cmd_cache, ac)) {
+	if (io_alloc_cache_put(&req->ctx->uring_cache, cache)) {
 		ioucmd->sqe = NULL;
 		req->async_data = NULL;
-		req->flags &= ~(REQ_F_ASYNC_DATA|REQ_F_NEED_CLEANUP);
+		req->flags &= ~REQ_F_ASYNC_DATA;
 	}
 }
 
-void io_uring_cmd_cleanup(struct io_kiocb *req)
-{
-	io_req_uring_cleanup(req, 0);
-}
-
 bool io_uring_try_cancel_uring_cmd(struct io_ring_ctx *ctx,
-				   struct io_uring_task *tctx, bool cancel_all)
+				   struct task_struct *task, bool cancel_all)
 {
 	struct hlist_node *tmp;
 	struct io_kiocb *req;
@@ -61,7 +61,7 @@ bool io_uring_try_cancel_uring_cmd(struct io_ring_ctx *ctx,
 				struct io_uring_cmd);
 		struct file *file = req->file;
 
-		if (!cancel_all && req->tctx != tctx)
+		if (!cancel_all && req->task != task)
 			continue;
 
 		if (cmd->flags & IORING_URING_CMD_CANCELABLE) {
@@ -113,7 +113,7 @@ void io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
 }
 EXPORT_SYMBOL_GPL(io_uring_cmd_mark_cancelable);
 
-static void io_uring_cmd_work(struct io_kiocb *req, io_tw_token_t tw)
+static void io_uring_cmd_work(struct io_kiocb *req, struct io_tw_state *ts)
 {
 	struct io_uring_cmd *ioucmd = io_kiocb_to_cmd(req, struct io_uring_cmd);
 	unsigned int flags = IO_URING_F_COMPLETE_DEFER;
@@ -130,9 +130,6 @@ void __io_uring_cmd_do_in_task(struct io_uring_cmd *ioucmd,
 			unsigned flags)
 {
 	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
-
-	if (WARN_ON_ONCE(req->flags & REQ_F_APOLL_MULTISHOT))
-		return;
 
 	ioucmd->task_work_cb = task_work_cb;
 	req->io_task_work.func = io_uring_cmd_work;
@@ -155,9 +152,6 @@ void io_uring_cmd_done(struct io_uring_cmd *ioucmd, ssize_t ret, u64 res2,
 		       unsigned issue_flags)
 {
 	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
-
-	if (WARN_ON_ONCE(req->flags & REQ_F_APOLL_MULTISHOT))
-		return;
 
 	io_uring_cmd_del_cancelable(ioucmd, issue_flags);
 
@@ -182,10 +176,30 @@ void io_uring_cmd_done(struct io_uring_cmd *ioucmd, ssize_t ret, u64 res2,
 }
 EXPORT_SYMBOL_GPL(io_uring_cmd_done);
 
+static int io_uring_cmd_prep_setup(struct io_kiocb *req,
+				   const struct io_uring_sqe *sqe)
+{
+	struct io_uring_cmd *ioucmd = io_kiocb_to_cmd(req, struct io_uring_cmd);
+	struct uring_cache *cache;
+
+	cache = io_uring_async_get(req);
+	if (unlikely(!cache))
+		return -ENOMEM;
+
+	if (!(req->flags & REQ_F_FORCE_ASYNC)) {
+		/* defer memcpy until we need it */
+		ioucmd->sqe = sqe;
+		return 0;
+	}
+
+	memcpy(req->async_data, sqe, uring_sqe_size(req->ctx));
+	ioucmd->sqe = req->async_data;
+	return 0;
+}
+
 int io_uring_cmd_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_uring_cmd *ioucmd = io_kiocb_to_cmd(req, struct io_uring_cmd);
-	struct io_async_cmd *ac;
 
 	if (sqe->__pad1)
 		return -EINVAL;
@@ -194,28 +208,20 @@ int io_uring_cmd_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	if (ioucmd->flags & ~IORING_URING_CMD_MASK)
 		return -EINVAL;
 
-	if (ioucmd->flags & IORING_URING_CMD_FIXED)
-		req->buf_index = READ_ONCE(sqe->buf_index);
+	if (ioucmd->flags & IORING_URING_CMD_FIXED) {
+		struct io_ring_ctx *ctx = req->ctx;
+		u16 index;
 
+		req->buf_index = READ_ONCE(sqe->buf_index);
+		if (unlikely(req->buf_index >= ctx->nr_user_bufs))
+			return -EFAULT;
+		index = array_index_nospec(req->buf_index, ctx->nr_user_bufs);
+		req->imu = ctx->user_bufs[index];
+		io_req_set_rsrc_node(req, ctx, 0);
+	}
 	ioucmd->cmd_op = READ_ONCE(sqe->cmd_op);
 
-	ac = io_uring_alloc_async_data(&req->ctx->cmd_cache, req);
-	if (!ac)
-		return -ENOMEM;
-	ioucmd->sqe = sqe;
-	return 0;
-}
-
-void io_uring_cmd_sqe_copy(struct io_kiocb *req)
-{
-	struct io_uring_cmd *ioucmd = io_kiocb_to_cmd(req, struct io_uring_cmd);
-	struct io_async_cmd *ac = req->async_data;
-
-	/* Should not happen, as REQ_F_SQE_COPIED covers this */
-	if (WARN_ON_ONCE(ioucmd->sqe == ac->sqes))
-		return;
-	memcpy(ac->sqes, ioucmd->sqe, uring_sqe_size(req->ctx));
-	ioucmd->sqe = ac->sqes;
+	return io_uring_cmd_prep_setup(req, sqe);
 }
 
 int io_uring_cmd(struct io_kiocb *req, unsigned int issue_flags)
@@ -236,69 +242,41 @@ int io_uring_cmd(struct io_kiocb *req, unsigned int issue_flags)
 		issue_flags |= IO_URING_F_SQE128;
 	if (ctx->flags & IORING_SETUP_CQE32)
 		issue_flags |= IO_URING_F_CQE32;
-	if (io_is_compat(ctx))
+	if (ctx->compat)
 		issue_flags |= IO_URING_F_COMPAT;
 	if (ctx->flags & IORING_SETUP_IOPOLL) {
 		if (!file->f_op->uring_cmd_iopoll)
 			return -EOPNOTSUPP;
 		issue_flags |= IO_URING_F_IOPOLL;
 		req->iopoll_completed = 0;
-		if (ctx->flags & IORING_SETUP_HYBRID_IOPOLL) {
-			/* make sure every req only blocks once */
-			req->flags &= ~REQ_F_IOPOLL_STATE;
-			req->iopoll_start = ktime_get_ns();
-		}
 	}
 
 	ret = file->f_op->uring_cmd(ioucmd, issue_flags);
 	if (ret == -EAGAIN) {
-		ioucmd->flags |= IORING_URING_CMD_REISSUE;
-		return ret;
+		struct uring_cache *cache = req->async_data;
+
+		if (ioucmd->sqe != (void *) cache)
+			memcpy(cache, ioucmd->sqe, uring_sqe_size(req->ctx));
+		return -EAGAIN;
+	} else if (ret == -EIOCBQUEUED) {
+		return -EIOCBQUEUED;
 	}
-	if (ret == -EIOCBQUEUED)
-		return ret;
+
 	if (ret < 0)
 		req_set_fail(req);
 	io_req_uring_cleanup(req, issue_flags);
 	io_req_set_res(req, ret, 0);
-	return IOU_COMPLETE;
+	return IOU_OK;
 }
 
 int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
-			      struct iov_iter *iter,
-			      struct io_uring_cmd *ioucmd,
-			      unsigned int issue_flags)
+			      struct iov_iter *iter, void *ioucmd)
 {
 	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
 
-	if (WARN_ON_ONCE(!(ioucmd->flags & IORING_URING_CMD_FIXED)))
-		return -EINVAL;
-
-	return io_import_reg_buf(req, iter, ubuf, len, rw, issue_flags);
+	return io_import_fixed(rw, iter, req->imu, ubuf, len);
 }
 EXPORT_SYMBOL_GPL(io_uring_cmd_import_fixed);
-
-int io_uring_cmd_import_fixed_vec(struct io_uring_cmd *ioucmd,
-				  const struct iovec __user *uvec,
-				  size_t uvec_segs,
-				  int ddir, struct iov_iter *iter,
-				  unsigned issue_flags)
-{
-	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
-	struct io_async_cmd *ac = req->async_data;
-	int ret;
-
-	if (WARN_ON_ONCE(!(ioucmd->flags & IORING_URING_CMD_FIXED)))
-		return -EINVAL;
-
-	ret = io_prep_reg_iovec(req, &ac->vec, uvec, uvec_segs);
-	if (ret)
-		return ret;
-
-	return io_import_reg_vec(ddir, iter, req, &ac->vec, uvec_segs,
-				 issue_flags);
-}
-EXPORT_SYMBOL_GPL(io_uring_cmd_import_fixed_vec);
 
 void io_uring_cmd_issue_blocking(struct io_uring_cmd *ioucmd)
 {
@@ -307,29 +285,80 @@ void io_uring_cmd_issue_blocking(struct io_uring_cmd *ioucmd)
 	io_req_queue_iowq(req);
 }
 
-int io_cmd_poll_multishot(struct io_uring_cmd *cmd,
-			  unsigned int issue_flags, __poll_t mask)
+static inline int io_uring_cmd_getsockopt(struct socket *sock,
+					  struct io_uring_cmd *cmd,
+					  unsigned int issue_flags)
 {
-	struct io_kiocb *req = cmd_to_io_kiocb(cmd);
-	int ret;
+	bool compat = !!(issue_flags & IO_URING_F_COMPAT);
+	int optlen, optname, level, err;
+	void __user *optval;
 
-	if (likely(req->flags & REQ_F_APOLL_MULTISHOT))
-		return 0;
+	level = READ_ONCE(cmd->sqe->level);
+	if (level != SOL_SOCKET)
+		return -EOPNOTSUPP;
 
-	req->flags |= REQ_F_APOLL_MULTISHOT;
-	mask &= ~EPOLLONESHOT;
+	optval = u64_to_user_ptr(READ_ONCE(cmd->sqe->optval));
+	optname = READ_ONCE(cmd->sqe->optname);
+	optlen = READ_ONCE(cmd->sqe->optlen);
 
-	ret = io_arm_apoll(req, issue_flags, mask);
-	return ret == IO_APOLL_OK ? -EIOCBQUEUED : -ECANCELED;
+	err = do_sock_getsockopt(sock, compat, level, optname,
+				 USER_SOCKPTR(optval),
+				 KERNEL_SOCKPTR(&optlen));
+	if (err)
+		return err;
+
+	/* On success, return optlen */
+	return optlen;
 }
 
-bool io_uring_cmd_post_mshot_cqe32(struct io_uring_cmd *cmd,
-				   unsigned int issue_flags,
-				   struct io_uring_cqe cqe[2])
+static inline int io_uring_cmd_setsockopt(struct socket *sock,
+					  struct io_uring_cmd *cmd,
+					  unsigned int issue_flags)
 {
-	struct io_kiocb *req = cmd_to_io_kiocb(cmd);
+	bool compat = !!(issue_flags & IO_URING_F_COMPAT);
+	int optname, optlen, level;
+	void __user *optval;
+	sockptr_t optval_s;
 
-	if (WARN_ON_ONCE(!(issue_flags & IO_URING_F_MULTISHOT)))
-		return false;
-	return io_req_post_cqe32(req, cqe);
+	optval = u64_to_user_ptr(READ_ONCE(cmd->sqe->optval));
+	optname = READ_ONCE(cmd->sqe->optname);
+	optlen = READ_ONCE(cmd->sqe->optlen);
+	level = READ_ONCE(cmd->sqe->level);
+	optval_s = USER_SOCKPTR(optval);
+
+	return do_sock_setsockopt(sock, compat, level, optname, optval_s,
+				  optlen);
 }
+
+#if defined(CONFIG_NET)
+int io_uring_cmd_sock(struct io_uring_cmd *cmd, unsigned int issue_flags)
+{
+	struct socket *sock = cmd->file->private_data;
+	struct sock *sk = sock->sk;
+	struct proto *prot = READ_ONCE(sk->sk_prot);
+	int ret, arg = 0;
+
+	if (!prot || !prot->ioctl)
+		return -EOPNOTSUPP;
+
+	switch (cmd->cmd_op) {
+	case SOCKET_URING_OP_SIOCINQ:
+		ret = prot->ioctl(sk, SIOCINQ, &arg);
+		if (ret)
+			return ret;
+		return arg;
+	case SOCKET_URING_OP_SIOCOUTQ:
+		ret = prot->ioctl(sk, SIOCOUTQ, &arg);
+		if (ret)
+			return ret;
+		return arg;
+	case SOCKET_URING_OP_GETSOCKOPT:
+		return io_uring_cmd_getsockopt(sock, cmd, issue_flags);
+	case SOCKET_URING_OP_SETSOCKOPT:
+		return io_uring_cmd_setsockopt(sock, cmd, issue_flags);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+EXPORT_SYMBOL_GPL(io_uring_cmd_sock);
+#endif

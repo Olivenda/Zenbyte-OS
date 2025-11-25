@@ -10,7 +10,7 @@
 #include <objtool/warn.h>
 #include <objtool/endianness.h>
 
-int orc_dump(const char *filename)
+int orc_dump(const char *_objname)
 {
 	int fd, nr_entries, i, *orc_ip = NULL, orc_size = 0;
 	struct orc_entry *orc = NULL;
@@ -26,9 +26,12 @@ int orc_dump(const char *filename)
 	Elf_Data *data, *symtab = NULL, *rela_orc_ip = NULL;
 	struct elf dummy_elf = {};
 
+
+	objname = _objname;
+
 	elf_version(EV_CURRENT);
 
-	fd = open(filename, O_RDONLY);
+	fd = open(objname, O_RDONLY);
 	if (fd == -1) {
 		perror("open");
 		return -1;
@@ -36,47 +39,47 @@ int orc_dump(const char *filename)
 
 	elf = elf_begin(fd, ELF_C_READ_MMAP, NULL);
 	if (!elf) {
-		ERROR_ELF("elf_begin");
+		WARN_ELF("elf_begin");
 		return -1;
 	}
 
 	if (!elf64_getehdr(elf)) {
-		ERROR_ELF("elf64_getehdr");
+		WARN_ELF("elf64_getehdr");
 		return -1;
 	}
 	memcpy(&dummy_elf.ehdr, elf64_getehdr(elf), sizeof(dummy_elf.ehdr));
 
 	if (elf_getshdrnum(elf, &nr_sections)) {
-		ERROR_ELF("elf_getshdrnum");
+		WARN_ELF("elf_getshdrnum");
 		return -1;
 	}
 
 	if (elf_getshdrstrndx(elf, &shstrtab_idx)) {
-		ERROR_ELF("elf_getshdrstrndx");
+		WARN_ELF("elf_getshdrstrndx");
 		return -1;
 	}
 
 	for (i = 0; i < nr_sections; i++) {
 		scn = elf_getscn(elf, i);
 		if (!scn) {
-			ERROR_ELF("elf_getscn");
+			WARN_ELF("elf_getscn");
 			return -1;
 		}
 
 		if (!gelf_getshdr(scn, &sh)) {
-			ERROR_ELF("gelf_getshdr");
+			WARN_ELF("gelf_getshdr");
 			return -1;
 		}
 
 		name = elf_strptr(elf, shstrtab_idx, sh.sh_name);
 		if (!name) {
-			ERROR_ELF("elf_strptr");
+			WARN_ELF("elf_strptr");
 			return -1;
 		}
 
 		data = elf_getdata(scn, NULL);
 		if (!data) {
-			ERROR_ELF("elf_getdata");
+			WARN_ELF("elf_getdata");
 			return -1;
 		}
 
@@ -99,7 +102,7 @@ int orc_dump(const char *filename)
 		return 0;
 
 	if (orc_size % sizeof(*orc) != 0) {
-		ERROR("bad .orc_unwind section size");
+		WARN("bad .orc_unwind section size");
 		return -1;
 	}
 
@@ -107,36 +110,36 @@ int orc_dump(const char *filename)
 	for (i = 0; i < nr_entries; i++) {
 		if (rela_orc_ip) {
 			if (!gelf_getrela(rela_orc_ip, i, &rela)) {
-				ERROR_ELF("gelf_getrela");
+				WARN_ELF("gelf_getrela");
 				return -1;
 			}
 
 			if (!gelf_getsym(symtab, GELF_R_SYM(rela.r_info), &sym)) {
-				ERROR_ELF("gelf_getsym");
+				WARN_ELF("gelf_getsym");
 				return -1;
 			}
 
 			if (GELF_ST_TYPE(sym.st_info) == STT_SECTION) {
 				scn = elf_getscn(elf, sym.st_shndx);
 				if (!scn) {
-					ERROR_ELF("elf_getscn");
+					WARN_ELF("elf_getscn");
 					return -1;
 				}
 
 				if (!gelf_getshdr(scn, &sh)) {
-					ERROR_ELF("gelf_getshdr");
+					WARN_ELF("gelf_getshdr");
 					return -1;
 				}
 
 				name = elf_strptr(elf, shstrtab_idx, sh.sh_name);
 				if (!name) {
-					ERROR_ELF("elf_strptr");
+					WARN_ELF("elf_strptr");
 					return -1;
 				}
 			} else {
 				name = elf_strptr(elf, strtab_idx, sym.st_name);
 				if (!name) {
-					ERROR_ELF("elf_strptr");
+					WARN_ELF("elf_strptr");
 					return -1;
 				}
 			}

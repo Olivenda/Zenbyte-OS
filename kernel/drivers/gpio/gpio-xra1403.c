@@ -13,7 +13,6 @@
 #include <linux/mutex.h>
 #include <linux/seq_file.h>
 #include <linux/spi/spi.h>
-#include <linux/string_choices.h>
 #include <linux/regmap.h>
 
 /* XRA1403 registers */
@@ -102,13 +101,16 @@ static int xra1403_get(struct gpio_chip *chip, unsigned int offset)
 	return !!(val & BIT(offset % 8));
 }
 
-static int xra1403_set(struct gpio_chip *chip, unsigned int offset, int value)
+static void xra1403_set(struct gpio_chip *chip, unsigned int offset, int value)
 {
+	int ret;
 	struct xra1403 *xra = gpiochip_get_data(chip);
 
-	return regmap_update_bits(xra->regmap, to_reg(XRA_OCR, offset),
-				  BIT(offset % 8),
-				  value ? BIT(offset % 8) : 0);
+	ret = regmap_update_bits(xra->regmap, to_reg(XRA_OCR, offset),
+			BIT(offset % 8), value ? BIT(offset % 8) : 0);
+	if (ret)
+		dev_err(chip->parent, "Failed to set pin: %d, ret: %d\n",
+				offset, ret);
 }
 
 #ifdef CONFIG_DEBUG_FS
@@ -138,7 +140,7 @@ static void xra1403_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 		seq_printf(s, " gpio-%-3d (%-12s) %s %s\n",
 			   chip->base + i, label,
 			   (gcr & BIT(i)) ? "in" : "out",
-			   str_hi_lo(gsr & BIT(i)));
+			   (gsr & BIT(i)) ? "hi" : "lo");
 	}
 }
 #else

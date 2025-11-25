@@ -42,7 +42,7 @@ required:
   - clock-names
   - interrupts
 
-unevaluatedProperties: false
+unevaluatedProperties: true
 
 examples:
   - |

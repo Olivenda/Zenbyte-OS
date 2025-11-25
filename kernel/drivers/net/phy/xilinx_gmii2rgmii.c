@@ -64,16 +64,15 @@ static int xgmiitorgmii_read_status(struct phy_device *phydev)
 	return 0;
 }
 
-static int xgmiitorgmii_set_loopback(struct phy_device *phydev, bool enable,
-				     int speed)
+static int xgmiitorgmii_set_loopback(struct phy_device *phydev, bool enable)
 {
 	struct gmii2rgmii *priv = mdiodev_get_drvdata(&phydev->mdio);
 	int err;
 
 	if (priv->phy_drv->set_loopback)
-		err = priv->phy_drv->set_loopback(phydev, enable, speed);
+		err = priv->phy_drv->set_loopback(phydev, enable);
 	else
-		err = genphy_loopback(phydev, enable, speed);
+		err = genphy_loopback(phydev, enable);
 	if (err < 0)
 		return err;
 

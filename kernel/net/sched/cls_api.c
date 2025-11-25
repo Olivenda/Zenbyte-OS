@@ -1926,8 +1926,7 @@ static void tcf_chain_tp_remove(struct tcf_chain *chain,
 static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 					   struct tcf_chain_info *chain_info,
 					   u32 protocol, u32 prio,
-					   bool prio_allocate,
-					   struct netlink_ext_ack *extack);
+					   bool prio_allocate);
 
 /* Try to insert new proto.
  * If proto with specified priority already exists, free new proto
@@ -1951,7 +1950,8 @@ static struct tcf_proto *tcf_chain_tp_insert_unique(struct tcf_chain *chain,
 		return ERR_PTR(-EAGAIN);
 	}
 
-	tp = tcf_chain_tp_find(chain, &chain_info, protocol, prio, false, NULL);
+	tp = tcf_chain_tp_find(chain, &chain_info,
+			       protocol, prio, false);
 	if (!tp)
 		err = tcf_chain_tp_insert(chain, &chain_info, tp_new);
 	mutex_unlock(&chain->filter_chain_lock);
@@ -2011,8 +2011,7 @@ static void tcf_chain_tp_delete_empty(struct tcf_chain *chain,
 static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 					   struct tcf_chain_info *chain_info,
 					   u32 protocol, u32 prio,
-					   bool prio_allocate,
-					   struct netlink_ext_ack *extack)
+					   bool prio_allocate)
 {
 	struct tcf_proto **pprev;
 	struct tcf_proto *tp;
@@ -2023,14 +2022,9 @@ static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 	     pprev = &tp->next) {
 		if (tp->prio >= prio) {
 			if (tp->prio == prio) {
-				if (prio_allocate) {
-					NL_SET_ERR_MSG(extack, "Lowest ID from auto-alloc range already in use");
-					return ERR_PTR(-ENOSPC);
-				}
-				if (tp->protocol != protocol && protocol) {
-					NL_SET_ERR_MSG(extack, "Protocol mismatch for filter with specified priority");
+				if (prio_allocate ||
+				    (tp->protocol != protocol && protocol))
 					return ERR_PTR(-EINVAL);
-				}
 			} else {
 				tp = NULL;
 			}
@@ -2320,7 +2314,7 @@ replay:
 	}
 	block->classid = parent;
 
-	chain_index = nla_get_u32_default(tca[TCA_CHAIN], 0);
+	chain_index = tca[TCA_CHAIN] ? nla_get_u32(tca[TCA_CHAIN]) : 0;
 	if (chain_index > TC_ACT_EXT_VAL_MASK) {
 		NL_SET_ERR_MSG(extack, "Specified chain index exceeds upper limit");
 		err = -EINVAL;
@@ -2335,8 +2329,9 @@ replay:
 
 	mutex_lock(&chain->filter_chain_lock);
 	tp = tcf_chain_tp_find(chain, &chain_info, protocol,
-			       prio, prio_allocate, extack);
+			       prio, prio_allocate);
 	if (IS_ERR(tp)) {
+		NL_SET_ERR_MSG(extack, "Filter with specified priority/protocol not found");
 		err = PTR_ERR(tp);
 		goto errout_locked;
 	}
@@ -2531,7 +2526,7 @@ static int tc_del_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 		goto errout;
 	}
 
-	chain_index = nla_get_u32_default(tca[TCA_CHAIN], 0);
+	chain_index = tca[TCA_CHAIN] ? nla_get_u32(tca[TCA_CHAIN]) : 0;
 	if (chain_index > TC_ACT_EXT_VAL_MASK) {
 		NL_SET_ERR_MSG(extack, "Specified chain index exceeds upper limit");
 		err = -EINVAL;
@@ -2561,13 +2556,10 @@ static int tc_del_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 
 	mutex_lock(&chain->filter_chain_lock);
 	tp = tcf_chain_tp_find(chain, &chain_info, protocol,
-			       prio, false, extack);
-	if (!tp) {
-		err = -ENOENT;
+			       prio, false);
+	if (!tp || IS_ERR(tp)) {
 		NL_SET_ERR_MSG(extack, "Filter with specified priority/protocol not found");
-		goto errout_locked;
-	} else if (IS_ERR(tp)) {
-		err = PTR_ERR(tp);
+		err = tp ? PTR_ERR(tp) : -ENOENT;
 		goto errout_locked;
 	} else if (tca[TCA_KIND] && nla_strcmp(tca[TCA_KIND], tp->ops->kind)) {
 		NL_SET_ERR_MSG(extack, "Specified filter kind does not match existing one");
@@ -2689,7 +2681,7 @@ static int tc_get_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 		goto errout;
 	}
 
-	chain_index = nla_get_u32_default(tca[TCA_CHAIN], 0);
+	chain_index = tca[TCA_CHAIN] ? nla_get_u32(tca[TCA_CHAIN]) : 0;
 	if (chain_index > TC_ACT_EXT_VAL_MASK) {
 		NL_SET_ERR_MSG(extack, "Specified chain index exceeds upper limit");
 		err = -EINVAL;
@@ -2704,14 +2696,11 @@ static int tc_get_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 
 	mutex_lock(&chain->filter_chain_lock);
 	tp = tcf_chain_tp_find(chain, &chain_info, protocol,
-			       prio, false, extack);
+			       prio, false);
 	mutex_unlock(&chain->filter_chain_lock);
-	if (!tp) {
-		err = -ENOENT;
+	if (!tp || IS_ERR(tp)) {
 		NL_SET_ERR_MSG(extack, "Filter with specified priority/protocol not found");
-		goto errout;
-	} else if (IS_ERR(tp)) {
-		err = PTR_ERR(tp);
+		err = tp ? PTR_ERR(tp) : -ENOENT;
 		goto errout;
 	} else if (tca[TCA_KIND] && nla_strcmp(tca[TCA_KIND], tp->ops->kind)) {
 		NL_SET_ERR_MSG(extack, "Specified filter kind does not match existing one");
@@ -3132,7 +3121,7 @@ replay:
 	if (IS_ERR(block))
 		return PTR_ERR(block);
 
-	chain_index = nla_get_u32_default(tca[TCA_CHAIN], 0);
+	chain_index = tca[TCA_CHAIN] ? nla_get_u32(tca[TCA_CHAIN]) : 0;
 	if (chain_index > TC_ACT_EXT_VAL_MASK) {
 		NL_SET_ERR_MSG(extack, "Specified chain index exceeds upper limit");
 		err = -EINVAL;
@@ -4080,19 +4069,6 @@ static struct pernet_operations tcf_net_ops = {
 	.size = sizeof(struct tcf_net),
 };
 
-static const struct rtnl_msg_handler tc_filter_rtnl_msg_handlers[] __initconst = {
-	{.msgtype = RTM_NEWTFILTER, .doit = tc_new_tfilter,
-	 .flags = RTNL_FLAG_DOIT_UNLOCKED},
-	{.msgtype = RTM_DELTFILTER, .doit = tc_del_tfilter,
-	 .flags = RTNL_FLAG_DOIT_UNLOCKED},
-	{.msgtype = RTM_GETTFILTER, .doit = tc_get_tfilter,
-	 .dumpit = tc_dump_tfilter, .flags = RTNL_FLAG_DOIT_UNLOCKED},
-	{.msgtype = RTM_NEWCHAIN, .doit = tc_ctl_chain},
-	{.msgtype = RTM_DELCHAIN, .doit = tc_ctl_chain},
-	{.msgtype = RTM_GETCHAIN, .doit = tc_ctl_chain,
-	 .dumpit = tc_dump_chain},
-};
-
 static int __init tc_filter_init(void)
 {
 	int err;
@@ -4106,7 +4082,17 @@ static int __init tc_filter_init(void)
 		goto err_register_pernet_subsys;
 
 	xa_init_flags(&tcf_exts_miss_cookies_xa, XA_FLAGS_ALLOC1);
-	rtnl_register_many(tc_filter_rtnl_msg_handlers);
+
+	rtnl_register(PF_UNSPEC, RTM_NEWTFILTER, tc_new_tfilter, NULL,
+		      RTNL_FLAG_DOIT_UNLOCKED);
+	rtnl_register(PF_UNSPEC, RTM_DELTFILTER, tc_del_tfilter, NULL,
+		      RTNL_FLAG_DOIT_UNLOCKED);
+	rtnl_register(PF_UNSPEC, RTM_GETTFILTER, tc_get_tfilter,
+		      tc_dump_tfilter, RTNL_FLAG_DOIT_UNLOCKED);
+	rtnl_register(PF_UNSPEC, RTM_NEWCHAIN, tc_ctl_chain, NULL, 0);
+	rtnl_register(PF_UNSPEC, RTM_DELCHAIN, tc_ctl_chain, NULL, 0);
+	rtnl_register(PF_UNSPEC, RTM_GETCHAIN, tc_ctl_chain,
+		      tc_dump_chain, 0);
 
 	return 0;
 

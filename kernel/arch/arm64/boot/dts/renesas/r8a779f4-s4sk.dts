@@ -22,8 +22,7 @@
 		i2c5 = &i2c5;
 		serial0 = &hscif0;
 		serial1 = &hscif1;
-		ethernet0 = &rswitch_port0;
-		ethernet1 = &rswitch_port1;
+		ethernet0 = &rswitch;
 	};
 
 	chosen {
@@ -68,7 +67,6 @@
 &hscif0 {
 	pinctrl-0 = <&hscif0_pins>;
 	pinctrl-names = "default";
-	bootph-all;
 
 	uart-has-rtscts;
 	status = "okay";
@@ -181,42 +179,49 @@
 	pinctrl-0 = <&tsn0_pins>, <&tsn1_pins>;
 	pinctrl-names = "default";
 	status = "okay";
-};
 
-&rswitch_port0 {
-	reg = <0>;
-	phy-handle = <&ic99>;
-	phy-mode = "sgmii";
-	phys = <&eth_serdes 0>;
-	status = "okay";
-
-	mdio {
+	ethernet-ports {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		ic99: ethernet-phy@1 {
-			reg = <1>;
-			compatible = "ethernet-phy-ieee802.3-c45";
-			interrupts-extended = <&gpio3 10 IRQ_TYPE_LEVEL_LOW>;
+		port@0 {
+			reg = <0>;
+			phy-handle = <&ic99>;
+			phy-mode = "sgmii";
+			phys = <&eth_serdes 0>;
+
+			mdio {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				ic99: ethernet-phy@1 {
+					reg = <1>;
+					compatible = "ethernet-phy-ieee802.3-c45";
+					interrupts-extended = <&gpio3 10 IRQ_TYPE_LEVEL_LOW>;
+				};
+			};
 		};
-	};
-};
 
-&rswitch_port1 {
-	reg = <1>;
-	phy-handle = <&ic102>;
-	phy-mode = "sgmii";
-	phys = <&eth_serdes 1>;
-	status = "okay";
+		port@1 {
+			reg = <1>;
+			phy-handle = <&ic102>;
+			phy-mode = "sgmii";
+			phys = <&eth_serdes 1>;
 
-	mdio {
-		#address-cells = <1>;
-		#size-cells = <0>;
+			mdio {
+				#address-cells = <1>;
+				#size-cells = <0>;
 
-		ic102: ethernet-phy@2 {
-			reg = <2>;
-			compatible = "ethernet-phy-ieee802.3-c45";
-			interrupts-extended = <&gpio3 11 IRQ_TYPE_LEVEL_LOW>;
+				ic102: ethernet-phy@2 {
+					reg = <2>;
+					compatible = "ethernet-phy-ieee802.3-c45";
+					interrupts-extended = <&gpio3 11 IRQ_TYPE_LEVEL_LOW>;
+				};
+			};
+		};
+
+		port@2 {
+			status = "disabled";
 		};
 	};
 };

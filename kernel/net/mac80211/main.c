@@ -5,7 +5,7 @@
  * Copyright 2006-2007	Jiri Benc <jbenc@suse.cz>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright (C) 2017     Intel Deutschland GmbH
- * Copyright (C) 2018-2025 Intel Corporation
+ * Copyright (C) 2018-2023 Intel Corporation
  */
 
 #include <net/mac80211.h>
@@ -190,8 +190,7 @@ static u32 ieee80211_calc_hw_conf_chan(struct ieee80211_local *local,
 	return changed;
 }
 
-int ieee80211_hw_config(struct ieee80211_local *local, int radio_idx,
-			u32 changed)
+int ieee80211_hw_config(struct ieee80211_local *local, u32 changed)
 {
 	int ret = 0;
 
@@ -202,7 +201,7 @@ int ieee80211_hw_config(struct ieee80211_local *local, int radio_idx,
 			   IEEE80211_CONF_CHANGE_SMPS));
 
 	if (changed && local->open_count) {
-		ret = drv_config(local, radio_idx, changed);
+		ret = drv_config(local, changed);
 		/*
 		 * Goal:
 		 * HW reconfiguration should never fail, the driver has told
@@ -236,7 +235,7 @@ static int _ieee80211_hw_conf_chan(struct ieee80211_local *local,
 	if (!changed)
 		return 0;
 
-	return drv_config(local, -1, changed);
+	return drv_config(local, changed);
 }
 
 int ieee80211_hw_conf_chan(struct ieee80211_local *local)
@@ -270,7 +269,7 @@ void ieee80211_hw_conf_init(struct ieee80211_local *local)
 						       ctx ? &ctx->conf : NULL);
 	}
 
-	WARN_ON(drv_config(local, -1, changed));
+	WARN_ON(drv_config(local, changed));
 }
 
 int ieee80211_emulate_add_chanctx(struct ieee80211_hw *hw,
@@ -408,19 +407,8 @@ void ieee80211_link_info_change_notify(struct ieee80211_sub_if_data *sdata,
 
 	WARN_ON_ONCE(changed & BSS_CHANGED_VIF_CFG_FLAGS);
 
-	if (!changed)
+	if (!changed || sdata->vif.type == NL80211_IFTYPE_AP_VLAN)
 		return;
-
-	switch (sdata->vif.type) {
-	case NL80211_IFTYPE_AP_VLAN:
-		return;
-	case NL80211_IFTYPE_MONITOR:
-		if (!ieee80211_hw_check(&local->hw, WANT_MONITOR_VIF))
-			return;
-		break;
-	default:
-		break;
-	}
 
 	if (!check_sdata_in_driver(sdata))
 		return;
@@ -738,13 +726,8 @@ ieee80211_default_mgmt_stypes[NUM_NL80211_IFTYPES] = {
 	},
 	[NL80211_IFTYPE_P2P_DEVICE] = {
 		.tx = 0xffff,
-		/*
-		 * To support P2P PASN pairing let user space register to rx
-		 * also AUTH frames on P2P device interface.
-		 */
 		.rx = BIT(IEEE80211_STYPE_ACTION >> 4) |
-			BIT(IEEE80211_STYPE_PROBE_REQ >> 4) |
-			BIT(IEEE80211_STYPE_AUTH >> 4),
+			BIT(IEEE80211_STYPE_PROBE_REQ >> 4),
 	},
 };
 
@@ -1036,9 +1019,12 @@ EXPORT_SYMBOL(ieee80211_alloc_hw_nm);
 
 static int ieee80211_init_cipher_suites(struct ieee80211_local *local)
 {
+	bool have_wep = !fips_enabled; /* FIPS does not permit the use of RC4 */
 	bool have_mfp = ieee80211_hw_check(&local->hw, MFP_CAPABLE);
+	int r = 0, w = 0;
+	u32 *suites;
 	static const u32 cipher_suites[] = {
-		/* keep WEP and TKIP first, they may be removed below */
+		/* keep WEP first, it may be removed below */
 		WLAN_CIPHER_SUITE_WEP40,
 		WLAN_CIPHER_SUITE_WEP104,
 		WLAN_CIPHER_SUITE_TKIP,
@@ -1054,17 +1040,34 @@ static int ieee80211_init_cipher_suites(struct ieee80211_local *local)
 		WLAN_CIPHER_SUITE_BIP_GMAC_256,
 	};
 
-	if (ieee80211_hw_check(&local->hw, SW_CRYPTO_CONTROL) && fips_enabled) {
-		dev_err(local->hw.wiphy->dev.parent,
-			"Drivers with SW_CRYPTO_CONTROL cannot work with FIPS\n");
-		return -EINVAL;
-	}
+	if (ieee80211_hw_check(&local->hw, SW_CRYPTO_CONTROL) ||
+	    local->hw.wiphy->cipher_suites) {
+		/* If the driver advertises, or doesn't support SW crypto,
+		 * we only need to remove WEP if necessary.
+		 */
+		if (have_wep)
+			return 0;
 
-	if (WARN_ON(ieee80211_hw_check(&local->hw, SW_CRYPTO_CONTROL) &&
-		    !local->hw.wiphy->cipher_suites))
-		return -EINVAL;
+		/* well if it has _no_ ciphers ... fine */
+		if (!local->hw.wiphy->n_cipher_suites)
+			return 0;
 
-	if (fips_enabled || !local->hw.wiphy->cipher_suites) {
+		/* Driver provides cipher suites, but we need to exclude WEP */
+		suites = kmemdup_array(local->hw.wiphy->cipher_suites,
+				       local->hw.wiphy->n_cipher_suites,
+				       sizeof(u32), GFP_KERNEL);
+		if (!suites)
+			return -ENOMEM;
+
+		for (r = 0; r < local->hw.wiphy->n_cipher_suites; r++) {
+			u32 suite = local->hw.wiphy->cipher_suites[r];
+
+			if (suite == WLAN_CIPHER_SUITE_WEP40 ||
+			    suite == WLAN_CIPHER_SUITE_WEP104)
+				continue;
+			suites[w++] = suite;
+		}
+	} else {
 		/* assign the (software supported and perhaps offloaded)
 		 * cipher suites
 		 */
@@ -1074,12 +1077,18 @@ static int ieee80211_init_cipher_suites(struct ieee80211_local *local)
 		if (!have_mfp)
 			local->hw.wiphy->n_cipher_suites -= 4;
 
-		/* FIPS does not permit the use of RC4 */
-		if (fips_enabled) {
-			local->hw.wiphy->cipher_suites += 3;
-			local->hw.wiphy->n_cipher_suites -= 3;
+		if (!have_wep) {
+			local->hw.wiphy->cipher_suites += 2;
+			local->hw.wiphy->n_cipher_suites -= 2;
 		}
+
+		/* not dynamically allocated, so just return */
+		return 0;
 	}
+
+	local->hw.wiphy->cipher_suites = suites;
+	local->hw.wiphy->n_cipher_suites = w;
+	local->wiphy_ciphers_allocated = true;
 
 	return 0;
 }
@@ -1162,6 +1171,9 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 			return -EINVAL;
 
 		if (WARN_ON(!ieee80211_hw_check(hw, MFP_CAPABLE)))
+			return -EINVAL;
+
+		if (WARN_ON(!ieee80211_hw_check(hw, CONNECTION_MONITOR)))
 			return -EINVAL;
 
 		if (WARN_ON(ieee80211_hw_check(hw, NEED_DTIM_BEFORE_ASSOC)))
@@ -1295,11 +1307,6 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 			    sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40 &&
 			    !(iftd->he_cap.he_cap_elem.phy_cap_info[0] & he_40_mhz_cap))
 				return -EINVAL;
-
-			/* no support for per-band vendor elems with MLO */
-			if (WARN_ON(iftd->vendor_elems.len &&
-				    hw->wiphy->flags & WIPHY_FLAG_SUPPORTS_MLO))
-				return -EINVAL;
 		}
 
 		/* HT, VHT, HE require QoS, thus >= 4 queues */
@@ -1344,6 +1351,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 				      GFP_KERNEL);
 	if (!local->int_scan_req)
 		return -ENOMEM;
+	local->int_scan_req->n_channels = channels;
 
 	eth_broadcast_addr(local->int_scan_req->bssid);
 
@@ -1637,6 +1645,10 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	ieee80211_led_exit(local);
 	destroy_workqueue(local->workqueue);
  fail_workqueue:
+	if (local->wiphy_ciphers_allocated) {
+		kfree(local->hw.wiphy->cipher_suites);
+		local->wiphy_ciphers_allocated = false;
+	}
 	kfree(local->int_scan_req);
 	return result;
 }
@@ -1707,6 +1719,11 @@ void ieee80211_free_hw(struct ieee80211_hw *hw)
 
 	mutex_destroy(&local->iflist_mtx);
 
+	if (local->wiphy_ciphers_allocated) {
+		kfree(local->hw.wiphy->cipher_suites);
+		local->wiphy_ciphers_allocated = false;
+	}
+
 	idr_for_each(&local->ack_status_frames,
 		     ieee80211_free_ack_frame, NULL);
 	idr_destroy(&local->ack_status_frames);
@@ -1724,7 +1741,18 @@ void ieee80211_free_hw(struct ieee80211_hw *hw)
 	wiphy_free(local->hw.wiphy);
 }
 EXPORT_SYMBOL(ieee80211_free_hw);
-#define V(x)   #x,
+
+static const char * const drop_reasons_monitor[] = {
+#define V(x)	#x,
+	[0] = "RX_DROP_MONITOR",
+	MAC80211_DROP_REASONS_MONITOR(V)
+};
+
+static struct drop_reason_list drop_reason_list_monitor = {
+	.reasons = drop_reasons_monitor,
+	.n_reasons = ARRAY_SIZE(drop_reasons_monitor),
+};
+
 static const char * const drop_reasons_unusable[] = {
 	[0] = "RX_DROP_UNUSABLE",
 	MAC80211_DROP_REASONS_UNUSABLE(V)
@@ -1753,6 +1781,8 @@ static int __init ieee80211_init(void)
 	if (ret)
 		goto err_netdev;
 
+	drop_reasons_register_subsys(SKB_DROP_REASON_SUBSYS_MAC80211_MONITOR,
+				     &drop_reason_list_monitor);
 	drop_reasons_register_subsys(SKB_DROP_REASON_SUBSYS_MAC80211_UNUSABLE,
 				     &drop_reason_list_unusable);
 
@@ -1771,6 +1801,7 @@ static void __exit ieee80211_exit(void)
 
 	ieee80211_iface_exit();
 
+	drop_reasons_unregister_subsys(SKB_DROP_REASON_SUBSYS_MAC80211_MONITOR);
 	drop_reasons_unregister_subsys(SKB_DROP_REASON_SUBSYS_MAC80211_UNUSABLE);
 
 	rcu_barrier();

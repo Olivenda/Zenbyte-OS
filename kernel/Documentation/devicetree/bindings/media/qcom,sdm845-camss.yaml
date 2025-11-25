@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+
 %YAML 1.2
 ---
 $id: http://devicetree.org/schemas/media/qcom,sdm845-camss.yaml#
@@ -108,11 +109,6 @@ properties:
                 minItems: 1
                 maxItems: 4
 
-              bus-type:
-                enum:
-                  - 1 # MEDIA_BUS_TYPE_CSI2_CPHY
-                  - 4 # MEDIA_BUS_TYPE_CSI2_DPHY
-
             required:
               - data-lanes
 
@@ -131,11 +127,6 @@ properties:
               data-lanes:
                 minItems: 1
                 maxItems: 4
-
-              bus-type:
-                enum:
-                  - 1 # MEDIA_BUS_TYPE_CSI2_CPHY
-                  - 4 # MEDIA_BUS_TYPE_CSI2_DPHY
 
             required:
               - data-lanes
@@ -156,11 +147,6 @@ properties:
                 minItems: 1
                 maxItems: 4
 
-              bus-type:
-                enum:
-                  - 1 # MEDIA_BUS_TYPE_CSI2_CPHY
-                  - 4 # MEDIA_BUS_TYPE_CSI2_DPHY
-
             required:
               - data-lanes
 
@@ -179,11 +165,6 @@ properties:
               data-lanes:
                 minItems: 1
                 maxItems: 4
-
-              bus-type:
-                enum:
-                  - 1 # MEDIA_BUS_TYPE_CSI2_CPHY
-                  - 4 # MEDIA_BUS_TYPE_CSI2_DPHY
 
             required:
               - data-lanes
@@ -315,16 +296,16 @@ examples:
           "vfe_lite_cphy_rx",
           "vfe_lite_src";
 
-        interrupts = <GIC_SPI 464 IRQ_TYPE_EDGE_RISING>,
-          <GIC_SPI 466 IRQ_TYPE_EDGE_RISING>,
-          <GIC_SPI 468 IRQ_TYPE_EDGE_RISING>,
-          <GIC_SPI 477 IRQ_TYPE_EDGE_RISING>,
-          <GIC_SPI 478 IRQ_TYPE_EDGE_RISING>,
-          <GIC_SPI 479 IRQ_TYPE_EDGE_RISING>,
-          <GIC_SPI 448 IRQ_TYPE_EDGE_RISING>,
-          <GIC_SPI 465 IRQ_TYPE_EDGE_RISING>,
-          <GIC_SPI 467 IRQ_TYPE_EDGE_RISING>,
-          <GIC_SPI 469 IRQ_TYPE_EDGE_RISING>;
+        interrupts = <GIC_SPI 464 IRQ_TYPE_LEVEL_HIGH>,
+          <GIC_SPI 466 IRQ_TYPE_LEVEL_HIGH>,
+          <GIC_SPI 468 IRQ_TYPE_LEVEL_HIGH>,
+          <GIC_SPI 477 IRQ_TYPE_LEVEL_HIGH>,
+          <GIC_SPI 478 IRQ_TYPE_LEVEL_HIGH>,
+          <GIC_SPI 479 IRQ_TYPE_LEVEL_HIGH>,
+          <GIC_SPI 448 IRQ_TYPE_LEVEL_HIGH>,
+          <GIC_SPI 465 IRQ_TYPE_LEVEL_HIGH>,
+          <GIC_SPI 467 IRQ_TYPE_LEVEL_HIGH>,
+          <GIC_SPI 469 IRQ_TYPE_LEVEL_HIGH>;
 
         interrupt-names = "csid0",
           "csid1",

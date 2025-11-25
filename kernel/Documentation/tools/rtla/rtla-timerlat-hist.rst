@@ -107,5 +107,3 @@ SEE ALSO
 AUTHOR
 ======
 Written by Daniel Bristot de Oliveira <bristot@kernel.org>
-
-.. include:: common_appendix.rst

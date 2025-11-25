@@ -9,7 +9,6 @@
 #include <linux/init.h>
 #include <linux/irq.h>
 #include <asm/asm-extable.h>
-#include <asm/asm-offsets.h>
 #include <asm/pfault.h>
 #include <asm/diag.h>
 
@@ -57,7 +56,7 @@ int __pfault_init(void)
 	if (pfault_disable)
 		return rc;
 	diag_stat_inc(DIAG_STAT_X258);
-	asm_inline volatile(
+	asm volatile(
 		"	diag	%[refbk],%[rc],0x258\n"
 		"0:	nopr	%%r7\n"
 		EX_TABLE(0b, 0b)
@@ -79,7 +78,7 @@ void __pfault_fini(void)
 	if (pfault_disable)
 		return;
 	diag_stat_inc(DIAG_STAT_X258);
-	asm_inline volatile(
+	asm volatile(
 		"	diag	%[refbk],0,0x258\n"
 		"0:	nopr	%%r7\n"
 		EX_TABLE(0b, 0b)

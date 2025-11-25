@@ -40,9 +40,7 @@ struct svc_sock {
 
 	struct completion	sk_handshake_done;
 
-	/* received data */
-	unsigned long		sk_maxpages;
-	struct page *		sk_pages[] __counted_by(sk_maxpages);
+	struct page *		sk_pages[RPCSVC_MAXPAGES];	/* received data */
 };
 
 static inline u32 svc_sock_reclen(struct svc_sock *svsk)

@@ -264,7 +264,7 @@ events on a read. Their layout is::
 	    struct timeval time;
 	    unsigned short type;
 	    unsigned short code;
-	    int value;
+	    unsigned int value;
     };
 
 ``time`` is the timestamp, it returns the time at which the event happened.

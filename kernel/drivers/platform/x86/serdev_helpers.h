@@ -22,13 +22,31 @@
 #include <linux/string.h>
 
 static inline struct device *
-get_serdev_controller_from_parent(struct device *ctrl_dev,
-				  int serial_ctrl_port,
-				  const char *serdev_ctrl_name)
+get_serdev_controller(const char *serial_ctrl_hid,
+		      const char *serial_ctrl_uid,
+		      int serial_ctrl_port,
+		      const char *serdev_ctrl_name)
 {
-	struct device *child;
+	struct device *ctrl_dev, *child;
+	struct acpi_device *ctrl_adev;
 	char name[32];
 	int i;
+
+	ctrl_adev = acpi_dev_get_first_match_dev(serial_ctrl_hid, serial_ctrl_uid, -1);
+	if (!ctrl_adev) {
+		pr_err("error could not get %s/%s serial-ctrl adev\n",
+		       serial_ctrl_hid, serial_ctrl_uid ?: "*");
+		return ERR_PTR(-ENODEV);
+	}
+
+	/* get_first_physical_node() returns a weak ref */
+	ctrl_dev = get_device(acpi_get_first_physical_node(ctrl_adev));
+	if (!ctrl_dev) {
+		pr_err("error could not get %s/%s serial-ctrl physical node\n",
+		       serial_ctrl_hid, serial_ctrl_uid ?: "*");
+		ctrl_dev = ERR_PTR(-ENODEV);
+		goto put_ctrl_adev;
+	}
 
 	/* Walk host -> uart-ctrl -> port -> serdev-ctrl */
 	for (i = 0; i < 3; i++) {
@@ -49,40 +67,14 @@ get_serdev_controller_from_parent(struct device *ctrl_dev,
 		put_device(ctrl_dev);
 		if (!child) {
 			pr_err("error could not find '%s' device\n", name);
-			return ERR_PTR(-ENODEV);
+			ctrl_dev = ERR_PTR(-ENODEV);
+			goto put_ctrl_adev;
 		}
 
 		ctrl_dev = child;
 	}
 
+put_ctrl_adev:
+	acpi_dev_put(ctrl_adev);
 	return ctrl_dev;
-}
-
-static inline struct device *
-get_serdev_controller(const char *serial_ctrl_hid,
-		      const char *serial_ctrl_uid,
-		      int serial_ctrl_port,
-		      const char *serdev_ctrl_name)
-{
-	struct acpi_device *adev;
-	struct device *parent;
-
-	adev = acpi_dev_get_first_match_dev(serial_ctrl_hid, serial_ctrl_uid, -1);
-	if (!adev) {
-		pr_err("error could not get %s/%s serial-ctrl adev\n",
-		       serial_ctrl_hid, serial_ctrl_uid ?: "*");
-		return ERR_PTR(-ENODEV);
-	}
-
-	/* get_first_physical_node() returns a weak ref */
-	parent = get_device(acpi_get_first_physical_node(adev));
-	acpi_dev_put(adev);
-	if (!parent) {
-		pr_err("error could not get %s/%s serial-ctrl physical node\n",
-		       serial_ctrl_hid, serial_ctrl_uid ?: "*");
-		return ERR_PTR(-ENODEV);
-	}
-
-	/* This puts our reference on parent and returns a ref on the ctrl */
-	return get_serdev_controller_from_parent(parent, serial_ctrl_port, serdev_ctrl_name);
 }

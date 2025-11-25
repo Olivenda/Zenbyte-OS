@@ -10,10 +10,8 @@
 #include <linux/perf_event.h>
 
 #include <asm/perf_event_p4.h>
-#include <asm/cpu_device_id.h>
 #include <asm/hardirq.h>
 #include <asm/apic.h>
-#include <asm/msr.h>
 
 #include "../perf_event.h"
 
@@ -734,9 +732,9 @@ static bool p4_event_match_cpu_model(unsigned int event_idx)
 {
 	/* INSTR_COMPLETED event only exist for model 3, 4, 6 (Prescott) */
 	if (event_idx == P4_EVENT_INSTR_COMPLETED) {
-		if (boot_cpu_data.x86_vfm != INTEL_P4_PRESCOTT &&
-		    boot_cpu_data.x86_vfm != INTEL_P4_PRESCOTT_2M &&
-		    boot_cpu_data.x86_vfm != INTEL_P4_CEDARMILL)
+		if (boot_cpu_data.x86_model != 3 &&
+			boot_cpu_data.x86_model != 4 &&
+			boot_cpu_data.x86_model != 6)
 			return false;
 	}
 
@@ -778,7 +776,7 @@ static int p4_validate_raw_event(struct perf_event *event)
 	 * the user needs special permissions to be able to use it
 	 */
 	if (p4_ht_active() && p4_event_bind_map[v].shared) {
-		v = perf_allow_cpu();
+		v = perf_allow_cpu(&event->attr);
 		if (v)
 			return v;
 	}
@@ -860,9 +858,9 @@ static inline int p4_pmu_clear_cccr_ovf(struct hw_perf_event *hwc)
 	u64 v;
 
 	/* an official way for overflow indication */
-	rdmsrq(hwc->config_base, v);
+	rdmsrl(hwc->config_base, v);
 	if (v & P4_CCCR_OVF) {
-		wrmsrq(hwc->config_base, v & ~P4_CCCR_OVF);
+		wrmsrl(hwc->config_base, v & ~P4_CCCR_OVF);
 		return 1;
 	}
 
@@ -873,7 +871,7 @@ static inline int p4_pmu_clear_cccr_ovf(struct hw_perf_event *hwc)
 	 * the counter has reached zero value and continued counting before
 	 * real NMI signal was received:
 	 */
-	rdmsrq(hwc->event_base, v);
+	rdmsrl(hwc->event_base, v);
 	if (!(v & ARCH_P4_UNFLAGGED_BIT))
 		return 1;
 
@@ -898,8 +896,8 @@ static void p4_pmu_disable_pebs(void)
 	 * So at moment let leave metrics turned on forever -- it's
 	 * ok for now but need to be revisited!
 	 *
-	 * (void)wrmsrq_safe(MSR_IA32_PEBS_ENABLE, 0);
-	 * (void)wrmsrq_safe(MSR_P4_PEBS_MATRIX_VERT, 0);
+	 * (void)wrmsrl_safe(MSR_IA32_PEBS_ENABLE, 0);
+	 * (void)wrmsrl_safe(MSR_P4_PEBS_MATRIX_VERT, 0);
 	 */
 }
 
@@ -912,7 +910,7 @@ static inline void p4_pmu_disable_event(struct perf_event *event)
 	 * state we need to clear P4_CCCR_OVF, otherwise interrupt get
 	 * asserted again and again
 	 */
-	(void)wrmsrq_safe(hwc->config_base,
+	(void)wrmsrl_safe(hwc->config_base,
 		p4_config_unpack_cccr(hwc->config) & ~P4_CCCR_ENABLE & ~P4_CCCR_OVF & ~P4_CCCR_RESERVED);
 }
 
@@ -945,8 +943,8 @@ static void p4_pmu_enable_pebs(u64 config)
 
 	bind = &p4_pebs_bind_map[idx];
 
-	(void)wrmsrq_safe(MSR_IA32_PEBS_ENABLE,	(u64)bind->metric_pebs);
-	(void)wrmsrq_safe(MSR_P4_PEBS_MATRIX_VERT,	(u64)bind->metric_vert);
+	(void)wrmsrl_safe(MSR_IA32_PEBS_ENABLE,	(u64)bind->metric_pebs);
+	(void)wrmsrl_safe(MSR_P4_PEBS_MATRIX_VERT,	(u64)bind->metric_vert);
 }
 
 static void __p4_pmu_enable_event(struct perf_event *event)
@@ -980,8 +978,8 @@ static void __p4_pmu_enable_event(struct perf_event *event)
 	 */
 	p4_pmu_enable_pebs(hwc->config);
 
-	(void)wrmsrq_safe(escr_addr, escr_conf);
-	(void)wrmsrq_safe(hwc->config_base,
+	(void)wrmsrl_safe(escr_addr, escr_conf);
+	(void)wrmsrl_safe(hwc->config_base,
 				(cccr & ~P4_CCCR_RESERVED) | P4_CCCR_ENABLE);
 }
 
@@ -1025,7 +1023,7 @@ static int p4_pmu_set_period(struct perf_event *event)
 		 *
 		 * the former idea is taken from OProfile code
 		 */
-		wrmsrq(hwc->event_base, (u64)(-left) & x86_pmu.cntval_mask);
+		wrmsrl(hwc->event_base, (u64)(-left) & x86_pmu.cntval_mask);
 	}
 
 	return ret;
@@ -1073,7 +1071,8 @@ static int p4_pmu_handle_irq(struct pt_regs *regs)
 			continue;
 
 
-		perf_event_overflow(event, &data, regs);
+		if (perf_event_overflow(event, &data, regs))
+			x86_pmu_stop(event, 0);
 	}
 
 	if (handled)
@@ -1398,7 +1397,7 @@ __init int p4_pmu_init(void)
 	 */
 	for_each_set_bit(i, x86_pmu.cntr_mask, X86_PMC_IDX_MAX) {
 		reg = x86_pmu_config_addr(i);
-		wrmsrq_safe(reg, 0ULL);
+		wrmsrl_safe(reg, 0ULL);
 	}
 
 	return 0;

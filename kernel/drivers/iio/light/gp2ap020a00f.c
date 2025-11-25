@@ -1159,7 +1159,7 @@ static int gp2ap020a00f_write_event_config(struct iio_dev *indio_dev,
 					   const struct iio_chan_spec *chan,
 					   enum iio_event_type type,
 					   enum iio_event_direction dir,
-					   bool state)
+					   int state)
 {
 	struct gp2ap020a00f_data *data = iio_priv(indio_dev);
 	enum gp2ap020a00f_cmd cmd;
@@ -1283,11 +1283,12 @@ static int gp2ap020a00f_read_raw(struct iio_dev *indio_dev,
 	int err = -EINVAL;
 
 	if (mask == IIO_CHAN_INFO_RAW) {
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		err = iio_device_claim_direct_mode(indio_dev);
+		if (err)
+			return err;
 
 		err = gp2ap020a00f_read_channel(data, chan, val);
-		iio_device_release_direct(indio_dev);
+		iio_device_release_direct_mode(indio_dev);
 	}
 	return err < 0 ? err : IIO_VAL_INT;
 }

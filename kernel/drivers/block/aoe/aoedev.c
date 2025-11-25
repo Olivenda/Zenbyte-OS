@@ -149,7 +149,7 @@ dummy_timer(struct timer_list *t)
 {
 	struct aoedev *d;
 
-	d = timer_container_of(d, t, timer);
+	d = from_timer(d, t, timer);
 	if (d->flags & DEVFL_TKILL)
 		return;
 	d->timer.expires = jiffies + HZ;
@@ -237,11 +237,10 @@ aoedev_downdev(struct aoedev *d)
 	/* fast fail all pending I/O */
 	if (d->blkq) {
 		/* UP is cleared, freeze+quiesce to insure all are errored */
-		unsigned int memflags = blk_mq_freeze_queue(d->blkq);
-
+		blk_mq_freeze_queue(d->blkq);
 		blk_mq_quiesce_queue(d->blkq);
 		blk_mq_unquiesce_queue(d->blkq);
-		blk_mq_unfreeze_queue(d->blkq, memflags);
+		blk_mq_unfreeze_queue(d->blkq);
 	}
 
 	if (d->gd)
@@ -285,7 +284,7 @@ freedev(struct aoedev *d)
 	if (!freeing)
 		return;
 
-	timer_delete_sync(&d->timer);
+	del_timer_sync(&d->timer);
 	if (d->gd) {
 		aoedisk_rm_debugfs(d);
 		del_gendisk(d->gd);

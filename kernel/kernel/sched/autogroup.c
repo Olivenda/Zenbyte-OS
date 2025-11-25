@@ -4,15 +4,12 @@
  * Auto-group scheduling implementation:
  */
 
-#include "autogroup.h"
-#include "sched.h"
-
 unsigned int __read_mostly sysctl_sched_autogroup_enabled = 1;
 static struct autogroup autogroup_default;
 static atomic_t autogroup_seq_nr;
 
 #ifdef CONFIG_SYSCTL
-static const struct ctl_table sched_autogroup_sysctls[] = {
+static struct ctl_table sched_autogroup_sysctls[] = {
 	{
 		.procname       = "sched_autogroup_enabled",
 		.data           = &sysctl_sched_autogroup_enabled,
@@ -28,9 +25,9 @@ static void __init sched_autogroup_sysctl_init(void)
 {
 	register_sysctl_init("kernel", sched_autogroup_sysctls);
 }
-#else /* !CONFIG_SYSCTL: */
+#else
 #define sched_autogroup_sysctl_init() do { } while (0)
-#endif /* !CONFIG_SYSCTL */
+#endif
 
 void __init autogroup_init(struct task_struct *init_task)
 {
@@ -111,7 +108,7 @@ static inline struct autogroup *autogroup_create(void)
 	free_rt_sched_group(tg);
 	tg->rt_se = root_task_group.rt_se;
 	tg->rt_rq = root_task_group.rt_rq;
-#endif /* CONFIG_RT_GROUP_SCHED */
+#endif
 	tg->autogroup = ag;
 
 	sched_online_group(tg, &root_task_group);

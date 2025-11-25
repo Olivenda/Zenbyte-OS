@@ -79,8 +79,7 @@ static struct msm_ringbuffer *get_next_ring(struct msm_gpu *gpu)
 
 static void a5xx_preempt_timer(struct timer_list *t)
 {
-	struct a5xx_gpu *a5xx_gpu = timer_container_of(a5xx_gpu, t,
-						       preempt_timer);
+	struct a5xx_gpu *a5xx_gpu = from_timer(a5xx_gpu, t, preempt_timer);
 	struct msm_gpu *gpu = &a5xx_gpu->base.base;
 	struct drm_device *dev = gpu->dev;
 
@@ -183,7 +182,7 @@ void a5xx_preempt_irq(struct msm_gpu *gpu)
 		return;
 
 	/* Delete the preemption watchdog timer */
-	timer_delete(&a5xx_gpu->preempt_timer);
+	del_timer(&a5xx_gpu->preempt_timer);
 
 	/*
 	 * The hardware should be setting CP_CONTEXT_SWITCH_CNTL to zero before
@@ -255,7 +254,7 @@ static int preempt_init_ring(struct a5xx_gpu *a5xx_gpu,
 
 	ptr = msm_gem_kernel_new(gpu->dev,
 		A5XX_PREEMPT_RECORD_SIZE + A5XX_PREEMPT_COUNTER_SIZE,
-		MSM_BO_WC | MSM_BO_MAP_PRIV, gpu->vm, &bo, &iova);
+		MSM_BO_WC | MSM_BO_MAP_PRIV, gpu->aspace, &bo, &iova);
 
 	if (IS_ERR(ptr))
 		return PTR_ERR(ptr);
@@ -263,9 +262,9 @@ static int preempt_init_ring(struct a5xx_gpu *a5xx_gpu,
 	/* The buffer to store counters needs to be unprivileged */
 	counters = msm_gem_kernel_new(gpu->dev,
 		A5XX_PREEMPT_COUNTER_SIZE,
-		MSM_BO_WC, gpu->vm, &counters_bo, &counters_iova);
+		MSM_BO_WC, gpu->aspace, &counters_bo, &counters_iova);
 	if (IS_ERR(counters)) {
-		msm_gem_kernel_put(bo, gpu->vm);
+		msm_gem_kernel_put(bo, gpu->aspace);
 		return PTR_ERR(counters);
 	}
 
@@ -296,8 +295,8 @@ void a5xx_preempt_fini(struct msm_gpu *gpu)
 	int i;
 
 	for (i = 0; i < gpu->nr_rings; i++) {
-		msm_gem_kernel_put(a5xx_gpu->preempt_bo[i], gpu->vm);
-		msm_gem_kernel_put(a5xx_gpu->preempt_counters_bo[i], gpu->vm);
+		msm_gem_kernel_put(a5xx_gpu->preempt_bo[i], gpu->aspace);
+		msm_gem_kernel_put(a5xx_gpu->preempt_counters_bo[i], gpu->aspace);
 	}
 }
 

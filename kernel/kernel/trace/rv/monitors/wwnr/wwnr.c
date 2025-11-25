@@ -10,7 +10,7 @@
 
 #define MODULE_NAME "wwnr"
 
-#include <rv_trace.h>
+#include <trace/events/rv.h>
 #include <trace/events/sched.h>
 
 #include "wwnr.h"
@@ -70,7 +70,8 @@ static struct rv_monitor rv_wwnr = {
 
 static int __init register_wwnr(void)
 {
-	return rv_register_monitor(&rv_wwnr, NULL);
+	rv_register_monitor(&rv_wwnr);
+	return 0;
 }
 
 static void __exit unregister_wwnr(void)

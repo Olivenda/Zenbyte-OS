@@ -283,6 +283,18 @@ static int idtcm_extts_enable(struct idtcm_channel *channel,
 	idtcm = channel->idtcm;
 	old_mask = idtcm->extts_mask;
 
+	/* Reject requests with unsupported flags */
+	if (rq->extts.flags & ~(PTP_ENABLE_FEATURE |
+				PTP_RISING_EDGE |
+				PTP_FALLING_EDGE |
+				PTP_STRICT_FLAGS))
+		return -EOPNOTSUPP;
+
+	/* Reject requests to enable time stamping on falling edge */
+	if ((rq->extts.flags & PTP_ENABLE_FEATURE) &&
+	    (rq->extts.flags & PTP_FALLING_EDGE))
+		return -EOPNOTSUPP;
+
 	if (index >= MAX_TOD)
 		return -EINVAL;
 
@@ -2031,7 +2043,6 @@ static const struct ptp_clock_info idtcm_caps = {
 	.n_per_out	= 12,
 	.n_ext_ts	= MAX_TOD,
 	.n_pins		= MAX_REF_CLK,
-	.supported_extts_flags = PTP_RISING_EDGE | PTP_STRICT_FLAGS,
 	.adjphase	= &idtcm_adjphase,
 	.getmaxphase	= &idtcm_getmaxphase,
 	.adjfine	= &idtcm_adjfine,
@@ -2049,7 +2060,6 @@ static const struct ptp_clock_info idtcm_caps_deprecated = {
 	.n_per_out	= 12,
 	.n_ext_ts	= MAX_TOD,
 	.n_pins		= MAX_REF_CLK,
-	.supported_extts_flags = PTP_RISING_EDGE | PTP_STRICT_FLAGS,
 	.adjphase	= &idtcm_adjphase,
 	.getmaxphase    = &idtcm_getmaxphase,
 	.adjfine	= &idtcm_adjfine,
@@ -2461,7 +2471,7 @@ static struct platform_driver idtcm_driver = {
 		.name = "8a3400x-phc",
 	},
 	.probe = idtcm_probe,
-	.remove = idtcm_remove,
+	.remove_new = idtcm_remove,
 };
 
 module_platform_driver(idtcm_driver);

@@ -7,7 +7,6 @@
 #include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/blkdev.h>
-#include <linux/blk-integrity.h>
 #include <linux/buffer_head.h>
 #include <linux/mpage.h>
 #include <linux/uio.h>
@@ -73,7 +72,6 @@ static ssize_t __blkdev_direct_IO_simple(struct kiocb *iocb,
 	}
 	bio.bi_iter.bi_sector = pos >> SECTOR_SHIFT;
 	bio.bi_write_hint = file_inode(iocb->ki_filp)->i_write_hint;
-	bio.bi_write_stream = iocb->ki_write_stream;
 	bio.bi_ioprio = iocb->ki_ioprio;
 	if (iocb->ki_flags & IOCB_ATOMIC)
 		bio.bi_opf |= REQ_ATOMIC;
@@ -126,16 +124,12 @@ static void blkdev_bio_end_io(struct bio *bio)
 {
 	struct blkdev_dio *dio = bio->bi_private;
 	bool should_dirty = dio->flags & DIO_SHOULD_DIRTY;
-	bool is_sync = dio->flags & DIO_IS_SYNC;
 
 	if (bio->bi_status && !dio->bio.bi_status)
 		dio->bio.bi_status = bio->bi_status;
 
-	if (bio_integrity(bio))
-		bio_integrity_unmap_user(bio);
-
 	if (atomic_dec_and_test(&dio->ref)) {
-		if (!is_sync) {
+		if (!(dio->flags & DIO_IS_SYNC)) {
 			struct kiocb *iocb = dio->iocb;
 			ssize_t ret;
 
@@ -207,7 +201,6 @@ static ssize_t __blkdev_direct_IO(struct kiocb *iocb, struct iov_iter *iter,
 	for (;;) {
 		bio->bi_iter.bi_sector = pos >> SECTOR_SHIFT;
 		bio->bi_write_hint = file_inode(iocb->ki_filp)->i_write_hint;
-		bio->bi_write_stream = iocb->ki_write_stream;
 		bio->bi_private = dio;
 		bio->bi_end_io = blkdev_bio_end_io;
 		bio->bi_ioprio = iocb->ki_ioprio;
@@ -228,15 +221,13 @@ static ssize_t __blkdev_direct_IO(struct kiocb *iocb, struct iov_iter *iter,
 			 * a retry of this from blocking context.
 			 */
 			if (unlikely(iov_iter_count(iter))) {
-				ret = -EAGAIN;
-				goto fail;
+				bio_release_pages(bio, false);
+				bio_clear_flag(bio, BIO_REFFED);
+				bio_put(bio);
+				blk_finish_plug(&plug);
+				return -EAGAIN;
 			}
 			bio->bi_opf |= REQ_NOWAIT;
-		}
-		if (iocb->ki_flags & IOCB_HAS_METADATA) {
-			ret = bio_integrity_map_iter(bio, iocb->private);
-			if (unlikely(ret))
-				goto fail;
 		}
 
 		if (is_read) {
@@ -278,12 +269,6 @@ static ssize_t __blkdev_direct_IO(struct kiocb *iocb, struct iov_iter *iter,
 
 	bio_put(&dio->bio);
 	return ret;
-fail:
-	bio_release_pages(bio, false);
-	bio_clear_flag(bio, BIO_REFFED);
-	bio_put(bio);
-	blk_finish_plug(&plug);
-	return ret;
 }
 
 static void blkdev_bio_end_io_async(struct bio *bio)
@@ -300,9 +285,6 @@ static void blkdev_bio_end_io_async(struct bio *bio)
 	} else {
 		ret = blk_status_to_errno(bio->bi_status);
 	}
-
-	if (bio_integrity(bio))
-		bio_integrity_unmap_user(bio);
 
 	iocb->ki_complete(iocb, ret);
 
@@ -335,7 +317,6 @@ static ssize_t __blkdev_direct_IO_async(struct kiocb *iocb,
 	dio->iocb = iocb;
 	bio->bi_iter.bi_sector = pos >> SECTOR_SHIFT;
 	bio->bi_write_hint = file_inode(iocb->ki_filp)->i_write_hint;
-	bio->bi_write_stream = iocb->ki_write_stream;
 	bio->bi_end_io = blkdev_bio_end_io_async;
 	bio->bi_ioprio = iocb->ki_ioprio;
 
@@ -349,8 +330,10 @@ static ssize_t __blkdev_direct_IO_async(struct kiocb *iocb,
 		bio_iov_bvec_set(bio, iter);
 	} else {
 		ret = bio_iov_iter_get_pages(bio, iter);
-		if (unlikely(ret))
-			goto out_bio_put;
+		if (unlikely(ret)) {
+			bio_put(bio);
+			return ret;
+		}
 	}
 	dio->size = bio->bi_iter.bi_size;
 
@@ -361,13 +344,6 @@ static ssize_t __blkdev_direct_IO_async(struct kiocb *iocb,
 		}
 	} else {
 		task_io_account_write(bio->bi_iter.bi_size);
-	}
-
-	if (iocb->ki_flags & IOCB_HAS_METADATA) {
-		ret = bio_integrity_map_iter(bio, iocb->private);
-		WRITE_ONCE(iocb->private, NULL);
-		if (unlikely(ret))
-			goto out_bio_put;
 	}
 
 	if (iocb->ki_flags & IOCB_ATOMIC)
@@ -384,10 +360,6 @@ static ssize_t __blkdev_direct_IO_async(struct kiocb *iocb,
 		submit_bio(bio);
 	}
 	return -EIOCBQUEUED;
-
-out_bio_put:
-	bio_put(bio);
-	return ret;
 }
 
 static ssize_t blkdev_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
@@ -401,29 +373,8 @@ static ssize_t blkdev_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	if (blkdev_dio_invalid(bdev, iocb, iter))
 		return -EINVAL;
 
-	if (iov_iter_rw(iter) == WRITE) {
-		u16 max_write_streams = bdev_max_write_streams(bdev);
-
-		if (iocb->ki_write_stream) {
-			if (iocb->ki_write_stream > max_write_streams)
-				return -EINVAL;
-		} else if (max_write_streams) {
-			enum rw_hint write_hint =
-				file_inode(iocb->ki_filp)->i_write_hint;
-
-			/*
-			 * Just use the write hint as write stream for block
-			 * device writes.  This assumes no file system is
-			 * mounted that would use the streams differently.
-			 */
-			if (write_hint <= max_write_streams)
-				iocb->ki_write_stream = write_hint;
-		}
-	}
-
 	nr_pages = bio_iov_vecs_to_alloc(iter, BIO_MAX_VECS + 1);
-	if (likely(nr_pages <= BIO_MAX_VECS &&
-		   !(iocb->ki_flags & IOCB_HAS_METADATA))) {
+	if (likely(nr_pages <= BIO_MAX_VECS)) {
 		if (is_sync_kiocb(iocb))
 			return __blkdev_direct_IO_simple(iocb, iter, bdev,
 							nr_pages);
@@ -475,13 +426,12 @@ static int blkdev_get_block(struct inode *inode, sector_t iblock,
 static int blkdev_writepages(struct address_space *mapping,
 		struct writeback_control *wbc)
 {
-	struct folio *folio = NULL;
 	struct blk_plug plug;
 	int err;
 
 	blk_start_plug(&plug);
-	while ((folio = writeback_iter(mapping, wbc, folio, &err)))
-		err = block_write_full_folio(folio, wbc, blkdev_get_block);
+	err = write_cache_pages(mapping, wbc, block_write_full_folio,
+			blkdev_get_block);
 	blk_finish_plug(&plug);
 
 	return err;
@@ -497,21 +447,18 @@ static void blkdev_readahead(struct readahead_control *rac)
 	mpage_readahead(rac, blkdev_get_block);
 }
 
-static int blkdev_write_begin(const struct kiocb *iocb,
-			      struct address_space *mapping, loff_t pos,
-			      unsigned len, struct folio **foliop,
-			      void **fsdata)
+static int blkdev_write_begin(struct file *file, struct address_space *mapping,
+		loff_t pos, unsigned len, struct folio **foliop, void **fsdata)
 {
 	return block_write_begin(mapping, pos, len, foliop, blkdev_get_block);
 }
 
-static int blkdev_write_end(const struct kiocb *iocb,
-			    struct address_space *mapping,
-			    loff_t pos, unsigned len, unsigned copied,
-			    struct folio *folio, void *fsdata)
+static int blkdev_write_end(struct file *file, struct address_space *mapping,
+		loff_t pos, unsigned len, unsigned copied, struct folio *folio,
+		void *fsdata)
 {
 	int ret;
-	ret = block_write_end(pos, len, copied, folio);
+	ret = block_write_end(file, mapping, pos, len, copied, folio, fsdata);
 
 	folio_unlock(folio);
 	folio_put(folio);
@@ -541,42 +488,30 @@ static void blkdev_readahead(struct readahead_control *rac)
 	iomap_readahead(rac, &blkdev_iomap_ops);
 }
 
-static ssize_t blkdev_writeback_range(struct iomap_writepage_ctx *wpc,
-		struct folio *folio, u64 offset, unsigned int len, u64 end_pos)
+static int blkdev_map_blocks(struct iomap_writepage_ctx *wpc,
+		struct inode *inode, loff_t offset, unsigned int len)
 {
-	loff_t isize = i_size_read(wpc->inode);
+	loff_t isize = i_size_read(inode);
 
 	if (WARN_ON_ONCE(offset >= isize))
 		return -EIO;
-
-	if (offset < wpc->iomap.offset ||
-	    offset >= wpc->iomap.offset + wpc->iomap.length) {
-		int error;
-
-		error = blkdev_iomap_begin(wpc->inode, offset, isize - offset,
-				IOMAP_WRITE, &wpc->iomap, NULL);
-		if (error)
-			return error;
-	}
-
-	return iomap_add_to_ioend(wpc, folio, offset, end_pos, len);
+	if (offset >= wpc->iomap.offset &&
+	    offset < wpc->iomap.offset + wpc->iomap.length)
+		return 0;
+	return blkdev_iomap_begin(inode, offset, isize - offset,
+				  IOMAP_WRITE, &wpc->iomap, NULL);
 }
 
 static const struct iomap_writeback_ops blkdev_writeback_ops = {
-	.writeback_range	= blkdev_writeback_range,
-	.writeback_submit	= iomap_ioend_writeback_submit,
+	.map_blocks		= blkdev_map_blocks,
 };
 
 static int blkdev_writepages(struct address_space *mapping,
 		struct writeback_control *wbc)
 {
-	struct iomap_writepage_ctx wpc = {
-		.inode		= mapping->host,
-		.wbc		= wbc,
-		.ops		= &blkdev_writeback_ops
-	};
+	struct iomap_writepage_ctx wpc = { };
 
-	return iomap_writepages(&wpc);
+	return iomap_writepages(mapping, wbc, &wpc, &blkdev_writeback_ops);
 }
 
 const struct address_space_operations def_blk_aops = {
@@ -682,14 +617,12 @@ static int blkdev_open(struct inode *inode, struct file *filp)
 	if (ret)
 		return ret;
 
-	bdev = blkdev_get_no_open(inode->i_rdev, true);
+	bdev = blkdev_get_no_open(inode->i_rdev);
 	if (!bdev)
 		return -ENXIO;
 
 	if (bdev_can_atomic_write(bdev))
 		filp->f_mode |= FMODE_CAN_ATOMIC_WRITE;
-	if (blk_get_integrity(bdev->bd_disk))
-		filp->f_mode |= FMODE_HAS_METADATA;
 
 	ret = bdev_open(bdev, mode, filp->private_data, NULL, filp);
 	if (ret)
@@ -729,8 +662,7 @@ blkdev_direct_write(struct kiocb *iocb, struct iov_iter *from)
 
 static ssize_t blkdev_buffered_write(struct kiocb *iocb, struct iov_iter *from)
 {
-	return iomap_file_buffered_write(iocb, from, &blkdev_iomap_ops, NULL,
-			NULL);
+	return iomap_file_buffered_write(iocb, from, &blkdev_iomap_ops, NULL);
 }
 
 /*
@@ -860,7 +792,7 @@ reexpand:
 
 #define	BLKDEV_FALLOC_FL_SUPPORTED					\
 		(FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE |		\
-		 FALLOC_FL_ZERO_RANGE | FALLOC_FL_WRITE_ZEROES)
+		 FALLOC_FL_ZERO_RANGE)
 
 static long blkdev_fallocate(struct file *file, int mode, loff_t start,
 			     loff_t len)
@@ -869,18 +801,10 @@ static long blkdev_fallocate(struct file *file, int mode, loff_t start,
 	struct block_device *bdev = I_BDEV(inode);
 	loff_t end = start + len - 1;
 	loff_t isize;
-	unsigned int flags;
 	int error;
 
 	/* Fail if we don't recognize the flags. */
 	if (mode & ~BLKDEV_FALLOC_FL_SUPPORTED)
-		return -EOPNOTSUPP;
-	/*
-	 * Don't allow writing zeroes if the device does not enable the
-	 * unmap write zeroes operation.
-	 */
-	if ((mode & FALLOC_FL_WRITE_ZEROES) &&
-	    !bdev_write_zeroes_unmap_sectors(bdev))
 		return -EOPNOTSUPP;
 
 	/* Don't go off the end of the device. */
@@ -904,46 +828,48 @@ static long blkdev_fallocate(struct file *file, int mode, loff_t start,
 	inode_lock(inode);
 	filemap_invalidate_lock(inode->i_mapping);
 
-	switch (mode) {
-	case FALLOC_FL_ZERO_RANGE:
-	case FALLOC_FL_ZERO_RANGE | FALLOC_FL_KEEP_SIZE:
-		flags = BLKDEV_ZERO_NOUNMAP;
-		break;
-	case FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE:
-		flags = BLKDEV_ZERO_NOFALLBACK;
-		break;
-	case FALLOC_FL_WRITE_ZEROES:
-		flags = 0;
-		break;
-	default:
-		error = -EOPNOTSUPP;
-		goto fail;
-	}
-
 	/*
 	 * Invalidate the page cache, including dirty pages, for valid
 	 * de-allocate mode calls to fallocate().
 	 */
-	error = truncate_bdev_range(bdev, file_to_blk_mode(file), start, end);
-	if (error)
-		goto fail;
+	switch (mode) {
+	case FALLOC_FL_ZERO_RANGE:
+	case FALLOC_FL_ZERO_RANGE | FALLOC_FL_KEEP_SIZE:
+		error = truncate_bdev_range(bdev, file_to_blk_mode(file), start, end);
+		if (error)
+			goto fail;
 
-	error = blkdev_issue_zeroout(bdev, start >> SECTOR_SHIFT,
-				     len >> SECTOR_SHIFT, GFP_KERNEL, flags);
+		error = blkdev_issue_zeroout(bdev, start >> SECTOR_SHIFT,
+					     len >> SECTOR_SHIFT, GFP_KERNEL,
+					     BLKDEV_ZERO_NOUNMAP);
+		break;
+	case FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE:
+		error = truncate_bdev_range(bdev, file_to_blk_mode(file), start, end);
+		if (error)
+			goto fail;
+
+		error = blkdev_issue_zeroout(bdev, start >> SECTOR_SHIFT,
+					     len >> SECTOR_SHIFT, GFP_KERNEL,
+					     BLKDEV_ZERO_NOFALLBACK);
+		break;
+	default:
+		error = -EOPNOTSUPP;
+	}
+
  fail:
 	filemap_invalidate_unlock(inode->i_mapping);
 	inode_unlock(inode);
 	return error;
 }
 
-static int blkdev_mmap_prepare(struct vm_area_desc *desc)
+static int blkdev_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	struct file *file = desc->file;
+	struct inode *bd_inode = bdev_file_inode(file);
 
-	if (bdev_read_only(I_BDEV(bdev_file_inode(file))))
-		return generic_file_readonly_mmap_prepare(desc);
+	if (bdev_read_only(I_BDEV(bd_inode)))
+		return generic_file_readonly_mmap(file, vma);
 
-	return generic_file_mmap_prepare(desc);
+	return generic_file_mmap(file, vma);
 }
 
 const struct file_operations def_blk_fops = {
@@ -953,7 +879,7 @@ const struct file_operations def_blk_fops = {
 	.read_iter	= blkdev_read_iter,
 	.write_iter	= blkdev_write_iter,
 	.iopoll		= iocb_bio_iopoll,
-	.mmap_prepare	= blkdev_mmap_prepare,
+	.mmap		= blkdev_mmap,
 	.fsync		= blkdev_fsync,
 	.unlocked_ioctl	= blkdev_ioctl,
 #ifdef CONFIG_COMPAT

@@ -2608,7 +2608,7 @@ static void sbmac_remove(struct platform_device *pldev)
 
 static struct platform_driver sbmac_driver = {
 	.probe = sbmac_probe,
-	.remove = sbmac_remove,
+	.remove_new = sbmac_remove,
 	.driver = {
 		.name = sbmac_string,
 	},

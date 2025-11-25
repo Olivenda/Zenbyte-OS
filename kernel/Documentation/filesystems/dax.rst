@@ -206,6 +206,8 @@ stall the CPU for an extended period, you should also not attempt to
 implement direct_access.
 
 These block devices may be used for inspiration:
+- brd: RAM backed block device driver
+- dcssblk: s390 dcss block device driver
 - pmem: NVDIMM persistent memory driver
 
 

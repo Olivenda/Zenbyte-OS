@@ -444,8 +444,18 @@ static int w1_read(struct device *dev, enum hwmon_sensor_types type,
 	}
 }
 
+static const u32 w1_temp_config[] = {
+	HWMON_T_INPUT,
+	0
+};
+
+static const struct hwmon_channel_info w1_temp = {
+	.type = hwmon_temp,
+	.config = w1_temp_config,
+};
+
 static const struct hwmon_channel_info * const w1_info[] = {
-	HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT),
+	&w1_temp,
 	NULL
 };
 

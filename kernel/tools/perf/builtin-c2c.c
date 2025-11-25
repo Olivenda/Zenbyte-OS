@@ -195,14 +195,12 @@ static struct hist_entry_ops c2c_entry_ops = {
 
 static int c2c_hists__init(struct c2c_hists *hists,
 			   const char *sort,
-			   int nr_header_lines,
-			   struct perf_env *env);
+			   int nr_header_lines);
 
 static struct c2c_hists*
 he__get_c2c_hists(struct hist_entry *he,
 		  const char *sort,
-		  int nr_header_lines,
-		  struct perf_env *env)
+		  int nr_header_lines)
 {
 	struct c2c_hist_entry *c2c_he;
 	struct c2c_hists *hists;
@@ -216,7 +214,7 @@ he__get_c2c_hists(struct hist_entry *he,
 	if (!hists)
 		return NULL;
 
-	ret = c2c_hists__init(hists, sort, nr_header_lines, env);
+	ret = c2c_hists__init(hists, sort, nr_header_lines);
 	if (ret) {
 		free(hists);
 		return NULL;
@@ -352,7 +350,7 @@ static int process_sample_event(const struct perf_tool *tool __maybe_unused,
 
 		mi = mi_dup;
 
-		c2c_hists = he__get_c2c_hists(he, c2c.cl_sort, 2, machine->env);
+		c2c_hists = he__get_c2c_hists(he, c2c.cl_sort, 2);
 		if (!c2c_hists)
 			goto free_mi;
 
@@ -1968,29 +1966,27 @@ static struct c2c_fmt *get_format(const char *name)
 	return c2c_fmt;
 }
 
-static int c2c_hists__init_output(struct perf_hpp_list *hpp_list, char *name,
-				  struct perf_env *env __maybe_unused)
+static int c2c_hists__init_output(struct perf_hpp_list *hpp_list, char *name)
 {
 	struct c2c_fmt *c2c_fmt = get_format(name);
-	int level = 0;
 
 	if (!c2c_fmt) {
 		reset_dimensions();
-		return output_field_add(hpp_list, name, &level);
+		return output_field_add(hpp_list, name);
 	}
 
 	perf_hpp_list__column_register(hpp_list, &c2c_fmt->fmt);
 	return 0;
 }
 
-static int c2c_hists__init_sort(struct perf_hpp_list *hpp_list, char *name, struct perf_env *env)
+static int c2c_hists__init_sort(struct perf_hpp_list *hpp_list, char *name)
 {
 	struct c2c_fmt *c2c_fmt = get_format(name);
 	struct c2c_dimension *dim;
 
 	if (!c2c_fmt) {
 		reset_dimensions();
-		return sort_dimension__add(hpp_list, name, /*evlist=*/NULL, env, /*level=*/0);
+		return sort_dimension__add(hpp_list, name, NULL, 0);
 	}
 
 	dim = c2c_fmt->dim;
@@ -2011,7 +2007,7 @@ static int c2c_hists__init_sort(struct perf_hpp_list *hpp_list, char *name, stru
 										\
 		for (tok = strtok_r((char *)_list, ", ", &tmp);			\
 				tok; tok = strtok_r(NULL, ", ", &tmp)) {	\
-			ret = _fn(hpp_list, tok, env);				\
+			ret = _fn(hpp_list, tok);				\
 			if (ret == -EINVAL) {					\
 				pr_err("Invalid --fields key: `%s'", tok);	\
 				break;						\
@@ -2024,8 +2020,7 @@ static int c2c_hists__init_sort(struct perf_hpp_list *hpp_list, char *name, stru
 
 static int hpp_list__parse(struct perf_hpp_list *hpp_list,
 			   const char *output_,
-			   const char *sort_,
-			   struct perf_env *env)
+			   const char *sort_)
 {
 	char *output = output_ ? strdup(output_) : NULL;
 	char *sort   = sort_   ? strdup(sort_) : NULL;
@@ -2056,8 +2051,7 @@ static int hpp_list__parse(struct perf_hpp_list *hpp_list,
 
 static int c2c_hists__init(struct c2c_hists *hists,
 			   const char *sort,
-			   int nr_header_lines,
-			   struct perf_env *env)
+			   int nr_header_lines)
 {
 	__hists__init(&hists->hists, &hists->list);
 
@@ -2071,16 +2065,15 @@ static int c2c_hists__init(struct c2c_hists *hists,
 	/* Overload number of header lines.*/
 	hists->list.nr_header_lines = nr_header_lines;
 
-	return hpp_list__parse(&hists->list, /*output=*/NULL, sort, env);
+	return hpp_list__parse(&hists->list, NULL, sort);
 }
 
 static int c2c_hists__reinit(struct c2c_hists *c2c_hists,
 			     const char *output,
-			     const char *sort,
-			     struct perf_env *env)
+			     const char *sort)
 {
 	perf_hpp__reset_output_field(&c2c_hists->list);
-	return hpp_list__parse(&c2c_hists->list, output, sort, env);
+	return hpp_list__parse(&c2c_hists->list, output, sort);
 }
 
 #define DISPLAY_LINE_LIMIT  0.001
@@ -2213,9 +2206,8 @@ static int filter_cb(struct hist_entry *he, void *arg __maybe_unused)
 	return 0;
 }
 
-static int resort_cl_cb(struct hist_entry *he, void *arg)
+static int resort_cl_cb(struct hist_entry *he, void *arg __maybe_unused)
 {
-	struct perf_env *env = arg;
 	struct c2c_hist_entry *c2c_he;
 	struct c2c_hists *c2c_hists;
 	bool display = he__display(he, &c2c.shared_clines_stats);
@@ -2229,7 +2221,7 @@ static int resort_cl_cb(struct hist_entry *he, void *arg)
 		c2c_he->cacheline_idx = idx++;
 		calc_width(c2c_he);
 
-		c2c_hists__reinit(c2c_hists, c2c.cl_output, c2c.cl_resort, env);
+		c2c_hists__reinit(c2c_hists, c2c.cl_output, c2c.cl_resort);
 
 		hists__collapse_resort(&c2c_hists->hists, NULL);
 		hists__output_resort_cb(&c2c_hists->hists, NULL, filter_cb);
@@ -2274,15 +2266,14 @@ static int setup_nodes(struct perf_session *session)
 	int node, idx;
 	struct perf_cpu cpu;
 	int *cpu2node;
-	struct perf_env *env = perf_session__env(session);
 
 	if (c2c.node_info > 2)
 		c2c.node_info = 2;
 
-	c2c.nodes_cnt = env->nr_numa_nodes;
-	c2c.cpus_cnt  = env->nr_cpus_avail;
+	c2c.nodes_cnt = session->header.env.nr_numa_nodes;
+	c2c.cpus_cnt  = session->header.env.nr_cpus_avail;
 
-	n = env->numa_nodes;
+	n = session->header.env.numa_nodes;
 	if (!n)
 		return -EINVAL;
 
@@ -2341,7 +2332,7 @@ static int resort_shared_cl_cb(struct hist_entry *he, void *arg __maybe_unused)
 	return 0;
 }
 
-static int hists__iterate_cb(struct hists *hists, hists__resort_cb_t cb, void *arg)
+static int hists__iterate_cb(struct hists *hists, hists__resort_cb_t cb)
 {
 	struct rb_node *next = rb_first_cached(&hists->entries);
 	int ret = 0;
@@ -2350,7 +2341,7 @@ static int hists__iterate_cb(struct hists *hists, hists__resort_cb_t cb, void *a
 		struct hist_entry *he;
 
 		he = rb_entry(next, struct hist_entry, rb_node);
-		ret = cb(he, arg);
+		ret = cb(he, NULL);
 		if (ret)
 			break;
 		next = rb_next(&he->rb_node);
@@ -2456,7 +2447,7 @@ static void print_cacheline(struct c2c_hists *c2c_hists,
 	hists__fprintf(&c2c_hists->hists, false, 0, 0, 0, out, false);
 }
 
-static void print_pareto(FILE *out, struct perf_env *env)
+static void print_pareto(FILE *out)
 {
 	struct perf_hpp_list hpp_list;
 	struct rb_node *nd;
@@ -2481,7 +2472,7 @@ static void print_pareto(FILE *out, struct perf_env *env)
 			    "dcacheline";
 
 	perf_hpp_list__init(&hpp_list);
-	ret = hpp_list__parse(&hpp_list, cl_output, /*evlist=*/NULL, env);
+	ret = hpp_list__parse(&hpp_list, cl_output, NULL);
 
 	if (WARN_ONCE(ret, "failed to setup sort entries\n"))
 		return;
@@ -2546,7 +2537,7 @@ static void perf_c2c__hists_fprintf(FILE *out, struct perf_session *session)
 	fprintf(out, "=================================================\n");
 	fprintf(out, "#\n");
 
-	print_pareto(out, perf_session__env(session));
+	print_pareto(out);
 }
 
 #ifdef HAVE_SLANG_SUPPORT
@@ -3038,7 +3029,6 @@ static int perf_c2c__report(int argc, const char **argv)
 	};
 	int err = 0;
 	const char *output_str, *sort_str = NULL;
-	struct perf_env *env;
 
 	argc = parse_options(argc, argv, options, report_c2c_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
@@ -3081,14 +3071,14 @@ static int perf_c2c__report(int argc, const char **argv)
 		pr_debug("Error creating perf session\n");
 		goto out;
 	}
-	env = perf_session__env(session);
+
 	/*
 	 * Use the 'tot' as default display type if user doesn't specify it;
 	 * since Arm64 platform doesn't support HITMs flag, use 'peer' as the
 	 * default display type.
 	 */
 	if (!display) {
-		if (!strcmp(perf_env__arch(env), "arm64"))
+		if (!strcmp(perf_env__arch(&session->header.env), "arm64"))
 			display = "peer";
 		else
 			display = "tot";
@@ -3104,7 +3094,7 @@ static int perf_c2c__report(int argc, const char **argv)
 		goto out_session;
 	}
 
-	err = c2c_hists__init(&c2c.hists, "dcacheline", 2, perf_session__env(session));
+	err = c2c_hists__init(&c2c.hists, "dcacheline", 2);
 	if (err) {
 		pr_debug("Failed to initialize hists\n");
 		goto out_session;
@@ -3118,7 +3108,7 @@ static int perf_c2c__report(int argc, const char **argv)
 		goto out_session;
 	}
 
-	err = mem2node__init(&c2c.mem2node, env);
+	err = mem2node__init(&c2c.mem2node, &session->header.env);
 	if (err)
 		goto out_session;
 
@@ -3126,7 +3116,7 @@ static int perf_c2c__report(int argc, const char **argv)
 	if (err)
 		goto out_mem2node;
 
-	if (symbol__init(env) < 0)
+	if (symbol__init(&session->header.env) < 0)
 		goto out_mem2node;
 
 	/* No pipe support at the moment. */
@@ -3188,13 +3178,13 @@ static int perf_c2c__report(int argc, const char **argv)
 	else if (c2c.display == DISPLAY_SNP_PEER)
 		sort_str = "tot_peer";
 
-	c2c_hists__reinit(&c2c.hists, output_str, sort_str, perf_session__env(session));
+	c2c_hists__reinit(&c2c.hists, output_str, sort_str);
 
 	ui_progress__init(&prog, c2c.hists.hists.nr_entries, "Sorting...");
 
 	hists__collapse_resort(&c2c.hists.hists, NULL);
 	hists__output_resort_cb(&c2c.hists.hists, &prog, resort_shared_cl_cb);
-	hists__iterate_cb(&c2c.hists.hists, resort_cl_cb, perf_session__env(session));
+	hists__iterate_cb(&c2c.hists.hists, resort_cl_cb);
 
 	ui_progress__finish();
 
@@ -3249,7 +3239,6 @@ static int perf_c2c__record(int argc, const char **argv)
 {
 	int rec_argc, i = 0, j;
 	const char **rec_argv;
-	char *event_name_storage = NULL;
 	int ret;
 	bool all_user = false, all_kernel = false;
 	bool event_set = false;
@@ -3311,7 +3300,7 @@ static int perf_c2c__record(int argc, const char **argv)
 	rec_argv[i++] = "--phys-data";
 	rec_argv[i++] = "--sample-cpu";
 
-	ret = perf_mem_events__record_args(rec_argv, &i, &event_name_storage);
+	ret = perf_mem_events__record_args(rec_argv, &i);
 	if (ret)
 		goto out;
 
@@ -3338,7 +3327,6 @@ static int perf_c2c__record(int argc, const char **argv)
 
 	ret = cmd_record(i, rec_argv);
 out:
-	free(event_name_storage);
 	free(rec_argv);
 	return ret;
 }

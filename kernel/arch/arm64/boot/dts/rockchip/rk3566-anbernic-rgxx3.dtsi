@@ -469,7 +469,7 @@
 };
 
 &i2c1 {
-	/* Unused iSmartWare SW2001 encryption device at 0x3c */
+	/* Unknown/unused device at 0x3c */
 	status = "disabled";
 };
 

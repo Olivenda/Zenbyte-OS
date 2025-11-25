@@ -10,8 +10,6 @@
 #include <linux/interrupt.h>
 #include <linux/dca.h>
 
-#include <asm/cpuid/api.h>
-
 /* either a kernel change is needed, or we need something like this in kernel */
 #ifndef CONFIG_SMP
 #include <asm/smp.h>
@@ -60,11 +58,11 @@ static int dca_enabled_in_bios(struct pci_dev *pdev)
 {
 	/* CPUID level 9 returns DCA configuration */
 	/* Bit 0 indicates DCA enabled by the BIOS */
-	u32 eax;
+	unsigned long cpuid_level_9;
 	int res;
 
-	eax = cpuid_eax(CPUID_LEAF_DCA);
-	res = eax & BIT(0);
+	cpuid_level_9 = cpuid_eax(9);
+	res = test_bit(0, &cpuid_level_9);
 	if (!res)
 		dev_dbg(&pdev->dev, "DCA is disabled in BIOS\n");
 

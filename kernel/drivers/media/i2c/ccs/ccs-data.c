@@ -976,7 +976,6 @@ int ccs_data_parse(struct ccs_data_container *ccsdata, const void *data,
 out_cleanup:
 	kvfree(bin.base);
 	memset(ccsdata, 0, sizeof(*ccsdata));
-	dev_warn(dev, "failed to parse CCS static data: %d\n", rval);
 
 	return rval;
 }

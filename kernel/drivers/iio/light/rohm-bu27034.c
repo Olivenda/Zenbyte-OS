@@ -7,7 +7,6 @@
 
 #include <linux/bitfield.h>
 #include <linux/bits.h>
-#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
@@ -396,26 +395,30 @@ static int bu27034_try_set_int_time(struct bu27034_data *data, int time_us)
 	int numg = ARRAY_SIZE(gains);
 	int ret, int_time_old, i;
 
-	guard(mutex)(&data->mutex);
+	mutex_lock(&data->mutex);
 	ret = bu27034_get_int_time(data);
 	if (ret < 0)
-		return ret;
+		goto unlock_out;
 
 	int_time_old = ret;
 
 	if (!iio_gts_valid_time(&data->gts, time_us)) {
 		dev_err(data->dev, "Unsupported integration time %u\n",
 			time_us);
-		return -EINVAL;
+		ret = -EINVAL;
+
+		goto unlock_out;
 	}
 
-	if (time_us == int_time_old)
-		return 0;
+	if (time_us == int_time_old) {
+		ret = 0;
+		goto unlock_out;
+	}
 
 	for (i = 0; i < numg; i++) {
 		ret = bu27034_get_gain(data, gains[i].chan, &gains[i].old_gain);
 		if (ret)
-			return 0;
+			goto unlock_out;
 
 		ret = iio_gts_find_new_gain_by_old_gain_time(&data->gts,
 							     gains[i].old_gain,
@@ -431,7 +434,7 @@ static int bu27034_try_set_int_time(struct bu27034_data *data, int time_us)
 				gains[i].chan, time_us, scale1, scale2);
 
 			if (gains[i].new_gain < 0)
-				return ret;
+				goto unlock_out;
 
 			/*
 			 * If caller requests for integration time change and we
@@ -452,7 +455,7 @@ static int bu27034_try_set_int_time(struct bu27034_data *data, int time_us)
 					 "Total gain increase. Risk of saturation");
 				ret = iio_gts_get_min_gain(&data->gts);
 				if (ret < 0)
-					return ret;
+					goto unlock_out;
 			}
 			dev_dbg(data->dev, "chan %u scale changed\n",
 				 gains[i].chan);
@@ -465,10 +468,15 @@ static int bu27034_try_set_int_time(struct bu27034_data *data, int time_us)
 	for (i = 0; i < numg; i++) {
 		ret = bu27034_set_gain(data, gains[i].chan, gains[i].new_gain);
 		if (ret)
-			return ret;
+			goto unlock_out;
 	}
 
-	return bu27034_set_int_time(data, time_us);
+	ret = bu27034_set_int_time(data, time_us);
+
+unlock_out:
+	mutex_unlock(&data->mutex);
+
+	return ret;
 }
 
 static int bu27034_set_scale(struct bu27034_data *data, int chan,
@@ -484,10 +492,10 @@ static int bu27034_set_scale(struct bu27034_data *data, int chan,
 		return -EINVAL;
 	}
 
-	guard(mutex)(&data->mutex);
+	mutex_lock(&data->mutex);
 	ret = regmap_read(data->regmap, BU27034_REG_MODE_CONTROL1, &time_sel);
 	if (ret)
-		return ret;
+		goto unlock_out;
 
 	ret = iio_gts_find_gain_sel_for_scale_using_time(&data->gts, time_sel,
 						val, val2, &gain_sel);
@@ -510,7 +518,7 @@ static int bu27034_set_scale(struct bu27034_data *data, int chan,
 
 		ret = bu27034_get_gain(data, gain.chan, &gain.old_gain);
 		if (ret)
-			return ret;
+			goto unlock_out;
 
 		/*
 		 * Iterate through all the times to see if we find one which
@@ -543,20 +551,26 @@ static int bu27034_set_scale(struct bu27034_data *data, int chan,
 		if (!found) {
 			dev_dbg(data->dev,
 				"Can't set scale maintaining other channel\n");
-			return -EINVAL;
+			ret = -EINVAL;
+
+			goto unlock_out;
 		}
 
 		ret = bu27034_set_gain(data, gain.chan, gain.new_gain);
 		if (ret)
-			return ret;
+			goto unlock_out;
 
 		ret = regmap_update_bits(data->regmap, BU27034_REG_MODE_CONTROL1,
 				  BU27034_MASK_MEAS_MODE, new_time_sel);
 		if (ret)
-			return ret;
+			goto unlock_out;
 	}
 
-	return bu27034_write_gain_sel(data, chan, gain_sel);
+	ret = bu27034_write_gain_sel(data, chan, gain_sel);
+unlock_out:
+	mutex_unlock(&data->mutex);
+
+	return ret;
 }
 
 /*
@@ -998,8 +1012,9 @@ static int bu27034_read_raw(struct iio_dev *idev,
 			return -EINVAL;
 
 		/* Don't mess with measurement enabling while buffering */
-		if (!iio_device_claim_direct(idev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(idev);
+		if (ret)
+			return ret;
 
 		mutex_lock(&data->mutex);
 		/*
@@ -1010,7 +1025,7 @@ static int bu27034_read_raw(struct iio_dev *idev,
 		ret = result_get(data, chan->channel, val);
 
 		mutex_unlock(&data->mutex);
-		iio_device_release_direct(idev);
+		iio_device_release_direct_mode(idev);
 
 		if (ret)
 			return ret;
@@ -1049,8 +1064,9 @@ static int bu27034_write_raw(struct iio_dev *idev,
 	struct bu27034_data *data = iio_priv(idev);
 	int ret;
 
-	if (!iio_device_claim_direct(idev))
-		return -EBUSY;
+	ret = iio_device_claim_direct_mode(idev);
+	if (ret)
+		return ret;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
@@ -1067,7 +1083,7 @@ static int bu27034_write_raw(struct iio_dev *idev,
 		break;
 	}
 
-	iio_device_release_direct(idev);
+	iio_device_release_direct_mode(idev);
 
 	return ret;
 }
@@ -1205,33 +1221,42 @@ static int bu27034_buffer_enable(struct iio_dev *idev)
 	struct task_struct *task;
 	int ret;
 
-	guard(mutex)(&data->mutex);
+	mutex_lock(&data->mutex);
 	ret = bu27034_meas_set(data, true);
 	if (ret)
-		return ret;
+		goto unlock_out;
 
 	task = kthread_run(bu27034_buffer_thread, idev,
 				 "bu27034-buffering-%u",
 				 iio_device_id(idev));
-	if (IS_ERR(task))
-		return PTR_ERR(task);
+	if (IS_ERR(task)) {
+		ret = PTR_ERR(task);
+		goto unlock_out;
+	}
 
 	data->task = task;
 
-	return 0;
+unlock_out:
+	mutex_unlock(&data->mutex);
+
+	return ret;
 }
 
 static int bu27034_buffer_disable(struct iio_dev *idev)
 {
 	struct bu27034_data *data = iio_priv(idev);
+	int ret;
 
-	guard(mutex)(&data->mutex);
+	mutex_lock(&data->mutex);
 	if (data->task) {
 		kthread_stop(data->task);
 		data->task = NULL;
 	}
 
-	return bu27034_meas_set(data, false);
+	ret = bu27034_meas_set(data, false);
+	mutex_unlock(&data->mutex);
+
+	return ret;
 }
 
 static const struct iio_buffer_setup_ops bu27034_buffer_ops = {
@@ -1325,4 +1350,4 @@ module_i2c_driver(bu27034_i2c_driver);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Matti Vaittinen <matti.vaittinen@fi.rohmeurope.com>");
 MODULE_DESCRIPTION("ROHM BU27034 ambient light sensor driver");
-MODULE_IMPORT_NS("IIO_GTS_HELPER");
+MODULE_IMPORT_NS(IIO_GTS_HELPER);

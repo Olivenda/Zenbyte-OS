@@ -9,7 +9,6 @@
 #define KMSG_COMPONENT "ap"
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
-#include <linux/export.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <asm/facility.h>
@@ -1290,7 +1289,7 @@ void ap_queue_prepare_remove(struct ap_queue *aq)
 	/* move queue device state to SHUTDOWN in progress */
 	aq->dev_state = AP_DEV_STATE_SHUTDOWN;
 	spin_unlock_bh(&aq->lock);
-	timer_delete_sync(&aq->timeout);
+	del_timer_sync(&aq->timeout);
 }
 
 void ap_queue_remove(struct ap_queue *aq)

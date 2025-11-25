@@ -148,9 +148,6 @@
  * @__reserved1:	    Reserved field.
  * @cfg8b_w1:		    Compound descriptor command queue origin produced
  *			    by qDMA and dynamic debug field.
- * @__reserved2:	    Reserved field.
- * @cmd:		    Command for QDMA (see FSL_QDMA_CMD_RWTTYPE and
- *			     others).
  * @data:		    Pointer to the memory 40-bit address, describes DMA
  *			    source information and DMA destination information.
  */
@@ -1291,7 +1288,7 @@ static struct platform_driver fsl_qdma_driver = {
 		.of_match_table = fsl_qdma_dt_ids,
 	},
 	.probe          = fsl_qdma_probe,
-	.remove		= fsl_qdma_remove,
+	.remove_new	= fsl_qdma_remove,
 };
 
 module_platform_driver(fsl_qdma_driver);

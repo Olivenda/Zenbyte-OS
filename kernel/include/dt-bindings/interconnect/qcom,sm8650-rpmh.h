@@ -150,6 +150,5 @@
 #define MASTER_A1NOC_SNOC			0
 #define MASTER_A2NOC_SNOC			1
 #define SLAVE_SNOC_GEM_NOC_SF			2
-#define MASTER_APSS_NOC				3
 
 #endif

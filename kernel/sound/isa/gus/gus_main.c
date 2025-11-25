@@ -22,6 +22,18 @@ MODULE_LICENSE("GPL");
 
 static int snd_gus_init_dma_irq(struct snd_gus_card * gus, int latches);
 
+int snd_gus_use_inc(struct snd_gus_card * gus)
+{
+	if (!try_module_get(gus->card->module))
+		return 0;
+	return 1;
+}
+
+void snd_gus_use_dec(struct snd_gus_card * gus)
+{
+	module_put(gus->card->module);
+}
+
 static int snd_gus_joystick_info(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_info *uinfo)
 {
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
@@ -348,8 +360,8 @@ static int snd_gus_check_version(struct snd_gus_card * gus)
 	rev = inb(GUSP(gus, BOARDVERSION));
 	spin_unlock_irqrestore(&gus->reg_lock, flags);
 	dev_dbg(card->dev, "GF1 [0x%lx] init - val = 0x%x, rev = 0x%x\n", gus->gf1.port, val, rev);
-	strscpy(card->driver, "GUS");
-	strscpy(card->longname, "Gravis UltraSound Classic (2.4)");
+	strcpy(card->driver, "GUS");
+	strcpy(card->longname, "Gravis UltraSound Classic (2.4)");
 	if ((val != 255 && (val & 0x06)) || (rev >= 5 && rev != 255)) {
 		if (rev >= 5 && rev <= 9) {
 			gus->ics_flag = 1;
@@ -360,16 +372,16 @@ static int snd_gus_check_version(struct snd_gus_card * gus)
 		}
 		if (rev >= 10 && rev != 255) {
 			if (rev >= 10 && rev <= 11) {
-				strscpy(card->driver, "GUS MAX");
-				strscpy(card->longname, "Gravis UltraSound MAX");
+				strcpy(card->driver, "GUS MAX");
+				strcpy(card->longname, "Gravis UltraSound MAX");
 				gus->max_flag = 1;
 			} else if (rev == 0x30) {
-				strscpy(card->driver, "GUS ACE");
-				strscpy(card->longname, "Gravis UltraSound Ace");
+				strcpy(card->driver, "GUS ACE");
+				strcpy(card->longname, "Gravis UltraSound Ace");
 				gus->ace_flag = 1;
 			} else if (rev == 0x50) {
-				strscpy(card->driver, "GUS Extreme");
-				strscpy(card->longname, "Gravis UltraSound Extreme");
+				strcpy(card->driver, "GUS Extreme");
+				strcpy(card->longname, "Gravis UltraSound Extreme");
 				gus->ess_flag = 1;
 			} else {
 				dev_err(card->dev,
@@ -431,6 +443,8 @@ EXPORT_SYMBOL(snd_gf1_new_mixer);
   /* gus_pcm.c */
 EXPORT_SYMBOL(snd_gf1_pcm_new);
   /* gus.c */
+EXPORT_SYMBOL(snd_gus_use_inc);
+EXPORT_SYMBOL(snd_gus_use_dec);
 EXPORT_SYMBOL(snd_gus_create);
 EXPORT_SYMBOL(snd_gus_initialize);
   /* gus_irq.c */

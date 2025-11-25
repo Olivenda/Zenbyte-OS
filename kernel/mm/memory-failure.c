@@ -100,7 +100,7 @@ static ssize_t _name##_show(struct device *dev,			\
 {								\
 	struct memory_failure_stats *mf_stats =			\
 		&NODE_DATA(dev->id)->mf_stats;			\
-	return sysfs_emit(buf, "%lu\n", mf_stats->_name);	\
+	return sprintf(buf, "%lu\n", mf_stats->_name);		\
 }								\
 static DEVICE_ATTR_RO(_name)
 
@@ -124,7 +124,7 @@ const struct attribute_group memory_failure_attr_group = {
 	.attrs = memory_failure_attr,
 };
 
-static const struct ctl_table memory_failure_table[] = {
+static struct ctl_table memory_failure_table[] = {
 	{
 		.procname	= "memory_failure_early_kill",
 		.data		= &sysctl_memory_failure_early_kill,
@@ -419,18 +419,18 @@ static unsigned long dev_pagemap_mapping_shift(struct vm_area_struct *vma,
 	pud = pud_offset(p4d, address);
 	if (!pud_present(*pud))
 		return 0;
-	if (pud_trans_huge(*pud))
+	if (pud_devmap(*pud))
 		return PUD_SHIFT;
 	pmd = pmd_offset(pud, address);
 	if (!pmd_present(*pmd))
 		return 0;
-	if (pmd_trans_huge(*pmd))
+	if (pmd_devmap(*pmd))
 		return PMD_SHIFT;
 	pte = pte_offset_map(pmd, address);
 	if (!pte)
 		return 0;
 	ptent = ptep_get(pte);
-	if (pte_present(ptent))
+	if (pte_present(ptent) && pte_devmap(ptent))
 		ret = PAGE_SHIFT;
 	pte_unmap(pte);
 	return ret;
@@ -445,7 +445,7 @@ static unsigned long dev_pagemap_mapping_shift(struct vm_area_struct *vma,
  * Schedule a process for later kill.
  * Uses GFP_ATOMIC allocations to avoid potential recursions in the VM.
  */
-static void __add_to_kill(struct task_struct *tsk, const struct page *p,
+static void __add_to_kill(struct task_struct *tsk, struct page *p,
 			  struct vm_area_struct *vma, struct list_head *to_kill,
 			  unsigned long addr)
 {
@@ -461,7 +461,7 @@ static void __add_to_kill(struct task_struct *tsk, const struct page *p,
 	if (is_zone_device_page(p))
 		tk->size_shift = dev_pagemap_mapping_shift(vma, tk->addr);
 	else
-		tk->size_shift = folio_shift(page_folio(p));
+		tk->size_shift = page_shift(compound_head(p));
 
 	/*
 	 * Send SIGKILL if "tk->addr == -EFAULT". Also, as
@@ -486,7 +486,7 @@ static void __add_to_kill(struct task_struct *tsk, const struct page *p,
 	list_add_tail(&tk->nd, to_kill);
 }
 
-static void add_to_kill_anon_file(struct task_struct *tsk, const struct page *p,
+static void add_to_kill_anon_file(struct task_struct *tsk, struct page *p,
 		struct vm_area_struct *vma, struct list_head *to_kill,
 		unsigned long addr)
 {
@@ -509,7 +509,7 @@ static bool task_in_to_kill_list(struct list_head *to_kill,
 	return false;
 }
 
-void add_to_kill_ksm(struct task_struct *tsk, const struct page *p,
+void add_to_kill_ksm(struct task_struct *tsk, struct page *p,
 		     struct vm_area_struct *vma, struct list_head *to_kill,
 		     unsigned long addr)
 {
@@ -606,9 +606,8 @@ struct task_struct *task_early_kill(struct task_struct *tsk, int force_early)
 /*
  * Collect processes when the error hit an anonymous page.
  */
-static void collect_procs_anon(const struct folio *folio,
-		const struct page *page, struct list_head *to_kill,
-		int force_early)
+static void collect_procs_anon(struct folio *folio, struct page *page,
+		struct list_head *to_kill, int force_early)
 {
 	struct task_struct *tsk;
 	struct anon_vma *av;
@@ -618,7 +617,7 @@ static void collect_procs_anon(const struct folio *folio,
 	if (av == NULL)	/* Not actually mapped anymore */
 		return;
 
-	pgoff = page_pgoff(folio, page);
+	pgoff = page_to_pgoff(page);
 	rcu_read_lock();
 	for_each_process(tsk) {
 		struct vm_area_struct *vma;
@@ -644,9 +643,8 @@ static void collect_procs_anon(const struct folio *folio,
 /*
  * Collect processes when the error hit a file mapped page.
  */
-static void collect_procs_file(const struct folio *folio,
-		const struct page *page, struct list_head *to_kill,
-		int force_early)
+static void collect_procs_file(struct folio *folio, struct page *page,
+		struct list_head *to_kill, int force_early)
 {
 	struct vm_area_struct *vma;
 	struct task_struct *tsk;
@@ -655,7 +653,7 @@ static void collect_procs_file(const struct folio *folio,
 
 	i_mmap_lock_read(mapping);
 	rcu_read_lock();
-	pgoff = page_pgoff(folio, page);
+	pgoff = page_to_pgoff(page);
 	for_each_process(tsk) {
 		struct task_struct *t = task_early_kill(tsk, force_early);
 		unsigned long addr;
@@ -673,7 +671,7 @@ static void collect_procs_file(const struct folio *folio,
 			 */
 			if (vma->vm_mm != t->mm)
 				continue;
-			addr = page_address_in_vma(folio, page, vma);
+			addr = page_address_in_vma(page, vma);
 			add_to_kill_anon_file(t, page, vma, to_kill, addr);
 		}
 	}
@@ -682,7 +680,7 @@ static void collect_procs_file(const struct folio *folio,
 }
 
 #ifdef CONFIG_FS_DAX
-static void add_to_kill_fsdax(struct task_struct *tsk, const struct page *p,
+static void add_to_kill_fsdax(struct task_struct *tsk, struct page *p,
 			      struct vm_area_struct *vma,
 			      struct list_head *to_kill, pgoff_t pgoff)
 {
@@ -693,7 +691,7 @@ static void add_to_kill_fsdax(struct task_struct *tsk, const struct page *p,
 /*
  * Collect processes when the error hit a fsdax page.
  */
-static void collect_procs_fsdax(const struct page *page,
+static void collect_procs_fsdax(struct page *page,
 		struct address_space *mapping, pgoff_t pgoff,
 		struct list_head *to_kill, bool pre_remove)
 {
@@ -727,7 +725,7 @@ static void collect_procs_fsdax(const struct page *page,
 /*
  * Collect the processes who have the corrupted page mapped to kill.
  */
-static void collect_procs(const struct folio *folio, const struct page *page,
+static void collect_procs(struct folio *folio, struct page *page,
 		struct list_head *tokill, int force_early)
 {
 	if (!folio->mapping)
@@ -837,17 +835,11 @@ static int hwpoison_hugetlb_range(pte_t *ptep, unsigned long hmask,
 			    struct mm_walk *walk)
 {
 	struct hwpoison_walk *hwp = walk->private;
+	pte_t pte = huge_ptep_get(walk->mm, addr, ptep);
 	struct hstate *h = hstate_vma(walk->vma);
-	spinlock_t *ptl;
-	pte_t pte;
-	int ret;
 
-	ptl = huge_pte_lock(h, walk->mm, ptep);
-	pte = huge_ptep_get(walk->mm, addr, ptep);
-	ret = check_hwpoisoned_entry(pte, addr, huge_page_shift(h),
-					hwp->pfn, &hwp->tk);
-	spin_unlock(ptl);
-	return ret;
+	return check_hwpoisoned_entry(pte, addr, huge_page_shift(h),
+				      hwp->pfn, &hwp->tk);
 }
 #else
 #define hwpoison_hugetlb_range	NULL
@@ -1403,8 +1395,8 @@ static inline bool HWPoisonHandlable(struct page *page, unsigned long flags)
 	if (PageSlab(page))
 		return false;
 
-	/* Soft offline could migrate movable_ops pages */
-	if ((flags & MF_SOFT_OFFLINE) && page_has_movable_ops(page))
+	/* Soft offline could migrate non-LRU movable pages */
+	if ((flags & MF_SOFT_OFFLINE) && __PageMovable(page))
 		return true;
 
 	return PageLRU(page) || is_free_buddy_page(page);
@@ -2233,13 +2225,9 @@ static void kill_procs_now(struct page *p, unsigned long pfn, int flags,
  * Must run in process context (e.g. a work queue) with interrupts
  * enabled and no spinlocks held.
  *
- * Return:
- *   0             - success,
- *   -ENXIO        - memory not managed by the kernel
- *   -EOPNOTSUPP   - hwpoison_filter() filtered the error event,
- *   -EHWPOISON    - the page was already poisoned, potentially
- *                   kill process,
- *   other negative values - failure.
+ * Return: 0 for successfully handled the memory error,
+ *         -EOPNOTSUPP for hwpoison_filter() filtered the error event,
+ *         < 0(except -EOPNOTSUPP) on failure.
  */
 int memory_failure(unsigned long pfn, int flags)
 {
@@ -2518,6 +2506,19 @@ static void memory_failure_work_func(struct work_struct *work)
 		else
 			memory_failure(entry.pfn, entry.flags);
 	}
+}
+
+/*
+ * Process memory_failure work queued on the specified CPU.
+ * Used to avoid return-to-userspace racing with the memory_failure workqueue.
+ */
+void memory_failure_queue_kick(int cpu)
+{
+	struct memory_failure_cpu *mf_cpu;
+
+	mf_cpu = &per_cpu(memory_failure_cpu, cpu);
+	cancel_work_sync(&mf_cpu->work);
+	memory_failure_work_func(&mf_cpu->work);
 }
 
 static int __init memory_failure_init(void)

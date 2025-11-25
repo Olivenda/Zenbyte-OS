@@ -160,8 +160,8 @@ static int gpio_siox_get(struct gpio_chip *chip, unsigned int offset)
 	return ret;
 }
 
-static int gpio_siox_set(struct gpio_chip *chip,
-			 unsigned int offset, int value)
+static void gpio_siox_set(struct gpio_chip *chip,
+			  unsigned int offset, int value)
 {
 	struct gpio_siox_ddata *ddata = gpiochip_get_data(chip);
 	u8 mask = 1 << (19 - offset);
@@ -174,8 +174,6 @@ static int gpio_siox_set(struct gpio_chip *chip,
 		ddata->setdata[0] &= ~mask;
 
 	mutex_unlock(&ddata->lock);
-
-	return 0;
 }
 
 static int gpio_siox_direction_input(struct gpio_chip *chip,
@@ -193,7 +191,8 @@ static int gpio_siox_direction_output(struct gpio_chip *chip,
 	if (offset < 12)
 		return -EINVAL;
 
-	return gpio_siox_set(chip, offset, value);
+	gpio_siox_set(chip, offset, value);
+	return 0;
 }
 
 static int gpio_siox_get_direction(struct gpio_chip *chip, unsigned int offset)

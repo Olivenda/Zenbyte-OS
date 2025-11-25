@@ -13,7 +13,6 @@
 #include <linux/kernel.h>
 #include <linux/initrd.h>
 #include <linux/of_platform.h>
-#include <linux/seq_file.h>
 
 #include <asm/time.h>
 #include <asm/mpic.h>

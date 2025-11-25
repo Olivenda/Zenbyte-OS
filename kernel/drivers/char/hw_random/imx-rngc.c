@@ -13,8 +13,6 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/platform_device.h>
-#include <linux/pm.h>
-#include <linux/pm_runtime.h>
 #include <linux/interrupt.h>
 #include <linux/hw_random.h>
 #include <linux/completion.h>
@@ -55,7 +53,6 @@
 
 #define RNGC_SELFTEST_TIMEOUT 2500 /* us */
 #define RNGC_SEED_TIMEOUT      200 /* ms */
-#define RNGC_PM_TIMEOUT        500 /* ms */
 
 static bool self_test = true;
 module_param(self_test, bool, 0);
@@ -126,11 +123,7 @@ static int imx_rngc_read(struct hwrng *rng, void *data, size_t max, bool wait)
 {
 	struct imx_rngc *rngc = container_of(rng, struct imx_rngc, rng);
 	unsigned int status;
-	int err, retval = 0;
-
-	err = pm_runtime_resume_and_get(rngc->dev);
-	if (err)
-		return err;
+	int retval = 0;
 
 	while (max >= sizeof(u32)) {
 		status = readl(rngc->base + RNGC_STATUS);
@@ -148,8 +141,6 @@ static int imx_rngc_read(struct hwrng *rng, void *data, size_t max, bool wait)
 			max -= sizeof(u32);
 		}
 	}
-	pm_runtime_mark_last_busy(rngc->dev);
-	pm_runtime_put(rngc->dev);
 
 	return retval ? retval : -EIO;
 }
@@ -178,11 +169,7 @@ static int imx_rngc_init(struct hwrng *rng)
 {
 	struct imx_rngc *rngc = container_of(rng, struct imx_rngc, rng);
 	u32 cmd, ctrl;
-	int ret, err;
-
-	err = pm_runtime_resume_and_get(rngc->dev);
-	if (err)
-		return err;
+	int ret;
 
 	/* clear error */
 	cmd = readl(rngc->base + RNGC_COMMAND);
@@ -199,15 +186,15 @@ static int imx_rngc_init(struct hwrng *rng)
 		ret = wait_for_completion_timeout(&rngc->rng_op_done,
 						  msecs_to_jiffies(RNGC_SEED_TIMEOUT));
 		if (!ret) {
-			err = -ETIMEDOUT;
-			goto out;
+			ret = -ETIMEDOUT;
+			goto err;
 		}
 
 	} while (rngc->err_reg == RNGC_ERROR_STATUS_STAT_ERR);
 
 	if (rngc->err_reg) {
-		err = -EIO;
-		goto out;
+		ret = -EIO;
+		goto err;
 	}
 
 	/*
@@ -218,29 +205,23 @@ static int imx_rngc_init(struct hwrng *rng)
 	ctrl |= RNGC_CTRL_AUTO_SEED;
 	writel(ctrl, rngc->base + RNGC_CONTROL);
 
-out:
 	/*
 	 * if initialisation was successful, we keep the interrupt
 	 * unmasked until imx_rngc_cleanup is called
 	 * we mask the interrupt ourselves if we return an error
 	 */
-	if (err)
-		imx_rngc_irq_mask_clear(rngc);
+	return 0;
 
-	pm_runtime_put(rngc->dev);
-	return err;
+err:
+	imx_rngc_irq_mask_clear(rngc);
+	return ret;
 }
 
 static void imx_rngc_cleanup(struct hwrng *rng)
 {
 	struct imx_rngc *rngc = container_of(rng, struct imx_rngc, rng);
-	int err;
 
-	err = pm_runtime_resume_and_get(rngc->dev);
-	if (!err) {
-		imx_rngc_irq_mask_clear(rngc);
-		pm_runtime_put(rngc->dev);
-	}
+	imx_rngc_irq_mask_clear(rngc);
 }
 
 static int __init imx_rngc_probe(struct platform_device *pdev)
@@ -259,7 +240,7 @@ static int __init imx_rngc_probe(struct platform_device *pdev)
 	if (IS_ERR(rngc->base))
 		return PTR_ERR(rngc->base);
 
-	rngc->clk = devm_clk_get(&pdev->dev, NULL);
+	rngc->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(rngc->clk))
 		return dev_err_probe(&pdev->dev, PTR_ERR(rngc->clk), "Cannot get rng_clk\n");
 
@@ -267,18 +248,14 @@ static int __init imx_rngc_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
-	clk_prepare_enable(rngc->clk);
-
 	ver_id = readl(rngc->base + RNGC_VER_ID);
 	rng_type = FIELD_GET(RNG_TYPE, ver_id);
 	/*
 	 * This driver supports only RNGC and RNGB. (There's a different
 	 * driver for RNGA.)
 	 */
-	if (rng_type != RNGC_TYPE_RNGC && rng_type != RNGC_TYPE_RNGB) {
-		clk_disable_unprepare(rngc->clk);
+	if (rng_type != RNGC_TYPE_RNGC && rng_type != RNGC_TYPE_RNGB)
 		return -ENODEV;
-	}
 
 	init_completion(&rngc->rng_op_done);
 
@@ -295,23 +272,14 @@ static int __init imx_rngc_probe(struct platform_device *pdev)
 
 	ret = devm_request_irq(&pdev->dev,
 			irq, imx_rngc_irq, 0, pdev->name, (void *)rngc);
-	if (ret) {
-		clk_disable_unprepare(rngc->clk);
+	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "Can't get interrupt working.\n");
-	}
 
 	if (self_test) {
 		ret = imx_rngc_self_test(rngc);
-		if (ret) {
-			clk_disable_unprepare(rngc->clk);
+		if (ret)
 			return dev_err_probe(&pdev->dev, ret, "self test failed\n");
-		}
 	}
-
-	pm_runtime_set_autosuspend_delay(&pdev->dev, RNGC_PM_TIMEOUT);
-	pm_runtime_use_autosuspend(&pdev->dev);
-	pm_runtime_set_active(&pdev->dev);
-	devm_pm_runtime_enable(&pdev->dev);
 
 	ret = devm_hwrng_register(&pdev->dev, &rngc->rng);
 	if (ret)
@@ -342,10 +310,7 @@ static int imx_rngc_resume(struct device *dev)
 	return 0;
 }
 
-static const struct dev_pm_ops imx_rngc_pm_ops = {
-	SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
-	RUNTIME_PM_OPS(imx_rngc_suspend, imx_rngc_resume, NULL)
-};
+static DEFINE_SIMPLE_DEV_PM_OPS(imx_rngc_pm_ops, imx_rngc_suspend, imx_rngc_resume);
 
 static const struct of_device_id imx_rngc_dt_ids[] = {
 	{ .compatible = "fsl,imx25-rngb" },
@@ -356,7 +321,7 @@ MODULE_DEVICE_TABLE(of, imx_rngc_dt_ids);
 static struct platform_driver imx_rngc_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.pm = pm_ptr(&imx_rngc_pm_ops),
+		.pm = pm_sleep_ptr(&imx_rngc_pm_ops),
 		.of_match_table = imx_rngc_dt_ids,
 	},
 };

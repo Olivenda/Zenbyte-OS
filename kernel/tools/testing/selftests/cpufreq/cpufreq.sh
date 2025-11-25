@@ -52,14 +52,7 @@ read_cpufreq_files_in_dir()
 	for file in $files; do
 		if [ -f $1/$file ]; then
 			printf "$file:"
-			#file is readable ?
-			local rfile=$(ls -l $1/$file | awk '$1 ~ /^.*r.*/ { print $NF; }')
-
-			if [ ! -z $rfile ]; then
-				cat $1/$file
-			else
-				printf "$file is not readable\n"
-			fi
+			cat $1/$file
 		else
 			printf "\n"
 			read_cpufreq_files_in_dir "$1/$file"
@@ -90,10 +83,10 @@ update_cpufreq_files_in_dir()
 
 	for file in $files; do
 		if [ -f $1/$file ]; then
-			# file is readable and writable ?
-			local rwfile=$(ls -l $1/$file | awk '$1 ~ /^.*rw.*/ { print $NF; }')
+			# file is writable ?
+			local wfile=$(ls -l $1/$file | awk '$1 ~ /^.*w.*/ { print $NF; }')
 
-			if [ ! -z $rwfile ]; then
+			if [ ! -z $wfile ]; then
 				# scaling_setspeed is a special file and we
 				# should skip updating it
 				if [ $file != "scaling_setspeed" ]; then

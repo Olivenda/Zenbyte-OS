@@ -18,25 +18,10 @@
 	aliases {
 		mmc0 = &sdmmc0;
 		mmc1 = &sdhci;
-		rtc0 = &hym8563;
 	};
 
 	chosen: chosen {
 		stdout-path = "serial2:1500000n8";
-	};
-
-	adc-keys {
-		compatible = "adc-keys";
-		io-channels = <&saradc 0>;
-		io-channel-names = "buttons";
-		keyup-threshold-microvolt = <1800000>;
-		poll-interval = <100>;
-
-		button-maskrom {
-			label = "MASKROM";
-			linux,code = <KEY_SETUP>;
-			press-threshold-microvolt = <0>;
-		};
 	};
 
 	hdmi-con {
@@ -50,7 +35,7 @@
 		};
 	};
 
-	vdd_usbc: regulator-vdd-usbc {
+	vdd_usbc: vdd-usbc-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vdd_usbc";
 		regulator-always-on;
@@ -59,7 +44,7 @@
 		regulator-max-microvolt = <5000000>;
 	};
 
-	vcc3v3_sys: regulator-vcc3v3-sys {
+	vcc3v3_sys: vcc3v3-sys-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc3v3_sys";
 		regulator-always-on;
@@ -69,7 +54,7 @@
 		vin-supply = <&vdd_usbc>;
 	};
 
-	vcc5v0_sys: regulator-vcc5v0-sys {
+	vcc5v0_sys: vcc5v0-sys-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc5v0_sys";
 		regulator-always-on;
@@ -79,7 +64,7 @@
 		vin-supply = <&vdd_usbc>;
 	};
 
-	vcc3v3_pcie: regulator-vcc3v3-pcie {
+	vcc3v3_pcie: vcc3v3-pcie-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc3v3_pcie";
 		regulator-min-microvolt = <3300000>;
@@ -90,7 +75,7 @@
 		vin-supply = <&vcc5v0_sys>;
 	};
 
-	vcc5v0_usb: regulator-vcc5v0-usb {
+	vcc5v0_usb: vcc5v0-usb-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc5v0_usb";
 		regulator-always-on;
@@ -100,7 +85,7 @@
 		vin-supply = <&vdd_usbc>;
 	};
 
-	vcc5v0_usb_host: regulator-vcc5v0-usb-host {
+	vcc5v0_usb_host: vcc5v0-usb-host-regulator {
 		compatible = "regulator-fixed";
 		enable-active-high;
 		gpio = <&gpio0 RK_PA6 GPIO_ACTIVE_HIGH>;
@@ -114,7 +99,7 @@
 		vin-supply = <&vcc5v0_usb>;
 	};
 
-	vcc5v0_usb_otg: regulator-vcc5v0-usb-otg {
+	vcc5v0_usb_otg: vcc5v0-usb-otg-regulator {
 		compatible = "regulator-fixed";
 		enable-active-high;
 		gpio = <&gpio0 RK_PA5 GPIO_ACTIVE_HIGH>;
@@ -126,7 +111,7 @@
 		vin-supply = <&vcc5v0_usb>;
 	};
 
-	pcie30_avdd0v9: regulator-pcie30-avdd0v9 {
+	pcie30_avdd0v9: pcie30-avdd0v9-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "pcie30_avdd0v9";
 		regulator-always-on;
@@ -136,7 +121,7 @@
 		vin-supply = <&vcc3v3_sys>;
 	};
 
-	pcie30_avdd1v8: regulator-pcie30-avdd1v8 {
+	pcie30_avdd1v8: pcie30-avdd1v8-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "pcie30_avdd1v8";
 		regulator-always-on;
@@ -230,7 +215,7 @@
 		#clock-cells = <1>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pmic_int>;
-		system-power-controller;
+		rockchip,system-power-controller;
 		vcc1-supply = <&vcc3v3_sys>;
 		vcc2-supply = <&vcc3v3_sys>;
 		vcc3-supply = <&vcc3v3_sys>;

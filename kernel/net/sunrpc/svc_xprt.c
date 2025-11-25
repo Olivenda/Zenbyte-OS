@@ -488,7 +488,6 @@ void svc_xprt_enqueue(struct svc_xprt *xprt)
 	pool = svc_pool_for_cpu(xprt->xpt_server);
 
 	percpu_counter_inc(&pool->sp_sockets_queued);
-	xprt->xpt_qtime = ktime_get();
 	lwq_enqueue(&xprt->xpt_ready, &pool->sp_xprts);
 
 	svc_pool_wake_idle_thread(pool);
@@ -620,10 +619,16 @@ int svc_port_is_privileged(struct sockaddr *sin)
  * The only somewhat efficient mechanism would be if drop old
  * connections from the same IP first. But right now we don't even
  * record the client IP in svc_sock.
+ *
+ * single-threaded services that expect a lot of clients will probably
+ * need to set sv_maxconn to override the default value which is based
+ * on the number of threads
  */
 static void svc_check_conn_limits(struct svc_serv *serv)
 {
-	if (serv->sv_tmpcnt > XPT_MAX_TMP_CONN) {
+	unsigned int limit = serv->sv_maxconn ? serv->sv_maxconn : 64;
+
+	if (serv->sv_tmpcnt > limit) {
 		struct svc_xprt *xprt = NULL, *xprti;
 		spin_lock_bh(&serv->sv_lock);
 		if (!list_empty(&serv->sv_tempsocks)) {
@@ -652,12 +657,21 @@ static void svc_check_conn_limits(struct svc_serv *serv)
 
 static bool svc_alloc_arg(struct svc_rqst *rqstp)
 {
+	struct svc_serv *serv = rqstp->rq_server;
 	struct xdr_buf *arg = &rqstp->rq_arg;
 	unsigned long pages, filled, ret;
 
-	pages = rqstp->rq_maxpages;
+	pages = (serv->sv_max_mesg + 2 * PAGE_SIZE) >> PAGE_SHIFT;
+	if (pages > RPCSVC_MAXPAGES) {
+		pr_warn_once("svc: warning: pages=%lu > RPCSVC_MAXPAGES=%lu\n",
+			     pages, RPCSVC_MAXPAGES);
+		/* use as many pages as possible */
+		pages = RPCSVC_MAXPAGES;
+	}
+
 	for (filled = 0; filled < pages; filled = ret) {
-		ret = alloc_pages_bulk(GFP_KERNEL, pages, rqstp->rq_pages);
+		ret = alloc_pages_bulk_array(GFP_KERNEL, pages,
+					     rqstp->rq_pages);
 		if (ret > filled)
 			/* Made progress, don't sleep yet */
 			continue;
@@ -922,7 +936,7 @@ void svc_send(struct svc_rqst *rqstp)
  */
 static void svc_age_temp_xprts(struct timer_list *t)
 {
-	struct svc_serv *serv = timer_container_of(serv, t, sv_temptimer);
+	struct svc_serv *serv = from_timer(serv, t, sv_temptimer);
 	struct svc_xprt *xprt;
 	struct list_head *le, *next;
 

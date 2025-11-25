@@ -19,7 +19,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/fsl/mc.h>
 #include <linux/kernel.h>
-#include <linux/string_choices.h>
 #include <soc/fsl/dpaa2-io.h>
 #include <soc/fsl/dpaa2-fd.h>
 #include <crypto/xts.h>
@@ -5176,7 +5175,7 @@ static int __cold dpaa2_dpseci_disable(struct dpaa2_caam_priv *priv)
 		return err;
 	}
 
-	dev_dbg(dev, "disable: %s\n", str_false_true(enabled));
+	dev_dbg(dev, "disable: %s\n", enabled ? "false" : "true");
 
 	for (i = 0; i < priv->num_pairs; i++) {
 		ppriv = per_cpu_ptr(priv->ppriv, i);

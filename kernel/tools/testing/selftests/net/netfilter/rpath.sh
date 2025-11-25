@@ -1,7 +1,8 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0
 
-source lib.sh
+# return code to signal skipped test
+ksft_skip=4
 
 # search for legacy iptables (it uses the xtables extensions
 if iptables-legacy --version >/dev/null 2>&1; then
@@ -31,10 +32,17 @@ if [ -z "$iptables$ip6tables$nft" ]; then
 	exit $ksft_skip
 fi
 
-trap cleanup_all_ns EXIT
+sfx=$(mktemp -u "XXXXXXXX")
+ns1="ns1-$sfx"
+ns2="ns2-$sfx"
+trap "ip netns del $ns1; ip netns del $ns2" EXIT
 
-# create two netns, keep IPv6 address when moving into VRF
-setup_ns ns1 ns2
+# create two netns, disable rp_filter in ns2 and
+# keep IPv6 address when moving into VRF
+ip netns add "$ns1"
+ip netns add "$ns2"
+ip netns exec "$ns2" sysctl -q net.ipv4.conf.all.rp_filter=0
+ip netns exec "$ns2" sysctl -q net.ipv4.conf.default.rp_filter=0
 ip netns exec "$ns2" sysctl -q net.ipv6.conf.all.keep_addr_on_down=1
 
 # a standard connection between the netns, should not trigger rp filter

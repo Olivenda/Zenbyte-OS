@@ -7,6 +7,9 @@
 #include <linux/hid.h>
 #include <linux/kfifo.h>
 
+/* maximum packet length for USB/BT devices */
+#define WACOM_PKGLEN_MAX	361
+
 #define WACOM_NAME_MAX		64
 #define WACOM_MAX_REMOTES	5
 #define WACOM_STATUS_UNKNOWN	255
@@ -274,7 +277,7 @@ struct wacom_features {
 	unsigned touch_max;
 	int oVid;
 	int oPid;
-	unsigned int pktlen;
+	int pktlen;
 	bool check_for_hid_type;
 	int hid_type;
 };
@@ -297,7 +300,7 @@ struct hid_data {
 	__s16 inputmode_index;	/* InputMode HID feature index in the report */
 	bool sense_state;
 	bool inrange_state;
-	bool eraser;
+	bool invert_state;
 	bool tipswitch;
 	bool barrelswitch;
 	bool barrelswitch2;
@@ -338,7 +341,7 @@ struct wacom_wac {
 	char pen_name[WACOM_NAME_MAX];
 	char touch_name[WACOM_NAME_MAX];
 	char pad_name[WACOM_NAME_MAX];
-	u8 *data;
+	unsigned char data[WACOM_PKGLEN_MAX];
 	int tool[2];
 	int id[2];
 	__u64 serial[2];

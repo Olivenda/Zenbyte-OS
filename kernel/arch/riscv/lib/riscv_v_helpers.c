@@ -16,11 +16,8 @@
 #ifdef CONFIG_MMU
 size_t riscv_v_usercopy_threshold = CONFIG_RISCV_ISA_V_UCOPY_THRESHOLD;
 int __asm_vector_usercopy(void *dst, void *src, size_t n);
-int __asm_vector_usercopy_sum_enabled(void *dst, void *src, size_t n);
 int fallback_scalar_usercopy(void *dst, void *src, size_t n);
-int fallback_scalar_usercopy_sum_enabled(void *dst, void *src, size_t n);
-asmlinkage int enter_vector_usercopy(void *dst, void *src, size_t n,
-				     bool enable_sum)
+asmlinkage int enter_vector_usercopy(void *dst, void *src, size_t n)
 {
 	size_t remain, copied;
 
@@ -29,8 +26,7 @@ asmlinkage int enter_vector_usercopy(void *dst, void *src, size_t n,
 		goto fallback;
 
 	kernel_vector_begin();
-	remain = enable_sum ? __asm_vector_usercopy(dst, src, n) :
-			      __asm_vector_usercopy_sum_enabled(dst, src, n);
+	remain = __asm_vector_usercopy(dst, src, n);
 	kernel_vector_end();
 
 	if (remain) {
@@ -44,7 +40,6 @@ asmlinkage int enter_vector_usercopy(void *dst, void *src, size_t n,
 	return remain;
 
 fallback:
-	return enable_sum ? fallback_scalar_usercopy(dst, src, n) :
-			    fallback_scalar_usercopy_sum_enabled(dst, src, n);
+	return fallback_scalar_usercopy(dst, src, n);
 }
 #endif

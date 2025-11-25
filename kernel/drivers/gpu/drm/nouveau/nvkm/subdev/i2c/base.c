@@ -22,7 +22,7 @@
  * Authors: Ben Skeggs
  */
 #include "priv.h"
-#include "auxch.h"
+#include "aux.h"
 #include "bus.h"
 #include "pad.h"
 

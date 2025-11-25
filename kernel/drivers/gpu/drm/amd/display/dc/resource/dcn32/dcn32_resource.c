@@ -24,7 +24,6 @@
  *
  */
 
-#include "dc_types.h"
 #include "dm_services.h"
 #include "dc.h"
 
@@ -690,6 +689,7 @@ static const struct dc_plane_cap plane_cap = {
 static const struct dc_debug_options debug_defaults_drv = {
 	.disable_dmcu = true,
 	.force_abm_enable = false,
+	.timing_trace = false,
 	.clock_trace = true,
 	.disable_pplib_clock_request = false,
 	.pipe_split_policy = MPC_SPLIT_AVOID, // Due to CRB, no need to MPC split anymore
@@ -1039,7 +1039,7 @@ static struct link_encoder *dcn32_link_encoder_create(
 	struct dcn20_link_encoder *enc20 =
 		kzalloc(sizeof(struct dcn20_link_encoder), GFP_KERNEL);
 
-	if (!enc20 || enc_init_data->hpd_source >= ARRAY_SIZE(link_enc_hpd_regs))
+	if (!enc20)
 		return NULL;
 
 #undef REG_STRUCT
@@ -1742,7 +1742,7 @@ void dcn32_add_phantom_pipes(struct dc *dc, struct dc_state *context,
 	}
 }
 
-static bool dml1_validate(struct dc *dc, struct dc_state *context, enum dc_validate_mode validate_mode)
+static bool dml1_validate(struct dc *dc, struct dc_state *context, bool fast_validate)
 {
 	bool out = false;
 
@@ -1750,8 +1750,7 @@ static bool dml1_validate(struct dc *dc, struct dc_state *context, enum dc_valid
 
 	int vlevel = 0;
 	int pipe_cnt = 0;
-	display_e2e_pipe_params_st *pipes = kcalloc(dc->res_pool->pipe_count,
-			sizeof(display_e2e_pipe_params_st), GFP_KERNEL);
+	display_e2e_pipe_params_st *pipes = kzalloc(dc->res_pool->pipe_count * sizeof(display_e2e_pipe_params_st), GFP_KERNEL);
 
 	/* To handle Freesync properly, setting FreeSync DML parameters
 	 * to its default state for the first stage of validation
@@ -1767,7 +1766,7 @@ static bool dml1_validate(struct dc *dc, struct dc_state *context, enum dc_valid
 		goto validate_fail;
 
 	DC_FP_START();
-	out = dcn32_internal_validate_bw(dc, context, pipes, &pipe_cnt, &vlevel, validate_mode);
+	out = dcn32_internal_validate_bw(dc, context, pipes, &pipe_cnt, &vlevel, fast_validate);
 	DC_FP_END();
 
 	if (pipe_cnt == 0)
@@ -1778,7 +1777,7 @@ static bool dml1_validate(struct dc *dc, struct dc_state *context, enum dc_valid
 
 	BW_VAL_TRACE_END_VOLTAGE_LEVEL();
 
-	if (validate_mode != DC_VALIDATE_MODE_AND_PROGRAMMING) {
+	if (fast_validate) {
 		BW_VAL_TRACE_SKIP(fast);
 		goto validate_out;
 	}
@@ -1807,62 +1806,25 @@ validate_out:
 	return out;
 }
 
-enum dc_status dcn32_validate_bandwidth(struct dc *dc,
+bool dcn32_validate_bandwidth(struct dc *dc,
 		struct dc_state *context,
-		enum dc_validate_mode validate_mode)
+		bool fast_validate)
 {
-	unsigned int i;
-	enum dc_status status;
-	const struct dc_stream_state *stream;
-
-	/* reset cursor limitations on subvp */
-	for (i = 0; i < context->stream_count; i++) {
-		stream = context->streams[i];
-
-		if (dc_state_can_clear_stream_cursor_subvp_limit(stream, context)) {
-			dc_state_set_stream_cursor_subvp_limit(stream, context, false);
-		}
-	}
+	bool out = false;
 
 	if (dc->debug.using_dml2)
-		status = dml2_validate(dc, context,
+		out = dml2_validate(dc, context,
 				context->power_source == DC_POWER_SOURCE_DC ? context->bw_ctx.dml2_dc_power_source : context->bw_ctx.dml2,
-				validate_mode) ? DC_OK : DC_FAIL_BANDWIDTH_VALIDATE;
+				fast_validate);
 	else
-		status = dml1_validate(dc, context, validate_mode) ? DC_OK : DC_FAIL_BANDWIDTH_VALIDATE;
-
-	if (validate_mode == DC_VALIDATE_MODE_AND_PROGRAMMING && status == DC_OK && dc_state_is_subvp_in_use(context)) {
-		/* check new stream configuration still supports cursor if subvp used */
-		for (i = 0; i < context->stream_count; i++) {
-			stream = context->streams[i];
-
-			if (dc_state_get_stream_subvp_type(context, stream) != SUBVP_PHANTOM &&
-					stream->cursor_position.enable &&
-					!dc_stream_check_cursor_attributes(stream, context, &stream->cursor_attributes)) {
-				/* hw cursor cannot be supported with subvp active, so disable subvp for now */
-				dc_state_set_stream_cursor_subvp_limit(stream, context, true);
-				status = DC_FAIL_HW_CURSOR_SUPPORT;
-			}
-		};
-	}
-
-	if (validate_mode == DC_VALIDATE_MODE_AND_PROGRAMMING && status == DC_FAIL_HW_CURSOR_SUPPORT) {
-		/* attempt to validate again with subvp disabled due to cursor */
-		if (dc->debug.using_dml2)
-			status = dml2_validate(dc, context,
-					context->power_source == DC_POWER_SOURCE_DC ? context->bw_ctx.dml2_dc_power_source : context->bw_ctx.dml2,
-					validate_mode) ? DC_OK : DC_FAIL_BANDWIDTH_VALIDATE;
-		else
-			status = dml1_validate(dc, context, validate_mode) ? DC_OK : DC_FAIL_BANDWIDTH_VALIDATE;
-	}
-
-	return status;
+		out = dml1_validate(dc, context, fast_validate);
+	return out;
 }
 
 int dcn32_populate_dml_pipes_from_context(
 	struct dc *dc, struct dc_state *context,
 	display_e2e_pipe_params_st *pipes,
-	enum dc_validate_mode validate_mode)
+	bool fast_validate)
 {
 	int i, pipe_cnt;
 	struct resource_context *res_ctx = &context->res_ctx;
@@ -1878,7 +1840,7 @@ int dcn32_populate_dml_pipes_from_context(
 	int num_subvp_none = 0;
 	int odm_slice_count;
 
-	dcn20_populate_dml_pipes_from_context(dc, context, pipes, validate_mode);
+	dcn20_populate_dml_pipes_from_context(dc, context, pipes, fast_validate);
 
 	/* For single display subvp, look for subvp main so if we have phantom
 	 *  pipe, we can set odm policy to match main pipe
@@ -1960,7 +1922,7 @@ int dcn32_populate_dml_pipes_from_context(
 		/* Only populate DML input with subvp info for full updates.
 		 * This is just a workaround -- needs a proper fix.
 		 */
-		if (validate_mode == DC_VALIDATE_MODE_AND_PROGRAMMING) {
+		if (!fast_validate) {
 			switch (dc_state_get_pipe_subvp_type(context, pipe)) {
 			case SUBVP_MAIN:
 				pipes[pipe_cnt].pipe.src.use_mall_for_pstate_change = dm_use_mall_pstate_change_sub_viewport;
@@ -2028,10 +1990,6 @@ unsigned int dcn32_calculate_mall_ways_from_bytes(const struct dc *dc, unsigned 
 		return 0;
 	}
 
-	if (dc->caps.max_cab_allocation_bytes == 0) {
-		return 0xffffffff;
-	}
-
 	/* add 2 lines for worst case alignment */
 	cache_lines_used = total_size_in_mall_bytes / dc->caps.cache_line_size + 2;
 
@@ -2061,29 +2019,23 @@ void dcn32_calculate_wm_and_dlg(struct dc *dc, struct dc_state *context,
 
 static void dcn32_update_bw_bounding_box(struct dc *dc, struct clk_bw_params *bw_params)
 {
+	struct dml2_configuration_options *dml2_opt = &dc->dml2_tmp;
+
+	memcpy(dml2_opt, &dc->dml2_options, sizeof(dc->dml2_options));
+
 	DC_FP_START();
 
 	dcn32_update_bw_bounding_box_fpu(dc, bw_params);
 
+	dml2_opt->use_clock_dc_limits = false;
 	if (dc->debug.using_dml2 && dc->current_state && dc->current_state->bw_ctx.dml2)
-		dml2_reinit(dc, &dc->dml2_options, &dc->current_state->bw_ctx.dml2);
+		dml2_reinit(dc, dml2_opt, &dc->current_state->bw_ctx.dml2);
 
+	dml2_opt->use_clock_dc_limits = true;
 	if (dc->debug.using_dml2 && dc->current_state && dc->current_state->bw_ctx.dml2_dc_power_source)
-		dml2_reinit(dc, &dc->dml2_dc_power_options, &dc->current_state->bw_ctx.dml2_dc_power_source);
+		dml2_reinit(dc, dml2_opt, &dc->current_state->bw_ctx.dml2_dc_power_source);
 
 	DC_FP_END();
-}
-
-unsigned int dcn32_get_max_hw_cursor_size(const struct dc *dc,
-			struct dc_state *state,
-			const struct dc_stream_state *stream)
-{
-	bool limit_cur_to_buf;
-
-	limit_cur_to_buf = dc_state_get_stream_subvp_cursor_limit(stream, state) &&
-			!stream->hw_cursor_req;
-
-	return limit_cur_to_buf ? dc->caps.max_buffered_cursor_size : dc->caps.max_cursor_size;
 }
 
 static struct resource_funcs dcn32_res_pool_funcs = {
@@ -2111,8 +2063,6 @@ static struct resource_funcs dcn32_res_pool_funcs = {
 	.add_phantom_pipes = dcn32_add_phantom_pipes,
 	.build_pipe_pix_clk_params = dcn20_build_pipe_pix_clk_params,
 	.calculate_mall_ways_from_bytes = dcn32_calculate_mall_ways_from_bytes,
-	.get_vstartup_for_pipe = dcn10_get_vstartup_for_pipe,
-	.get_max_hw_cursor_size = dcn32_get_max_hw_cursor_size,
 };
 
 static uint32_t read_pipe_fuses(struct dc_context *ctx)
@@ -2159,6 +2109,8 @@ static bool dcn32_resource_construct(
 #define REG_STRUCT dccg_regs
 	dccg_regs_init();
 
+	DC_FP_START();
+
 	ctx->dc_bios->regs = &bios_regs;
 
 	pool->base.res_cap = &res_cap_dcn32;
@@ -2196,7 +2148,6 @@ static bool dcn32_resource_construct(
 	dc->caps.i2c_speed_in_khz_hdcp = 100; /*1.4 w/a applied by default*/
 	/* TODO: Bring max_cursor_size back to 256 after subvp cursor corruption is fixed*/
 	dc->caps.max_cursor_size = 64;
-	dc->caps.max_buffered_cursor_size = 64; // sqrt(16 * 1024 / 4)
 	dc->caps.min_horizontal_blanking_period = 80;
 	dc->caps.dmdata_alloc_size = 2048;
 	dc->caps.mall_size_per_mem_channel = 4;
@@ -2251,7 +2202,7 @@ static bool dcn32_resource_construct(
 	dc->caps.color.dpp.gamma_corr = 1;
 	dc->caps.color.dpp.dgam_rom_for_yuv = 0;
 
-	dc->caps.color.dpp.hw_3d_lut = 0;
+	dc->caps.color.dpp.hw_3d_lut = 1;
 	dc->caps.color.dpp.ogam_ram = 0;  // no OGAM in DPP since DCN1
 	// no OGAM ROM on DCN2 and later ASICs
 	dc->caps.color.dpp.ogam_rom_caps.srgb = 0;
@@ -2270,7 +2221,6 @@ static bool dcn32_resource_construct(
 	dc->caps.color.mpc.ogam_rom_caps.pq = 0;
 	dc->caps.color.mpc.ogam_rom_caps.hlg = 0;
 	dc->caps.color.mpc.ocsc = 1;
-	dc->caps.color.mpc.preblend = true;
 
 	/* Use pipe context based otg sync logic */
 	dc->config.use_pipe_ctx_sync_logic = true;
@@ -2500,8 +2450,6 @@ static bool dcn32_resource_construct(
 	for (i = 0; i < dc->caps.max_planes; ++i)
 		dc->caps.planes[i] = plane_cap;
 
-	dc->caps.max_odm_combine_factor = 4;
-
 	dc->cap_funcs = cap_funcs;
 
 	if (dc->ctx->dc_bios->fw_info.oem_i2c_present) {
@@ -2516,6 +2464,7 @@ static bool dcn32_resource_construct(
 	}
 
 	dc->dml2_options.dcn_pipe_count = pool->base.pipe_count;
+	dc->dml2_options.use_native_pstate_optimization = false;
 	dc->dml2_options.use_native_soc_bb_construction = true;
 	dc->dml2_options.minimize_dispclk_using_odm = true;
 
@@ -2547,13 +2496,13 @@ static bool dcn32_resource_construct(
 	if (ASICREV_IS_GC_11_0_3(dc->ctx->asic_id.hw_internal_rev) && (dc->config.sdpif_request_limit_words_per_umc == 0))
 		dc->config.sdpif_request_limit_words_per_umc = 16;
 
-	/* init DC limited DML2 options */
-	memcpy(&dc->dml2_dc_power_options, &dc->dml2_options, sizeof(struct dml2_configuration_options));
-	dc->dml2_dc_power_options.use_clock_dc_limits = true;
+	DC_FP_END();
 
 	return true;
 
 create_fail:
+
+	DC_FP_END();
 
 	dcn32_resource_destruct(pool);
 
@@ -2852,7 +2801,6 @@ struct pipe_ctx *dcn32_acquire_free_pipe_as_secondary_opp_head(
 		free_pipe->plane_res.xfm = pool->transforms[free_pipe_idx];
 		free_pipe->plane_res.dpp = pool->dpps[free_pipe_idx];
 		free_pipe->plane_res.mpcc_inst = pool->dpps[free_pipe_idx]->inst;
-		free_pipe->hblank_borrow = otg_master->hblank_borrow;
 		if (free_pipe->stream->timing.flags.DSC == 1) {
 			dcn20_acquire_dsc(free_pipe->stream->ctx->dc,
 					&new_ctx->res_ctx,

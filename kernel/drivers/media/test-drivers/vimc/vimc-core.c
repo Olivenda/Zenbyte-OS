@@ -410,7 +410,7 @@ static struct platform_device vimc_pdev = {
 
 static struct platform_driver vimc_pdrv = {
 	.probe		= vimc_probe,
-	.remove		= vimc_remove,
+	.remove_new	= vimc_remove,
 	.driver		= {
 		.name	= VIMC_PDEV_NAME,
 	},

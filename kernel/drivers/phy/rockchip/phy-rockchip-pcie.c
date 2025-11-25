@@ -123,7 +123,7 @@ static int rockchip_pcie_phy_power_off(struct phy *phy)
 	struct rockchip_pcie_phy *rk_phy = to_pcie_phy(inst);
 	int err = 0;
 
-	guard(mutex)(&rk_phy->pcie_mutex);
+	mutex_lock(&rk_phy->pcie_mutex);
 
 	regmap_write(rk_phy->reg_base,
 		     rk_phy->phy_data->pcie_laneoff,
@@ -131,22 +131,27 @@ static int rockchip_pcie_phy_power_off(struct phy *phy)
 				   PHY_LANE_IDLE_MASK,
 				   PHY_LANE_IDLE_A_SHIFT + inst->index));
 
-	if (--rk_phy->pwr_cnt) {
-		return 0;
-	}
+	if (--rk_phy->pwr_cnt)
+		goto err_out;
 
 	err = reset_control_assert(rk_phy->phy_rst);
 	if (err) {
 		dev_err(&phy->dev, "assert phy_rst err %d\n", err);
-		rk_phy->pwr_cnt++;
-		regmap_write(rk_phy->reg_base,
-			     rk_phy->phy_data->pcie_laneoff,
-			     HIWORD_UPDATE(!PHY_LANE_IDLE_OFF,
-					   PHY_LANE_IDLE_MASK,
-					   PHY_LANE_IDLE_A_SHIFT + inst->index));
-		return err;
+		goto err_restore;
 	}
 
+err_out:
+	mutex_unlock(&rk_phy->pcie_mutex);
+	return 0;
+
+err_restore:
+	rk_phy->pwr_cnt++;
+	regmap_write(rk_phy->reg_base,
+		     rk_phy->phy_data->pcie_laneoff,
+		     HIWORD_UPDATE(!PHY_LANE_IDLE_OFF,
+				   PHY_LANE_IDLE_MASK,
+				   PHY_LANE_IDLE_A_SHIFT + inst->index));
+	mutex_unlock(&rk_phy->pcie_mutex);
 	return err;
 }
 
@@ -156,24 +161,17 @@ static int rockchip_pcie_phy_power_on(struct phy *phy)
 	struct rockchip_pcie_phy *rk_phy = to_pcie_phy(inst);
 	int err = 0;
 	u32 status;
+	unsigned long timeout;
 
-	guard(mutex)(&rk_phy->pcie_mutex);
+	mutex_lock(&rk_phy->pcie_mutex);
 
-	regmap_write(rk_phy->reg_base,
-		     rk_phy->phy_data->pcie_laneoff,
-		     HIWORD_UPDATE(!PHY_LANE_IDLE_OFF,
-				   PHY_LANE_IDLE_MASK,
-				   PHY_LANE_IDLE_A_SHIFT + inst->index));
-
-	if (rk_phy->pwr_cnt++) {
-		return 0;
-	}
+	if (rk_phy->pwr_cnt++)
+		goto err_out;
 
 	err = reset_control_deassert(rk_phy->phy_rst);
 	if (err) {
 		dev_err(&phy->dev, "deassert phy_rst err %d\n", err);
-		rk_phy->pwr_cnt--;
-		return err;
+		goto err_pwr_cnt;
 	}
 
 	regmap_write(rk_phy->reg_base, rk_phy->phy_data->pcie_conf,
@@ -181,16 +179,32 @@ static int rockchip_pcie_phy_power_on(struct phy *phy)
 				   PHY_CFG_ADDR_MASK,
 				   PHY_CFG_ADDR_SHIFT));
 
+	regmap_write(rk_phy->reg_base,
+		     rk_phy->phy_data->pcie_laneoff,
+		     HIWORD_UPDATE(!PHY_LANE_IDLE_OFF,
+				   PHY_LANE_IDLE_MASK,
+				   PHY_LANE_IDLE_A_SHIFT + inst->index));
+
 	/*
 	 * No documented timeout value for phy operation below,
 	 * so we make it large enough here. And we use loop-break
 	 * method which should not be harmful.
 	 */
-	err = regmap_read_poll_timeout(rk_phy->reg_base,
-				       rk_phy->phy_data->pcie_status,
-				       status,
-				       status & PHY_PLL_LOCKED,
-				       200, 100000);
+	timeout = jiffies + msecs_to_jiffies(1000);
+
+	err = -EINVAL;
+	while (time_before(jiffies, timeout)) {
+		regmap_read(rk_phy->reg_base,
+			    rk_phy->phy_data->pcie_status,
+			    &status);
+		if (status & PHY_PLL_LOCKED) {
+			dev_dbg(&phy->dev, "pll locked!\n");
+			err = 0;
+			break;
+		}
+		msleep(20);
+	}
+
 	if (err) {
 		dev_err(&phy->dev, "pll lock timeout!\n");
 		goto err_pll_lock;
@@ -199,11 +213,19 @@ static int rockchip_pcie_phy_power_on(struct phy *phy)
 	phy_wr_cfg(rk_phy, PHY_CFG_CLK_TEST, PHY_CFG_SEPE_RATE);
 	phy_wr_cfg(rk_phy, PHY_CFG_CLK_SCC, PHY_CFG_PLL_100M);
 
-	err = regmap_read_poll_timeout(rk_phy->reg_base,
-				       rk_phy->phy_data->pcie_status,
-				       status,
-				       !(status & PHY_PLL_OUTPUT),
-				       200, 100000);
+	err = -ETIMEDOUT;
+	while (time_before(jiffies, timeout)) {
+		regmap_read(rk_phy->reg_base,
+			    rk_phy->phy_data->pcie_status,
+			    &status);
+		if (!(status & PHY_PLL_OUTPUT)) {
+			dev_dbg(&phy->dev, "pll output enable done!\n");
+			err = 0;
+			break;
+		}
+		msleep(20);
+	}
+
 	if (err) {
 		dev_err(&phy->dev, "pll output enable timeout!\n");
 		goto err_pll_lock;
@@ -213,22 +235,33 @@ static int rockchip_pcie_phy_power_on(struct phy *phy)
 		     HIWORD_UPDATE(PHY_CFG_PLL_LOCK,
 				   PHY_CFG_ADDR_MASK,
 				   PHY_CFG_ADDR_SHIFT));
+	err = -EINVAL;
+	while (time_before(jiffies, timeout)) {
+		regmap_read(rk_phy->reg_base,
+			    rk_phy->phy_data->pcie_status,
+			    &status);
+		if (status & PHY_PLL_LOCKED) {
+			dev_dbg(&phy->dev, "pll relocked!\n");
+			err = 0;
+			break;
+		}
+		msleep(20);
+	}
 
-	err = regmap_read_poll_timeout(rk_phy->reg_base,
-				       rk_phy->phy_data->pcie_status,
-				       status,
-				       status & PHY_PLL_LOCKED,
-				       200, 100000);
 	if (err) {
 		dev_err(&phy->dev, "pll relock timeout!\n");
 		goto err_pll_lock;
 	}
 
-	return err;
+err_out:
+	mutex_unlock(&rk_phy->pcie_mutex);
+	return 0;
 
 err_pll_lock:
 	reset_control_assert(rk_phy->phy_rst);
+err_pwr_cnt:
 	rk_phy->pwr_cnt--;
+	mutex_unlock(&rk_phy->pcie_mutex);
 	return err;
 }
 
@@ -238,19 +271,33 @@ static int rockchip_pcie_phy_init(struct phy *phy)
 	struct rockchip_pcie_phy *rk_phy = to_pcie_phy(inst);
 	int err = 0;
 
-	guard(mutex)(&rk_phy->pcie_mutex);
+	mutex_lock(&rk_phy->pcie_mutex);
 
-	if (rk_phy->init_cnt++) {
-		return 0;
+	if (rk_phy->init_cnt++)
+		goto err_out;
+
+	err = clk_prepare_enable(rk_phy->clk_pciephy_ref);
+	if (err) {
+		dev_err(&phy->dev, "Fail to enable pcie ref clock.\n");
+		goto err_refclk;
 	}
 
 	err = reset_control_assert(rk_phy->phy_rst);
 	if (err) {
 		dev_err(&phy->dev, "assert phy_rst err %d\n", err);
-		rk_phy->init_cnt--;
-		return err;
+		goto err_reset;
 	}
 
+err_out:
+	mutex_unlock(&rk_phy->pcie_mutex);
+	return 0;
+
+err_reset:
+
+	clk_disable_unprepare(rk_phy->clk_pciephy_ref);
+err_refclk:
+	rk_phy->init_cnt--;
+	mutex_unlock(&rk_phy->pcie_mutex);
 	return err;
 }
 
@@ -259,12 +306,15 @@ static int rockchip_pcie_phy_exit(struct phy *phy)
 	struct phy_pcie_instance *inst = phy_get_drvdata(phy);
 	struct rockchip_pcie_phy *rk_phy = to_pcie_phy(inst);
 
-	guard(mutex)(&rk_phy->pcie_mutex);
+	mutex_lock(&rk_phy->pcie_mutex);
 
 	if (--rk_phy->init_cnt)
 		goto err_init_cnt;
 
+	clk_disable_unprepare(rk_phy->clk_pciephy_ref);
+
 err_init_cnt:
+	mutex_unlock(&rk_phy->pcie_mutex);
 	return 0;
 }
 
@@ -320,14 +370,18 @@ static int rockchip_pcie_phy_probe(struct platform_device *pdev)
 	mutex_init(&rk_phy->pcie_mutex);
 
 	rk_phy->phy_rst = devm_reset_control_get(dev, "phy");
-	if (IS_ERR(rk_phy->phy_rst))
-		return dev_err_probe(&pdev->dev, PTR_ERR(rk_phy->phy_rst),
-				     "missing phy property for reset controller\n");
+	if (IS_ERR(rk_phy->phy_rst)) {
+		if (PTR_ERR(rk_phy->phy_rst) != -EPROBE_DEFER)
+			dev_err(dev,
+				"missing phy property for reset controller\n");
+		return PTR_ERR(rk_phy->phy_rst);
+	}
 
-	rk_phy->clk_pciephy_ref = devm_clk_get_enabled(dev, "refclk");
-	if (IS_ERR(rk_phy->clk_pciephy_ref))
-		return dev_err_probe(&pdev->dev, PTR_ERR(rk_phy->clk_pciephy_ref),
-				     "failed to get phyclk\n");
+	rk_phy->clk_pciephy_ref = devm_clk_get(dev, "refclk");
+	if (IS_ERR(rk_phy->clk_pciephy_ref)) {
+		dev_err(dev, "refclk not found.\n");
+		return PTR_ERR(rk_phy->clk_pciephy_ref);
+	}
 
 	/* parse #phy-cells to see if it's legacy PHY model */
 	if (of_property_read_u32(dev->of_node, "#phy-cells", &phy_num))

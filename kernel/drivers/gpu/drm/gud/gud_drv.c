@@ -13,7 +13,6 @@
 #include <linux/vmalloc.h>
 #include <linux/workqueue.h>
 
-#include <drm/clients/drm_client_setup.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_blend.h>
 #include <drm/drm_damage_helper.h>
@@ -309,6 +308,21 @@ out:
 	return ret;
 }
 
+/*
+ * FIXME: Dma-buf sharing requires DMA support by the importing device.
+ *        This function is a workaround to make USB devices work as well.
+ *        See todo.rst for how to fix the issue in the dma-buf framework.
+ */
+static struct drm_gem_object *gud_gem_prime_import(struct drm_device *drm, struct dma_buf *dma_buf)
+{
+	struct gud_device *gdrm = to_gud_device(drm);
+
+	if (!gdrm->dmadev)
+		return ERR_PTR(-ENODEV);
+
+	return drm_gem_prime_import_dev(drm, dma_buf, gdrm->dmadev);
+}
+
 static int gud_stats_debugfs(struct seq_file *m, void *data)
 {
 	struct drm_debugfs_entry *entry = m->private;
@@ -361,10 +375,11 @@ static const struct drm_driver gud_drm_driver = {
 	.driver_features	= DRIVER_MODESET | DRIVER_GEM | DRIVER_ATOMIC,
 	.fops			= &gud_fops,
 	DRM_GEM_SHMEM_DRIVER_OPS,
-	DRM_FBDEV_SHMEM_DRIVER_OPS,
+	.gem_prime_import	= gud_gem_prime_import,
 
 	.name			= "gud",
 	.desc			= "Generic USB Display",
+	.date			= "20200422",
 	.major			= 1,
 	.minor			= 0,
 };
@@ -418,7 +433,6 @@ static int gud_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	size_t max_buffer_size = 0;
 	struct gud_device *gdrm;
 	struct drm_device *drm;
-	struct device *dma_dev;
 	u8 *formats_dev;
 	u32 *formats;
 	int ret, i;
@@ -594,23 +608,21 @@ static int gud_probe(struct usb_interface *intf, const struct usb_device_id *id)
 
 	usb_set_intfdata(intf, gdrm);
 
-	dma_dev = usb_intf_get_dma_device(intf);
-	if (dma_dev) {
-		drm_dev_set_dma_dev(drm, dma_dev);
-		put_device(dma_dev);
-	} else {
-		dev_warn(dev, "buffer sharing not supported"); /* not an error */
-	}
+	gdrm->dmadev = usb_intf_get_dma_device(intf);
+	if (!gdrm->dmadev)
+		dev_warn(dev, "buffer sharing not supported");
 
 	drm_debugfs_add_file(drm, "stats", gud_stats_debugfs, NULL);
 
 	ret = drm_dev_register(drm, 0);
-	if (ret)
+	if (ret) {
+		put_device(gdrm->dmadev);
 		return ret;
+	}
 
 	drm_kms_helper_poll_init(drm);
 
-	drm_client_setup(drm, NULL);
+	drm_fbdev_shmem_setup(drm, 0);
 
 	return 0;
 }
@@ -625,6 +637,8 @@ static void gud_disconnect(struct usb_interface *interface)
 	drm_kms_helper_poll_fini(drm);
 	drm_dev_unplug(drm);
 	drm_atomic_helper_shutdown(drm);
+	put_device(gdrm->dmadev);
+	gdrm->dmadev = NULL;
 }
 
 static int gud_suspend(struct usb_interface *intf, pm_message_t message)

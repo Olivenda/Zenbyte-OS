@@ -1169,6 +1169,7 @@ out:
 
 static void check_sg_segment(struct device *dev, struct scatterlist *sg)
 {
+#ifdef CONFIG_DMA_API_DEBUG_SG
 	unsigned int max_seg = dma_get_max_seg_size(dev);
 	u64 start, end, boundary = dma_get_seg_boundary(dev);
 
@@ -1189,6 +1190,7 @@ static void check_sg_segment(struct device *dev, struct scatterlist *sg)
 	if ((start ^ end) & ~boundary)
 		err_printk(dev, NULL, "mapping sg segment across boundary [start=0x%016llx] [end=0x%016llx] [boundary=0x%016llx]\n",
 			   start, end, boundary);
+#endif
 }
 
 void debug_dma_map_single(struct device *dev, const void *addr,

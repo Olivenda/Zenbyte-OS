@@ -7,8 +7,6 @@
 #include <linux/bitmap.h>
 #include <linux/sched.h>
 #include <linux/wait.h>
-#include <linux/mm.h>
-#include <linux/pagemap.h>
 #include <linux/math64.h>
 #include <linux/rbtree.h>
 
@@ -121,23 +119,28 @@ static inline struct rb_node *rb_simple_search_first(const struct rb_root *root,
 	return ret;
 }
 
-static int rb_simple_node_bytenr_cmp(struct rb_node *new, const struct rb_node *existing)
+static inline struct rb_node *rb_simple_insert(struct rb_root *root, u64 bytenr,
+					       struct rb_node *node)
 {
-	struct rb_simple_node *new_entry = rb_entry(new, struct rb_simple_node, rb_node);
-	struct rb_simple_node *existing_entry = rb_entry(existing, struct rb_simple_node, rb_node);
+	struct rb_node **p = &root->rb_node;
+	struct rb_node *parent = NULL;
+	struct rb_simple_node *entry;
 
-	if (new_entry->bytenr < existing_entry->bytenr)
-		return -1;
-	else if (new_entry->bytenr > existing_entry->bytenr)
-		return 1;
+	while (*p) {
+		parent = *p;
+		entry = rb_entry(parent, struct rb_simple_node, rb_node);
 
-	return 0;
-}
+		if (bytenr < entry->bytenr)
+			p = &(*p)->rb_left;
+		else if (bytenr > entry->bytenr)
+			p = &(*p)->rb_right;
+		else
+			return parent;
+	}
 
-static inline struct rb_node *rb_simple_insert(struct rb_root *root,
-					       struct rb_simple_node *simple_node)
-{
-	return rb_find_add(&simple_node->rb_node, root, rb_simple_node_bytenr_cmp);
+	rb_link_node(node, parent, p);
+	rb_insert_color(node, root);
+	return NULL;
 }
 
 static inline bool bitmap_test_range_all_set(const unsigned long *addr,
@@ -158,11 +161,6 @@ static inline bool bitmap_test_range_all_zero(const unsigned long *addr,
 
 	found_set = find_next_bit(addr, start + nbits, start);
 	return (found_set == start + nbits);
-}
-
-static inline u64 folio_end(struct folio *folio)
-{
-	return folio_pos(folio) + folio_size(folio);
 }
 
 #endif

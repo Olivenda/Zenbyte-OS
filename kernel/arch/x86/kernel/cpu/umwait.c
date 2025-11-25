@@ -33,7 +33,7 @@ static DEFINE_MUTEX(umwait_lock);
 static void umwait_update_control_msr(void * unused)
 {
 	lockdep_assert_irqs_disabled();
-	wrmsrq(MSR_IA32_UMWAIT_CONTROL, READ_ONCE(umwait_control_cached));
+	wrmsr(MSR_IA32_UMWAIT_CONTROL, READ_ONCE(umwait_control_cached), 0);
 }
 
 /*
@@ -71,7 +71,7 @@ static int umwait_cpu_offline(unsigned int cpu)
 	 * the original control MSR value in umwait_init(). So there
 	 * is no race condition here.
 	 */
-	wrmsrq(MSR_IA32_UMWAIT_CONTROL, orig_umwait_control_cached);
+	wrmsr(MSR_IA32_UMWAIT_CONTROL, orig_umwait_control_cached, 0);
 
 	return 0;
 }
@@ -214,7 +214,7 @@ static int __init umwait_init(void)
 	 * changed. This is the only place where orig_umwait_control_cached
 	 * is modified.
 	 */
-	rdmsrq(MSR_IA32_UMWAIT_CONTROL, orig_umwait_control_cached);
+	rdmsrl(MSR_IA32_UMWAIT_CONTROL, orig_umwait_control_cached);
 
 	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "umwait:online",
 				umwait_cpu_online, umwait_cpu_offline);

@@ -45,7 +45,6 @@
  * therefore delaying the throughput loss caused by using SMP threads.
  */
 
-#include <linux/cpufeature.h>
 #include <linux/cpumask.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
@@ -88,7 +87,7 @@ static DECLARE_DELAYED_WORK(hd_capacity_work, hd_capacity_work_fn);
 
 static int hd_set_hiperdispatch_mode(int enable)
 {
-	if (!cpu_has_topology())
+	if (!MACHINE_HAS_TOPOLOGY)
 		enable = 0;
 	if (hd_enabled == enable)
 		return 0;
@@ -293,7 +292,7 @@ static int hiperdispatch_ctl_handler(const struct ctl_table *ctl, int write,
 	return 0;
 }
 
-static const struct ctl_table hiperdispatch_ctl_table[] = {
+static struct ctl_table hiperdispatch_ctl_table[] = {
 	{
 		.procname	= "hiperdispatch",
 		.mode		= 0644,

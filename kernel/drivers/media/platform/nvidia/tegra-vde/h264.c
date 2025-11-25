@@ -585,6 +585,7 @@ static int tegra_vde_decode_begin(struct tegra_vde *vde,
 	return 0;
 
 put_runtime_pm:
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 unlock:
@@ -611,6 +612,7 @@ static void tegra_vde_decode_abort(struct tegra_vde *vde)
 	if (err)
 		dev_err(dev, "DEC end: Failed to assert HW reset: %d\n", err);
 
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	mutex_unlock(&vde->lock);

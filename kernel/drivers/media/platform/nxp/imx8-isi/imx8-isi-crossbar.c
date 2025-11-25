@@ -188,12 +188,11 @@ static int mxc_isi_crossbar_init_state(struct v4l2_subdev *sd,
 	 * Create a 1:1 mapping between pixel link inputs and outputs to
 	 * pipelines by default.
 	 */
-	routing.num_routes = min(xbar->num_sinks - 1, xbar->num_sources);
-	routes = kcalloc(routing.num_routes, sizeof(*routes), GFP_KERNEL);
+	routes = kcalloc(xbar->num_sources, sizeof(*routes), GFP_KERNEL);
 	if (!routes)
 		return -ENOMEM;
 
-	for (i = 0; i < routing.num_routes; ++i) {
+	for (i = 0; i < xbar->num_sources; ++i) {
 		struct v4l2_subdev_route *route = &routes[i];
 
 		route->sink_pad = i;
@@ -201,6 +200,7 @@ static int mxc_isi_crossbar_init_state(struct v4l2_subdev *sd,
 		route->flags = V4L2_SUBDEV_ROUTE_FL_ACTIVE;
 	}
 
+	routing.num_routes = xbar->num_sources;
 	routing.routes = routes;
 
 	ret = __mxc_isi_crossbar_set_routing(sd, state, &routing);
@@ -352,8 +352,9 @@ static int mxc_isi_crossbar_enable_streams(struct v4l2_subdev *sd,
 						 sink_streams);
 		if (ret) {
 			dev_err(xbar->isi->dev,
-				"failed to enable streams 0x%llx on '%s':%u: %d\n",
-				sink_streams, remote_sd->name, remote_pad, ret);
+				"failed to %s streams 0x%llx on '%s':%u: %d\n",
+				"enable", sink_streams, remote_sd->name,
+				remote_pad, ret);
 			mxc_isi_crossbar_gasket_disable(xbar, sink_pad);
 			return ret;
 		}
@@ -391,8 +392,9 @@ static int mxc_isi_crossbar_disable_streams(struct v4l2_subdev *sd,
 						  sink_streams);
 		if (ret)
 			dev_err(xbar->isi->dev,
-				"failed to disable streams 0x%llx on '%s':%u: %d\n",
-				sink_streams, remote_sd->name, remote_pad, ret);
+				"failed to %s streams 0x%llx on '%s':%u: %d\n",
+				"disable", sink_streams, remote_sd->name,
+				remote_pad, ret);
 
 		mxc_isi_crossbar_gasket_disable(xbar, sink_pad);
 	}
@@ -451,7 +453,7 @@ int mxc_isi_crossbar_init(struct mxc_isi_dev *isi)
 	 * the memory input.
 	 */
 	xbar->num_sinks = isi->pdata->num_ports + 1;
-	xbar->num_sources = isi->pdata->num_channels;
+	xbar->num_sources = isi->pdata->num_ports;
 	num_pads = xbar->num_sinks + xbar->num_sources;
 
 	xbar->pads = kcalloc(num_pads, sizeof(*xbar->pads), GFP_KERNEL);

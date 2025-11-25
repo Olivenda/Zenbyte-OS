@@ -16,7 +16,7 @@
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
 
-/* Control registers */
+/* Contol registers */
 #define DRV2667_STATUS	0x00
 #define DRV2667_CTRL_1	0x01
 #define DRV2667_CTRL_2	0x02
@@ -402,57 +402,59 @@ static int drv2667_probe(struct i2c_client *client)
 static int drv2667_suspend(struct device *dev)
 {
 	struct drv2667_data *haptics = dev_get_drvdata(dev);
-	int error;
+	int ret = 0;
 
-	guard(mutex)(&haptics->input_dev->mutex);
+	mutex_lock(&haptics->input_dev->mutex);
 
 	if (input_device_enabled(haptics->input_dev)) {
-		error = regmap_update_bits(haptics->regmap, DRV2667_CTRL_2,
-					   DRV2667_STANDBY, DRV2667_STANDBY);
-		if (error) {
+		ret = regmap_update_bits(haptics->regmap, DRV2667_CTRL_2,
+					 DRV2667_STANDBY, DRV2667_STANDBY);
+		if (ret) {
 			dev_err(dev, "Failed to set standby mode\n");
 			regulator_disable(haptics->regulator);
-			return error;
+			goto out;
 		}
 
-		error = regulator_disable(haptics->regulator);
-		if (error) {
+		ret = regulator_disable(haptics->regulator);
+		if (ret) {
 			dev_err(dev, "Failed to disable regulator\n");
 			regmap_update_bits(haptics->regmap,
 					   DRV2667_CTRL_2,
 					   DRV2667_STANDBY, 0);
-			return error;
 		}
 	}
-
-	return 0;
+out:
+	mutex_unlock(&haptics->input_dev->mutex);
+	return ret;
 }
 
 static int drv2667_resume(struct device *dev)
 {
 	struct drv2667_data *haptics = dev_get_drvdata(dev);
-	int error;
+	int ret = 0;
 
-	guard(mutex)(&haptics->input_dev->mutex);
+	mutex_lock(&haptics->input_dev->mutex);
 
 	if (input_device_enabled(haptics->input_dev)) {
-		error = regulator_enable(haptics->regulator);
-		if (error) {
+		ret = regulator_enable(haptics->regulator);
+		if (ret) {
 			dev_err(dev, "Failed to enable regulator\n");
-			return error;
+			goto out;
 		}
 
-		error = regmap_update_bits(haptics->regmap, DRV2667_CTRL_2,
-					   DRV2667_STANDBY, 0);
-		if (error) {
+		ret = regmap_update_bits(haptics->regmap, DRV2667_CTRL_2,
+					 DRV2667_STANDBY, 0);
+		if (ret) {
 			dev_err(dev, "Failed to unset standby mode\n");
 			regulator_disable(haptics->regulator);
-			return error;
+			goto out;
 		}
 
 	}
 
-	return 0;
+out:
+	mutex_unlock(&haptics->input_dev->mutex);
+	return ret;
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(drv2667_pm_ops, drv2667_suspend, drv2667_resume);

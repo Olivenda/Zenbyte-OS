@@ -17,7 +17,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x4",
+        "UMask": "0x70ff004",
         "Unit": "IIO"
     },
     {
@@ -29,7 +29,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x4",
+        "UMask": "0x7001004",
         "Unit": "IIO"
     },
     {
@@ -41,7 +41,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x4",
+        "UMask": "0x7002004",
         "Unit": "IIO"
     },
     {
@@ -53,7 +53,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x4",
+        "UMask": "0x7004004",
         "Unit": "IIO"
     },
     {
@@ -65,7 +65,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x4",
+        "UMask": "0x7008004",
         "Unit": "IIO"
     },
     {
@@ -77,7 +77,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x4",
+        "UMask": "0x7010004",
         "Unit": "IIO"
     },
     {
@@ -89,7 +89,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x4",
+        "UMask": "0x7020004",
         "Unit": "IIO"
     },
     {
@@ -101,7 +101,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x4",
+        "UMask": "0x7040004",
         "Unit": "IIO"
     },
     {
@@ -113,7 +113,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x4",
+        "UMask": "0x7080004",
         "Unit": "IIO"
     },
     {
@@ -125,7 +125,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0xff",
+        "UMask": "0x70ff0ff",
         "Unit": "IIO"
     },
     {
@@ -137,7 +137,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x1",
+        "UMask": "0x7001001",
         "Unit": "IIO"
     },
     {
@@ -149,7 +149,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x2",
+        "UMask": "0x7002002",
         "Unit": "IIO"
     },
     {
@@ -161,7 +161,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x4",
+        "UMask": "0x7004004",
         "Unit": "IIO"
     },
     {
@@ -173,7 +173,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x8",
+        "UMask": "0x7008008",
         "Unit": "IIO"
     },
     {
@@ -185,7 +185,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x10",
+        "UMask": "0x7010010",
         "Unit": "IIO"
     },
     {
@@ -197,7 +197,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x20",
+        "UMask": "0x7020020",
         "Unit": "IIO"
     },
     {
@@ -209,7 +209,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x40",
+        "UMask": "0x7040040",
         "Unit": "IIO"
     },
     {
@@ -221,7 +221,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x80",
+        "UMask": "0x7080080",
         "Unit": "IIO"
     },
     {
@@ -233,7 +233,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x4",
+        "UMask": "0x70ff004",
         "Unit": "IIO"
     },
     {
@@ -245,7 +245,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x4",
+        "UMask": "0x7001004",
         "Unit": "IIO"
     },
     {
@@ -257,7 +257,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x4",
+        "UMask": "0x7002004",
         "Unit": "IIO"
     },
     {
@@ -269,7 +269,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x4",
+        "UMask": "0x7004004",
         "Unit": "IIO"
     },
     {
@@ -281,7 +281,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x4",
+        "UMask": "0x7008004",
         "Unit": "IIO"
     },
     {
@@ -293,7 +293,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x4",
+        "UMask": "0x7010004",
         "Unit": "IIO"
     },
     {
@@ -305,7 +305,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x4",
+        "UMask": "0x7020004",
         "Unit": "IIO"
     },
     {
@@ -317,7 +317,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x4",
+        "UMask": "0x7040004",
         "Unit": "IIO"
     },
     {
@@ -329,7 +329,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x4",
+        "UMask": "0x7080004",
         "Unit": "IIO"
     },
     {
@@ -341,7 +341,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x1",
+        "UMask": "0x70ff001",
         "Unit": "IIO"
     },
     {
@@ -352,7 +352,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x1",
+        "UMask": "0x7001001",
         "Unit": "IIO"
     },
     {
@@ -363,7 +363,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x1",
+        "UMask": "0x7002001",
         "Unit": "IIO"
     },
     {
@@ -374,7 +374,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x1",
+        "UMask": "0x7004001",
         "Unit": "IIO"
     },
     {
@@ -385,7 +385,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x1",
+        "UMask": "0x7008001",
         "Unit": "IIO"
     },
     {
@@ -396,7 +396,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x1",
+        "UMask": "0x7010001",
         "Unit": "IIO"
     },
     {
@@ -407,7 +407,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x1",
+        "UMask": "0x7020001",
         "Unit": "IIO"
     },
     {
@@ -418,7 +418,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x1",
+        "UMask": "0x7040001",
         "Unit": "IIO"
     },
     {
@@ -429,7 +429,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x1",
+        "UMask": "0x7080001",
         "Unit": "IIO"
     },
     {
@@ -440,7 +440,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x8",
+        "UMask": "0x70ff008",
         "Unit": "IIO"
     },
     {
@@ -451,7 +451,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x2",
+        "UMask": "0x70ff002",
         "Unit": "IIO"
     },
     {
@@ -462,7 +462,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x4",
+        "UMask": "0x70ff004",
         "Unit": "IIO"
     },
     {
@@ -473,7 +473,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x4",
+        "UMask": "0x7001004",
         "Unit": "IIO"
     },
     {
@@ -484,7 +484,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x02",
-        "UMask": "0x4",
+        "UMask": "0x7002004",
         "Unit": "IIO"
     },
     {
@@ -495,7 +495,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x04",
-        "UMask": "0x4",
+        "UMask": "0x7004004",
         "Unit": "IIO"
     },
     {
@@ -506,7 +506,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x08",
-        "UMask": "0x4",
+        "UMask": "0x7008004",
         "Unit": "IIO"
     },
     {
@@ -517,7 +517,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x10",
-        "UMask": "0x4",
+        "UMask": "0x7010004",
         "Unit": "IIO"
     },
     {
@@ -528,7 +528,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x20",
-        "UMask": "0x4",
+        "UMask": "0x7020004",
         "Unit": "IIO"
     },
     {
@@ -539,7 +539,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x40",
-        "UMask": "0x4",
+        "UMask": "0x7040004",
         "Unit": "IIO"
     },
     {
@@ -550,7 +550,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x80",
-        "UMask": "0x4",
+        "UMask": "0x7080004",
         "Unit": "IIO"
     },
     {
@@ -561,7 +561,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x1",
+        "UMask": "0x70ff001",
         "Unit": "IIO"
     },
     {
@@ -572,7 +572,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x1",
+        "UMask": "0x7001001",
         "Unit": "IIO"
     },
     {
@@ -583,7 +583,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x02",
-        "UMask": "0x1",
+        "UMask": "0x7002001",
         "Unit": "IIO"
     },
     {
@@ -594,7 +594,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x04",
-        "UMask": "0x1",
+        "UMask": "0x7004001",
         "Unit": "IIO"
     },
     {
@@ -605,7 +605,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x08",
-        "UMask": "0x1",
+        "UMask": "0x7008001",
         "Unit": "IIO"
     },
     {
@@ -616,7 +616,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x10",
-        "UMask": "0x1",
+        "UMask": "0x7010001",
         "Unit": "IIO"
     },
     {
@@ -627,7 +627,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x20",
-        "UMask": "0x1",
+        "UMask": "0x7020001",
         "Unit": "IIO"
     },
     {
@@ -638,7 +638,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x40",
-        "UMask": "0x1",
+        "UMask": "0x7040001",
         "Unit": "IIO"
     },
     {
@@ -649,7 +649,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x80",
-        "UMask": "0x1",
+        "UMask": "0x7080001",
         "Unit": "IIO"
     },
     {
@@ -661,7 +661,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x8",
+        "UMask": "0x7001008",
         "Unit": "IIO"
     },
     {
@@ -673,7 +673,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x8",
+        "UMask": "0x7002008",
         "Unit": "IIO"
     },
     {
@@ -685,7 +685,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x8",
+        "UMask": "0x7004008",
         "Unit": "IIO"
     },
     {
@@ -697,7 +697,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x8",
+        "UMask": "0x7008008",
         "Unit": "IIO"
     },
     {
@@ -709,7 +709,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x8",
+        "UMask": "0x7010008",
         "Unit": "IIO"
     },
     {
@@ -721,7 +721,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x8",
+        "UMask": "0x7020008",
         "Unit": "IIO"
     },
     {
@@ -733,7 +733,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x8",
+        "UMask": "0x7040008",
         "Unit": "IIO"
     },
     {
@@ -745,7 +745,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x8",
+        "UMask": "0x7080008",
         "Unit": "IIO"
     },
     {
@@ -757,7 +757,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x2",
+        "UMask": "0x70ff002",
         "Unit": "IIO"
     },
     {
@@ -769,7 +769,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x2",
+        "UMask": "0x7001002",
         "Unit": "IIO"
     },
     {
@@ -781,7 +781,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x2",
+        "UMask": "0x7002002",
         "Unit": "IIO"
     },
     {
@@ -793,7 +793,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x2",
+        "UMask": "0x7004002",
         "Unit": "IIO"
     },
     {
@@ -805,7 +805,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x2",
+        "UMask": "0x7008002",
         "Unit": "IIO"
     },
     {
@@ -817,7 +817,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x2",
+        "UMask": "0x7010002",
         "Unit": "IIO"
     },
     {
@@ -829,7 +829,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x2",
+        "UMask": "0x7020002",
         "Unit": "IIO"
     },
     {
@@ -841,7 +841,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x2",
+        "UMask": "0x7040002",
         "Unit": "IIO"
     },
     {
@@ -853,7 +853,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x2",
+        "UMask": "0x7080002",
         "Unit": "IIO"
     },
     {
@@ -1121,28 +1121,15 @@
         "Unit": "IIO"
     },
     {
-        "BriefDescription": "This event is deprecated. [This event is alias to UNC_IIO_NUM_OUTSTANDING_REQ_FROM_CPU.TO_IO]",
+        "BriefDescription": "Occupancy of outbound request queue : To device : Counts number of outbound requests/completions IIO is currently processing",
         "Counter": "2,3",
-        "Deprecated": "1",
         "EventCode": "0xc5",
         "EventName": "UNC_IIO_NUM_OUSTANDING_REQ_FROM_CPU.TO_IO",
         "Experimental": "1",
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x8",
-        "Unit": "IIO"
-    },
-    {
-        "BriefDescription": "Occupancy of outbound request queue : To device : Counts number of outbound requests/completions IIO is currently processing [This event is alias to UNC_IIO_NUM_OUSTANDING_REQ_FROM_CPU.TO_IO]",
-        "Counter": "2,3",
-        "EventCode": "0xc5",
-        "EventName": "UNC_IIO_NUM_OUTSTANDING_REQ_FROM_CPU.TO_IO",
-        "Experimental": "1",
-        "FCMask": "0x07",
-        "PerPkg": "1",
-        "PortMask": "0x0FF",
-        "UMask": "0x8",
+        "UMask": "0x70ff008",
         "Unit": "IIO"
     },
     {
@@ -1154,7 +1141,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x20",
+        "UMask": "0x700f020",
         "Unit": "IIO"
     },
     {
@@ -1166,7 +1153,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x8",
+        "UMask": "0x700f008",
         "Unit": "IIO"
     },
     {
@@ -1178,7 +1165,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x2",
+        "UMask": "0x700f002",
         "Unit": "IIO"
     },
     {
@@ -1190,7 +1177,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x1",
+        "UMask": "0x700f001",
         "Unit": "IIO"
     },
     {
@@ -1202,7 +1189,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x4",
+        "UMask": "0x700f004",
         "Unit": "IIO"
     },
     {
@@ -1214,7 +1201,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x10",
+        "UMask": "0x700f010",
         "Unit": "IIO"
     },
     {
@@ -1226,7 +1213,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x80",
+        "UMask": "0x70ff080",
         "Unit": "IIO"
     },
     {
@@ -1238,7 +1225,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x40",
+        "UMask": "0x70ff040",
         "Unit": "IIO"
     },
     {
@@ -1250,7 +1237,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x20",
+        "UMask": "0x70ff020",
         "Unit": "IIO"
     },
     {
@@ -1262,7 +1249,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x2",
+        "UMask": "0x70ff002",
         "Unit": "IIO"
     },
     {
@@ -1274,7 +1261,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x8",
+        "UMask": "0x70ff008",
         "Unit": "IIO"
     },
     {
@@ -1286,7 +1273,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x1",
+        "UMask": "0x70ff001",
         "Unit": "IIO"
     },
     {
@@ -1298,7 +1285,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x10",
+        "UMask": "0x70ff010",
         "Unit": "IIO"
     },
     {
@@ -1310,19 +1297,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x4",
-        "Unit": "IIO"
-    },
-    {
-        "BriefDescription": "Posted requests sent by the integrated IO (IIO) controller to the Ubox, useful for counting message signaled interrupts (MSI).",
-        "Counter": "0,1,2,3",
-        "EventCode": "0x8e",
-        "EventName": "UNC_IIO_NUM_REQ_OF_CPU_BY_TGT.UBOX_POSTED",
-        "FCMask": "0x01",
-        "PerPkg": "1",
-        "PortMask": "0x0FF",
-        "PublicDescription": "-",
-        "UMask": "0x4",
+        "UMask": "0x70ff004",
         "Unit": "IIO"
     },
     {
@@ -1343,7 +1318,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x4",
+        "UMask": "0x70ff004",
         "Unit": "IIO"
     },
     {
@@ -1354,7 +1329,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x4",
+        "UMask": "0x7001004",
         "Unit": "IIO"
     },
     {
@@ -1365,7 +1340,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x4",
+        "UMask": "0x7002004",
         "Unit": "IIO"
     },
     {
@@ -1376,7 +1351,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x4",
+        "UMask": "0x7004004",
         "Unit": "IIO"
     },
     {
@@ -1387,7 +1362,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x4",
+        "UMask": "0x7008004",
         "Unit": "IIO"
     },
     {
@@ -1398,7 +1373,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x4",
+        "UMask": "0x7010004",
         "Unit": "IIO"
     },
     {
@@ -1409,7 +1384,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x4",
+        "UMask": "0x7020004",
         "Unit": "IIO"
     },
     {
@@ -1420,7 +1395,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x4",
+        "UMask": "0x7040004",
         "Unit": "IIO"
     },
     {
@@ -1431,7 +1406,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x4",
+        "UMask": "0x7080004",
         "Unit": "IIO"
     },
     {
@@ -1442,7 +1417,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x1",
+        "UMask": "0x70ff001",
         "Unit": "IIO"
     },
     {
@@ -1453,7 +1428,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x1",
+        "UMask": "0x7001001",
         "Unit": "IIO"
     },
     {
@@ -1464,7 +1439,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x1",
+        "UMask": "0x7002001",
         "Unit": "IIO"
     },
     {
@@ -1475,7 +1450,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x1",
+        "UMask": "0x7004001",
         "Unit": "IIO"
     },
     {
@@ -1486,7 +1461,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x1",
+        "UMask": "0x7008001",
         "Unit": "IIO"
     },
     {
@@ -1497,7 +1472,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x1",
+        "UMask": "0x7010001",
         "Unit": "IIO"
     },
     {
@@ -1508,7 +1483,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x1",
+        "UMask": "0x7020001",
         "Unit": "IIO"
     },
     {
@@ -1519,7 +1494,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x1",
+        "UMask": "0x7040001",
         "Unit": "IIO"
     },
     {
@@ -1530,7 +1505,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x1",
+        "UMask": "0x7080001",
         "Unit": "IIO"
     },
     {
@@ -1541,7 +1516,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x8",
+        "UMask": "0x70ff008",
         "Unit": "IIO"
     },
     {
@@ -1552,7 +1527,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x0FF",
-        "UMask": "0x2",
+        "UMask": "0x70ff002",
         "Unit": "IIO"
     },
     {
@@ -1563,7 +1538,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x4",
+        "UMask": "0x7001004",
         "Unit": "IIO"
     },
     {
@@ -1574,7 +1549,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x4",
+        "UMask": "0x7002004",
         "Unit": "IIO"
     },
     {
@@ -1585,7 +1560,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x4",
+        "UMask": "0x7004004",
         "Unit": "IIO"
     },
     {
@@ -1596,7 +1571,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x4",
+        "UMask": "0x7008004",
         "Unit": "IIO"
     },
     {
@@ -1607,7 +1582,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x4",
+        "UMask": "0x7010004",
         "Unit": "IIO"
     },
     {
@@ -1618,7 +1593,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x4",
+        "UMask": "0x7020004",
         "Unit": "IIO"
     },
     {
@@ -1629,7 +1604,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x4",
+        "UMask": "0x7040004",
         "Unit": "IIO"
     },
     {
@@ -1640,7 +1615,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x4",
+        "UMask": "0x7080004",
         "Unit": "IIO"
     },
     {
@@ -1651,7 +1626,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x1",
+        "UMask": "0x7001001",
         "Unit": "IIO"
     },
     {
@@ -1662,7 +1637,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x1",
+        "UMask": "0x7002001",
         "Unit": "IIO"
     },
     {
@@ -1673,7 +1648,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x1",
+        "UMask": "0x7004001",
         "Unit": "IIO"
     },
     {
@@ -1684,7 +1659,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x1",
+        "UMask": "0x7008001",
         "Unit": "IIO"
     },
     {
@@ -1695,7 +1670,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x1",
+        "UMask": "0x7010001",
         "Unit": "IIO"
     },
     {
@@ -1706,7 +1681,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x1",
+        "UMask": "0x7020001",
         "Unit": "IIO"
     },
     {
@@ -1717,7 +1692,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x1",
+        "UMask": "0x7040001",
         "Unit": "IIO"
     },
     {
@@ -1728,7 +1703,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x1",
+        "UMask": "0x7080001",
         "Unit": "IIO"
     },
     {
@@ -1740,7 +1715,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x8",
+        "UMask": "0x7001008",
         "Unit": "IIO"
     },
     {
@@ -1752,7 +1727,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x8",
+        "UMask": "0x7002008",
         "Unit": "IIO"
     },
     {
@@ -1764,7 +1739,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x8",
+        "UMask": "0x7004008",
         "Unit": "IIO"
     },
     {
@@ -1776,7 +1751,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x8",
+        "UMask": "0x7008008",
         "Unit": "IIO"
     },
     {
@@ -1788,7 +1763,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x8",
+        "UMask": "0x7010008",
         "Unit": "IIO"
     },
     {
@@ -1800,7 +1775,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x8",
+        "UMask": "0x7020008",
         "Unit": "IIO"
     },
     {
@@ -1812,7 +1787,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x8",
+        "UMask": "0x7040008",
         "Unit": "IIO"
     },
     {
@@ -1824,7 +1799,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x8",
+        "UMask": "0x7080008",
         "Unit": "IIO"
     },
     {
@@ -1836,7 +1811,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x001",
-        "UMask": "0x2",
+        "UMask": "0x7001002",
         "Unit": "IIO"
     },
     {
@@ -1848,7 +1823,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x002",
-        "UMask": "0x2",
+        "UMask": "0x7002002",
         "Unit": "IIO"
     },
     {
@@ -1860,7 +1835,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x004",
-        "UMask": "0x2",
+        "UMask": "0x7004002",
         "Unit": "IIO"
     },
     {
@@ -1872,7 +1847,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x008",
-        "UMask": "0x2",
+        "UMask": "0x7008002",
         "Unit": "IIO"
     },
     {
@@ -1884,7 +1859,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x010",
-        "UMask": "0x2",
+        "UMask": "0x7010002",
         "Unit": "IIO"
     },
     {
@@ -1896,7 +1871,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x020",
-        "UMask": "0x2",
+        "UMask": "0x7020002",
         "Unit": "IIO"
     },
     {
@@ -1908,7 +1883,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x040",
-        "UMask": "0x2",
+        "UMask": "0x7040002",
         "Unit": "IIO"
     },
     {
@@ -1920,7 +1895,7 @@
         "FCMask": "0x07",
         "PerPkg": "1",
         "PortMask": "0x080",
-        "UMask": "0x2",
+        "UMask": "0x7080002",
         "Unit": "IIO"
     }
 ]

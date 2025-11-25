@@ -17,12 +17,8 @@ description:
 
 properties:
   compatible:
-    oneOf:
-      - enum:
-          - mediatek,mt8195-mdp3-tcc
-      - items:
-          - const: mediatek,mt8188-mdp3-tcc
-          - const: mediatek,mt8195-mdp3-tcc
+    enum:
+      - mediatek,mt8195-mdp3-tcc
 
   reg:
     maxItems: 1

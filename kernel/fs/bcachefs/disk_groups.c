@@ -86,6 +86,35 @@ err:
 	return ret;
 }
 
+void bch2_disk_groups_to_text(struct printbuf *out, struct bch_fs *c)
+{
+	out->atomic++;
+	rcu_read_lock();
+
+	struct bch_disk_groups_cpu *g = rcu_dereference(c->disk_groups);
+	if (!g)
+		goto out;
+
+	for (unsigned i = 0; i < g->nr; i++) {
+		if (i)
+			prt_printf(out, " ");
+
+		if (g->entries[i].deleted) {
+			prt_printf(out, "[deleted]");
+			continue;
+		}
+
+		prt_printf(out, "[parent %d devs", g->entries[i].parent);
+		for_each_member_device_rcu(c, ca, &g->entries[i].devs)
+			prt_printf(out, " %s", ca->name);
+		prt_printf(out, "]");
+	}
+
+out:
+	rcu_read_unlock();
+	out->atomic--;
+}
+
 static void bch2_sb_disk_groups_to_text(struct printbuf *out,
 					struct bch_sb *sb,
 					struct bch_sb_field *f)
@@ -130,7 +159,7 @@ int bch2_sb_disk_groups_to_cpu(struct bch_fs *c)
 
 	cpu_g = kzalloc(struct_size(cpu_g, entries, nr_groups), GFP_KERNEL);
 	if (!cpu_g)
-		return bch_err_throw(c, ENOMEM_disk_groups_to_cpu);
+		return -BCH_ERR_ENOMEM_disk_groups_to_cpu;
 
 	cpu_g->nr = nr_groups;
 
@@ -170,28 +199,36 @@ int bch2_sb_disk_groups_to_cpu(struct bch_fs *c)
 const struct bch_devs_mask *bch2_target_to_mask(struct bch_fs *c, unsigned target)
 {
 	struct target t = target_decode(target);
+	struct bch_devs_mask *devs;
 
-	guard(rcu)();
+	rcu_read_lock();
 
 	switch (t.type) {
 	case TARGET_NULL:
-		return NULL;
+		devs = NULL;
+		break;
 	case TARGET_DEV: {
 		struct bch_dev *ca = t.dev < c->sb.nr_devices
 			? rcu_dereference(c->devs[t.dev])
 			: NULL;
-		return ca ? &ca->self : NULL;
+		devs = ca ? &ca->self : NULL;
+		break;
 	}
 	case TARGET_GROUP: {
 		struct bch_disk_groups_cpu *g = rcu_dereference(c->disk_groups);
 
-		return g && t.group < g->nr && !g->entries[t.group].deleted
+		devs = g && t.group < g->nr && !g->entries[t.group].deleted
 			? &g->entries[t.group].devs
 			: NULL;
+		break;
 	}
 	default:
 		BUG();
 	}
+
+	rcu_read_unlock();
+
+	return devs;
 }
 
 bool bch2_dev_in_target(struct bch_fs *c, unsigned dev, unsigned target)
@@ -204,13 +241,20 @@ bool bch2_dev_in_target(struct bch_fs *c, unsigned dev, unsigned target)
 	case TARGET_DEV:
 		return dev == t.dev;
 	case TARGET_GROUP: {
-		struct bch_disk_groups_cpu *g = rcu_dereference(c->disk_groups);
-		const struct bch_devs_mask *m =
-			g && t.group < g->nr && !g->entries[t.group].deleted
+		struct bch_disk_groups_cpu *g;
+		const struct bch_devs_mask *m;
+		bool ret;
+
+		rcu_read_lock();
+		g = rcu_dereference(c->disk_groups);
+		m = g && t.group < g->nr && !g->entries[t.group].deleted
 			? &g->entries[t.group].devs
 			: NULL;
 
-		return m ? test_bit(dev, m->d) : false;
+		ret = m ? test_bit(dev, m->d) : false;
+		rcu_read_unlock();
+
+		return ret;
 	}
 	default:
 		BUG();
@@ -333,79 +377,54 @@ int bch2_disk_path_find_or_create(struct bch_sb_handle *sb, const char *name)
 	return v;
 }
 
-static void __bch2_disk_path_to_text(struct printbuf *out, struct bch_disk_groups_cpu *g,
-				     unsigned v)
+void bch2_disk_path_to_text(struct printbuf *out, struct bch_fs *c, unsigned v)
 {
-	u16 path[32];
+	struct bch_disk_groups_cpu *groups;
+	struct bch_disk_group_cpu *g;
 	unsigned nr = 0;
+	u16 path[32];
+
+	out->atomic++;
+	rcu_read_lock();
+	groups = rcu_dereference(c->disk_groups);
+	if (!groups)
+		goto invalid;
 
 	while (1) {
 		if (nr == ARRAY_SIZE(path))
 			goto invalid;
 
-		if (v >= (g ? g->nr : 0))
+		if (v >= groups->nr)
 			goto invalid;
 
-		struct bch_disk_group_cpu *e = g->entries + v;
+		g = groups->entries + v;
 
-		if (e->deleted)
+		if (g->deleted)
 			goto invalid;
 
 		path[nr++] = v;
 
-		if (!e->parent)
+		if (!g->parent)
 			break;
 
-		v = e->parent - 1;
+		v = g->parent - 1;
 	}
 
 	while (nr) {
-		struct bch_disk_group_cpu *e = g->entries + path[--nr];
+		v = path[--nr];
+		g = groups->entries + v;
 
-		prt_printf(out, "%.*s", (int) sizeof(e->label), e->label);
+		prt_printf(out, "%.*s", (int) sizeof(g->label), g->label);
 		if (nr)
 			prt_printf(out, ".");
 	}
+out:
+	rcu_read_unlock();
+	out->atomic--;
 	return;
 invalid:
 	prt_printf(out, "invalid label %u", v);
-}
-
-void bch2_disk_groups_to_text(struct printbuf *out, struct bch_fs *c)
-{
-	bch2_printbuf_make_room(out, 4096);
-
-	out->atomic++;
-	guard(rcu)();
-	struct bch_disk_groups_cpu *g = rcu_dereference(c->disk_groups);
-
-	for (unsigned i = 0; i < (g ? g->nr : 0); i++) {
-		prt_printf(out, "%2u: ", i);
-
-		if (g->entries[i].deleted) {
-			prt_printf(out, "[deleted]");
-			goto next;
-		}
-
-		__bch2_disk_path_to_text(out, g, i);
-
-		prt_printf(out, " devs");
-
-		for_each_member_device_rcu(c, ca, &g->entries[i].devs)
-			prt_printf(out, " %s", ca->name);
-next:
-		prt_newline(out);
-	}
-
-	out->atomic--;
-}
-
-void bch2_disk_path_to_text(struct printbuf *out, struct bch_fs *c, unsigned v)
-{
-	out->atomic++;
-	guard(rcu)();
-	__bch2_disk_path_to_text(out, rcu_dereference(c->disk_groups), v),
-	--out->atomic;
+	goto out;
 }
 
 void bch2_disk_path_to_text_sb(struct printbuf *out, struct bch_sb *sb, unsigned v)
@@ -451,22 +470,23 @@ inval:
 
 int __bch2_dev_group_set(struct bch_fs *c, struct bch_dev *ca, const char *name)
 {
-	lockdep_assert_held(&c->sb_lock);
+	struct bch_member *mi;
+	int ret, v = -1;
 
+	if (!strlen(name) || !strcmp(name, "none"))
+		return 0;
 
-	if (!strlen(name) || !strcmp(name, "none")) {
-		struct bch_member *mi = bch2_members_v2_get_mut(c->disk_sb.sb, ca->dev_idx);
-		SET_BCH_MEMBER_GROUP(mi, 0);
-	} else {
-		int v = bch2_disk_path_find_or_create(&c->disk_sb, name);
-		if (v < 0)
-			return v;
+	v = bch2_disk_path_find_or_create(&c->disk_sb, name);
+	if (v < 0)
+		return v;
 
-		struct bch_member *mi = bch2_members_v2_get_mut(c->disk_sb.sb, ca->dev_idx);
-		SET_BCH_MEMBER_GROUP(mi, v + 1);
-	}
+	ret = bch2_sb_disk_groups_to_cpu(c);
+	if (ret)
+		return ret;
 
-	return bch2_sb_disk_groups_to_cpu(c);
+	mi = bch2_members_v2_get_mut(c->disk_sb.sb, ca->dev_idx);
+	SET_BCH_MEMBER_GROUP(mi, v + 1);
+	return 0;
 }
 
 int bch2_dev_group_set(struct bch_fs *c, struct bch_dev *ca, const char *name)
@@ -525,27 +545,32 @@ void bch2_target_to_text(struct printbuf *out, struct bch_fs *c, unsigned v)
 	switch (t.type) {
 	case TARGET_NULL:
 		prt_printf(out, "none");
-		return;
+		break;
 	case TARGET_DEV: {
+		struct bch_dev *ca;
+
 		out->atomic++;
-		guard(rcu)();
-		struct bch_dev *ca = t.dev < c->sb.nr_devices
+		rcu_read_lock();
+		ca = t.dev < c->sb.nr_devices
 			? rcu_dereference(c->devs[t.dev])
 			: NULL;
 
-		if (ca && ca->disk_sb.bdev)
+		if (ca && percpu_ref_tryget(&ca->io_ref)) {
 			prt_printf(out, "/dev/%s", ca->name);
-		else if (ca)
+			percpu_ref_put(&ca->io_ref);
+		} else if (ca) {
 			prt_printf(out, "offline device %u", t.dev);
-		else
+		} else {
 			prt_printf(out, "invalid device %u", t.dev);
+		}
 
+		rcu_read_unlock();
 		out->atomic--;
-		return;
+		break;
 	}
 	case TARGET_GROUP:
 		bch2_disk_path_to_text(out, c, t.group);
-		return;
+		break;
 	default:
 		BUG();
 	}

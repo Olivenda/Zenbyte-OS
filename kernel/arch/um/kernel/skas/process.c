@@ -22,11 +22,15 @@ static int __init start_kernel_proc(void *unused)
 {
 	block_signals_trace();
 
+	cpu_tasks[0].task = current;
+
 	start_kernel();
 	return 0;
 }
 
-static char cpu0_irqstack[THREAD_SIZE] __aligned(THREAD_SIZE);
+extern int userspace_pid[];
+
+extern char cpu0_irqstack[];
 
 int __init start_uml(void)
 {

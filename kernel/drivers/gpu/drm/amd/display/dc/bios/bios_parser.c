@@ -2381,10 +2381,10 @@ static enum bp_result get_integrated_info_v8(
 }
 
 /*
- * get_integrated_info_v9
+ * get_integrated_info_v8
  *
  * @brief
- * Get V9 integrated BIOS information
+ * Get V8 integrated BIOS information
  *
  * @param
  * bios_parser *bp - [in]BIOS parser handler to get master data table

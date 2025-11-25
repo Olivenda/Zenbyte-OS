@@ -192,7 +192,7 @@ __nfs3_proc_lookup(struct inode *dir, const char *name, size_t len,
 }
 
 static int
-nfs3_proc_lookup(struct inode *dir, struct dentry *dentry, const struct qstr *name,
+nfs3_proc_lookup(struct inode *dir, struct dentry *dentry,
 		 struct nfs_fh *fhandle, struct nfs_fattr *fattr)
 {
 	unsigned short task_flags = 0;
@@ -202,7 +202,8 @@ nfs3_proc_lookup(struct inode *dir, struct dentry *dentry, const struct qstr *na
 		task_flags |= RPC_TASK_TIMEOUT;
 
 	dprintk("NFS call  lookup %pd2\n", dentry);
-	return __nfs3_proc_lookup(dir, name->name, name->len, fhandle, fattr,
+	return __nfs3_proc_lookup(dir, dentry->d_name.name,
+				  dentry->d_name.len, fhandle, fattr,
 				  task_flags);
 }
 
@@ -578,13 +579,13 @@ out:
 	return status;
 }
 
-static struct dentry *
+static int
 nfs3_proc_mkdir(struct inode *dir, struct dentry *dentry, struct iattr *sattr)
 {
 	struct posix_acl *default_acl, *acl;
 	struct nfs3_createdata *data;
-	struct dentry *ret = ERR_PTR(-ENOMEM);
-	int status;
+	struct dentry *d_alias;
+	int status = -ENOMEM;
 
 	dprintk("NFS call  mkdir %pd\n", dentry);
 
@@ -592,9 +593,8 @@ nfs3_proc_mkdir(struct inode *dir, struct dentry *dentry, struct iattr *sattr)
 	if (data == NULL)
 		goto out;
 
-	ret = ERR_PTR(posix_acl_create(dir, &sattr->ia_mode,
-				       &default_acl, &acl));
-	if (IS_ERR(ret))
+	status = posix_acl_create(dir, &sattr->ia_mode, &default_acl, &acl);
+	if (status)
 		goto out;
 
 	data->msg.rpc_proc = &nfs3_procedures[NFS3PROC_MKDIR];
@@ -603,27 +603,25 @@ nfs3_proc_mkdir(struct inode *dir, struct dentry *dentry, struct iattr *sattr)
 	data->arg.mkdir.len = dentry->d_name.len;
 	data->arg.mkdir.sattr = sattr;
 
-	ret = nfs3_do_create(dir, dentry, data);
+	d_alias = nfs3_do_create(dir, dentry, data);
+	status = PTR_ERR_OR_ZERO(d_alias);
 
-	if (IS_ERR(ret))
+	if (status != 0)
 		goto out_release_acls;
 
-	if (ret)
-		dentry = ret;
+	if (d_alias)
+		dentry = d_alias;
 
 	status = nfs3_proc_setacls(d_inode(dentry), acl, default_acl);
-	if (status) {
-		dput(ret);
-		ret = ERR_PTR(status);
-	}
 
+	dput(d_alias);
 out_release_acls:
 	posix_acl_release(acl);
 	posix_acl_release(default_acl);
 out:
 	nfs3_free_createdata(data);
-	dprintk("NFS reply mkdir: %d\n", PTR_ERR_OR_ZERO(ret));
-	return ret;
+	dprintk("NFS reply mkdir: %d\n", status);
+	return status;
 }
 
 static int
@@ -846,41 +844,6 @@ nfs3_proc_pathconf(struct nfs_server *server, struct nfs_fh *fhandle,
 	return status;
 }
 
-#if IS_ENABLED(CONFIG_NFS_LOCALIO)
-
-static unsigned nfs3_localio_probe_throttle __read_mostly = 0;
-module_param(nfs3_localio_probe_throttle, uint, 0644);
-MODULE_PARM_DESC(nfs3_localio_probe_throttle,
-		 "Probe for NFSv3 LOCALIO every N IO requests. Must be power-of-2, defaults to 0 (probing disabled).");
-
-static void nfs3_localio_probe(struct nfs_server *server)
-{
-	struct nfs_client *clp = server->nfs_client;
-
-	/* Throttled to reduce nfs_local_probe_async() frequency */
-	if (!nfs3_localio_probe_throttle || nfs_server_is_local(clp))
-		return;
-
-	/*
-	 * Try (re)enabling LOCALIO if isn't enabled -- admin deems
-	 * it worthwhile to periodically check if LOCALIO possible by
-	 * setting the 'nfs3_localio_probe_throttle' module parameter.
-	 *
-	 * This is useful if LOCALIO was previously enabled, but was
-	 * disabled due to server restart, and IO has successfully
-	 * completed in terms of normal RPC.
-	 */
-	if ((clp->cl_uuid.nfs3_localio_probe_count++ &
-	     (nfs3_localio_probe_throttle - 1)) == 0) {
-		if (!nfs_server_is_local(clp))
-			nfs_local_probe_async(clp);
-	}
-}
-
-#else
-static void nfs3_localio_probe(struct nfs_server *server) {}
-#endif
-
 static int nfs3_read_done(struct rpc_task *task, struct nfs_pgio_header *hdr)
 {
 	struct inode *inode = hdr->inode;
@@ -892,11 +855,8 @@ static int nfs3_read_done(struct rpc_task *task, struct nfs_pgio_header *hdr)
 	if (nfs3_async_handle_jukebox(task, inode))
 		return -EAGAIN;
 
-	if (task->tk_status >= 0) {
-		if (!server->read_hdrsize)
-			cmpxchg(&server->read_hdrsize, 0, hdr->res.replen);
-		nfs3_localio_probe(server);
-	}
+	if (task->tk_status >= 0 && !server->read_hdrsize)
+		cmpxchg(&server->read_hdrsize, 0, hdr->res.replen);
 
 	nfs_invalidate_atime(inode);
 	nfs_refresh_inode(inode, &hdr->fattr);
@@ -926,10 +886,8 @@ static int nfs3_write_done(struct rpc_task *task, struct nfs_pgio_header *hdr)
 
 	if (nfs3_async_handle_jukebox(task, inode))
 		return -EAGAIN;
-	if (task->tk_status >= 0) {
+	if (task->tk_status >= 0)
 		nfs_writeback_update_inode(hdr);
-		nfs3_localio_probe(NFS_SERVER(inode));
-	}
 	return 0;
 }
 

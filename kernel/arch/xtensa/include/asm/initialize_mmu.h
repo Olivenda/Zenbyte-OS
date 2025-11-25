@@ -34,7 +34,7 @@
 #define CA_WRITEBACK	(0x4)
 #endif
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 
 #define XTENSA_HWVERSION_RC_2009_0 230000
 
@@ -240,6 +240,6 @@
 
 	.endm
 
-#endif /*__ASSEMBLER__*/
+#endif /*__ASSEMBLY__*/
 
 #endif /* _XTENSA_INITIALIZE_MMU_H */

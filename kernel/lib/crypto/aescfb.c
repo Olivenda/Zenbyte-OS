@@ -5,10 +5,11 @@
  * Copyright 2023 Google LLC
  */
 
-#include <crypto/aes.h>
-#include <crypto/algapi.h>
-#include <linux/export.h>
 #include <linux/module.h>
+
+#include <crypto/algapi.h>
+#include <crypto/aes.h>
+
 #include <asm/irqflags.h>
 
 static void aescfb_encrypt_block(const struct crypto_aes_ctx *ctx, void *dst,
@@ -98,18 +99,18 @@ MODULE_DESCRIPTION("Generic AES-CFB library");
 MODULE_AUTHOR("Ard Biesheuvel <ardb@kernel.org>");
 MODULE_LICENSE("GPL");
 
-#ifdef CONFIG_CRYPTO_SELFTESTS
+#ifndef CONFIG_CRYPTO_MANAGER_DISABLE_TESTS
 
 /*
  * Test code below. Vectors taken from crypto/testmgr.h
  */
 
 static struct {
-	u8	ptext[64] __nonstring;
-	u8	ctext[64] __nonstring;
+	u8	ptext[64];
+	u8	ctext[64];
 
-	u8	key[AES_MAX_KEY_SIZE] __nonstring;
-	u8	iv[AES_BLOCK_SIZE] __nonstring;
+	u8	key[AES_MAX_KEY_SIZE];
+	u8	iv[AES_BLOCK_SIZE];
 
 	int	klen;
 	int	len;

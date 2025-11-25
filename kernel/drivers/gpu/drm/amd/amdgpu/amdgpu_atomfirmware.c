@@ -281,9 +281,6 @@ static int convert_atom_mem_type_to_vram_type(struct amdgpu_device *adev,
 		case ATOM_DGPU_VRAM_TYPE_GDDR6:
 			vram_type = AMDGPU_VRAM_TYPE_GDDR6;
 			break;
-		case ATOM_DGPU_VRAM_TYPE_HBM3E:
-			vram_type = AMDGPU_VRAM_TYPE_HBM3E;
-			break;
 		default:
 			vram_type = AMDGPU_VRAM_TYPE_UNKNOWN;
 			break;
@@ -552,10 +549,9 @@ bool amdgpu_atomfirmware_mem_ecc_supported(struct amdgpu_device *adev)
 	u16 data_offset, size;
 	union umc_info *umc_info;
 	u8 frev, crev;
-	bool mem_ecc_enabled = false;
+	bool ecc_default_enabled = false;
 	u8 umc_config;
 	u32 umc_config1;
-	adev->ras_default_ecc_enabled = false;
 
 	index = get_index_into_master_table(atom_master_list_of_data_tables_v2_1,
 			umc_info);
@@ -567,22 +563,20 @@ bool amdgpu_atomfirmware_mem_ecc_supported(struct amdgpu_device *adev)
 			switch (crev) {
 			case 1:
 				umc_config = le32_to_cpu(umc_info->v31.umc_config);
-				mem_ecc_enabled =
+				ecc_default_enabled =
 					(umc_config & UMC_CONFIG__DEFAULT_MEM_ECC_ENABLE) ? true : false;
 				break;
 			case 2:
 				umc_config = le32_to_cpu(umc_info->v32.umc_config);
-				mem_ecc_enabled =
+				ecc_default_enabled =
 					(umc_config & UMC_CONFIG__DEFAULT_MEM_ECC_ENABLE) ? true : false;
 				break;
 			case 3:
 				umc_config = le32_to_cpu(umc_info->v33.umc_config);
 				umc_config1 = le32_to_cpu(umc_info->v33.umc_config1);
-				mem_ecc_enabled =
+				ecc_default_enabled =
 					((umc_config & UMC_CONFIG__DEFAULT_MEM_ECC_ENABLE) ||
 					 (umc_config1 & UMC_CONFIG1__ENABLE_ECC_CAPABLE)) ? true : false;
-				adev->ras_default_ecc_enabled =
-					(umc_config & UMC_CONFIG__DEFAULT_MEM_ECC_ENABLE) ? true : false;
 				break;
 			default:
 				/* unsupported crev */
@@ -591,12 +585,9 @@ bool amdgpu_atomfirmware_mem_ecc_supported(struct amdgpu_device *adev)
 		} else if (frev == 4) {
 			switch (crev) {
 			case 0:
-				umc_config = le32_to_cpu(umc_info->v40.umc_config);
 				umc_config1 = le32_to_cpu(umc_info->v40.umc_config1);
-				mem_ecc_enabled =
+				ecc_default_enabled =
 					(umc_config1 & UMC_CONFIG1__ENABLE_ECC_CAPABLE) ? true : false;
-				adev->ras_default_ecc_enabled =
-					(umc_config & UMC_CONFIG__DEFAULT_MEM_ECC_ENABLE) ? true : false;
 				break;
 			default:
 				/* unsupported crev */
@@ -608,7 +599,7 @@ bool amdgpu_atomfirmware_mem_ecc_supported(struct amdgpu_device *adev)
 		}
 	}
 
-	return mem_ecc_enabled;
+	return ecc_default_enabled;
 }
 
 /*

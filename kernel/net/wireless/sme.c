@@ -5,7 +5,7 @@
  * (for nl80211's connect() and wext)
  *
  * Copyright 2009	Johannes Berg <johannes@sipsolutions.net>
- * Copyright (C) 2009, 2020, 2022-2025 Intel Corporation. All rights reserved.
+ * Copyright (C) 2009, 2020, 2022-2024 Intel Corporation. All rights reserved.
  * Copyright 2017	Intel Deutschland GmbH
  */
 
@@ -64,7 +64,7 @@ static void cfg80211_sme_free(struct wireless_dev *wdev)
 static int cfg80211_conn_scan(struct wireless_dev *wdev)
 {
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wdev->wiphy);
-	struct cfg80211_scan_request_int *request;
+	struct cfg80211_scan_request *request;
 	int n_channels, err;
 
 	lockdep_assert_wiphy(wdev->wiphy);
@@ -77,12 +77,13 @@ static int cfg80211_conn_scan(struct wireless_dev *wdev)
 	else
 		n_channels = ieee80211_get_num_supported_channels(wdev->wiphy);
 
-	request = kzalloc(sizeof(*request) + sizeof(request->req.ssids[0]) +
-			  sizeof(request->req.channels[0]) * n_channels,
+	request = kzalloc(sizeof(*request) + sizeof(request->ssids[0]) +
+			  sizeof(request->channels[0]) * n_channels,
 			  GFP_KERNEL);
 	if (!request)
 		return -ENOMEM;
 
+	request->n_channels = n_channels;
 	if (wdev->conn->params.channel) {
 		enum nl80211_band band = wdev->conn->params.channel->band;
 		struct ieee80211_supported_band *sband =
@@ -92,8 +93,8 @@ static int cfg80211_conn_scan(struct wireless_dev *wdev)
 			kfree(request);
 			return -EINVAL;
 		}
-		request->req.channels[0] = wdev->conn->params.channel;
-		request->req.rates[band] = (1 << sband->n_bitrates) - 1;
+		request->channels[0] = wdev->conn->params.channel;
+		request->rates[band] = (1 << sband->n_bitrates) - 1;
 	} else {
 		int i = 0, j;
 		enum nl80211_band band;
@@ -108,26 +109,26 @@ static int cfg80211_conn_scan(struct wireless_dev *wdev)
 				channel = &bands->channels[j];
 				if (channel->flags & IEEE80211_CHAN_DISABLED)
 					continue;
-				request->req.channels[i++] = channel;
+				request->channels[i++] = channel;
 			}
-			request->req.rates[band] = (1 << bands->n_bitrates) - 1;
+			request->rates[band] = (1 << bands->n_bitrates) - 1;
 		}
 		n_channels = i;
 	}
-	request->req.n_channels = n_channels;
-	request->req.ssids = (void *)request +
-			     struct_size(request, req.channels, n_channels);
-	request->req.n_ssids = 1;
+	request->n_channels = n_channels;
+	request->ssids = (void *)request +
+		struct_size(request, channels, n_channels);
+	request->n_ssids = 1;
 
-	memcpy(request->req.ssids[0].ssid, wdev->conn->params.ssid,
-	       wdev->conn->params.ssid_len);
-	request->req.ssids[0].ssid_len = wdev->conn->params.ssid_len;
+	memcpy(request->ssids[0].ssid, wdev->conn->params.ssid,
+		wdev->conn->params.ssid_len);
+	request->ssids[0].ssid_len = wdev->conn->params.ssid_len;
 
-	eth_broadcast_addr(request->req.bssid);
+	eth_broadcast_addr(request->bssid);
 
-	request->req.wdev = wdev;
-	request->req.wiphy = &rdev->wiphy;
-	request->req.scan_start = jiffies;
+	request->wdev = wdev;
+	request->wiphy = &rdev->wiphy;
+	request->scan_start = jiffies;
 
 	rdev->scan_req = request;
 
@@ -251,7 +252,7 @@ void cfg80211_conn_work(struct work_struct *work)
 	u8 bssid_buf[ETH_ALEN], *bssid = NULL;
 	enum nl80211_timeout_reason treason;
 
-	guard(wiphy)(&rdev->wiphy);
+	wiphy_lock(&rdev->wiphy);
 
 	list_for_each_entry(wdev, &rdev->wiphy.wdev_list, list) {
 		if (!wdev->netdev)
@@ -279,6 +280,8 @@ void cfg80211_conn_work(struct work_struct *work)
 			__cfg80211_connect_result(wdev->netdev, &cr, false);
 		}
 	}
+
+	wiphy_unlock(&rdev->wiphy);
 }
 
 static void cfg80211_step_auth_next(struct cfg80211_conn *conn,
@@ -690,13 +693,13 @@ static bool cfg80211_is_all_idle(void)
 	 * as chan dfs state, etc.
 	 */
 	for_each_rdev(rdev) {
-		guard(wiphy)(&rdev->wiphy);
-
+		wiphy_lock(&rdev->wiphy);
 		list_for_each_entry(wdev, &rdev->wiphy.wdev_list, list) {
 			if (wdev->conn || wdev->connected ||
 			    cfg80211_beaconing_iface_active(wdev))
 				is_all_idle = false;
 		}
+		wiphy_unlock(&rdev->wiphy);
 	}
 
 	return is_all_idle;
@@ -1583,7 +1586,7 @@ void cfg80211_autodisconnect_wk(struct work_struct *work)
 		container_of(work, struct wireless_dev, disconnect_wk);
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wdev->wiphy);
 
-	guard(wiphy)(wdev->wiphy);
+	wiphy_lock(wdev->wiphy);
 
 	if (wdev->conn_owner_nlportid) {
 		switch (wdev->iftype) {
@@ -1619,4 +1622,6 @@ void cfg80211_autodisconnect_wk(struct work_struct *work)
 			break;
 		}
 	}
+
+	wiphy_unlock(wdev->wiphy);
 }

@@ -53,7 +53,6 @@
 #include <net/fib_rules.h>
 #include <net/rtnetlink.h>
 #include <net/net_namespace.h>
-#include <net/netdev_lock.h>
 #include <net/devlink.h>
 #if IS_ENABLED(CONFIG_IPV6)
 #include <net/addrconf.h>
@@ -81,15 +80,11 @@ void rtnl_lock(void)
 }
 EXPORT_SYMBOL(rtnl_lock);
 
-int rtnl_lock_interruptible(void)
-{
-	return mutex_lock_interruptible(&rtnl_mutex);
-}
-
 int rtnl_lock_killable(void)
 {
 	return mutex_lock_killable(&rtnl_mutex);
 }
+EXPORT_SYMBOL(rtnl_lock_killable);
 
 static struct sk_buff *defer_kfree_skb_list;
 void rtnl_kfree_skbs(struct sk_buff *head, struct sk_buff *tail)
@@ -184,176 +179,6 @@ bool lockdep_rtnl_is_held(void)
 EXPORT_SYMBOL(lockdep_rtnl_is_held);
 #endif /* #ifdef CONFIG_PROVE_LOCKING */
 
-#ifdef CONFIG_DEBUG_NET_SMALL_RTNL
-void __rtnl_net_lock(struct net *net)
-{
-	ASSERT_RTNL();
-
-	mutex_lock(&net->rtnl_mutex);
-}
-EXPORT_SYMBOL(__rtnl_net_lock);
-
-void __rtnl_net_unlock(struct net *net)
-{
-	ASSERT_RTNL();
-
-	mutex_unlock(&net->rtnl_mutex);
-}
-EXPORT_SYMBOL(__rtnl_net_unlock);
-
-void rtnl_net_lock(struct net *net)
-{
-	rtnl_lock();
-	__rtnl_net_lock(net);
-}
-EXPORT_SYMBOL(rtnl_net_lock);
-
-void rtnl_net_unlock(struct net *net)
-{
-	__rtnl_net_unlock(net);
-	rtnl_unlock();
-}
-EXPORT_SYMBOL(rtnl_net_unlock);
-
-int rtnl_net_trylock(struct net *net)
-{
-	int ret = rtnl_trylock();
-
-	if (ret)
-		__rtnl_net_lock(net);
-
-	return ret;
-}
-EXPORT_SYMBOL(rtnl_net_trylock);
-
-int rtnl_net_lock_killable(struct net *net)
-{
-	int ret = rtnl_lock_killable();
-
-	if (!ret)
-		__rtnl_net_lock(net);
-
-	return ret;
-}
-
-static int rtnl_net_cmp_locks(const struct net *net_a, const struct net *net_b)
-{
-	if (net_eq(net_a, net_b))
-		return 0;
-
-	/* always init_net first */
-	if (net_eq(net_a, &init_net))
-		return -1;
-
-	if (net_eq(net_b, &init_net))
-		return 1;
-
-	/* otherwise lock in ascending order */
-	return net_a < net_b ? -1 : 1;
-}
-
-int rtnl_net_lock_cmp_fn(const struct lockdep_map *a, const struct lockdep_map *b)
-{
-	const struct net *net_a, *net_b;
-
-	net_a = container_of(a, struct net, rtnl_mutex.dep_map);
-	net_b = container_of(b, struct net, rtnl_mutex.dep_map);
-
-	return rtnl_net_cmp_locks(net_a, net_b);
-}
-
-bool rtnl_net_is_locked(struct net *net)
-{
-	return rtnl_is_locked() && mutex_is_locked(&net->rtnl_mutex);
-}
-EXPORT_SYMBOL(rtnl_net_is_locked);
-
-bool lockdep_rtnl_net_is_held(struct net *net)
-{
-	return lockdep_rtnl_is_held() && lockdep_is_held(&net->rtnl_mutex);
-}
-EXPORT_SYMBOL(lockdep_rtnl_net_is_held);
-#else
-static int rtnl_net_cmp_locks(const struct net *net_a, const struct net *net_b)
-{
-	/* No need to swap */
-	return -1;
-}
-#endif
-
-struct rtnl_nets {
-	/* ->newlink() needs to freeze 3 netns at most;
-	 * 2 for the new device, 1 for its peer.
-	 */
-	struct net *net[3];
-	unsigned char len;
-};
-
-static void rtnl_nets_init(struct rtnl_nets *rtnl_nets)
-{
-	memset(rtnl_nets, 0, sizeof(*rtnl_nets));
-}
-
-static void rtnl_nets_destroy(struct rtnl_nets *rtnl_nets)
-{
-	int i;
-
-	for (i = 0; i < rtnl_nets->len; i++) {
-		put_net(rtnl_nets->net[i]);
-		rtnl_nets->net[i] = NULL;
-	}
-
-	rtnl_nets->len = 0;
-}
-
-/**
- * rtnl_nets_add - Add netns to be locked before ->newlink().
- *
- * @rtnl_nets: rtnl_nets pointer passed to ->get_peer_net().
- * @net: netns pointer with an extra refcnt held.
- *
- * The extra refcnt is released in rtnl_nets_destroy().
- */
-static void rtnl_nets_add(struct rtnl_nets *rtnl_nets, struct net *net)
-{
-	int i;
-
-	DEBUG_NET_WARN_ON_ONCE(rtnl_nets->len == ARRAY_SIZE(rtnl_nets->net));
-
-	for (i = 0; i < rtnl_nets->len; i++) {
-		switch (rtnl_net_cmp_locks(rtnl_nets->net[i], net)) {
-		case 0:
-			put_net(net);
-			return;
-		case 1:
-			swap(rtnl_nets->net[i], net);
-		}
-	}
-
-	rtnl_nets->net[i] = net;
-	rtnl_nets->len++;
-}
-
-static void rtnl_nets_lock(struct rtnl_nets *rtnl_nets)
-{
-	int i;
-
-	rtnl_lock();
-
-	for (i = 0; i < rtnl_nets->len; i++)
-		__rtnl_net_lock(rtnl_nets->net[i]);
-}
-
-static void rtnl_nets_unlock(struct rtnl_nets *rtnl_nets)
-{
-	int i;
-
-	for (i = 0; i < rtnl_nets->len; i++)
-		__rtnl_net_unlock(rtnl_nets->net[i]);
-
-	rtnl_unlock();
-}
-
 static struct rtnl_link __rcu *__rcu *rtnl_msg_handlers[RTNL_FAMILY_MAX + 1];
 
 static inline int rtm_msgindex(int msgtype)
@@ -444,13 +269,64 @@ unlock:
 }
 
 /**
+ * rtnl_register_module - Register a rtnetlink message type
+ *
+ * @owner: module registering the hook (THIS_MODULE)
+ * @protocol: Protocol family or PF_UNSPEC
+ * @msgtype: rtnetlink message type
+ * @doit: Function pointer called for each request message
+ * @dumpit: Function pointer called for each dump request (NLM_F_DUMP) message
+ * @flags: rtnl_link_flags to modify behaviour of doit/dumpit functions
+ *
+ * Like rtnl_register, but for use by removable modules.
+ */
+int rtnl_register_module(struct module *owner,
+			 int protocol, int msgtype,
+			 rtnl_doit_func doit, rtnl_dumpit_func dumpit,
+			 unsigned int flags)
+{
+	return rtnl_register_internal(owner, protocol, msgtype,
+				      doit, dumpit, flags);
+}
+EXPORT_SYMBOL_GPL(rtnl_register_module);
+
+/**
+ * rtnl_register - Register a rtnetlink message type
+ * @protocol: Protocol family or PF_UNSPEC
+ * @msgtype: rtnetlink message type
+ * @doit: Function pointer called for each request message
+ * @dumpit: Function pointer called for each dump request (NLM_F_DUMP) message
+ * @flags: rtnl_link_flags to modify behaviour of doit/dumpit functions
+ *
+ * Registers the specified function pointers (at least one of them has
+ * to be non-NULL) to be called whenever a request message for the
+ * specified protocol family and message type is received.
+ *
+ * The special protocol family PF_UNSPEC may be used to define fallback
+ * function pointers for the case when no entry for the specific protocol
+ * family exists.
+ */
+void rtnl_register(int protocol, int msgtype,
+		   rtnl_doit_func doit, rtnl_dumpit_func dumpit,
+		   unsigned int flags)
+{
+	int err;
+
+	err = rtnl_register_internal(NULL, protocol, msgtype, doit, dumpit,
+				     flags);
+	if (err)
+		pr_err("Unable to register rtnetlink message handler, "
+		       "protocol = %d, message type = %d\n", protocol, msgtype);
+}
+
+/**
  * rtnl_unregister - Unregister a rtnetlink message type
  * @protocol: Protocol family or PF_UNSPEC
  * @msgtype: rtnetlink message type
  *
  * Returns 0 on success or a negative error code.
  */
-static int rtnl_unregister(int protocol, int msgtype)
+int rtnl_unregister(int protocol, int msgtype)
 {
 	struct rtnl_link __rcu **tab;
 	struct rtnl_link *link;
@@ -473,6 +349,7 @@ static int rtnl_unregister(int protocol, int msgtype)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(rtnl_unregister);
 
 /**
  * rtnl_unregister_all - Unregister all rtnetlink message type of a protocol
@@ -507,26 +384,6 @@ void rtnl_unregister_all(int protocol)
 }
 EXPORT_SYMBOL_GPL(rtnl_unregister_all);
 
-/**
- * __rtnl_register_many - Register rtnetlink message types
- * @handlers: Array of struct rtnl_msg_handlers
- * @n: The length of @handlers
- *
- * Registers the specified function pointers (at least one of them has
- * to be non-NULL) to be called whenever a request message for the
- * specified protocol family and message type is received.
- *
- * The special protocol family PF_UNSPEC may be used to define fallback
- * function pointers for the case when no entry for the specific protocol
- * family exists.
- *
- * When one element of @handlers fails to register,
- * 1) built-in: panics.
- * 2) modules : the previous successful registrations are unwinded
- *              and an error is returned.
- *
- * Use rtnl_register_many().
- */
 int __rtnl_register_many(const struct rtnl_msg_handler *handlers, int n)
 {
 	const struct rtnl_msg_handler *handler;
@@ -537,10 +394,6 @@ int __rtnl_register_many(const struct rtnl_msg_handler *handlers, int n)
 					     handler->msgtype, handler->doit,
 					     handler->dumpit, handler->flags);
 		if (err) {
-			if (!handler->owner)
-				panic("Unable to register rtnetlink message "
-				      "handlers, %pS\n", handlers);
-
 			__rtnl_unregister_many(handlers, i);
 			break;
 		}
@@ -560,49 +413,33 @@ void __rtnl_unregister_many(const struct rtnl_msg_handler *handlers, int n)
 }
 EXPORT_SYMBOL_GPL(__rtnl_unregister_many);
 
-static DEFINE_MUTEX(link_ops_mutex);
 static LIST_HEAD(link_ops);
 
-static struct rtnl_link_ops *rtnl_link_ops_get(const char *kind, int *srcu_index)
+static const struct rtnl_link_ops *rtnl_link_ops_get(const char *kind)
 {
-	struct rtnl_link_ops *ops;
+	const struct rtnl_link_ops *ops;
 
-	rcu_read_lock();
-
-	list_for_each_entry_rcu(ops, &link_ops, list) {
-		if (!strcmp(ops->kind, kind)) {
-			*srcu_index = srcu_read_lock(&ops->srcu);
-			goto unlock;
-		}
+	list_for_each_entry(ops, &link_ops, list) {
+		if (!strcmp(ops->kind, kind))
+			return ops;
 	}
-
-	ops = NULL;
-unlock:
-	rcu_read_unlock();
-
-	return ops;
-}
-
-static void rtnl_link_ops_put(struct rtnl_link_ops *ops, int srcu_index)
-{
-	srcu_read_unlock(&ops->srcu, srcu_index);
+	return NULL;
 }
 
 /**
- * rtnl_link_register - Register rtnl_link_ops with rtnetlink.
+ * __rtnl_link_register - Register rtnl_link_ops with rtnetlink.
  * @ops: struct rtnl_link_ops * to register
+ *
+ * The caller must hold the rtnl_mutex. This function should be used
+ * by drivers that create devices during module initialization. It
+ * must be called before registering the devices.
  *
  * Returns 0 on success or a negative error code.
  */
-int rtnl_link_register(struct rtnl_link_ops *ops)
+int __rtnl_link_register(struct rtnl_link_ops *ops)
 {
-	struct rtnl_link_ops *tmp;
-	int err;
-
-	/* Sanity-check max sizes to avoid stack buffer overflow. */
-	if (WARN_ON(ops->maxtype > RTNL_MAX_TYPE ||
-		    ops->slave_maxtype > RTNL_SLAVE_MAX_TYPE))
-		return -EINVAL;
+	if (rtnl_link_ops_get(ops->kind))
+		return -EEXIST;
 
 	/* The check for alloc/setup is here because if ops
 	 * does not have that filled up, it is not possible
@@ -612,23 +449,29 @@ int rtnl_link_register(struct rtnl_link_ops *ops)
 	if ((ops->alloc || ops->setup) && !ops->dellink)
 		ops->dellink = unregister_netdevice_queue;
 
-	err = init_srcu_struct(&ops->srcu);
-	if (err)
-		return err;
+	list_add_tail(&ops->list, &link_ops);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(__rtnl_link_register);
 
-	mutex_lock(&link_ops_mutex);
+/**
+ * rtnl_link_register - Register rtnl_link_ops with rtnetlink.
+ * @ops: struct rtnl_link_ops * to register
+ *
+ * Returns 0 on success or a negative error code.
+ */
+int rtnl_link_register(struct rtnl_link_ops *ops)
+{
+	int err;
 
-	list_for_each_entry(tmp, &link_ops, list) {
-		if (!strcmp(ops->kind, tmp->kind)) {
-			err = -EEXIST;
-			goto unlock;
-		}
-	}
+	/* Sanity-check max sizes to avoid stack buffer overflow. */
+	if (WARN_ON(ops->maxtype > RTNL_MAX_TYPE ||
+		    ops->slave_maxtype > RTNL_SLAVE_MAX_TYPE))
+		return -EINVAL;
 
-	list_add_tail_rcu(&ops->list, &link_ops);
-unlock:
-	mutex_unlock(&link_ops_mutex);
-
+	rtnl_lock();
+	err = __rtnl_link_register(ops);
+	rtnl_unlock();
 	return err;
 }
 EXPORT_SYMBOL_GPL(rtnl_link_register);
@@ -644,6 +487,25 @@ static void __rtnl_kill_links(struct net *net, struct rtnl_link_ops *ops)
 	}
 	unregister_netdevice_many(&list_kill);
 }
+
+/**
+ * __rtnl_link_unregister - Unregister rtnl_link_ops from rtnetlink.
+ * @ops: struct rtnl_link_ops * to unregister
+ *
+ * The caller must hold the rtnl_mutex and guarantee net_namespace_list
+ * integrity (hold pernet_ops_rwsem for writing to close the race
+ * with setup_net() and cleanup_net()).
+ */
+void __rtnl_link_unregister(struct rtnl_link_ops *ops)
+{
+	struct net *net;
+
+	for_each_net(net) {
+		__rtnl_kill_links(net, ops);
+	}
+	list_del(&ops->list);
+}
+EXPORT_SYMBOL_GPL(__rtnl_link_unregister);
 
 /* Return with the rtnl_lock held when there are no network
  * devices unregistering in any network namespace.
@@ -673,22 +535,10 @@ static void rtnl_lock_unregistering_all(void)
  */
 void rtnl_link_unregister(struct rtnl_link_ops *ops)
 {
-	struct net *net;
-
-	mutex_lock(&link_ops_mutex);
-	list_del_rcu(&ops->list);
-	mutex_unlock(&link_ops_mutex);
-
-	synchronize_srcu(&ops->srcu);
-	cleanup_srcu_struct(&ops->srcu);
-
 	/* Close the race with setup_net() and cleanup_net() */
 	down_write(&pernet_ops_rwsem);
 	rtnl_lock_unregistering_all();
-
-	for_each_net(net)
-		__rtnl_kill_links(net, ops);
-
+	__rtnl_link_unregister(ops);
 	rtnl_unlock();
 	up_write(&pernet_ops_rwsem);
 }
@@ -745,51 +595,31 @@ static size_t rtnl_link_get_size(const struct net_device *dev)
 
 static LIST_HEAD(rtnl_af_ops);
 
-static struct rtnl_af_ops *rtnl_af_lookup(const int family, int *srcu_index)
+static const struct rtnl_af_ops *rtnl_af_lookup(const int family)
 {
-	struct rtnl_af_ops *ops;
+	const struct rtnl_af_ops *ops;
 
 	ASSERT_RTNL();
 
-	rcu_read_lock();
-
-	list_for_each_entry_rcu(ops, &rtnl_af_ops, list) {
-		if (ops->family == family) {
-			*srcu_index = srcu_read_lock(&ops->srcu);
-			goto unlock;
-		}
+	list_for_each_entry(ops, &rtnl_af_ops, list) {
+		if (ops->family == family)
+			return ops;
 	}
 
-	ops = NULL;
-unlock:
-	rcu_read_unlock();
-
-	return ops;
-}
-
-static void rtnl_af_put(struct rtnl_af_ops *ops, int srcu_index)
-{
-	srcu_read_unlock(&ops->srcu, srcu_index);
+	return NULL;
 }
 
 /**
  * rtnl_af_register - Register rtnl_af_ops with rtnetlink.
  * @ops: struct rtnl_af_ops * to register
  *
- * Return: 0 on success or a negative error code.
+ * Returns 0 on success or a negative error code.
  */
-int rtnl_af_register(struct rtnl_af_ops *ops)
+void rtnl_af_register(struct rtnl_af_ops *ops)
 {
-	int err = init_srcu_struct(&ops->srcu);
-
-	if (err)
-		return err;
-
 	rtnl_lock();
 	list_add_tail_rcu(&ops->list, &rtnl_af_ops);
 	rtnl_unlock();
-
-	return 0;
 }
 EXPORT_SYMBOL_GPL(rtnl_af_register);
 
@@ -804,8 +634,6 @@ void rtnl_af_unregister(struct rtnl_af_ops *ops)
 	rtnl_unlock();
 
 	synchronize_rcu();
-	synchronize_srcu(&ops->srcu);
-	cleanup_srcu_struct(&ops->srcu);
 }
 EXPORT_SYMBOL_GPL(rtnl_af_unregister);
 
@@ -1026,11 +854,9 @@ int rtnl_put_cacheinfo(struct sk_buff *skb, struct dst_entry *dst, u32 id,
 		.rta_error = error,
 		.rta_id =  id,
 	};
-	unsigned long delta;
 
 	if (dst) {
-		delta = jiffies - READ_ONCE(dst->lastuse);
-		ci.rta_lastuse = jiffies_delta_to_clock_t(delta);
+		ci.rta_lastuse = jiffies_delta_to_clock_t(jiffies - dst->lastuse);
 		ci.rta_used = dst->__use;
 		ci.rta_clntref = rcuref_read(&dst->__rcuref);
 	}
@@ -1045,7 +871,7 @@ int rtnl_put_cacheinfo(struct sk_buff *skb, struct dst_entry *dst, u32 id,
 }
 EXPORT_SYMBOL_GPL(rtnl_put_cacheinfo);
 
-void netif_set_operstate(struct net_device *dev, int newstate)
+void netdev_set_operstate(struct net_device *dev, int newstate)
 {
 	unsigned int old = READ_ONCE(dev->operstate);
 
@@ -1054,9 +880,9 @@ void netif_set_operstate(struct net_device *dev, int newstate)
 			return;
 	} while (!try_cmpxchg(&dev->operstate, &old, newstate));
 
-	netif_state_change(dev);
+	netdev_state_change(dev);
 }
-EXPORT_SYMBOL(netif_set_operstate);
+EXPORT_SYMBOL(netdev_set_operstate);
 
 static void set_operstate(struct net_device *dev, unsigned char transition)
 {
@@ -1082,7 +908,7 @@ static void set_operstate(struct net_device *dev, unsigned char transition)
 		break;
 	}
 
-	netif_set_operstate(dev, operstate);
+	netdev_set_operstate(dev, operstate);
 }
 
 static unsigned int rtnl_dev_get_flags(const struct net_device *dev)
@@ -1298,7 +1124,6 @@ static noinline size_t if_nlmsg_size(const struct net_device *dev,
 	       + nla_total_size(4) /* IFLA_TSO_MAX_SEGS */
 	       + nla_total_size(1) /* IFLA_OPERSTATE */
 	       + nla_total_size(1) /* IFLA_LINKMODE */
-	       + nla_total_size(1) /* IFLA_NETNS_IMMUTABLE */
 	       + nla_total_size(4) /* IFLA_CARRIER_CHANGES */
 	       + nla_total_size(4) /* IFLA_LINK_NETNSID */
 	       + nla_total_size(4) /* IFLA_GROUP */
@@ -1325,7 +1150,6 @@ static noinline size_t if_nlmsg_size(const struct net_device *dev,
 	       + nla_total_size(MAX_ADDR_LEN) /* IFLA_PERM_ADDRESS */
 	       + rtnl_devlink_port_size(dev)
 	       + rtnl_dpll_pin_size(dev)
-	       + nla_total_size(8)  /* IFLA_MAX_PACING_OFFLOAD_HORIZON */
 	       + 0;
 }
 
@@ -1448,7 +1272,7 @@ static int rtnl_phys_switch_id_fill(struct sk_buff *skb, struct net_device *dev)
 	struct netdev_phys_item_id ppid = { };
 	int err;
 
-	err = netif_get_port_parent_id(dev, &ppid, false);
+	err = dev_get_port_parent_id(dev, &ppid, false);
 	if (err) {
 		if (err == -EOPNOTSUPP)
 			return 0;
@@ -2038,7 +1862,7 @@ static int rtnl_fill_ifinfo(struct sk_buff *skb,
 	ifm->__ifi_pad = 0;
 	ifm->ifi_type = READ_ONCE(dev->type);
 	ifm->ifi_index = READ_ONCE(dev->ifindex);
-	ifm->ifi_flags = netif_get_flags(dev);
+	ifm->ifi_flags = dev_get_flags(dev);
 	ifm->ifi_change = change;
 
 	if (tgt_netnsid >= 0 && nla_put_s32(skb, IFLA_TARGET_NETNSID, tgt_netnsid))
@@ -2053,7 +1877,6 @@ static int rtnl_fill_ifinfo(struct sk_buff *skb,
 		       netif_running(dev) ? READ_ONCE(dev->operstate) :
 					    IF_OPER_DOWN) ||
 	    nla_put_u8(skb, IFLA_LINKMODE, READ_ONCE(dev->link_mode)) ||
-	    nla_put_u8(skb, IFLA_NETNS_IMMUTABLE, dev->netns_immutable) ||
 	    nla_put_u32(skb, IFLA_MTU, READ_ONCE(dev->mtu)) ||
 	    nla_put_u32(skb, IFLA_MIN_MTU, READ_ONCE(dev->min_mtu)) ||
 	    nla_put_u32(skb, IFLA_MAX_MTU, READ_ONCE(dev->max_mtu)) ||
@@ -2076,8 +1899,6 @@ static int rtnl_fill_ifinfo(struct sk_buff *skb,
 			READ_ONCE(dev->tso_max_size)) ||
 	    nla_put_u32(skb, IFLA_TSO_MAX_SEGS,
 			READ_ONCE(dev->tso_max_segs)) ||
-	    nla_put_uint(skb, IFLA_MAX_PACING_OFFLOAD_HORIZON,
-			 READ_ONCE(dev->max_pacing_offload_horizon)) ||
 #ifdef CONFIG_RPS
 	    nla_put_u32(skb, IFLA_NUM_RX_QUEUES,
 			READ_ONCE(dev->num_rx_queues)) ||
@@ -2186,7 +2007,6 @@ nla_put_failure:
 }
 
 static const struct nla_policy ifla_policy[IFLA_MAX+1] = {
-	[IFLA_UNSPEC]		= { .strict_start_type = IFLA_DPLL_PIN },
 	[IFLA_IFNAME]		= { .type = NLA_STRING, .len = IFNAMSIZ-1 },
 	[IFLA_ADDRESS]		= { .type = NLA_BINARY, .len = MAX_ADDR_LEN },
 	[IFLA_BROADCAST]	= { .type = NLA_BINARY, .len = MAX_ADDR_LEN },
@@ -2242,7 +2062,6 @@ static const struct nla_policy ifla_policy[IFLA_MAX+1] = {
 	[IFLA_ALLMULTI]		= { .type = NLA_REJECT },
 	[IFLA_GSO_IPV4_MAX_SIZE]	= NLA_POLICY_MIN(NLA_U32, MAX_TCP_HEADER + 1),
 	[IFLA_GRO_IPV4_MAX_SIZE]	= { .type = NLA_U32 },
-	[IFLA_NETNS_IMMUTABLE]	= { .type = NLA_REJECT },
 };
 
 static const struct nla_policy ifla_info_policy[IFLA_INFO_MAX+1] = {
@@ -2296,11 +2115,10 @@ static const struct nla_policy ifla_xdp_policy[IFLA_XDP_MAX + 1] = {
 	[IFLA_XDP_PROG_ID]	= { .type = NLA_U32 },
 };
 
-static struct rtnl_link_ops *linkinfo_to_kind_ops(const struct nlattr *nla,
-						  int *ops_srcu_index)
+static const struct rtnl_link_ops *linkinfo_to_kind_ops(const struct nlattr *nla)
 {
+	const struct rtnl_link_ops *ops = NULL;
 	struct nlattr *linfo[IFLA_INFO_MAX + 1];
-	struct rtnl_link_ops *ops = NULL;
 
 	if (nla_parse_nested_deprecated(linfo, IFLA_INFO_MAX, nla, ifla_info_policy, NULL) < 0)
 		return NULL;
@@ -2309,7 +2127,7 @@ static struct rtnl_link_ops *linkinfo_to_kind_ops(const struct nlattr *nla,
 		char kind[MODULE_NAME_LEN];
 
 		nla_strscpy(kind, linfo[IFLA_INFO_KIND], sizeof(kind));
-		ops = rtnl_link_ops_get(kind, ops_srcu_index);
+		ops = rtnl_link_ops_get(kind);
 	}
 
 	return ops;
@@ -2392,12 +2210,12 @@ static int rtnl_valid_dump_ifinfo_req(const struct nlmsghdr *nlh,
 	if (strict_check) {
 		struct ifinfomsg *ifm;
 
-		ifm = nlmsg_payload(nlh, sizeof(*ifm));
-		if (!ifm) {
+		if (nlh->nlmsg_len < nlmsg_msg_size(sizeof(*ifm))) {
 			NL_SET_ERR_MSG(extack, "Invalid header for link dump");
 			return -EINVAL;
 		}
 
+		ifm = nlmsg_data(nlh);
 		if (ifm->__ifi_pad || ifm->ifi_type || ifm->ifi_flags ||
 		    ifm->ifi_change) {
 			NL_SET_ERR_MSG(extack, "Invalid values in header for link dump request");
@@ -2429,8 +2247,8 @@ static int rtnl_valid_dump_ifinfo_req(const struct nlmsghdr *nlh,
 
 static int rtnl_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 {
+	const struct rtnl_link_ops *kind_ops = NULL;
 	struct netlink_ext_ack *extack = cb->extack;
-	struct rtnl_link_ops *kind_ops = NULL;
 	const struct nlmsghdr *nlh = cb->nlh;
 	struct net *net = sock_net(skb->sk);
 	unsigned int flags = NLM_F_MULTI;
@@ -2441,7 +2259,6 @@ static int rtnl_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 	struct net *tgt_net = net;
 	u32 ext_filter_mask = 0;
 	struct net_device *dev;
-	int ops_srcu_index;
 	int master_idx = 0;
 	int netnsid = -1;
 	int err, i;
@@ -2465,9 +2282,7 @@ static int rtnl_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 			tgt_net = rtnl_get_net_ns_capable(skb->sk, netnsid);
 			if (IS_ERR(tgt_net)) {
 				NL_SET_ERR_MSG(extack, "Invalid target network namespace id");
-				err = PTR_ERR(tgt_net);
-				netnsid = -1;
-				goto out;
+				return PTR_ERR(tgt_net);
 			}
 			break;
 		case IFLA_EXT_MASK:
@@ -2477,13 +2292,12 @@ static int rtnl_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 			master_idx = nla_get_u32(tb[i]);
 			break;
 		case IFLA_LINKINFO:
-			kind_ops = linkinfo_to_kind_ops(tb[i], &ops_srcu_index);
+			kind_ops = linkinfo_to_kind_ops(tb[i]);
 			break;
 		default:
 			if (cb->strict_check) {
 				NL_SET_ERR_MSG(extack, "Unsupported attribute in link dump request");
-				err = -EINVAL;
-				goto out;
+				return -EINVAL;
 			}
 		}
 	}
@@ -2504,15 +2318,8 @@ walk_entries:
 		if (err < 0)
 			break;
 	}
-
-
 	cb->seq = tgt_net->dev_base_seq;
 	nl_dump_check_consistent(cb, nlmsg_hdr(skb));
-
-out:
-
-	if (kind_ops)
-		rtnl_link_ops_put(kind_ops, ops_srcu_index);
 	if (netnsid >= 0)
 		put_net(tgt_net);
 
@@ -2541,10 +2348,9 @@ int rtnl_nla_parse_ifinfomsg(struct nlattr **tb, const struct nlattr *nla_peer,
 }
 EXPORT_SYMBOL(rtnl_nla_parse_ifinfomsg);
 
-static struct net *rtnl_link_get_net_ifla(struct nlattr *tb[])
+struct net *rtnl_link_get_net(struct net *src_net, struct nlattr *tb[])
 {
-	struct net *net = NULL;
-
+	struct net *net;
 	/* Examine the link attributes and figure out which
 	 * network namespace we are talking about.
 	 */
@@ -2552,17 +2358,8 @@ static struct net *rtnl_link_get_net_ifla(struct nlattr *tb[])
 		net = get_net_ns_by_pid(nla_get_u32(tb[IFLA_NET_NS_PID]));
 	else if (tb[IFLA_NET_NS_FD])
 		net = get_net_ns_by_fd(nla_get_u32(tb[IFLA_NET_NS_FD]));
-
-	return net;
-}
-
-struct net *rtnl_link_get_net(struct net *src_net, struct nlattr *tb[])
-{
-	struct net *net = rtnl_link_get_net_ifla(tb);
-
-	if (!net)
+	else
 		net = get_net(src_net);
-
 	return net;
 }
 EXPORT_SYMBOL(rtnl_link_get_net);
@@ -2702,24 +2499,20 @@ static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[],
 		int rem, err;
 
 		nla_for_each_nested(af, tb[IFLA_AF_SPEC], rem) {
-			struct rtnl_af_ops *af_ops;
-			int af_ops_srcu_index;
+			const struct rtnl_af_ops *af_ops;
 
-			af_ops = rtnl_af_lookup(nla_type(af), &af_ops_srcu_index);
+			af_ops = rtnl_af_lookup(nla_type(af));
 			if (!af_ops)
 				return -EAFNOSUPPORT;
 
 			if (!af_ops->set_link_af)
-				err = -EOPNOTSUPP;
-			else if (af_ops->validate_link_af)
+				return -EOPNOTSUPP;
+
+			if (af_ops->validate_link_af) {
 				err = af_ops->validate_link_af(dev, af, extack);
-			else
-				err = 0;
-
-			rtnl_af_put(af_ops, af_ops_srcu_index);
-
-			if (err < 0)
-				return err;
+				if (err < 0)
+					return err;
+			}
 		}
 	}
 
@@ -2918,19 +2711,12 @@ static int do_set_master(struct net_device *dev, int ifindex,
 	const struct net_device_ops *ops;
 	int err;
 
-	/* Release the lower lock, the upper is responsible for locking
-	 * the lower if needed. None of the existing upper devices
-	 * use netdev instance lock, so don't grab it.
-	 */
-
 	if (upper_dev) {
 		if (upper_dev->ifindex == ifindex)
 			return 0;
 		ops = upper_dev->netdev_ops;
 		if (ops->ndo_del_slave) {
-			netdev_unlock_ops(dev);
 			err = ops->ndo_del_slave(upper_dev, dev);
-			netdev_lock_ops(dev);
 			if (err)
 				return err;
 		} else {
@@ -2944,9 +2730,7 @@ static int do_set_master(struct net_device *dev, int ifindex,
 			return -EINVAL;
 		ops = upper_dev->netdev_ops;
 		if (ops->ndo_add_slave) {
-			netdev_unlock_ops(dev);
 			err = ops->ndo_add_slave(upper_dev, dev, extack);
-			netdev_lock_ops(dev);
 			if (err)
 				return err;
 		} else {
@@ -2996,7 +2780,7 @@ static int do_set_proto_down(struct net_device *dev,
 		if (pdreason[IFLA_PROTO_DOWN_REASON_MASK])
 			mask = nla_get_u32(pdreason[IFLA_PROTO_DOWN_REASON_MASK]);
 
-		netdev_change_proto_down_reason_locked(dev, mask, value);
+		dev_change_proto_down_reason(dev, mask, value);
 	}
 
 	if (nl_proto_down) {
@@ -3007,7 +2791,8 @@ static int do_set_proto_down(struct net_device *dev,
 			NL_SET_ERR_MSG(extack, "Cannot clear protodown, active reasons");
 			return -EBUSY;
 		}
-		err = netif_change_proto_down(dev, proto_down);
+		err = dev_change_proto_down(dev,
+					    proto_down);
 		if (err)
 			return err;
 	}
@@ -3018,8 +2803,8 @@ static int do_set_proto_down(struct net_device *dev,
 #define DO_SETLINK_MODIFIED	0x01
 /* notify flag means notify + modified. */
 #define DO_SETLINK_NOTIFY	0x03
-static int do_setlink(const struct sk_buff *skb, struct net_device *dev,
-		      struct net *tgt_net, struct ifinfomsg *ifm,
+static int do_setlink(const struct sk_buff *skb,
+		      struct net_device *dev, struct ifinfomsg *ifm,
 		      struct netlink_ext_ack *extack,
 		      struct nlattr **tb, int status)
 {
@@ -3027,30 +2812,34 @@ static int do_setlink(const struct sk_buff *skb, struct net_device *dev,
 	char ifname[IFNAMSIZ];
 	int err;
 
-	err = validate_linkmsg(dev, tb, extack);
-	if (err < 0)
-		return err;
-
 	if (tb[IFLA_IFNAME])
 		nla_strscpy(ifname, tb[IFLA_IFNAME], IFNAMSIZ);
 	else
 		ifname[0] = '\0';
 
-	if (!net_eq(tgt_net, dev_net(dev))) {
+	if (tb[IFLA_NET_NS_PID] || tb[IFLA_NET_NS_FD] || tb[IFLA_TARGET_NETNSID]) {
 		const char *pat = ifname[0] ? ifname : NULL;
+		struct net *net;
 		int new_ifindex;
 
-		new_ifindex = nla_get_s32_default(tb[IFLA_NEW_IFINDEX], 0);
+		net = rtnl_link_get_net_capable(skb, dev_net(dev),
+						tb, CAP_NET_ADMIN);
+		if (IS_ERR(net)) {
+			err = PTR_ERR(net);
+			goto errout;
+		}
 
-		err = __dev_change_net_namespace(dev, tgt_net, pat,
-						 new_ifindex, extack);
+		if (tb[IFLA_NEW_IFINDEX])
+			new_ifindex = nla_get_s32(tb[IFLA_NEW_IFINDEX]);
+		else
+			new_ifindex = 0;
+
+		err = __dev_change_net_namespace(dev, net, pat, new_ifindex);
+		put_net(net);
 		if (err)
-			return err;
-
+			goto errout;
 		status |= DO_SETLINK_MODIFIED;
 	}
-
-	netdev_lock_ops(dev);
 
 	if (tb[IFLA_MAP]) {
 		struct rtnl_link_ifmap *u_map;
@@ -3082,35 +2871,35 @@ static int do_setlink(const struct sk_buff *skb, struct net_device *dev,
 	}
 
 	if (tb[IFLA_ADDRESS]) {
-		struct sockaddr_storage ss = { };
+		struct sockaddr *sa;
+		int len;
 
-		netdev_unlock_ops(dev);
-
-		/* dev_addr_sem is an outer lock, enforce proper ordering */
-		down_write(&dev_addr_sem);
-		netdev_lock_ops(dev);
-
-		ss.ss_family = dev->type;
-		memcpy(ss.__data, nla_data(tb[IFLA_ADDRESS]), dev->addr_len);
-		err = netif_set_mac_address(dev, &ss, extack);
-		if (err) {
-			up_write(&dev_addr_sem);
+		len = sizeof(sa_family_t) + max_t(size_t, dev->addr_len,
+						  sizeof(*sa));
+		sa = kmalloc(len, GFP_KERNEL);
+		if (!sa) {
+			err = -ENOMEM;
 			goto errout;
 		}
+		sa->sa_family = dev->type;
+		memcpy(sa->sa_data, nla_data(tb[IFLA_ADDRESS]),
+		       dev->addr_len);
+		err = dev_set_mac_address_user(dev, sa, extack);
+		kfree(sa);
+		if (err)
+			goto errout;
 		status |= DO_SETLINK_MODIFIED;
-
-		up_write(&dev_addr_sem);
 	}
 
 	if (tb[IFLA_MTU]) {
-		err = netif_set_mtu_ext(dev, nla_get_u32(tb[IFLA_MTU]), extack);
+		err = dev_set_mtu_ext(dev, nla_get_u32(tb[IFLA_MTU]), extack);
 		if (err < 0)
 			goto errout;
 		status |= DO_SETLINK_MODIFIED;
 	}
 
 	if (tb[IFLA_GROUP]) {
-		netif_set_group(dev, nla_get_u32(tb[IFLA_GROUP]));
+		dev_set_group(dev, nla_get_u32(tb[IFLA_GROUP]));
 		status |= DO_SETLINK_NOTIFY;
 	}
 
@@ -3120,15 +2909,15 @@ static int do_setlink(const struct sk_buff *skb, struct net_device *dev,
 	 * requested.
 	 */
 	if (ifm->ifi_index > 0 && ifname[0]) {
-		err = netif_change_name(dev, ifname);
+		err = dev_change_name(dev, ifname);
 		if (err < 0)
 			goto errout;
 		status |= DO_SETLINK_MODIFIED;
 	}
 
 	if (tb[IFLA_IFALIAS]) {
-		err = netif_set_alias(dev, nla_data(tb[IFLA_IFALIAS]),
-				      nla_len(tb[IFLA_IFALIAS]));
+		err = dev_set_alias(dev, nla_data(tb[IFLA_IFALIAS]),
+				    nla_len(tb[IFLA_IFALIAS]));
 		if (err < 0)
 			goto errout;
 		status |= DO_SETLINK_NOTIFY;
@@ -3140,8 +2929,8 @@ static int do_setlink(const struct sk_buff *skb, struct net_device *dev,
 	}
 
 	if (ifm->ifi_flags || ifm->ifi_change) {
-		err = netif_change_flags(dev, rtnl_dev_combine_flags(dev, ifm),
-					 extack);
+		err = dev_change_flags(dev, rtnl_dev_combine_flags(dev, ifm),
+				       extack);
 		if (err < 0)
 			goto errout;
 	}
@@ -3154,7 +2943,7 @@ static int do_setlink(const struct sk_buff *skb, struct net_device *dev,
 	}
 
 	if (tb[IFLA_CARRIER]) {
-		err = netif_change_carrier(dev, nla_get_u8(tb[IFLA_CARRIER]));
+		err = dev_change_carrier(dev, nla_get_u8(tb[IFLA_CARRIER]));
 		if (err)
 			goto errout;
 		status |= DO_SETLINK_MODIFIED;
@@ -3163,7 +2952,7 @@ static int do_setlink(const struct sk_buff *skb, struct net_device *dev,
 	if (tb[IFLA_TXQLEN]) {
 		unsigned int value = nla_get_u32(tb[IFLA_TXQLEN]);
 
-		err = netif_change_tx_queue_len(dev, value);
+		err = dev_change_tx_queue_len(dev, value);
 		if (err)
 			goto errout;
 		status |= DO_SETLINK_MODIFIED;
@@ -3307,18 +3096,11 @@ static int do_setlink(const struct sk_buff *skb, struct net_device *dev,
 		int rem;
 
 		nla_for_each_nested(af, tb[IFLA_AF_SPEC], rem) {
-			struct rtnl_af_ops *af_ops;
-			int af_ops_srcu_index;
+			const struct rtnl_af_ops *af_ops;
 
-			af_ops = rtnl_af_lookup(nla_type(af), &af_ops_srcu_index);
-			if (!af_ops) {
-				err = -EAFNOSUPPORT;
-				goto errout;
-			}
+			BUG_ON(!(af_ops = rtnl_af_lookup(nla_type(af))));
 
 			err = af_ops->set_link_af(dev, af, extack);
-			rtnl_af_put(af_ops, af_ops_srcu_index);
-
 			if (err < 0)
 				goto errout;
 
@@ -3387,14 +3169,12 @@ static int do_setlink(const struct sk_buff *skb, struct net_device *dev,
 errout:
 	if (status & DO_SETLINK_MODIFIED) {
 		if ((status & DO_SETLINK_NOTIFY) == DO_SETLINK_NOTIFY)
-			netif_state_change(dev);
+			netdev_state_change(dev);
 
 		if (err < 0)
 			net_warn_ratelimited("A link change request failed with some changes committed already. Interface %s may have been left with an inconsistent configuration, please check.\n",
 					     dev->name);
 	}
-
-	netdev_unlock_ops(dev);
 
 	return err;
 }
@@ -3417,13 +3197,11 @@ static struct net_device *rtnl_dev_get(struct net *net,
 static int rtnl_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			struct netlink_ext_ack *extack)
 {
-	struct ifinfomsg *ifm = nlmsg_data(nlh);
 	struct net *net = sock_net(skb->sk);
-	struct nlattr *tb[IFLA_MAX+1];
-	struct net_device *dev = NULL;
-	struct rtnl_nets rtnl_nets;
-	struct net *tgt_net;
+	struct ifinfomsg *ifm;
+	struct net_device *dev;
 	int err;
+	struct nlattr *tb[IFLA_MAX+1];
 
 	err = nlmsg_parse_deprecated(nlh, sizeof(*ifm), tb, IFLA_MAX,
 				     ifla_policy, extack);
@@ -3434,32 +3212,25 @@ static int rtnl_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (err < 0)
 		goto errout;
 
-	tgt_net = rtnl_link_get_net_capable(skb, net, tb, CAP_NET_ADMIN);
-	if (IS_ERR(tgt_net)) {
-		err = PTR_ERR(tgt_net);
-		goto errout;
-	}
-
-	rtnl_nets_init(&rtnl_nets);
-	rtnl_nets_add(&rtnl_nets, get_net(net));
-	rtnl_nets_add(&rtnl_nets, tgt_net);
-
-	rtnl_nets_lock(&rtnl_nets);
-
+	err = -EINVAL;
+	ifm = nlmsg_data(nlh);
 	if (ifm->ifi_index > 0)
 		dev = __dev_get_by_index(net, ifm->ifi_index);
 	else if (tb[IFLA_IFNAME] || tb[IFLA_ALT_IFNAME])
 		dev = rtnl_dev_get(net, tb);
 	else
-		err = -EINVAL;
+		goto errout;
 
-	if (dev)
-		err = do_setlink(skb, dev, tgt_net, ifm, extack, tb, 0);
-	else if (!err)
+	if (dev == NULL) {
 		err = -ENODEV;
+		goto errout;
+	}
 
-	rtnl_nets_unlock(&rtnl_nets);
-	rtnl_nets_destroy(&rtnl_nets);
+	err = validate_linkmsg(dev, tb, extack);
+	if (err < 0)
+		goto errout;
+
+	err = do_setlink(skb, dev, ifm, extack, tb, 0);
 errout:
 	return err;
 }
@@ -3519,14 +3290,14 @@ EXPORT_SYMBOL_GPL(rtnl_delete_link);
 static int rtnl_dellink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			struct netlink_ext_ack *extack)
 {
-	struct ifinfomsg *ifm = nlmsg_data(nlh);
 	struct net *net = sock_net(skb->sk);
 	u32 portid = NETLINK_CB(skb).portid;
-	struct nlattr *tb[IFLA_MAX+1];
-	struct net_device *dev = NULL;
 	struct net *tgt_net = net;
-	int netnsid = -1;
+	struct net_device *dev = NULL;
+	struct ifinfomsg *ifm;
+	struct nlattr *tb[IFLA_MAX+1];
 	int err;
+	int netnsid = -1;
 
 	err = nlmsg_parse_deprecated(nlh, sizeof(*ifm), tb, IFLA_MAX,
 				     ifla_policy, extack);
@@ -3544,24 +3315,27 @@ static int rtnl_dellink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			return PTR_ERR(tgt_net);
 	}
 
-	rtnl_net_lock(tgt_net);
-
+	err = -EINVAL;
+	ifm = nlmsg_data(nlh);
 	if (ifm->ifi_index > 0)
 		dev = __dev_get_by_index(tgt_net, ifm->ifi_index);
 	else if (tb[IFLA_IFNAME] || tb[IFLA_ALT_IFNAME])
 		dev = rtnl_dev_get(tgt_net, tb);
-
-	if (dev)
-		err = rtnl_delete_link(dev, portid, nlh);
-	else if (ifm->ifi_index > 0 || tb[IFLA_IFNAME] || tb[IFLA_ALT_IFNAME])
-		err = -ENODEV;
 	else if (tb[IFLA_GROUP])
 		err = rtnl_group_dellink(tgt_net, nla_get_u32(tb[IFLA_GROUP]));
 	else
-		err = -EINVAL;
+		goto out;
 
-	rtnl_net_unlock(tgt_net);
+	if (!dev) {
+		if (tb[IFLA_IFNAME] || tb[IFLA_ALT_IFNAME] || ifm->ifi_index > 0)
+			err = -ENODEV;
 
+		goto out;
+	}
+
+	err = rtnl_delete_link(dev, portid, nlh);
+
+out:
 	if (netnsid >= 0)
 		put_net(tgt_net);
 
@@ -3571,7 +3345,7 @@ static int rtnl_dellink(struct sk_buff *skb, struct nlmsghdr *nlh,
 int rtnl_configure_link(struct net_device *dev, const struct ifinfomsg *ifm,
 			u32 portid, const struct nlmsghdr *nlh)
 {
-	unsigned int old_flags, changed;
+	unsigned int old_flags;
 	int err;
 
 	old_flags = dev->flags;
@@ -3582,13 +3356,12 @@ int rtnl_configure_link(struct net_device *dev, const struct ifinfomsg *ifm,
 			return err;
 	}
 
-	changed = old_flags ^ dev->flags;
-	if (dev->rtnl_link_initializing) {
-		dev->rtnl_link_initializing = false;
-		changed = ~0U;
+	if (dev->rtnl_link_state == RTNL_LINK_INITIALIZED) {
+		__dev_notify_flags(dev, old_flags, (old_flags ^ dev->flags), portid, nlh);
+	} else {
+		dev->rtnl_link_state = RTNL_LINK_INITIALIZED;
+		__dev_notify_flags(dev, old_flags, ~0U, portid, nlh);
 	}
-
-	__dev_notify_flags(dev, old_flags, changed, portid, nlh);
 	return 0;
 }
 EXPORT_SYMBOL(rtnl_configure_link);
@@ -3646,7 +3419,7 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname,
 
 	dev_net_set(dev, net);
 	dev->rtnl_link_ops = ops;
-	dev->rtnl_link_initializing = true;
+	dev->rtnl_link_state = RTNL_LINK_INITIALIZING;
 
 	if (tb[IFLA_MTU]) {
 		u32 mtu = nla_get_u32(tb[IFLA_MTU]);
@@ -3673,7 +3446,7 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname,
 	if (tb[IFLA_LINKMODE])
 		dev->link_mode = nla_get_u8(tb[IFLA_LINKMODE]);
 	if (tb[IFLA_GROUP])
-		netif_set_group(dev, nla_get_u32(tb[IFLA_GROUP]));
+		dev_set_group(dev, nla_get_u32(tb[IFLA_GROUP]));
 	if (tb[IFLA_GSO_MAX_SIZE])
 		netif_set_gso_max_size(dev, nla_get_u32(tb[IFLA_GSO_MAX_SIZE]));
 	if (tb[IFLA_GSO_MAX_SEGS])
@@ -3689,90 +3462,21 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname,
 }
 EXPORT_SYMBOL(rtnl_create_link);
 
-struct rtnl_newlink_tbs {
-	struct nlattr *tb[IFLA_MAX + 1];
-	struct nlattr *linkinfo[IFLA_INFO_MAX + 1];
-	struct nlattr *attr[RTNL_MAX_TYPE + 1];
-	struct nlattr *slave_attr[RTNL_SLAVE_MAX_TYPE + 1];
-};
-
-static int rtnl_changelink(const struct sk_buff *skb, struct nlmsghdr *nlh,
-			   const struct rtnl_link_ops *ops,
-			   struct net_device *dev, struct net *tgt_net,
-			   struct rtnl_newlink_tbs *tbs,
-			   struct nlattr **data,
-			   struct netlink_ext_ack *extack)
-{
-	struct nlattr ** const linkinfo = tbs->linkinfo;
-	struct nlattr ** const tb = tbs->tb;
-	int status = 0;
-	int err;
-
-	if (nlh->nlmsg_flags & NLM_F_EXCL)
-		return -EEXIST;
-
-	if (nlh->nlmsg_flags & NLM_F_REPLACE)
-		return -EOPNOTSUPP;
-
-	if (linkinfo[IFLA_INFO_DATA]) {
-		if (!ops || ops != dev->rtnl_link_ops || !ops->changelink)
-			return -EOPNOTSUPP;
-
-		err = ops->changelink(dev, tb, data, extack);
-		if (err < 0)
-			return err;
-
-		status |= DO_SETLINK_NOTIFY;
-	}
-
-	if (linkinfo[IFLA_INFO_SLAVE_DATA]) {
-		const struct rtnl_link_ops *m_ops = NULL;
-		struct nlattr **slave_data = NULL;
-		struct net_device *master_dev;
-
-		master_dev = netdev_master_upper_dev_get(dev);
-		if (master_dev)
-			m_ops = master_dev->rtnl_link_ops;
-
-		if (!m_ops || !m_ops->slave_changelink)
-			return -EOPNOTSUPP;
-
-		if (m_ops->slave_maxtype > RTNL_SLAVE_MAX_TYPE)
-			return -EINVAL;
-
-		if (m_ops->slave_maxtype) {
-			err = nla_parse_nested_deprecated(tbs->slave_attr,
-							  m_ops->slave_maxtype,
-							  linkinfo[IFLA_INFO_SLAVE_DATA],
-							  m_ops->slave_policy, extack);
-			if (err < 0)
-				return err;
-
-			slave_data = tbs->slave_attr;
-		}
-
-		err = m_ops->slave_changelink(master_dev, dev, tb, slave_data, extack);
-		if (err < 0)
-			return err;
-
-		status |= DO_SETLINK_NOTIFY;
-	}
-
-	return do_setlink(skb, dev, tgt_net, nlmsg_data(nlh), extack, tb, status);
-}
-
 static int rtnl_group_changelink(const struct sk_buff *skb,
-				 struct net *net, struct net *tgt_net,
-				 int group, struct ifinfomsg *ifm,
-				 struct netlink_ext_ack *extack,
-				 struct nlattr **tb)
+		struct net *net, int group,
+		struct ifinfomsg *ifm,
+		struct netlink_ext_ack *extack,
+		struct nlattr **tb)
 {
 	struct net_device *dev, *aux;
 	int err;
 
 	for_each_netdev_safe(net, dev, aux) {
 		if (dev->group == group) {
-			err = do_setlink(skb, dev, tgt_net, ifm, extack, tb, 0);
+			err = validate_linkmsg(dev, tb, extack);
+			if (err < 0)
+				return err;
+			err = do_setlink(skb, dev, ifm, extack, tb, 0);
 			if (err < 0)
 				return err;
 		}
@@ -3783,21 +3487,14 @@ static int rtnl_group_changelink(const struct sk_buff *skb,
 
 static int rtnl_newlink_create(struct sk_buff *skb, struct ifinfomsg *ifm,
 			       const struct rtnl_link_ops *ops,
-			       struct net *tgt_net, struct net *link_net,
-			       struct net *peer_net,
 			       const struct nlmsghdr *nlh,
 			       struct nlattr **tb, struct nlattr **data,
 			       struct netlink_ext_ack *extack)
 {
 	unsigned char name_assign_type = NET_NAME_USER;
-	struct rtnl_newlink_params params = {
-		.src_net = sock_net(skb->sk),
-		.link_net = link_net,
-		.peer_net = peer_net,
-		.tb = tb,
-		.data = data,
-	};
+	struct net *net = sock_net(skb->sk);
 	u32 portid = NETLINK_CB(skb).portid;
+	struct net *dest_net, *link_net;
 	struct net_device *dev;
 	char ifname[IFNAMSIZ];
 	int err;
@@ -3812,8 +3509,28 @@ static int rtnl_newlink_create(struct sk_buff *skb, struct ifinfomsg *ifm,
 		name_assign_type = NET_NAME_ENUM;
 	}
 
-	dev = rtnl_create_link(tgt_net, ifname, name_assign_type, ops, tb,
-			       extack);
+	dest_net = rtnl_link_get_net_capable(skb, net, tb, CAP_NET_ADMIN);
+	if (IS_ERR(dest_net))
+		return PTR_ERR(dest_net);
+
+	if (tb[IFLA_LINK_NETNSID]) {
+		int id = nla_get_s32(tb[IFLA_LINK_NETNSID]);
+
+		link_net = get_net_ns_by_id(dest_net, id);
+		if (!link_net) {
+			NL_SET_ERR_MSG(extack, "Unknown network namespace id");
+			err =  -EINVAL;
+			goto out;
+		}
+		err = -EPERM;
+		if (!netlink_ns_capable(skb, link_net->user_ns, CAP_NET_ADMIN))
+			goto out;
+	} else {
+		link_net = NULL;
+	}
+
+	dev = rtnl_create_link(link_net ? : dest_net, ifname,
+			       name_assign_type, ops, tb, extack);
 	if (IS_ERR(dev)) {
 		err = PTR_ERR(dev);
 		goto out;
@@ -3822,7 +3539,7 @@ static int rtnl_newlink_create(struct sk_buff *skb, struct ifinfomsg *ifm,
 	dev->ifindex = ifm->ifi_index;
 
 	if (ops->newlink)
-		err = ops->newlink(dev, &params, extack);
+		err = ops->newlink(link_net ? : net, dev, tb, data, extack);
 	else
 		err = register_netdevice(dev);
 	if (err < 0) {
@@ -3830,22 +3547,25 @@ static int rtnl_newlink_create(struct sk_buff *skb, struct ifinfomsg *ifm,
 		goto out;
 	}
 
-	netdev_lock_ops(dev);
-
 	err = rtnl_configure_link(dev, ifm, portid, nlh);
 	if (err < 0)
 		goto out_unregister;
+	if (link_net) {
+		err = dev_change_net_namespace(dev, dest_net, ifname);
+		if (err < 0)
+			goto out_unregister;
+	}
 	if (tb[IFLA_MASTER]) {
 		err = do_set_master(dev, nla_get_u32(tb[IFLA_MASTER]), extack);
 		if (err)
 			goto out_unregister;
 	}
-
-	netdev_unlock_ops(dev);
 out:
+	if (link_net)
+		put_net(link_net);
+	put_net(dest_net);
 	return err;
 out_unregister:
-	netdev_unlock_ops(dev);
 	if (ops->newlink) {
 		LIST_HEAD(list_kill);
 
@@ -3857,212 +3577,202 @@ out_unregister:
 	goto out;
 }
 
-static struct net *rtnl_get_peer_net(const struct rtnl_link_ops *ops,
-				     struct nlattr *tbp[],
-				     struct nlattr *data[],
-				     struct netlink_ext_ack *extack)
-{
+struct rtnl_newlink_tbs {
 	struct nlattr *tb[IFLA_MAX + 1];
-	int err;
-
-	if (!data || !data[ops->peer_type])
-		return rtnl_link_get_net_ifla(tbp);
-
-	err = rtnl_nla_parse_ifinfomsg(tb, data[ops->peer_type], extack);
-	if (err < 0)
-		return ERR_PTR(err);
-
-	if (ops->validate) {
-		err = ops->validate(tb, NULL, extack);
-		if (err < 0)
-			return ERR_PTR(err);
-	}
-
-	return rtnl_link_get_net_ifla(tb);
-}
+	struct nlattr *attr[RTNL_MAX_TYPE + 1];
+	struct nlattr *slave_attr[RTNL_SLAVE_MAX_TYPE + 1];
+};
 
 static int __rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
-			  const struct rtnl_link_ops *ops,
-			  struct net *tgt_net, struct net *link_net,
-			  struct net *peer_net,
 			  struct rtnl_newlink_tbs *tbs,
-			  struct nlattr **data,
 			  struct netlink_ext_ack *extack)
 {
+	struct nlattr *linkinfo[IFLA_INFO_MAX + 1];
 	struct nlattr ** const tb = tbs->tb;
+	const struct rtnl_link_ops *m_ops;
+	struct net_device *master_dev;
 	struct net *net = sock_net(skb->sk);
-	struct net *device_net;
+	const struct rtnl_link_ops *ops;
+	struct nlattr **slave_data;
+	char kind[MODULE_NAME_LEN];
 	struct net_device *dev;
 	struct ifinfomsg *ifm;
+	struct nlattr **data;
 	bool link_specified;
+	int err;
 
-	/* When creating, lookup for existing device in target net namespace */
-	device_net = (nlh->nlmsg_flags & NLM_F_CREATE) &&
-		     (nlh->nlmsg_flags & NLM_F_EXCL) ?
-		     tgt_net : net;
+#ifdef CONFIG_MODULES
+replay:
+#endif
+	err = nlmsg_parse_deprecated(nlh, sizeof(*ifm), tb, IFLA_MAX,
+				     ifla_policy, extack);
+	if (err < 0)
+		return err;
+
+	err = rtnl_ensure_unique_netns(tb, extack, false);
+	if (err < 0)
+		return err;
 
 	ifm = nlmsg_data(nlh);
 	if (ifm->ifi_index > 0) {
 		link_specified = true;
-		dev = __dev_get_by_index(device_net, ifm->ifi_index);
+		dev = __dev_get_by_index(net, ifm->ifi_index);
 	} else if (ifm->ifi_index < 0) {
 		NL_SET_ERR_MSG(extack, "ifindex can't be negative");
 		return -EINVAL;
 	} else if (tb[IFLA_IFNAME] || tb[IFLA_ALT_IFNAME]) {
 		link_specified = true;
-		dev = rtnl_dev_get(device_net, tb);
+		dev = rtnl_dev_get(net, tb);
 	} else {
 		link_specified = false;
 		dev = NULL;
 	}
 
-	if (dev)
-		return rtnl_changelink(skb, nlh, ops, dev, tgt_net, tbs, data, extack);
+	master_dev = NULL;
+	m_ops = NULL;
+	if (dev) {
+		master_dev = netdev_master_upper_dev_get(dev);
+		if (master_dev)
+			m_ops = master_dev->rtnl_link_ops;
+	}
+
+	if (tb[IFLA_LINKINFO]) {
+		err = nla_parse_nested_deprecated(linkinfo, IFLA_INFO_MAX,
+						  tb[IFLA_LINKINFO],
+						  ifla_info_policy, NULL);
+		if (err < 0)
+			return err;
+	} else
+		memset(linkinfo, 0, sizeof(linkinfo));
+
+	if (linkinfo[IFLA_INFO_KIND]) {
+		nla_strscpy(kind, linkinfo[IFLA_INFO_KIND], sizeof(kind));
+		ops = rtnl_link_ops_get(kind);
+	} else {
+		kind[0] = '\0';
+		ops = NULL;
+	}
+
+	data = NULL;
+	if (ops) {
+		if (ops->maxtype > RTNL_MAX_TYPE)
+			return -EINVAL;
+
+		if (ops->maxtype && linkinfo[IFLA_INFO_DATA]) {
+			err = nla_parse_nested_deprecated(tbs->attr, ops->maxtype,
+							  linkinfo[IFLA_INFO_DATA],
+							  ops->policy, extack);
+			if (err < 0)
+				return err;
+			data = tbs->attr;
+		}
+		if (ops->validate) {
+			err = ops->validate(tb, data, extack);
+			if (err < 0)
+				return err;
+		}
+	}
+
+	slave_data = NULL;
+	if (m_ops) {
+		if (m_ops->slave_maxtype > RTNL_SLAVE_MAX_TYPE)
+			return -EINVAL;
+
+		if (m_ops->slave_maxtype &&
+		    linkinfo[IFLA_INFO_SLAVE_DATA]) {
+			err = nla_parse_nested_deprecated(tbs->slave_attr,
+							  m_ops->slave_maxtype,
+							  linkinfo[IFLA_INFO_SLAVE_DATA],
+							  m_ops->slave_policy,
+							  extack);
+			if (err < 0)
+				return err;
+			slave_data = tbs->slave_attr;
+		}
+	}
+
+	if (dev) {
+		int status = 0;
+
+		if (nlh->nlmsg_flags & NLM_F_EXCL)
+			return -EEXIST;
+		if (nlh->nlmsg_flags & NLM_F_REPLACE)
+			return -EOPNOTSUPP;
+
+		err = validate_linkmsg(dev, tb, extack);
+		if (err < 0)
+			return err;
+
+		if (linkinfo[IFLA_INFO_DATA]) {
+			if (!ops || ops != dev->rtnl_link_ops ||
+			    !ops->changelink)
+				return -EOPNOTSUPP;
+
+			err = ops->changelink(dev, tb, data, extack);
+			if (err < 0)
+				return err;
+			status |= DO_SETLINK_NOTIFY;
+		}
+
+		if (linkinfo[IFLA_INFO_SLAVE_DATA]) {
+			if (!m_ops || !m_ops->slave_changelink)
+				return -EOPNOTSUPP;
+
+			err = m_ops->slave_changelink(master_dev, dev, tb,
+						      slave_data, extack);
+			if (err < 0)
+				return err;
+			status |= DO_SETLINK_NOTIFY;
+		}
+
+		return do_setlink(skb, dev, ifm, extack, tb, status);
+	}
 
 	if (!(nlh->nlmsg_flags & NLM_F_CREATE)) {
 		/* No dev found and NLM_F_CREATE not set. Requested dev does not exist,
 		 * or it's for a group
 		*/
-		if (link_specified || !tb[IFLA_GROUP])
+		if (link_specified)
 			return -ENODEV;
-
-		return rtnl_group_changelink(skb, net, tgt_net,
-					     nla_get_u32(tb[IFLA_GROUP]),
-					     ifm, extack, tb);
+		if (tb[IFLA_GROUP])
+			return rtnl_group_changelink(skb, net,
+						nla_get_u32(tb[IFLA_GROUP]),
+						ifm, extack, tb);
+		return -ENODEV;
 	}
 
 	if (tb[IFLA_MAP] || tb[IFLA_PROTINFO])
 		return -EOPNOTSUPP;
 
 	if (!ops) {
+#ifdef CONFIG_MODULES
+		if (kind[0]) {
+			__rtnl_unlock();
+			request_module("rtnl-link-%s", kind);
+			rtnl_lock();
+			ops = rtnl_link_ops_get(kind);
+			if (ops)
+				goto replay;
+		}
+#endif
 		NL_SET_ERR_MSG(extack, "Unknown device type");
 		return -EOPNOTSUPP;
 	}
 
-	return rtnl_newlink_create(skb, ifm, ops, tgt_net, link_net, peer_net, nlh,
-				   tb, data, extack);
+	return rtnl_newlink_create(skb, ifm, ops, nlh, tb, data, extack);
 }
 
 static int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			struct netlink_ext_ack *extack)
 {
-	struct net *tgt_net, *link_net = NULL, *peer_net = NULL;
-	struct nlattr **tb, **linkinfo, **data = NULL;
-	struct rtnl_link_ops *ops = NULL;
 	struct rtnl_newlink_tbs *tbs;
-	struct rtnl_nets rtnl_nets;
-	int ops_srcu_index;
 	int ret;
 
 	tbs = kmalloc(sizeof(*tbs), GFP_KERNEL);
 	if (!tbs)
 		return -ENOMEM;
 
-	tb = tbs->tb;
-	ret = nlmsg_parse_deprecated(nlh, sizeof(struct ifinfomsg), tb,
-				     IFLA_MAX, ifla_policy, extack);
-	if (ret < 0)
-		goto free;
-
-	ret = rtnl_ensure_unique_netns(tb, extack, false);
-	if (ret < 0)
-		goto free;
-
-	linkinfo = tbs->linkinfo;
-	if (tb[IFLA_LINKINFO]) {
-		ret = nla_parse_nested_deprecated(linkinfo, IFLA_INFO_MAX,
-						  tb[IFLA_LINKINFO],
-						  ifla_info_policy, NULL);
-		if (ret < 0)
-			goto free;
-	} else {
-		memset(linkinfo, 0, sizeof(tbs->linkinfo));
-	}
-
-	if (linkinfo[IFLA_INFO_KIND]) {
-		char kind[MODULE_NAME_LEN];
-
-		nla_strscpy(kind, linkinfo[IFLA_INFO_KIND], sizeof(kind));
-		ops = rtnl_link_ops_get(kind, &ops_srcu_index);
-#ifdef CONFIG_MODULES
-		if (!ops) {
-			request_module("rtnl-link-%s", kind);
-			ops = rtnl_link_ops_get(kind, &ops_srcu_index);
-		}
-#endif
-	}
-
-	rtnl_nets_init(&rtnl_nets);
-
-	if (ops) {
-		if (ops->maxtype > RTNL_MAX_TYPE) {
-			ret = -EINVAL;
-			goto put_ops;
-		}
-
-		if (ops->maxtype && linkinfo[IFLA_INFO_DATA]) {
-			ret = nla_parse_nested_deprecated(tbs->attr, ops->maxtype,
-							  linkinfo[IFLA_INFO_DATA],
-							  ops->policy, extack);
-			if (ret < 0)
-				goto put_ops;
-
-			data = tbs->attr;
-		}
-
-		if (ops->validate) {
-			ret = ops->validate(tb, data, extack);
-			if (ret < 0)
-				goto put_ops;
-		}
-
-		if (ops->peer_type) {
-			peer_net = rtnl_get_peer_net(ops, tb, data, extack);
-			if (IS_ERR(peer_net)) {
-				ret = PTR_ERR(peer_net);
-				goto put_ops;
-			}
-			if (peer_net)
-				rtnl_nets_add(&rtnl_nets, peer_net);
-		}
-	}
-
-	tgt_net = rtnl_link_get_net_capable(skb, sock_net(skb->sk), tb, CAP_NET_ADMIN);
-	if (IS_ERR(tgt_net)) {
-		ret = PTR_ERR(tgt_net);
-		goto put_net;
-	}
-
-	rtnl_nets_add(&rtnl_nets, tgt_net);
-
-	if (tb[IFLA_LINK_NETNSID]) {
-		int id = nla_get_s32(tb[IFLA_LINK_NETNSID]);
-
-		link_net = get_net_ns_by_id(tgt_net, id);
-		if (!link_net) {
-			NL_SET_ERR_MSG(extack, "Unknown network namespace id");
-			ret =  -EINVAL;
-			goto put_net;
-		}
-
-		rtnl_nets_add(&rtnl_nets, link_net);
-
-		if (!netlink_ns_capable(skb, link_net->user_ns, CAP_NET_ADMIN)) {
-			ret = -EPERM;
-			goto put_net;
-		}
-	}
-
-	rtnl_nets_lock(&rtnl_nets);
-	ret = __rtnl_newlink(skb, nlh, ops, tgt_net, link_net, peer_net, tbs, data, extack);
-	rtnl_nets_unlock(&rtnl_nets);
-
-put_net:
-	rtnl_nets_destroy(&rtnl_nets);
-put_ops:
-	if (ops)
-		rtnl_link_ops_put(ops, ops_srcu_index);
-free:
+	ret = __rtnl_newlink(skb, nlh, tbs, extack);
 	kfree(tbs);
 	return ret;
 }
@@ -4075,8 +3785,7 @@ static int rtnl_valid_getlink_req(struct sk_buff *skb,
 	struct ifinfomsg *ifm;
 	int i, err;
 
-	ifm = nlmsg_payload(nlh, sizeof(*ifm));
-	if (!ifm) {
+	if (nlh->nlmsg_len < nlmsg_msg_size(sizeof(*ifm))) {
 		NL_SET_ERR_MSG(extack, "Invalid header for get link");
 		return -EINVAL;
 	}
@@ -4085,6 +3794,7 @@ static int rtnl_valid_getlink_req(struct sk_buff *skb,
 		return nlmsg_parse_deprecated(nlh, sizeof(*ifm), tb, IFLA_MAX,
 					      ifla_policy, extack);
 
+	ifm = nlmsg_data(nlh);
 	if (ifm->__ifi_pad || ifm->ifi_type || ifm->ifi_flags ||
 	    ifm->ifi_change) {
 		NL_SET_ERR_MSG(extack, "Invalid values in header for get link request");
@@ -4634,10 +4344,9 @@ static int rtnl_fdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 	    netif_is_bridge_port(dev)) {
 		struct net_device *br_dev = netdev_master_upper_dev_get(dev);
 		const struct net_device_ops *ops = br_dev->netdev_ops;
-		bool notified = false;
 
 		err = ops->ndo_fdb_add(ndm, tb, dev, addr, vid,
-				       nlh->nlmsg_flags, &notified, extack);
+				       nlh->nlmsg_flags, extack);
 		if (err)
 			goto out;
 		else
@@ -4646,18 +4355,16 @@ static int rtnl_fdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	/* Embedded bridge, macvlan, and any other device support */
 	if ((ndm->ndm_flags & NTF_SELF)) {
-		bool notified = false;
-
 		if (dev->netdev_ops->ndo_fdb_add)
 			err = dev->netdev_ops->ndo_fdb_add(ndm, tb, dev, addr,
 							   vid,
 							   nlh->nlmsg_flags,
-							   &notified, extack);
+							   extack);
 		else
 			err = ndo_dflt_fdb_add(ndm, tb, dev, addr, vid,
 					       nlh->nlmsg_flags);
 
-		if (!err && !notified) {
+		if (!err) {
 			rtnl_fdb_notify(dev, addr, vid, RTM_NEWNEIGH,
 					ndm->ndm_state);
 			ndm->ndm_flags &= ~NTF_SELF;
@@ -4754,13 +4461,11 @@ static int rtnl_fdb_del(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if ((!ndm->ndm_flags || ndm->ndm_flags & NTF_MASTER) &&
 	    netif_is_bridge_port(dev)) {
 		struct net_device *br_dev = netdev_master_upper_dev_get(dev);
-		bool notified = false;
 
 		ops = br_dev->netdev_ops;
 		if (!del_bulk) {
 			if (ops->ndo_fdb_del)
-				err = ops->ndo_fdb_del(ndm, tb, dev, addr, vid,
-						       &notified, extack);
+				err = ops->ndo_fdb_del(ndm, tb, dev, addr, vid, extack);
 		} else {
 			if (ops->ndo_fdb_del_bulk)
 				err = ops->ndo_fdb_del_bulk(nlh, dev, extack);
@@ -4774,13 +4479,10 @@ static int rtnl_fdb_del(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	/* Embedded bridge, macvlan, and any other device support */
 	if (ndm->ndm_flags & NTF_SELF) {
-		bool notified = false;
-
 		ops = dev->netdev_ops;
 		if (!del_bulk) {
 			if (ops->ndo_fdb_del)
-				err = ops->ndo_fdb_del(ndm, tb, dev, addr, vid,
-						       &notified, extack);
+				err = ops->ndo_fdb_del(ndm, tb, dev, addr, vid, extack);
 			else
 				err = ndo_dflt_fdb_del(ndm, tb, dev, addr, vid);
 		} else {
@@ -4791,7 +4493,7 @@ static int rtnl_fdb_del(struct sk_buff *skb, struct nlmsghdr *nlh,
 		}
 
 		if (!err) {
-			if (!del_bulk && !notified)
+			if (!del_bulk)
 				rtnl_fdb_notify(dev, addr, vid, RTM_DELNEIGH,
 						ndm->ndm_state);
 			ndm->ndm_flags &= ~NTF_SELF;
@@ -4807,16 +4509,15 @@ static int nlmsg_populate_fdb(struct sk_buff *skb,
 			      int *idx,
 			      struct netdev_hw_addr_list *list)
 {
-	struct ndo_fdb_dump_context *ctx = (void *)cb->ctx;
 	struct netdev_hw_addr *ha;
-	u32 portid, seq;
 	int err;
+	u32 portid, seq;
 
 	portid = NETLINK_CB(cb->skb).portid;
 	seq = cb->nlh->nlmsg_seq;
 
 	list_for_each_entry(ha, &list->list, list) {
-		if (*idx < ctx->fdb_idx)
+		if (*idx < cb->args[2])
 			goto skip;
 
 		err = nlmsg_populate_fdb_fill(skb, dev, ha->addr, 0,
@@ -4872,12 +4573,12 @@ static int valid_fdb_dump_strict(const struct nlmsghdr *nlh,
 	struct ndmsg *ndm;
 	int err, i;
 
-	ndm = nlmsg_payload(nlh, sizeof(*ndm));
-	if (!ndm) {
+	if (nlh->nlmsg_len < nlmsg_msg_size(sizeof(*ndm))) {
 		NL_SET_ERR_MSG(extack, "Invalid header for fdb dump request");
 		return -EINVAL;
 	}
 
+	ndm = nlmsg_data(nlh);
 	if (ndm->ndm_pad1  || ndm->ndm_pad2  || ndm->ndm_state ||
 	    ndm->ndm_flags || ndm->ndm_type) {
 		NL_SET_ERR_MSG(extack, "Invalid values in header for fdb dump request");
@@ -4955,16 +4656,18 @@ static int valid_fdb_dump_legacy(const struct nlmsghdr *nlh,
 
 static int rtnl_fdb_dump(struct sk_buff *skb, struct netlink_callback *cb)
 {
-	const struct net_device_ops *ops = NULL, *cops = NULL;
-	struct ndo_fdb_dump_context *ctx = (void *)cb->ctx;
-	struct net_device *dev, *br_dev = NULL;
+	struct net_device *dev;
+	struct net_device *br_dev = NULL;
+	const struct net_device_ops *ops = NULL;
+	const struct net_device_ops *cops = NULL;
 	struct net *net = sock_net(skb->sk);
+	struct hlist_head *head;
 	int brport_idx = 0;
 	int br_idx = 0;
+	int h, s_h;
+	int idx = 0, s_idx;
+	int err = 0;
 	int fidx = 0;
-	int err;
-
-	NL_ASSERT_CTX_FITS(struct ndo_fdb_dump_context);
 
 	if (cb->strict_check)
 		err = valid_fdb_dump_strict(cb->nlh, &br_idx, &brport_idx,
@@ -4983,51 +4686,70 @@ static int rtnl_fdb_dump(struct sk_buff *skb, struct netlink_callback *cb)
 		ops = br_dev->netdev_ops;
 	}
 
-	for_each_netdev_dump(net, dev, ctx->ifindex) {
-		if (brport_idx && (dev->ifindex != brport_idx))
-			continue;
+	s_h = cb->args[0];
+	s_idx = cb->args[1];
 
-		if (!br_idx) { /* user did not specify a specific bridge */
+	for (h = s_h; h < NETDEV_HASHENTRIES; h++, s_idx = 0) {
+		idx = 0;
+		head = &net->dev_index_head[h];
+		hlist_for_each_entry(dev, head, index_hlist) {
+
+			if (brport_idx && (dev->ifindex != brport_idx))
+				continue;
+
+			if (!br_idx) { /* user did not specify a specific bridge */
+				if (netif_is_bridge_port(dev)) {
+					br_dev = netdev_master_upper_dev_get(dev);
+					cops = br_dev->netdev_ops;
+				}
+			} else {
+				if (dev != br_dev &&
+				    !netif_is_bridge_port(dev))
+					continue;
+
+				if (br_dev != netdev_master_upper_dev_get(dev) &&
+				    !netif_is_bridge_master(dev))
+					continue;
+				cops = ops;
+			}
+
+			if (idx < s_idx)
+				goto cont;
+
 			if (netif_is_bridge_port(dev)) {
-				br_dev = netdev_master_upper_dev_get(dev);
-				cops = br_dev->netdev_ops;
+				if (cops && cops->ndo_fdb_dump) {
+					err = cops->ndo_fdb_dump(skb, cb,
+								br_dev, dev,
+								&fidx);
+					if (err == -EMSGSIZE)
+						goto out;
+				}
 			}
-		} else {
-			if (dev != br_dev &&
-			    !netif_is_bridge_port(dev))
-				continue;
 
-			if (br_dev != netdev_master_upper_dev_get(dev) &&
-			    !netif_is_bridge_master(dev))
-				continue;
-			cops = ops;
-		}
-
-		if (netif_is_bridge_port(dev)) {
-			if (cops && cops->ndo_fdb_dump) {
-				err = cops->ndo_fdb_dump(skb, cb, br_dev, dev,
+			if (dev->netdev_ops->ndo_fdb_dump)
+				err = dev->netdev_ops->ndo_fdb_dump(skb, cb,
+								    dev, NULL,
+								    &fidx);
+			else
+				err = ndo_dflt_fdb_dump(skb, cb, dev, NULL,
 							&fidx);
-				if (err == -EMSGSIZE)
-					break;
-			}
+			if (err == -EMSGSIZE)
+				goto out;
+
+			cops = NULL;
+
+			/* reset fdb offset to 0 for rest of the interfaces */
+			cb->args[2] = 0;
+			fidx = 0;
+cont:
+			idx++;
 		}
-
-		if (dev->netdev_ops->ndo_fdb_dump)
-			err = dev->netdev_ops->ndo_fdb_dump(skb, cb, dev, NULL,
-							    &fidx);
-		else
-			err = ndo_dflt_fdb_dump(skb, cb, dev, NULL, &fidx);
-		if (err == -EMSGSIZE)
-			break;
-
-		cops = NULL;
-
-		/* reset fdb offset to 0 for rest of the interfaces */
-		ctx->fdb_idx = 0;
-		fidx = 0;
 	}
 
-	ctx->fdb_idx = fidx;
+out:
+	cb->args[0] = h;
+	cb->args[1] = idx;
+	cb->args[2] = fidx;
 
 	return skb->len;
 }
@@ -5040,12 +4762,12 @@ static int valid_fdb_get_strict(const struct nlmsghdr *nlh,
 	struct ndmsg *ndm;
 	int err, i;
 
-	ndm = nlmsg_payload(nlh, sizeof(*ndm));
-	if (!ndm) {
+	if (nlh->nlmsg_len < nlmsg_msg_size(sizeof(*ndm))) {
 		NL_SET_ERR_MSG(extack, "Invalid header for fdb get request");
 		return -EINVAL;
 	}
 
+	ndm = nlmsg_data(nlh);
 	if (ndm->ndm_pad1  || ndm->ndm_pad2  || ndm->ndm_state ||
 	    ndm->ndm_type) {
 		NL_SET_ERR_MSG(extack, "Invalid values in header for fdb get request");
@@ -5224,7 +4946,7 @@ int ndo_dflt_bridge_getlink(struct sk_buff *skb, u32 pid, u32 seq,
 	ifm->__ifi_pad = 0;
 	ifm->ifi_type = dev->type;
 	ifm->ifi_index = dev->ifindex;
-	ifm->ifi_flags = netif_get_flags(dev);
+	ifm->ifi_flags = dev_get_flags(dev);
 	ifm->ifi_change = 0;
 
 
@@ -5312,12 +5034,12 @@ static int valid_bridge_getlink_req(const struct nlmsghdr *nlh,
 	if (strict_check) {
 		struct ifinfomsg *ifm;
 
-		ifm = nlmsg_payload(nlh, sizeof(*ifm));
-		if (!ifm) {
+		if (nlh->nlmsg_len < nlmsg_msg_size(sizeof(*ifm))) {
 			NL_SET_ERR_MSG(extack, "Invalid header for bridge link dump");
 			return -EINVAL;
 		}
 
+		ifm = nlmsg_data(nlh);
 		if (ifm->__ifi_pad || ifm->ifi_type || ifm->ifi_flags ||
 		    ifm->ifi_change || ifm->ifi_index) {
 			NL_SET_ERR_MSG(extack, "Invalid values in header for bridge link dump request");
@@ -6209,14 +5931,15 @@ static int rtnl_valid_stats_req(const struct nlmsghdr *nlh, bool strict_check,
 {
 	struct if_stats_msg *ifsm;
 
-	ifsm = nlmsg_payload(nlh, sizeof(*ifsm));
-	if (!ifsm) {
+	if (nlh->nlmsg_len < nlmsg_msg_size(sizeof(*ifsm))) {
 		NL_SET_ERR_MSG(extack, "Invalid header for stats dump");
 		return -EINVAL;
 	}
 
 	if (!strict_check)
 		return 0;
+
+	ifsm = nlmsg_data(nlh);
 
 	/* only requests using strict checks can pass data to influence
 	 * the dump. The legacy exception is filter_mask.
@@ -6445,12 +6168,12 @@ static int rtnl_mdb_valid_dump_req(const struct nlmsghdr *nlh,
 {
 	struct br_port_msg *bpm;
 
-	bpm = nlmsg_payload(nlh, sizeof(*bpm));
-	if (!bpm) {
+	if (nlh->nlmsg_len < nlmsg_msg_size(sizeof(*bpm))) {
 		NL_SET_ERR_MSG(extack, "Invalid header for mdb dump request");
 		return -EINVAL;
 	}
 
+	bpm = nlmsg_data(nlh);
 	if (bpm->ifindex) {
 		NL_SET_ERR_MSG(extack, "Filtering by device index is not supported for mdb dump request");
 		return -EINVAL;
@@ -6475,7 +6198,7 @@ static int rtnl_mdb_dump(struct sk_buff *skb, struct netlink_callback *cb)
 	int idx, s_idx;
 	int err;
 
-	NL_ASSERT_CTX_FITS(struct rtnl_mdb_dump_ctx);
+	NL_ASSERT_DUMP_CTX_FITS(struct rtnl_mdb_dump_ctx);
 
 	if (cb->strict_check) {
 		err = rtnl_mdb_valid_dump_req(cb->nlh, cb->extack);
@@ -7042,41 +6765,6 @@ static struct pernet_operations rtnetlink_net_ops = {
 	.exit = rtnetlink_net_exit,
 };
 
-static const struct rtnl_msg_handler rtnetlink_rtnl_msg_handlers[] __initconst = {
-	{.msgtype = RTM_NEWLINK, .doit = rtnl_newlink,
-	 .flags = RTNL_FLAG_DOIT_PERNET},
-	{.msgtype = RTM_DELLINK, .doit = rtnl_dellink,
-	 .flags = RTNL_FLAG_DOIT_PERNET_WIP},
-	{.msgtype = RTM_GETLINK, .doit = rtnl_getlink,
-	 .dumpit = rtnl_dump_ifinfo, .flags = RTNL_FLAG_DUMP_SPLIT_NLM_DONE},
-	{.msgtype = RTM_SETLINK, .doit = rtnl_setlink,
-	 .flags = RTNL_FLAG_DOIT_PERNET_WIP},
-	{.msgtype = RTM_GETADDR, .dumpit = rtnl_dump_all},
-	{.msgtype = RTM_GETROUTE, .dumpit = rtnl_dump_all},
-	{.msgtype = RTM_GETNETCONF, .dumpit = rtnl_dump_all},
-	{.msgtype = RTM_GETSTATS, .doit = rtnl_stats_get,
-	 .dumpit = rtnl_stats_dump},
-	{.msgtype = RTM_SETSTATS, .doit = rtnl_stats_set},
-	{.msgtype = RTM_NEWLINKPROP, .doit = rtnl_newlinkprop},
-	{.msgtype = RTM_DELLINKPROP, .doit = rtnl_dellinkprop},
-	{.protocol = PF_BRIDGE, .msgtype = RTM_GETLINK,
-	 .dumpit = rtnl_bridge_getlink},
-	{.protocol = PF_BRIDGE, .msgtype = RTM_DELLINK,
-	 .doit = rtnl_bridge_dellink},
-	{.protocol = PF_BRIDGE, .msgtype = RTM_SETLINK,
-	 .doit = rtnl_bridge_setlink},
-	{.protocol = PF_BRIDGE, .msgtype = RTM_NEWNEIGH, .doit = rtnl_fdb_add},
-	{.protocol = PF_BRIDGE, .msgtype = RTM_DELNEIGH, .doit = rtnl_fdb_del,
-	 .flags = RTNL_FLAG_BULK_DEL_SUPPORTED},
-	{.protocol = PF_BRIDGE, .msgtype = RTM_GETNEIGH, .doit = rtnl_fdb_get,
-	 .dumpit = rtnl_fdb_dump},
-	{.protocol = PF_BRIDGE, .msgtype = RTM_NEWMDB, .doit = rtnl_mdb_add},
-	{.protocol = PF_BRIDGE, .msgtype = RTM_DELMDB, .doit = rtnl_mdb_del,
-	 .flags = RTNL_FLAG_BULK_DEL_SUPPORTED},
-	{.protocol = PF_BRIDGE, .msgtype = RTM_GETMDB, .doit = rtnl_mdb_get,
-	 .dumpit = rtnl_mdb_dump},
-};
-
 void __init rtnetlink_init(void)
 {
 	if (register_pernet_subsys(&rtnetlink_net_ops))
@@ -7084,5 +6772,34 @@ void __init rtnetlink_init(void)
 
 	register_netdevice_notifier(&rtnetlink_dev_notifier);
 
-	rtnl_register_many(rtnetlink_rtnl_msg_handlers);
+	rtnl_register(PF_UNSPEC, RTM_GETLINK, rtnl_getlink,
+		      rtnl_dump_ifinfo, RTNL_FLAG_DUMP_SPLIT_NLM_DONE);
+	rtnl_register(PF_UNSPEC, RTM_SETLINK, rtnl_setlink, NULL, 0);
+	rtnl_register(PF_UNSPEC, RTM_NEWLINK, rtnl_newlink, NULL, 0);
+	rtnl_register(PF_UNSPEC, RTM_DELLINK, rtnl_dellink, NULL, 0);
+
+	rtnl_register(PF_UNSPEC, RTM_GETADDR, NULL, rtnl_dump_all, 0);
+	rtnl_register(PF_UNSPEC, RTM_GETROUTE, NULL, rtnl_dump_all, 0);
+	rtnl_register(PF_UNSPEC, RTM_GETNETCONF, NULL, rtnl_dump_all, 0);
+
+	rtnl_register(PF_UNSPEC, RTM_NEWLINKPROP, rtnl_newlinkprop, NULL, 0);
+	rtnl_register(PF_UNSPEC, RTM_DELLINKPROP, rtnl_dellinkprop, NULL, 0);
+
+	rtnl_register(PF_BRIDGE, RTM_NEWNEIGH, rtnl_fdb_add, NULL, 0);
+	rtnl_register(PF_BRIDGE, RTM_DELNEIGH, rtnl_fdb_del, NULL,
+		      RTNL_FLAG_BULK_DEL_SUPPORTED);
+	rtnl_register(PF_BRIDGE, RTM_GETNEIGH, rtnl_fdb_get, rtnl_fdb_dump, 0);
+
+	rtnl_register(PF_BRIDGE, RTM_GETLINK, NULL, rtnl_bridge_getlink, 0);
+	rtnl_register(PF_BRIDGE, RTM_DELLINK, rtnl_bridge_dellink, NULL, 0);
+	rtnl_register(PF_BRIDGE, RTM_SETLINK, rtnl_bridge_setlink, NULL, 0);
+
+	rtnl_register(PF_UNSPEC, RTM_GETSTATS, rtnl_stats_get, rtnl_stats_dump,
+		      0);
+	rtnl_register(PF_UNSPEC, RTM_SETSTATS, rtnl_stats_set, NULL, 0);
+
+	rtnl_register(PF_BRIDGE, RTM_GETMDB, rtnl_mdb_get, rtnl_mdb_dump, 0);
+	rtnl_register(PF_BRIDGE, RTM_NEWMDB, rtnl_mdb_add, NULL, 0);
+	rtnl_register(PF_BRIDGE, RTM_DELMDB, rtnl_mdb_del, NULL,
+		      RTNL_FLAG_BULK_DEL_SUPPORTED);
 }

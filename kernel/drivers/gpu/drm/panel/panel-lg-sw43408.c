@@ -246,6 +246,8 @@ static int sw43408_add(struct sw43408_panel *ctx)
 
 	ctx->base.prepare_prev_first = true;
 
+	drm_panel_init(&ctx->base, dev, &sw43408_funcs, DRM_MODE_CONNECTOR_DSI);
+
 	drm_panel_add(&ctx->base);
 	return ret;
 }
@@ -255,11 +257,9 @@ static int sw43408_probe(struct mipi_dsi_device *dsi)
 	struct sw43408_panel *ctx;
 	int ret;
 
-	ctx = devm_drm_panel_alloc(&dsi->dev, __typeof(*ctx), base,
-				   &sw43408_funcs, DRM_MODE_CONNECTOR_DSI);
-
-	if (IS_ERR(ctx))
-		return PTR_ERR(ctx);
+	ctx = devm_kzalloc(&dsi->dev, sizeof(*ctx), GFP_KERNEL);
+	if (!ctx)
+		return -ENOMEM;
 
 	dsi->mode_flags = MIPI_DSI_MODE_LPM;
 	dsi->format = MIPI_DSI_FMT_RGB888;

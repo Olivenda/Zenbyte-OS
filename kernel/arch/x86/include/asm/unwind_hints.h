@@ -5,7 +5,7 @@
 
 #include "orc_types.h"
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 
 .macro UNWIND_HINT_END_OF_STACK
 	UNWIND_HINT type=UNWIND_HINT_TYPE_END_OF_STACK
@@ -88,6 +88,6 @@
 #define UNWIND_HINT_RESTORE \
 	UNWIND_HINT(UNWIND_HINT_TYPE_RESTORE, 0, 0, 0)
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_UNWIND_HINTS_H */

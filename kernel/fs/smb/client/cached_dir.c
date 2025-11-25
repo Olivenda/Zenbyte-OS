@@ -102,8 +102,7 @@ path_to_dentry(struct cifs_sb_info *cifs_sb, const char *path)
 		while (*s && *s != sep)
 			s++;
 
-		child = lookup_noperm_positive_unlocked(&QSTR_LEN(p, s - p),
-							dentry);
+		child = lookup_positive_unlocked(p, dentry, s - p);
 		dput(dentry);
 		dentry = child;
 	} while (!IS_ERR(dentry));
@@ -155,19 +154,16 @@ int open_cached_dir(unsigned int xid, struct cifs_tcon *tcon,
 	struct cached_fids *cfids;
 	const char *npath;
 	int retries = 0, cur_sleep = 1;
-	__le32 lease_flags = 0;
 
-	if (cifs_sb->root == NULL)
-		return -ENOENT;
-
-	if (tcon == NULL)
+	if (tcon == NULL || tcon->cfids == NULL || tcon->nohandlecache ||
+	    is_smb1_server(tcon->ses->server) || (dir_cache_timeout == 0))
 		return -EOPNOTSUPP;
 
 	ses = tcon->ses;
 	cfids = tcon->cfids;
 
-	if (cfids == NULL)
-		return -EOPNOTSUPP;
+	if (cifs_sb->root == NULL)
+		return -ENOENT;
 
 replay_again:
 	/* reinitialize for possible replay */
@@ -195,7 +191,6 @@ replay_again:
 	 * from @cfids->entries.  Caller will put last reference if the latter.
 	 */
 	if (cfid->has_lease && cfid->time) {
-		cfid->last_access_time = jiffies;
 		spin_unlock(&cfids->cfid_list_lock);
 		*ret_cfid = cfid;
 		kfree(utf16_path);
@@ -203,10 +198,8 @@ replay_again:
 	}
 	spin_unlock(&cfids->cfid_list_lock);
 
-	pfid = &cfid->fid;
-
 	/*
-	 * Skip any prefix paths in @path as lookup_noperm_positive_unlocked() ends up
+	 * Skip any prefix paths in @path as lookup_positive_unlocked() ends up
 	 * calling ->lookup() which already adds those through
 	 * build_path_from_dentry().  Also, do it earlier as we might reconnect
 	 * below when trying to send compounded request and then potentially
@@ -226,25 +219,6 @@ replay_again:
 			rc = -ENOENT;
 			goto out;
 		}
-		if (dentry->d_parent && server->dialect >= SMB30_PROT_ID) {
-			struct cached_fid *parent_cfid;
-
-			spin_lock(&cfids->cfid_list_lock);
-			list_for_each_entry(parent_cfid, &cfids->entries, entry) {
-				if (parent_cfid->dentry == dentry->d_parent) {
-					cifs_dbg(FYI, "found a parent cached file handle\n");
-					if (parent_cfid->has_lease && parent_cfid->time) {
-						lease_flags
-							|= SMB2_LEASE_FLAG_PARENT_LEASE_KEY_SET_LE;
-						memcpy(pfid->parent_lease_key,
-						       parent_cfid->fid.lease_key,
-						       SMB2_LEASE_KEY_SIZE);
-					}
-					break;
-				}
-			}
-			spin_unlock(&cfids->cfid_list_lock);
-		}
 	}
 	cfid->dentry = dentry;
 	cfid->tcon = tcon;
@@ -259,6 +233,7 @@ replay_again:
 	if (smb3_encryption_required(tcon))
 		flags |= CIFS_TRANSFORM_REQ;
 
+	pfid = &cfid->fid;
 	server->ops->new_lease_key(pfid);
 
 	memset(rqst, 0, sizeof(rqst));
@@ -278,7 +253,6 @@ replay_again:
 				   FILE_READ_EA,
 		.disposition = FILE_OPEN,
 		.fid = pfid,
-		.lease_flags = lease_flags,
 		.replay = !!(retries),
 	};
 
@@ -364,7 +338,6 @@ replay_again:
 		cfid->file_all_info_is_valid = true;
 
 	cfid->time = jiffies;
-	cfid->last_access_time = jiffies;
 	spin_unlock(&cfids->cfid_list_lock);
 	/* At this point the directory handle is fully cached */
 	rc = 0;
@@ -415,7 +388,7 @@ int open_cached_dir_by_dentry(struct cifs_tcon *tcon,
 	struct cached_fids *cfids = tcon->cfids;
 
 	if (cfids == NULL)
-		return -EOPNOTSUPP;
+		return -ENOENT;
 
 	spin_lock(&cfids->cfid_list_lock);
 	list_for_each_entry(cfid, &cfids->entries, entry) {
@@ -423,7 +396,6 @@ int open_cached_dir_by_dentry(struct cifs_tcon *tcon,
 			cifs_dbg(FYI, "found a cached file handle by dentry\n");
 			kref_get(&cfid->refcount);
 			*ret_cfid = cfid;
-			cfid->last_access_time = jiffies;
 			spin_unlock(&cfids->cfid_list_lock);
 			return 0;
 		}
@@ -622,7 +594,7 @@ static void cached_dir_put_work(struct work_struct *work)
 	queue_work(serverclose_wq, &cfid->close_work);
 }
 
-bool cached_dir_lease_break(struct cifs_tcon *tcon, __u8 lease_key[16])
+int cached_dir_lease_break(struct cifs_tcon *tcon, __u8 lease_key[16])
 {
 	struct cached_fids *cfids = tcon->cfids;
 	struct cached_fid *cfid;
@@ -735,8 +707,8 @@ static void cfids_laundromat_worker(struct work_struct *work)
 
 	spin_lock(&cfids->cfid_list_lock);
 	list_for_each_entry_safe(cfid, q, &cfids->entries, entry) {
-		if (cfid->last_access_time &&
-		    time_after(jiffies, cfid->last_access_time + HZ * dir_cache_timeout)) {
+		if (cfid->time &&
+		    time_after(jiffies, cfid->time + HZ * dir_cache_timeout)) {
 			cfid->on_list = false;
 			list_move(&cfid->entry, &entry);
 			cfids->num_entries--;

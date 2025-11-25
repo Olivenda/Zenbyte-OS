@@ -689,6 +689,6 @@ static struct platform_driver hisi_lpc_driver = {
 		.acpi_match_table = hisi_lpc_acpi_match,
 	},
 	.probe = hisi_lpc_probe,
-	.remove = hisi_lpc_remove,
+	.remove_new = hisi_lpc_remove,
 };
 builtin_platform_driver(hisi_lpc_driver);

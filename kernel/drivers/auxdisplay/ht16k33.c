@@ -657,6 +657,7 @@ static int ht16k33_seg_probe(struct device *dev, struct ht16k33_priv *priv,
 static int ht16k33_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
+	const struct of_device_id *id;
 	struct ht16k33_priv *priv;
 	uint32_t dft_brightness;
 	int err;
@@ -671,8 +672,9 @@ static int ht16k33_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	priv->client = client;
-	priv->type = (uintptr_t)i2c_get_match_data(client);
-
+	id = i2c_of_match_device(dev->driver->of_match_table, client);
+	if (id)
+		priv->type = (uintptr_t)id->data;
 	i2c_set_clientdata(client, priv);
 
 	err = ht16k33_initialize(priv);
@@ -745,9 +747,7 @@ static void ht16k33_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id ht16k33_i2c_match[] = {
-	{ "3108", DISP_QUAD_7SEG },
-	{ "3130", DISP_QUAD_14SEG },
-	{ "ht16k33", DISP_MATRIX },
+	{ "ht16k33", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ht16k33_i2c_match);
@@ -780,5 +780,5 @@ module_i2c_driver(ht16k33_driver);
 
 MODULE_DESCRIPTION("Holtek HT16K33 driver");
 MODULE_LICENSE("GPL");
-MODULE_IMPORT_NS("LINEDISP");
+MODULE_IMPORT_NS(LINEDISP);
 MODULE_AUTHOR("Robin van der Gracht <robin@protonic.nl>");

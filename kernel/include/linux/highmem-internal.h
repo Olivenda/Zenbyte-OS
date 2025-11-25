@@ -73,14 +73,6 @@ static inline void *kmap_local_page(struct page *page)
 	return __kmap_local_page_prot(page, kmap_prot);
 }
 
-static inline void *kmap_local_page_try_from_panic(struct page *page)
-{
-	if (!PageHighMem(page))
-		return page_address(page);
-	/* If the page is in HighMem, it's not safe to kmap it.*/
-	return NULL;
-}
-
 static inline void *kmap_local_folio(struct folio *folio, size_t offset)
 {
 	struct page *page = folio_page(folio, offset / PAGE_SIZE);
@@ -188,14 +180,9 @@ static inline void *kmap_local_page(struct page *page)
 	return page_address(page);
 }
 
-static inline void *kmap_local_page_try_from_panic(struct page *page)
-{
-	return page_address(page);
-}
-
 static inline void *kmap_local_folio(struct folio *folio, size_t offset)
 {
-	return folio_address(folio) + offset;
+	return page_address(&folio->page) + offset;
 }
 
 static inline void *kmap_local_page_prot(struct page *page, pgprot_t prot)

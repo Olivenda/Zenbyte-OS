@@ -477,42 +477,45 @@ static int adxl367_set_fifo_watermark(struct adxl367_state *st,
 static int adxl367_set_range(struct iio_dev *indio_dev,
 			     enum adxl367_range range)
 {
-	struct adxl367_state *st = iio_priv(indio_dev);
-	int ret;
+	iio_device_claim_direct_scoped(return -EBUSY, indio_dev) {
+		struct adxl367_state *st = iio_priv(indio_dev);
+		int ret;
 
-	guard(mutex)(&st->lock);
+		guard(mutex)(&st->lock);
 
-	ret = adxl367_set_measure_en(st, false);
-	if (ret)
-		return ret;
+		ret = adxl367_set_measure_en(st, false);
+		if (ret)
+			return ret;
 
-	ret = regmap_update_bits(st->regmap, ADXL367_REG_FILTER_CTL,
-				 ADXL367_FILTER_CTL_RANGE_MASK,
-				 FIELD_PREP(ADXL367_FILTER_CTL_RANGE_MASK,
-					    range));
-	if (ret)
-		return ret;
+		ret = regmap_update_bits(st->regmap, ADXL367_REG_FILTER_CTL,
+					 ADXL367_FILTER_CTL_RANGE_MASK,
+					 FIELD_PREP(ADXL367_FILTER_CTL_RANGE_MASK,
+						    range));
+		if (ret)
+			return ret;
 
-	adxl367_scale_act_thresholds(st, st->range, range);
+		adxl367_scale_act_thresholds(st, st->range, range);
 
-	/* Activity thresholds depend on range */
-	ret = _adxl367_set_act_threshold(st, ADXL367_ACTIVITY,
-					 st->act_threshold);
-	if (ret)
-		return ret;
+		/* Activity thresholds depend on range */
+		ret = _adxl367_set_act_threshold(st, ADXL367_ACTIVITY,
+						 st->act_threshold);
+		if (ret)
+			return ret;
 
-	ret = _adxl367_set_act_threshold(st, ADXL367_INACTIVITY,
-					 st->inact_threshold);
-	if (ret)
-		return ret;
+		ret = _adxl367_set_act_threshold(st, ADXL367_INACTIVITY,
+						 st->inact_threshold);
+		if (ret)
+			return ret;
 
-	ret = adxl367_set_measure_en(st, true);
-	if (ret)
-		return ret;
+		ret = adxl367_set_measure_en(st, true);
+		if (ret)
+			return ret;
 
-	st->range = range;
+		st->range = range;
 
-	return 0;
+		return 0;
+	}
+	unreachable();
 }
 
 static int adxl367_time_ms_to_samples(struct adxl367_state *st, unsigned int ms)
@@ -613,20 +616,23 @@ static int _adxl367_set_odr(struct adxl367_state *st, enum adxl367_odr odr)
 
 static int adxl367_set_odr(struct iio_dev *indio_dev, enum adxl367_odr odr)
 {
-	struct adxl367_state *st = iio_priv(indio_dev);
-	int ret;
+	iio_device_claim_direct_scoped(return -EBUSY, indio_dev) {
+		struct adxl367_state *st = iio_priv(indio_dev);
+		int ret;
 
-	guard(mutex)(&st->lock);
+		guard(mutex)(&st->lock);
 
-	ret = adxl367_set_measure_en(st, false);
-	if (ret)
-		return ret;
+		ret = adxl367_set_measure_en(st, false);
+		if (ret)
+			return ret;
 
-	ret = _adxl367_set_odr(st, odr);
-	if (ret)
-		return ret;
+		ret = _adxl367_set_odr(st, odr);
+		if (ret)
+			return ret;
 
-	return adxl367_set_measure_en(st, true);
+		return adxl367_set_measure_en(st, true);
+	}
+	unreachable();
 }
 
 static int adxl367_set_temp_adc_en(struct adxl367_state *st, unsigned int reg,
@@ -715,29 +721,32 @@ static int adxl367_read_sample(struct iio_dev *indio_dev,
 			       struct iio_chan_spec const *chan,
 			       int *val)
 {
-	struct adxl367_state *st = iio_priv(indio_dev);
-	u16 sample;
-	int ret;
+	iio_device_claim_direct_scoped(return -EBUSY, indio_dev) {
+		struct adxl367_state *st = iio_priv(indio_dev);
+		u16 sample;
+		int ret;
 
-	guard(mutex)(&st->lock);
+		guard(mutex)(&st->lock);
 
-	ret = adxl367_set_temp_adc_reg_en(st, chan->address, true);
-	if (ret)
-		return ret;
+		ret = adxl367_set_temp_adc_reg_en(st, chan->address, true);
+		if (ret)
+			return ret;
 
-	ret = regmap_bulk_read(st->regmap, chan->address, &st->sample_buf,
-			       sizeof(st->sample_buf));
-	if (ret)
-		return ret;
+		ret = regmap_bulk_read(st->regmap, chan->address, &st->sample_buf,
+				       sizeof(st->sample_buf));
+		if (ret)
+			return ret;
 
-	sample = FIELD_GET(ADXL367_DATA_MASK, be16_to_cpu(st->sample_buf));
-	*val = sign_extend32(sample, chan->scan_type.realbits - 1);
+		sample = FIELD_GET(ADXL367_DATA_MASK, be16_to_cpu(st->sample_buf));
+		*val = sign_extend32(sample, chan->scan_type.realbits - 1);
 
-	ret = adxl367_set_temp_adc_reg_en(st, chan->address, false);
-	if (ret)
-		return ret;
+		ret = adxl367_set_temp_adc_reg_en(st, chan->address, false);
+		if (ret)
+			return ret;
 
-	return IIO_VAL_INT;
+		return IIO_VAL_INT;
+	}
+	unreachable();
 }
 
 static int adxl367_get_status(struct adxl367_state *st, u8 *status,
@@ -839,15 +848,10 @@ static int adxl367_read_raw(struct iio_dev *indio_dev,
 			    int *val, int *val2, long info)
 {
 	struct adxl367_state *st = iio_priv(indio_dev);
-	int ret;
 
 	switch (info) {
 	case IIO_CHAN_INFO_RAW:
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
-		ret = adxl367_read_sample(indio_dev, chan, val);
-		iio_device_release_direct(indio_dev);
-		return ret;
+		return adxl367_read_sample(indio_dev, chan, val);
 	case IIO_CHAN_INFO_SCALE:
 		switch (chan->type) {
 		case IIO_ACCEL: {
@@ -904,12 +908,7 @@ static int adxl367_write_raw(struct iio_dev *indio_dev,
 		if (ret)
 			return ret;
 
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
-
-		ret = adxl367_set_odr(indio_dev, odr);
-		iio_device_release_direct(indio_dev);
-		return ret;
+		return adxl367_set_odr(indio_dev, odr);
 	}
 	case IIO_CHAN_INFO_SCALE: {
 		enum adxl367_range range;
@@ -918,12 +917,7 @@ static int adxl367_write_raw(struct iio_dev *indio_dev,
 		if (ret)
 			return ret;
 
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
-
-		ret = adxl367_set_range(indio_dev, range);
-		iio_device_release_direct(indio_dev);
-		return ret;
+		return adxl367_set_range(indio_dev, range);
 	}
 	default:
 		return -EINVAL;
@@ -1071,15 +1065,13 @@ static int adxl367_read_event_config(struct iio_dev *indio_dev,
 	}
 }
 
-static int __adxl367_write_event_config(struct iio_dev *indio_dev,
-					const struct iio_chan_spec *chan,
-					enum iio_event_type type,
-					enum iio_event_direction dir,
-					bool state)
+static int adxl367_write_event_config(struct iio_dev *indio_dev,
+				      const struct iio_chan_spec *chan,
+				      enum iio_event_type type,
+				      enum iio_event_direction dir,
+				      int state)
 {
-	struct adxl367_state *st = iio_priv(indio_dev);
 	enum adxl367_activity_type act;
-	int ret;
 
 	switch (dir) {
 	case IIO_EV_DIR_RISING:
@@ -1092,38 +1084,28 @@ static int __adxl367_write_event_config(struct iio_dev *indio_dev,
 		return -EINVAL;
 	}
 
-	guard(mutex)(&st->lock);
+	iio_device_claim_direct_scoped(return -EBUSY, indio_dev) {
+		struct adxl367_state *st = iio_priv(indio_dev);
+		int ret;
 
-	ret = adxl367_set_measure_en(st, false);
-	if (ret)
-		return ret;
+		guard(mutex)(&st->lock);
 
-	ret = adxl367_set_act_interrupt_en(st, act, state);
-	if (ret)
-		return ret;
+		ret = adxl367_set_measure_en(st, false);
+		if (ret)
+			return ret;
 
-	ret = adxl367_set_act_en(st, act, state ? ADCL367_ACT_REF_ENABLED
-				 : ADXL367_ACT_DISABLED);
-	if (ret)
-		return ret;
+		ret = adxl367_set_act_interrupt_en(st, act, state);
+		if (ret)
+			return ret;
 
-	return adxl367_set_measure_en(st, true);
-}
+		ret = adxl367_set_act_en(st, act, state ? ADCL367_ACT_REF_ENABLED
+					 : ADXL367_ACT_DISABLED);
+		if (ret)
+			return ret;
 
-static int adxl367_write_event_config(struct iio_dev *indio_dev,
-				      const struct iio_chan_spec *chan,
-				      enum iio_event_type type,
-				      enum iio_event_direction dir,
-				      bool state)
-{
-	int ret;
-
-	if (!iio_device_claim_direct(indio_dev))
-		return -EBUSY;
-
-	ret = __adxl367_write_event_config(indio_dev, chan, type, dir, state);
-	iio_device_release_direct(indio_dev);
-	return ret;
+		return adxl367_set_measure_en(st, true);
+	}
+	unreachable();
 }
 
 static ssize_t adxl367_get_fifo_enabled(struct device *dev,
@@ -1489,7 +1471,7 @@ int adxl367_probe(struct device *dev, const struct adxl367_ops *ops,
 
 	return devm_iio_device_register(dev, indio_dev);
 }
-EXPORT_SYMBOL_NS_GPL(adxl367_probe, "IIO_ADXL367");
+EXPORT_SYMBOL_NS_GPL(adxl367_probe, IIO_ADXL367);
 
 MODULE_AUTHOR("Cosmin Tanislav <cosmin.tanislav@analog.com>");
 MODULE_DESCRIPTION("Analog Devices ADXL367 3-axis accelerometer driver");

@@ -5,5 +5,4 @@ relocs.S
 section_cmp.*
 vmlinux
 vmlinux.lds
-vmlinux.map
 vmlinux.syms

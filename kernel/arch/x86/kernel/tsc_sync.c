@@ -21,7 +21,6 @@
 #include <linux/kernel.h>
 #include <linux/smp.h>
 #include <linux/nmi.h>
-#include <asm/msr.h>
 #include <asm/tsc.h>
 
 struct tsc_adjust {
@@ -66,12 +65,12 @@ void tsc_verify_tsc_adjust(bool resume)
 
 	adj->nextcheck = jiffies + HZ;
 
-	rdmsrq(MSR_IA32_TSC_ADJUST, curval);
+	rdmsrl(MSR_IA32_TSC_ADJUST, curval);
 	if (adj->adjusted == curval)
 		return;
 
 	/* Restore the original value */
-	wrmsrq(MSR_IA32_TSC_ADJUST, adj->adjusted);
+	wrmsrl(MSR_IA32_TSC_ADJUST, adj->adjusted);
 
 	if (!adj->warned || resume) {
 		pr_warn(FW_BUG "TSC ADJUST differs: CPU%u %lld --> %lld. Restoring\n",
@@ -143,7 +142,7 @@ static void tsc_sanitize_first_cpu(struct tsc_adjust *cur, s64 bootval,
 		if (likely(!tsc_async_resets)) {
 			pr_warn(FW_BUG "TSC ADJUST: CPU%u: %lld force to 0\n",
 				cpu, bootval);
-			wrmsrq(MSR_IA32_TSC_ADJUST, 0);
+			wrmsrl(MSR_IA32_TSC_ADJUST, 0);
 			bootval = 0;
 		} else {
 			pr_info("TSC ADJUST: CPU%u: %lld NOT forced to 0\n",
@@ -166,7 +165,7 @@ bool __init tsc_store_and_check_tsc_adjust(bool bootcpu)
 	if (check_tsc_unstable())
 		return false;
 
-	rdmsrq(MSR_IA32_TSC_ADJUST, bootval);
+	rdmsrl(MSR_IA32_TSC_ADJUST, bootval);
 	cur->bootval = bootval;
 	cur->nextcheck = jiffies + HZ;
 	tsc_sanitize_first_cpu(cur, bootval, smp_processor_id(), bootcpu);
@@ -188,7 +187,7 @@ bool tsc_store_and_check_tsc_adjust(bool bootcpu)
 	if (!boot_cpu_has(X86_FEATURE_TSC_ADJUST))
 		return false;
 
-	rdmsrq(MSR_IA32_TSC_ADJUST, bootval);
+	rdmsrl(MSR_IA32_TSC_ADJUST, bootval);
 	cur->bootval = bootval;
 	cur->nextcheck = jiffies + HZ;
 	cur->warned = false;
@@ -230,7 +229,7 @@ bool tsc_store_and_check_tsc_adjust(bool bootcpu)
 	 */
 	if (bootval != ref->adjusted) {
 		cur->adjusted = ref->adjusted;
-		wrmsrq(MSR_IA32_TSC_ADJUST, ref->adjusted);
+		wrmsrl(MSR_IA32_TSC_ADJUST, ref->adjusted);
 	}
 	/*
 	 * We have the TSCs forced to be in sync on this package. Skip sync
@@ -519,7 +518,7 @@ retry:
 	pr_warn("TSC ADJUST compensate: CPU%u observed %lld warp. Adjust: %lld\n",
 		cpu, cur_max_warp, cur->adjusted);
 
-	wrmsrq(MSR_IA32_TSC_ADJUST, cur->adjusted);
+	wrmsrl(MSR_IA32_TSC_ADJUST, cur->adjusted);
 	goto retry;
 
 }

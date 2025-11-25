@@ -23,7 +23,7 @@
 #include <asm/insn.h>
 #include <asm/set_memory.h>
 #include <asm/stacktrace.h>
-#include <asm/text-patching.h>
+#include <asm/patch.h>
 
 /*
  * The compiler emitted profiling hook consists of

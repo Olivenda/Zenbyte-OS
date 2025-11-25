@@ -347,10 +347,13 @@ EXPORT_SYMBOL_GPL(eventfd_fget);
  */
 struct eventfd_ctx *eventfd_ctx_fdget(int fd)
 {
-	CLASS(fd, f)(fd);
-	if (fd_empty(f))
+	struct eventfd_ctx *ctx;
+	struct fd f = fdget(fd);
+	if (!fd_file(f))
 		return ERR_PTR(-EBADF);
-	return eventfd_ctx_fileget(fd_file(f));
+	ctx = eventfd_ctx_fileget(fd_file(f));
+	fdput(f);
+	return ctx;
 }
 EXPORT_SYMBOL_GPL(eventfd_ctx_fdget);
 
@@ -406,13 +409,14 @@ static int do_eventfd(unsigned int count, int flags)
 	if (fd < 0)
 		goto err;
 
-	file = anon_inode_getfile_fmode("[eventfd]", &eventfd_fops,
-					ctx, flags, FMODE_NOWAIT);
+	file = anon_inode_getfile("[eventfd]", &eventfd_fops, ctx, flags);
 	if (IS_ERR(file)) {
 		put_unused_fd(fd);
 		fd = PTR_ERR(file);
 		goto err;
 	}
+
+	file->f_mode |= FMODE_NOWAIT;
 	fd_install(fd, file);
 	return fd;
 err:

@@ -16,7 +16,6 @@
 
 /* We use the hw_value as an index into our private channel structure */
 
-#include <linux/export.h>
 #include "common.h"
 
 #define CHAN2G(_freq, _idx)  { \

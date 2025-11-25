@@ -216,13 +216,14 @@ static int keyscan_suspend(struct device *dev)
 	struct st_keyscan *keypad = platform_get_drvdata(pdev);
 	struct input_dev *input = keypad->input_dev;
 
-	guard(mutex)(&input->mutex);
+	mutex_lock(&input->mutex);
 
 	if (device_may_wakeup(dev))
 		enable_irq_wake(keypad->irq);
 	else if (input_device_enabled(input))
 		keyscan_stop(keypad);
 
+	mutex_unlock(&input->mutex);
 	return 0;
 }
 
@@ -231,19 +232,17 @@ static int keyscan_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct st_keyscan *keypad = platform_get_drvdata(pdev);
 	struct input_dev *input = keypad->input_dev;
-	int error;
+	int retval = 0;
 
-	guard(mutex)(&input->mutex);
+	mutex_lock(&input->mutex);
 
-	if (device_may_wakeup(dev)) {
+	if (device_may_wakeup(dev))
 		disable_irq_wake(keypad->irq);
-	} else if (input_device_enabled(input)) {
-		error = keyscan_start(keypad);
-		if (error)
-			return error;
-	}
+	else if (input_device_enabled(input))
+		retval = keyscan_start(keypad);
 
-	return 0;
+	mutex_unlock(&input->mutex);
+	return retval;
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(keyscan_dev_pm_ops,

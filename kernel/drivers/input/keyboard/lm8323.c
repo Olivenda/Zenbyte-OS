@@ -21,7 +21,6 @@
 #include <linux/platform_data/lm8323.h>
 #include <linux/pm.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 
 /* Commands to send to the chip. */
 #define LM8323_CMD_READ_ID		0x80 /* Read chip ID. */
@@ -270,7 +269,7 @@ static void process_keys(struct lm8323_chip *lm)
 		unsigned short keycode = lm->keymap[key];
 
 		dev_vdbg(&lm->client->dev, "key 0x%02x %s\n",
-			 key, str_down_up(isdown));
+			 key, isdown ? "down" : "up");
 
 		if (lm->kp_enabled) {
 			input_event(lm->idev, EV_MSC, MSC_SCAN, key);
@@ -351,11 +350,11 @@ static int lm8323_configure(struct lm8323_chip *lm)
 
 static void pwm_done(struct lm8323_pwm *pwm)
 {
-	guard(mutex)(&pwm->lock);
-
+	mutex_lock(&pwm->lock);
 	pwm->running = false;
 	if (pwm->desired_brightness != pwm->brightness)
 		schedule_work(&pwm->work);
+	mutex_unlock(&pwm->lock);
 }
 
 /*
@@ -368,7 +367,7 @@ static irqreturn_t lm8323_irq(int irq, void *_lm)
 	u8 ints;
 	int i;
 
-	guard(mutex)(&lm->lock);
+	mutex_lock(&lm->lock);
 
 	while ((lm8323_read(lm, LM8323_CMD_READ_INT, &ints, 1) == 1) && ints) {
 		if (likely(ints & INT_KEYPAD))
@@ -394,6 +393,8 @@ static irqreturn_t lm8323_irq(int irq, void *_lm)
 			}
 		}
 	}
+
+	mutex_unlock(&lm->lock);
 
 	return IRQ_HANDLED;
 }
@@ -444,7 +445,7 @@ static void lm8323_pwm_work(struct work_struct *work)
 	u16 pwm_cmds[3];
 	int num_cmds = 0;
 
-	guard(mutex)(&pwm->lock);
+	mutex_lock(&pwm->lock);
 
 	/*
 	 * Do nothing if we're already at the requested level,
@@ -453,7 +454,7 @@ static void lm8323_pwm_work(struct work_struct *work)
 	 * finishes.
 	 */
 	if (pwm->running || pwm->desired_brightness == pwm->brightness)
-		return;
+		goto out;
 
 	kill = (pwm->desired_brightness == 0);
 	up = (pwm->desired_brightness > pwm->brightness);
@@ -488,6 +489,9 @@ static void lm8323_pwm_work(struct work_struct *work)
 
 	lm8323_write_pwm(pwm, kill, num_cmds, pwm_cmds);
 	pwm->brightness = pwm->desired_brightness;
+
+ out:
+	mutex_unlock(&pwm->lock);
 }
 
 static void lm8323_pwm_set_brightness(struct led_classdev *led_cdev,
@@ -496,9 +500,9 @@ static void lm8323_pwm_set_brightness(struct led_classdev *led_cdev,
 	struct lm8323_pwm *pwm = cdev_to_pwm(led_cdev);
 	struct lm8323_chip *lm = pwm->chip;
 
-	scoped_guard(mutex, &pwm->lock) {
-		pwm->desired_brightness = brightness;
-	}
+	mutex_lock(&pwm->lock);
+	pwm->desired_brightness = brightness;
+	mutex_unlock(&pwm->lock);
 
 	if (in_interrupt()) {
 		schedule_work(&pwm->work);
@@ -506,12 +510,12 @@ static void lm8323_pwm_set_brightness(struct led_classdev *led_cdev,
 		/*
 		 * Schedule PWM work as usual unless we are going into suspend
 		 */
-		scoped_guard(mutex, &lm->lock) {
-			if (likely(!lm->pm_suspend))
-				schedule_work(&pwm->work);
-			else
-				lm8323_pwm_work(&pwm->work);
-		}
+		mutex_lock(&lm->lock);
+		if (likely(!lm->pm_suspend))
+			schedule_work(&pwm->work);
+		else
+			lm8323_pwm_work(&pwm->work);
+		mutex_unlock(&lm->lock);
 	}
 }
 
@@ -604,9 +608,9 @@ static ssize_t lm8323_set_disable(struct device *dev,
 	if (ret)
 		return ret;
 
-	guard(mutex)(&lm->lock);
-
+	mutex_lock(&lm->lock);
 	lm->kp_enabled = !i;
+	mutex_unlock(&lm->lock);
 
 	return count;
 }
@@ -754,9 +758,9 @@ static int lm8323_suspend(struct device *dev)
 	irq_set_irq_wake(client->irq, 0);
 	disable_irq(client->irq);
 
-	scoped_guard(mutex, &lm->lock) {
-		lm->pm_suspend = true;
-	}
+	mutex_lock(&lm->lock);
+	lm->pm_suspend = true;
+	mutex_unlock(&lm->lock);
 
 	for (i = 0; i < 3; i++)
 		if (lm->pwm[i].enabled)
@@ -771,9 +775,9 @@ static int lm8323_resume(struct device *dev)
 	struct lm8323_chip *lm = i2c_get_clientdata(client);
 	int i;
 
-	scoped_guard(mutex, &lm->lock) {
-		lm->pm_suspend = false;
-	}
+	mutex_lock(&lm->lock);
+	lm->pm_suspend = false;
+	mutex_unlock(&lm->lock);
 
 	for (i = 0; i < 3; i++)
 		if (lm->pwm[i].enabled)

@@ -492,7 +492,7 @@ static int ocfs2_validate_and_adjust_move_goal(struct inode *inode,
 	bg = (struct ocfs2_group_desc *)gd_bh->b_data;
 
 	/*
-	 * moving goal is not allowed to start with a group desc blok(#0 blk)
+	 * moving goal is not allowd to start with a group desc blok(#0 blk)
 	 * let's compromise to the latter cluster.
 	 */
 	if (range->me_goal == le64_to_cpu(bg->bg_blkno))
@@ -617,8 +617,6 @@ static int ocfs2_move_extent(struct ocfs2_move_extents_context *context,
 	 */
 	credits += OCFS2_INODE_UPDATE_CREDITS + 1;
 
-	inode_lock(tl_inode);
-
 	/*
 	 * ocfs2_move_extent() didn't reserve any clusters in lock_allocators()
 	 * logic, while we still need to lock the global_bitmap.
@@ -628,7 +626,7 @@ static int ocfs2_move_extent(struct ocfs2_move_extents_context *context,
 	if (!gb_inode) {
 		mlog(ML_ERROR, "unable to get global_bitmap inode\n");
 		ret = -EIO;
-		goto out_unlock_tl_inode;
+		goto out;
 	}
 
 	inode_lock(gb_inode);
@@ -636,14 +634,16 @@ static int ocfs2_move_extent(struct ocfs2_move_extents_context *context,
 	ret = ocfs2_inode_lock(gb_inode, &gb_bh, 1);
 	if (ret) {
 		mlog_errno(ret);
-		goto out_unlock_gb_inode;
+		goto out_unlock_gb_mutex;
 	}
+
+	inode_lock(tl_inode);
 
 	handle = ocfs2_start_trans(osb, credits);
 	if (IS_ERR(handle)) {
 		ret = PTR_ERR(handle);
 		mlog_errno(ret);
-		goto out_unlock;
+		goto out_unlock_tl_inode;
 	}
 
 	new_phys_blkno = ocfs2_clusters_to_blocks(inode->i_sb, *new_phys_cpos);
@@ -658,7 +658,7 @@ static int ocfs2_move_extent(struct ocfs2_move_extents_context *context,
 
 	/*
 	 * probe the victim cluster group to find a proper
-	 * region to fit wanted movement, it even will perform
+	 * region to fit wanted movement, it even will perfrom
 	 * a best-effort attempt by compromising to a threshold
 	 * around the goal.
 	 */
@@ -703,14 +703,15 @@ static int ocfs2_move_extent(struct ocfs2_move_extents_context *context,
 out_commit:
 	ocfs2_commit_trans(osb, handle);
 	brelse(gd_bh);
-out_unlock:
+
+out_unlock_tl_inode:
+	inode_unlock(tl_inode);
+
 	ocfs2_inode_unlock(gb_inode, 1);
-out_unlock_gb_inode:
+out_unlock_gb_mutex:
 	inode_unlock(gb_inode);
 	brelse(gb_bh);
 	iput(gb_inode);
-out_unlock_tl_inode:
-	inode_unlock(tl_inode);
 
 out:
 	if (context->meta_ac) {
@@ -924,7 +925,7 @@ static int ocfs2_move_extents(struct ocfs2_move_extents_context *context)
 	}
 
 	/*
-	 * remember ip_xattr_sem also needs to be held if necessary
+	 * rememer ip_xattr_sem also needs to be held if necessary
 	 */
 	down_write(&OCFS2_I(inode)->ip_alloc_sem);
 
@@ -1026,7 +1027,7 @@ int ocfs2_ioctl_move_extents(struct file *filp, void __user *argp)
 	context->range = &range;
 
 	/*
-	 * ok, the default threshold for the defragmentation
+	 * ok, the default theshold for the defragmentation
 	 * is 1M, since our maximum clustersize was 1M also.
 	 * any thought?
 	 */

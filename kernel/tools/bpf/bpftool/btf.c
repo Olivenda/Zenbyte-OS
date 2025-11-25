@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 /* Copyright (C) 2019 Facebook */
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/err.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <linux/btf.h>
@@ -25,9 +21,6 @@
 #include "main.h"
 
 #define KFUNC_DECL_TAG		"bpf_kfunc"
-#define FASTCALL_DECL_TAG	"bpf_fastcall"
-
-#define MAX_ROOT_IDS		16
 
 static const char * const btf_kind_str[NR_BTF_KINDS] = {
 	[BTF_KIND_UNKN]		= "UNKNOWN",
@@ -253,7 +246,7 @@ static int dump_btf_type(const struct btf *btf, __u32 id,
 				if (btf_kflag(t))
 					printf("\n\t'%s' val=%d", name, v->val);
 				else
-					printf("\n\t'%s' val=%u", name, (__u32)v->val);
+					printf("\n\t'%s' val=%u", name, v->val);
 			}
 		}
 		if (json_output)
@@ -291,7 +284,7 @@ static int dump_btf_type(const struct btf *btf, __u32 id,
 			} else {
 				if (btf_kflag(t))
 					printf("\n\t'%s' val=%lldLL", name,
-					       (long long)val);
+					       (unsigned long long)val);
 				else
 					printf("\n\t'%s' val=%lluULL", name,
 					       (unsigned long long)val);
@@ -471,59 +464,19 @@ static int dump_btf_raw(const struct btf *btf,
 	return 0;
 }
 
-struct ptr_array {
-	__u32 cnt;
-	__u32 cap;
-	const void **elems;
-};
-
-static int ptr_array_push(const void *ptr, struct ptr_array *arr)
-{
-	__u32 new_cap;
-	void *tmp;
-
-	if (arr->cnt == arr->cap) {
-		new_cap = (arr->cap ?: 16) * 2;
-		tmp = realloc(arr->elems, sizeof(*arr->elems) * new_cap);
-		if (!tmp)
-			return -ENOMEM;
-		arr->elems = tmp;
-		arr->cap = new_cap;
-	}
-	arr->elems[arr->cnt++] = ptr;
-	return 0;
-}
-
-static void ptr_array_free(struct ptr_array *arr)
-{
-	free(arr->elems);
-}
-
-static int cmp_kfuncs(const void *pa, const void *pb, void *ctx)
-{
-	struct btf *btf = ctx;
-	const struct btf_type *a = *(void **)pa;
-	const struct btf_type *b = *(void **)pb;
-
-	return strcmp(btf__str_by_offset(btf, a->name_off),
-		      btf__str_by_offset(btf, b->name_off));
-}
-
 static int dump_btf_kfuncs(struct btf_dump *d, const struct btf *btf)
 {
 	LIBBPF_OPTS(btf_dump_emit_type_decl_opts, opts);
-	__u32 cnt = btf__type_cnt(btf), i, j;
-	struct ptr_array fastcalls = {};
-	struct ptr_array kfuncs = {};
-	int err = 0;
+	int cnt = btf__type_cnt(btf);
+	int i;
 
 	printf("\n/* BPF kfuncs */\n");
 	printf("#ifndef BPF_NO_KFUNC_PROTOTYPES\n");
 
 	for (i = 1; i < cnt; i++) {
 		const struct btf_type *t = btf__type_by_id(btf, i);
-		const struct btf_type *ft;
 		const char *name;
+		int err;
 
 		if (!btf_is_decl_tag(t))
 			continue;
@@ -531,53 +484,27 @@ static int dump_btf_kfuncs(struct btf_dump *d, const struct btf *btf)
 		if (btf_decl_tag(t)->component_idx != -1)
 			continue;
 
-		ft = btf__type_by_id(btf, t->type);
-		if (!btf_is_func(ft))
+		name = btf__name_by_offset(btf, t->name_off);
+		if (strncmp(name, KFUNC_DECL_TAG, sizeof(KFUNC_DECL_TAG)))
 			continue;
 
-		name = btf__name_by_offset(btf, t->name_off);
-		if (strncmp(name, KFUNC_DECL_TAG, sizeof(KFUNC_DECL_TAG)) == 0) {
-			err = ptr_array_push(ft, &kfuncs);
-			if (err)
-				goto out;
-		}
-
-		if (strncmp(name, FASTCALL_DECL_TAG, sizeof(FASTCALL_DECL_TAG)) == 0) {
-			err = ptr_array_push(ft, &fastcalls);
-			if (err)
-				goto out;
-		}
-	}
-
-	/* Sort kfuncs by name for improved vmlinux.h stability  */
-	qsort_r(kfuncs.elems, kfuncs.cnt, sizeof(*kfuncs.elems), cmp_kfuncs, (void *)btf);
-	for (i = 0; i < kfuncs.cnt; i++) {
-		const struct btf_type *t = kfuncs.elems[i];
+		t = btf__type_by_id(btf, t->type);
+		if (!btf_is_func(t))
+			continue;
 
 		printf("extern ");
-
-		/* Assume small amount of fastcall kfuncs */
-		for (j = 0; j < fastcalls.cnt; j++) {
-			if (fastcalls.elems[j] == t) {
-				printf("__bpf_fastcall ");
-				break;
-			}
-		}
 
 		opts.field_name = btf__name_by_offset(btf, t->name_off);
 		err = btf_dump__emit_type_decl(d, t->type, &opts);
 		if (err)
-			goto out;
+			return err;
 
 		printf(" __weak __ksym;\n");
 	}
 
 	printf("#endif\n\n");
 
-out:
-	ptr_array_free(&fastcalls);
-	ptr_array_free(&kfuncs);
-	return err;
+	return 0;
 }
 
 static void __printf(2, 0) btf_dump_printf(void *ctx,
@@ -791,13 +718,6 @@ static int dump_btf_c(const struct btf *btf,
 	printf("#ifndef __weak\n");
 	printf("#define __weak __attribute__((weak))\n");
 	printf("#endif\n\n");
-	printf("#ifndef __bpf_fastcall\n");
-	printf("#if __has_attribute(bpf_fastcall)\n");
-	printf("#define __bpf_fastcall __attribute__((bpf_fastcall))\n");
-	printf("#else\n");
-	printf("#define __bpf_fastcall\n");
-	printf("#endif\n");
-	printf("#endif\n\n");
 
 	if (root_type_cnt) {
 		for (i = 0; i < root_type_cnt; i++) {
@@ -882,14 +802,12 @@ static int do_dump(int argc, char **argv)
 {
 	bool dump_c = false, sort_dump_c = true;
 	struct btf *btf = NULL, *base = NULL;
-	__u32 root_type_ids[MAX_ROOT_IDS];
-	bool have_id_filtering;
+	__u32 root_type_ids[2];
 	int root_type_cnt = 0;
 	__u32 btf_id = -1;
 	const char *src;
 	int fd = -1;
 	int err = 0;
-	int i;
 
 	if (!REQ_ARGS(2)) {
 		usage();
@@ -905,8 +823,7 @@ static int do_dump(int argc, char **argv)
 			return -1;
 		}
 
-		fd = map_parse_fd_and_info(&argc, &argv, &info, &len,
-					   BPF_F_RDONLY);
+		fd = map_parse_fd_and_info(&argc, &argv, &info, &len);
 		if (fd < 0)
 			return -1;
 
@@ -978,8 +895,6 @@ static int do_dump(int argc, char **argv)
 		goto done;
 	}
 
-	have_id_filtering = !!root_type_cnt;
-
 	while (argc) {
 		if (is_prefix(*argv, "format")) {
 			NEXT_ARG();
@@ -998,36 +913,6 @@ static int do_dump(int argc, char **argv)
 				err = -EINVAL;
 				goto done;
 			}
-			NEXT_ARG();
-		} else if (is_prefix(*argv, "root_id")) {
-			__u32 root_id;
-			char *end;
-
-			if (have_id_filtering) {
-				p_err("cannot use root_id with other type filtering");
-				err = -EINVAL;
-				goto done;
-			} else if (root_type_cnt == MAX_ROOT_IDS) {
-				p_err("only %d root_id are supported", MAX_ROOT_IDS);
-				err = -E2BIG;
-				goto done;
-			}
-
-			NEXT_ARG();
-			root_id = strtoul(*argv, &end, 0);
-			if (*end) {
-				err = -1;
-				p_err("can't parse %s as root ID", *argv);
-				goto done;
-			}
-			for (i = 0; i < root_type_cnt; i++) {
-				if (root_type_ids[i] == root_id) {
-					err = -EINVAL;
-					p_err("duplicate root_id %u supplied", root_id);
-					goto done;
-				}
-			}
-			root_type_ids[root_type_cnt++] = root_id;
 			NEXT_ARG();
 		} else if (is_prefix(*argv, "unsorted")) {
 			sort_dump_c = false;
@@ -1050,17 +935,6 @@ static int do_dump(int argc, char **argv)
 		if (!btf) {
 			err = -errno;
 			p_err("get btf by id (%u): %s", btf_id, strerror(errno));
-			goto done;
-		}
-	}
-
-	/* Invalid root IDs causes half emitted boilerplate and then unclean
-	 * exit. It's an ugly user experience, so handle common error here.
-	 */
-	for (i = 0; i < root_type_cnt; i++) {
-		if (root_type_ids[i] >= btf__type_cnt(btf)) {
-			err = -EINVAL;
-			p_err("invalid root ID: %u", root_type_ids[i]);
 			goto done;
 		}
 	}
@@ -1119,12 +993,9 @@ build_btf_type_table(struct hashmap *tab, enum bpf_obj_type type,
 		[BPF_OBJ_PROG]		= "prog",
 		[BPF_OBJ_MAP]		= "map",
 	};
-	LIBBPF_OPTS(bpf_get_fd_by_id_opts, opts_ro);
 	__u32 btf_id, id = 0;
 	int err;
 	int fd;
-
-	opts_ro.open_flags = BPF_F_RDONLY;
 
 	while (true) {
 		switch (type) {
@@ -1136,7 +1007,7 @@ build_btf_type_table(struct hashmap *tab, enum bpf_obj_type type,
 			break;
 		default:
 			err = -1;
-			p_err("unexpected object type: %u", type);
+			p_err("unexpected object type: %d", type);
 			goto err_free;
 		}
 		if (err) {
@@ -1155,11 +1026,11 @@ build_btf_type_table(struct hashmap *tab, enum bpf_obj_type type,
 			fd = bpf_prog_get_fd_by_id(id);
 			break;
 		case BPF_OBJ_MAP:
-			fd = bpf_map_get_fd_by_id_opts(id, &opts_ro);
+			fd = bpf_map_get_fd_by_id(id);
 			break;
 		default:
 			err = -1;
-			p_err("unexpected object type: %u", type);
+			p_err("unexpected object type: %d", type);
 			goto err_free;
 		}
 		if (fd < 0) {
@@ -1192,7 +1063,7 @@ build_btf_type_table(struct hashmap *tab, enum bpf_obj_type type,
 			break;
 		default:
 			err = -1;
-			p_err("unexpected object type: %u", type);
+			p_err("unexpected object type: %d", type);
 			goto err_free;
 		}
 		if (!btf_id)
@@ -1258,12 +1129,12 @@ show_btf_plain(struct bpf_btf_info *info, int fd,
 
 	n = 0;
 	hashmap__for_each_key_entry(btf_prog_table, entry, info->id) {
-		printf("%s%lu", n++ == 0 ? "  prog_ids " : ",", (unsigned long)entry->value);
+		printf("%s%lu", n++ == 0 ? "  prog_ids " : ",", entry->value);
 	}
 
 	n = 0;
 	hashmap__for_each_key_entry(btf_map_table, entry, info->id) {
-		printf("%s%lu", n++ == 0 ? "  map_ids " : ",", (unsigned long)entry->value);
+		printf("%s%lu", n++ == 0 ? "  map_ids " : ",", entry->value);
 	}
 
 	emit_obj_refs_plain(refs_table, info->id, "\n\tpids ");
@@ -1442,7 +1313,7 @@ static int do_help(int argc, char **argv)
 
 	fprintf(stderr,
 		"Usage: %1$s %2$s { show | list } [id BTF_ID]\n"
-		"       %1$s %2$s dump BTF_SRC [format FORMAT] [root_id ROOT_ID]\n"
+		"       %1$s %2$s dump BTF_SRC [format FORMAT]\n"
 		"       %1$s %2$s help\n"
 		"\n"
 		"       BTF_SRC := { id BTF_ID | prog PROG | map MAP [{key | value | kv | all}] | file FILE }\n"

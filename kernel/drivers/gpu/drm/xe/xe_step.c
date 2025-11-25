@@ -5,7 +5,6 @@
 
 #include "xe_step.h"
 
-#include <kunit/visibility.h>
 #include <linux/bitfield.h>
 
 #include "xe_device.h"
@@ -256,4 +255,3 @@ const char *xe_step_name(enum xe_step step)
 		return "**";
 	}
 }
-EXPORT_SYMBOL_IF_KUNIT(xe_step_name);

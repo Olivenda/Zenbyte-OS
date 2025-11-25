@@ -28,8 +28,10 @@
 #define NR_IRQS	32
 #elif defined(CONFIG_APOLLO)
 #define NR_IRQS	24
-#else /* CONFIG_HP300 etc. */
+#elif defined(CONFIG_HP300)
 #define NR_IRQS	8
+#else
+#define NR_IRQS	0
 #endif
 
 #if defined(CONFIG_M68020) || defined(CONFIG_M68030) || \

@@ -103,15 +103,15 @@ static bool mute_led_registered;
 
 struct battery_mode_info {
 	int token;
-	enum power_supply_charge_type charge_type;
+	const char *label;
 };
 
 static const struct battery_mode_info battery_modes[] = {
-	{ BAT_PRI_AC_MODE_TOKEN,   POWER_SUPPLY_CHARGE_TYPE_TRICKLE },
-	{ BAT_EXPRESS_MODE_TOKEN,  POWER_SUPPLY_CHARGE_TYPE_FAST },
-	{ BAT_STANDARD_MODE_TOKEN, POWER_SUPPLY_CHARGE_TYPE_STANDARD },
-	{ BAT_ADAPTIVE_MODE_TOKEN, POWER_SUPPLY_CHARGE_TYPE_ADAPTIVE },
-	{ BAT_CUSTOM_MODE_TOKEN,   POWER_SUPPLY_CHARGE_TYPE_CUSTOM },
+	{ BAT_PRI_AC_MODE_TOKEN,   "Trickle" },
+	{ BAT_EXPRESS_MODE_TOKEN,  "Fast" },
+	{ BAT_STANDARD_MODE_TOKEN, "Standard" },
+	{ BAT_ADAPTIVE_MODE_TOKEN, "Adaptive" },
+	{ BAT_CUSTOM_MODE_TOKEN,   "Custom" },
 };
 static u32 battery_supported_modes;
 
@@ -725,8 +725,8 @@ static void dell_update_rfkill(struct work_struct *ignored)
 }
 static DECLARE_DELAYED_WORK(dell_rfkill_work, dell_update_rfkill);
 
-static bool dell_laptop_i8042_filter(unsigned char data, unsigned char str, struct serio *port,
-				     void *context)
+static bool dell_laptop_i8042_filter(unsigned char data, unsigned char str,
+			      struct serio *port)
 {
 	static bool extended;
 
@@ -884,7 +884,7 @@ static int __init dell_setup_rfkill(void)
 		pr_warn("Unable to register dell rbtn notifier\n");
 		goto err_filter;
 	} else {
-		ret = i8042_install_filter(dell_laptop_i8042_filter, NULL);
+		ret = i8042_install_filter(dell_laptop_i8042_filter);
 		if (ret) {
 			pr_warn("Unable to install key filter\n");
 			goto err_filter;
@@ -2261,42 +2261,46 @@ static ssize_t charge_types_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	enum power_supply_charge_type charge_type;
+	ssize_t count = 0;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(battery_modes); i++) {
-		charge_type = battery_modes[i].charge_type;
+		bool active;
 
-		if (!(battery_supported_modes & BIT(charge_type)))
+		if (!(battery_supported_modes & BIT(i)))
 			continue;
 
-		if (!dell_battery_mode_is_active(battery_modes[i].token))
-			continue;
-
-		return power_supply_charge_types_show(dev, battery_supported_modes,
-						      charge_type, buf);
+		active = dell_battery_mode_is_active(battery_modes[i].token);
+		count += sysfs_emit_at(buf, count, active ? "[%s] " : "%s ",
+				battery_modes[i].label);
 	}
 
-	/* No active mode found */
-	return -EIO;
+	/* convert the last space to a newline */
+	if (count > 0)
+		count--;
+	count += sysfs_emit_at(buf, count, "\n");
+
+	return count;
 }
 
 static ssize_t charge_types_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t size)
 {
-	int charge_type, err, i;
-
-	charge_type = power_supply_charge_types_parse(battery_supported_modes, buf);
-	if (charge_type < 0)
-		return charge_type;
+	bool matched = false;
+	int err, i;
 
 	for (i = 0; i < ARRAY_SIZE(battery_modes); i++) {
-		if (battery_modes[i].charge_type == charge_type)
+		if (!(battery_supported_modes & BIT(i)))
+			continue;
+
+		if (sysfs_streq(battery_modes[i].label, buf)) {
+			matched = true;
 			break;
+		}
 	}
-	if (i == ARRAY_SIZE(battery_modes))
-		return -ENOENT;
+	if (!matched)
+		return -EINVAL;
 
 	err = dell_battery_set_mode(battery_modes[i].token);
 	if (err)
@@ -2426,7 +2430,7 @@ static u32 __init battery_get_supported_modes(void)
 
 	for (i = 0; i < ARRAY_SIZE(battery_modes); i++) {
 		if (dell_smbios_find_token(battery_modes[i].token))
-			modes |= BIT(battery_modes[i].charge_type);
+			modes |= BIT(i);
 	}
 
 	return modes;

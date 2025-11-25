@@ -78,7 +78,7 @@ void amiga_mksound( unsigned int hz, unsigned int ticks )
 		return;
 
 	local_irq_save(flags);
-	timer_delete(&sound_timer);
+	del_timer( &sound_timer );
 
 	if (hz > 20 && hz < 32767) {
 		unsigned long period = (clock_constant / hz);

@@ -50,9 +50,11 @@ static int serport_serio_write(struct serio *serio, unsigned char data)
 static int serport_serio_open(struct serio *serio)
 {
 	struct serport *serport = serio->port_data;
+	unsigned long flags;
 
-	guard(spinlock_irqsave)(&serport->lock);
+	spin_lock_irqsave(&serport->lock, flags);
 	set_bit(SERPORT_ACTIVE, &serport->flags);
+	spin_unlock_irqrestore(&serport->lock, flags);
 
 	return 0;
 }
@@ -61,9 +63,11 @@ static int serport_serio_open(struct serio *serio)
 static void serport_serio_close(struct serio *serio)
 {
 	struct serport *serport = serio->port_data;
+	unsigned long flags;
 
-	guard(spinlock_irqsave)(&serport->lock);
+	spin_lock_irqsave(&serport->lock, flags);
 	clear_bit(SERPORT_ACTIVE, &serport->flags);
+	spin_unlock_irqrestore(&serport->lock, flags);
 }
 
 /*
@@ -114,13 +118,14 @@ static void serport_ldisc_receive(struct tty_struct *tty, const u8 *cp,
 				  const u8 *fp, size_t count)
 {
 	struct serport *serport = tty->disc_data;
+	unsigned long flags;
 	unsigned int ch_flags = 0;
 	int i;
 
-	guard(spinlock_irqsave)(&serport->lock);
+	spin_lock_irqsave(&serport->lock, flags);
 
 	if (!test_bit(SERPORT_ACTIVE, &serport->flags))
-		return;
+		goto out;
 
 	for (i = 0; i < count; i++) {
 		if (fp) {
@@ -141,6 +146,9 @@ static void serport_ldisc_receive(struct tty_struct *tty, const u8 *cp,
 
 		serio_interrupt(serport->serio, cp[i], ch_flags);
 	}
+
+out:
+	spin_unlock_irqrestore(&serport->lock, flags);
 }
 
 /*
@@ -238,9 +246,11 @@ static int serport_ldisc_compat_ioctl(struct tty_struct *tty,
 static void serport_ldisc_hangup(struct tty_struct *tty)
 {
 	struct serport *serport = tty->disc_data;
+	unsigned long flags;
 
-	scoped_guard(spinlock_irqsave, &serport->lock)
-		set_bit(SERPORT_DEAD, &serport->flags);
+	spin_lock_irqsave(&serport->lock, flags);
+	set_bit(SERPORT_DEAD, &serport->flags);
+	spin_unlock_irqrestore(&serport->lock, flags);
 
 	wake_up_interruptible(&serport->wait);
 }
@@ -248,11 +258,12 @@ static void serport_ldisc_hangup(struct tty_struct *tty)
 static void serport_ldisc_write_wakeup(struct tty_struct * tty)
 {
 	struct serport *serport = tty->disc_data;
+	unsigned long flags;
 
-	guard(spinlock_irqsave)(&serport->lock);
-
+	spin_lock_irqsave(&serport->lock, flags);
 	if (test_bit(SERPORT_ACTIVE, &serport->flags))
 		serio_drv_write_wakeup(serport->serio);
+	spin_unlock_irqrestore(&serport->lock, flags);
 }
 
 /*

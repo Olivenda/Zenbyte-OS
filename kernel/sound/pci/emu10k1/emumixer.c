@@ -12,7 +12,6 @@
 
 #include <linux/time.h>
 #include <linux/init.h>
-#include <linux/string.h>
 #include <sound/core.h>
 #include <sound/emu10k1.h>
 #include <linux/delay.h>
@@ -1984,7 +1983,7 @@ static int remove_ctl(struct snd_card *card, const char *name)
 {
 	struct snd_ctl_elem_id id;
 	memset(&id, 0, sizeof(id));
-	strscpy(id.name, name);
+	strcpy(id.name, name);
 	id.iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	return snd_ctl_remove_id(card, &id);
 }
@@ -2189,11 +2188,11 @@ int snd_emu10k1_mixer(struct snd_emu10k1 *emu,
 	} else {
 	no_ac97:
 		if (emu->card_capabilities->ecard)
-			strscpy(emu->card->mixername, "EMU APS");
+			strcpy(emu->card->mixername, "EMU APS");
 		else if (emu->audigy)
-			strscpy(emu->card->mixername, "SB Audigy");
+			strcpy(emu->card->mixername, "SB Audigy");
 		else
-			strscpy(emu->card->mixername, "Emu10k1");
+			strcpy(emu->card->mixername, "Emu10k1");
 	}
 
 	if (emu->audigy)

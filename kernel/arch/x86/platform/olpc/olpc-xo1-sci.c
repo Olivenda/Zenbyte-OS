@@ -14,6 +14,7 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/pm.h>
+#include <linux/pm_wakeup.h>
 #include <linux/power_supply.h>
 #include <linux/suspend.h>
 #include <linux/workqueue.h>
@@ -325,7 +326,7 @@ static int setup_sci_interrupt(struct platform_device *pdev)
 		dev_info(&pdev->dev, "SCI unmapped. Mapping to IRQ 3\n");
 		sci_irq = 3;
 		lo |= 0x00300000;
-		wrmsrq(0x51400020, lo);
+		wrmsrl(0x51400020, lo);
 	}
 
 	/* Select level triggered in PIC */
@@ -615,7 +616,7 @@ static struct platform_driver xo1_sci_driver = {
 		.dev_groups = lid_groups,
 	},
 	.probe = xo1_sci_probe,
-	.remove = xo1_sci_remove,
+	.remove_new = xo1_sci_remove,
 	.suspend = xo1_sci_suspend,
 	.resume = xo1_sci_resume,
 };

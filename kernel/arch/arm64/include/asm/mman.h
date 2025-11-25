@@ -7,14 +7,13 @@
 #ifndef BUILD_VDSO
 #include <linux/compiler.h>
 #include <linux/fs.h>
-#include <linux/hugetlb.h>
 #include <linux/shmem_fs.h>
 #include <linux/types.h>
 
-static inline vm_flags_t arch_calc_vm_prot_bits(unsigned long prot,
+static inline unsigned long arch_calc_vm_prot_bits(unsigned long prot,
 	unsigned long pkey)
 {
-	vm_flags_t ret = 0;
+	unsigned long ret = 0;
 
 	if (system_supports_bti() && (prot & PROT_BTI))
 		ret |= VM_ARM64_BTI;
@@ -34,8 +33,8 @@ static inline vm_flags_t arch_calc_vm_prot_bits(unsigned long prot,
 }
 #define arch_calc_vm_prot_bits(prot, pkey) arch_calc_vm_prot_bits(prot, pkey)
 
-static inline vm_flags_t arch_calc_vm_flag_bits(struct file *file,
-						unsigned long flags)
+static inline unsigned long arch_calc_vm_flag_bits(struct file *file,
+						   unsigned long flags)
 {
 	/*
 	 * Only allow MTE on anonymous mappings as these are guaranteed to be
@@ -43,9 +42,9 @@ static inline vm_flags_t arch_calc_vm_flag_bits(struct file *file,
 	 * filesystem supporting MTE (RAM-based).
 	 */
 	if (system_supports_mte()) {
-		if (flags & (MAP_ANONYMOUS | MAP_HUGETLB))
+		if ((flags & MAP_ANONYMOUS) && !(flags & MAP_HUGETLB))
 			return VM_MTE_ALLOWED;
-		if (shmem_file(file) || is_file_hugepages(file))
+		if (shmem_file(file))
 			return VM_MTE_ALLOWED;
 	}
 
@@ -68,28 +67,13 @@ static inline bool arch_validate_prot(unsigned long prot,
 }
 #define arch_validate_prot(prot, addr) arch_validate_prot(prot, addr)
 
-static inline bool arch_validate_flags(vm_flags_t vm_flags)
+static inline bool arch_validate_flags(unsigned long vm_flags)
 {
-	if (system_supports_mte()) {
-		/*
-		 * only allow VM_MTE if VM_MTE_ALLOWED has been set
-		 * previously
-		 */
-		if ((vm_flags & VM_MTE) && !(vm_flags & VM_MTE_ALLOWED))
-			return false;
-	}
+	if (!system_supports_mte())
+		return true;
 
-	if (system_supports_gcs() && (vm_flags & VM_SHADOW_STACK)) {
-		/* An executable GCS isn't a good idea. */
-		if (vm_flags & VM_EXEC)
-			return false;
-
-		/* The memory management core should prevent this */
-		VM_WARN_ON(vm_flags & VM_SHARED);
-	}
-
-	return true;
-
+	/* only allow VM_MTE if VM_MTE_ALLOWED has been set previously */
+	return !(vm_flags & VM_MTE) || (vm_flags & VM_MTE_ALLOWED);
 }
 #define arch_validate_flags(vm_flags) arch_validate_flags(vm_flags)
 

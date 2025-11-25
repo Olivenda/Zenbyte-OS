@@ -551,6 +551,7 @@ static void gpio_set_low_action(void *data)
 
 static int lm3532_parse_node(struct lm3532_data *priv)
 {
+	struct fwnode_handle *child = NULL;
 	struct lm3532_led *led;
 	int control_bank;
 	u32 ramp_time;
@@ -586,7 +587,7 @@ static int lm3532_parse_node(struct lm3532_data *priv)
 	else
 		priv->runtime_ramp_down = lm3532_get_ramp_index(ramp_time);
 
-	device_for_each_child_node_scoped(priv->dev, child) {
+	device_for_each_child_node(priv->dev, child) {
 		struct led_init_data idata = {
 			.fwnode = child,
 			.default_label = ":",
@@ -598,7 +599,7 @@ static int lm3532_parse_node(struct lm3532_data *priv)
 		ret = fwnode_property_read_u32(child, "reg", &control_bank);
 		if (ret) {
 			dev_err(&priv->client->dev, "reg property missing\n");
-			return ret;
+			goto child_out;
 		}
 
 		if (control_bank > LM3532_CONTROL_C) {
@@ -612,7 +613,7 @@ static int lm3532_parse_node(struct lm3532_data *priv)
 					       &led->mode);
 		if (ret) {
 			dev_err(&priv->client->dev, "ti,led-mode property missing\n");
-			return ret;
+			goto child_out;
 		}
 
 		if (fwnode_property_present(child, "led-max-microamp") &&
@@ -646,7 +647,7 @@ static int lm3532_parse_node(struct lm3532_data *priv)
 						    led->num_leds);
 		if (ret) {
 			dev_err(&priv->client->dev, "led-sources property missing\n");
-			return ret;
+			goto child_out;
 		}
 
 		led->priv = priv;
@@ -656,20 +657,23 @@ static int lm3532_parse_node(struct lm3532_data *priv)
 		if (ret) {
 			dev_err(&priv->client->dev, "led register err: %d\n",
 				ret);
-			return ret;
+			goto child_out;
 		}
 
 		ret = lm3532_init_registers(led);
 		if (ret) {
 			dev_err(&priv->client->dev, "register init err: %d\n",
 				ret);
-			return ret;
+			goto child_out;
 		}
 
 		i++;
 	}
-
 	return 0;
+
+child_out:
+	fwnode_handle_put(child);
+	return ret;
 }
 
 static int lm3532_probe(struct i2c_client *client)

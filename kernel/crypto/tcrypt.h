@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * Quick & dirty crypto benchmarking module.
+ * Quick & dirty crypto testing module.
  *
- * This will only exist until we have a better benchmarking mechanism
+ * This will only exist until we have a better testing mechanism
  * (e.g. a char device).
  *
  * Copyright (c) 2002 James Morris <jmorris@intercode.com.au>

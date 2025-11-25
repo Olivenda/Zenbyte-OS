@@ -18,14 +18,10 @@
 
 #define GOODIX_BERLIN_SPI_TRANS_PREFIX_LEN	1
 #define GOODIX_BERLIN_REGISTER_WIDTH		4
-#define GOODIX_BERLIN_SPI_READ_DUMMY_LEN_A	4
-#define GOODIX_BERLIN_SPI_READ_DUMMY_LEN_D	3
-#define GOODIX_BERLIN_SPI_READ_PREFIX_LEN_A	(GOODIX_BERLIN_SPI_TRANS_PREFIX_LEN + \
+#define GOODIX_BERLIN_SPI_READ_DUMMY_LEN	3
+#define GOODIX_BERLIN_SPI_READ_PREFIX_LEN	(GOODIX_BERLIN_SPI_TRANS_PREFIX_LEN + \
 						 GOODIX_BERLIN_REGISTER_WIDTH + \
-						 GOODIX_BERLIN_SPI_READ_DUMMY_LEN_A)
-#define GOODIX_BERLIN_SPI_READ_PREFIX_LEN_D	(GOODIX_BERLIN_SPI_TRANS_PREFIX_LEN + \
-						 GOODIX_BERLIN_REGISTER_WIDTH + \
-						 GOODIX_BERLIN_SPI_READ_DUMMY_LEN_D)
+						 GOODIX_BERLIN_SPI_READ_DUMMY_LEN)
 #define GOODIX_BERLIN_SPI_WRITE_PREFIX_LEN	(GOODIX_BERLIN_SPI_TRANS_PREFIX_LEN + \
 						 GOODIX_BERLIN_REGISTER_WIDTH)
 
@@ -37,7 +33,6 @@ static int goodix_berlin_spi_read(void *context, const void *reg_buf,
 				  size_t val_size)
 {
 	struct spi_device *spi = context;
-	const struct goodix_berlin_ic_data *ic_data = spi_get_device_match_data(spi);
 	struct spi_transfer xfers;
 	struct spi_message spi_msg;
 	const u32 *reg = reg_buf; /* reg is stored as native u32 at start of buffer */
@@ -47,22 +42,23 @@ static int goodix_berlin_spi_read(void *context, const void *reg_buf,
 		return -EINVAL;
 
 	u8 *buf __free(kfree) =
-		kzalloc(ic_data->read_prefix_len + val_size, GFP_KERNEL);
+		kzalloc(GOODIX_BERLIN_SPI_READ_PREFIX_LEN + val_size,
+			GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
 	spi_message_init(&spi_msg);
 	memset(&xfers, 0, sizeof(xfers));
 
-	/* buffer format: 0xF1 + addr(4bytes) + dummy(3/4bytes) + data */
+	/* buffer format: 0xF1 + addr(4bytes) + dummy(3bytes) + data */
 	buf[0] = GOODIX_BERLIN_SPI_READ_FLAG;
 	put_unaligned_be32(*reg, buf + GOODIX_BERLIN_SPI_TRANS_PREFIX_LEN);
 	memset(buf + GOODIX_BERLIN_SPI_TRANS_PREFIX_LEN + GOODIX_BERLIN_REGISTER_WIDTH,
-	       0xff, ic_data->read_dummy_len);
+	       0xff, GOODIX_BERLIN_SPI_READ_DUMMY_LEN);
 
 	xfers.tx_buf = buf;
 	xfers.rx_buf = buf;
-	xfers.len = ic_data->read_prefix_len + val_size;
+	xfers.len = GOODIX_BERLIN_SPI_READ_PREFIX_LEN + val_size;
 	xfers.cs_change = 0;
 	spi_message_add_tail(&xfers, &spi_msg);
 
@@ -72,7 +68,7 @@ static int goodix_berlin_spi_read(void *context, const void *reg_buf,
 		return error;
 	}
 
-	memcpy(val_buf, buf + ic_data->read_prefix_len, val_size);
+	memcpy(val_buf, buf + GOODIX_BERLIN_SPI_READ_PREFIX_LEN, val_size);
 	return error;
 }
 
@@ -127,7 +123,6 @@ static const struct input_id goodix_berlin_spi_input_id = {
 
 static int goodix_berlin_spi_probe(struct spi_device *spi)
 {
-	const struct goodix_berlin_ic_data *ic_data = spi_get_device_match_data(spi);
 	struct regmap_config regmap_config;
 	struct regmap *regmap;
 	size_t max_size;
@@ -142,7 +137,7 @@ static int goodix_berlin_spi_probe(struct spi_device *spi)
 	max_size = spi_max_transfer_size(spi);
 
 	regmap_config = goodix_berlin_spi_regmap_conf;
-	regmap_config.max_raw_read = max_size - ic_data->read_prefix_len;
+	regmap_config.max_raw_read = max_size - GOODIX_BERLIN_SPI_READ_PREFIX_LEN;
 	regmap_config.max_raw_write = max_size - GOODIX_BERLIN_SPI_WRITE_PREFIX_LEN;
 
 	regmap = devm_regmap_init(&spi->dev, NULL, spi, &regmap_config);
@@ -150,38 +145,21 @@ static int goodix_berlin_spi_probe(struct spi_device *spi)
 		return PTR_ERR(regmap);
 
 	error = goodix_berlin_probe(&spi->dev, spi->irq,
-				    &goodix_berlin_spi_input_id, regmap,
-				    ic_data);
+				    &goodix_berlin_spi_input_id, regmap);
 	if (error)
 		return error;
 
 	return 0;
 }
 
-static const struct goodix_berlin_ic_data gt9897_data = {
-	.fw_version_info_addr = GOODIX_BERLIN_FW_VERSION_INFO_ADDR_A,
-	.ic_info_addr = GOODIX_BERLIN_IC_INFO_ADDR_A,
-	.read_dummy_len = GOODIX_BERLIN_SPI_READ_DUMMY_LEN_A,
-	.read_prefix_len = GOODIX_BERLIN_SPI_READ_PREFIX_LEN_A,
-};
-
-static const struct goodix_berlin_ic_data gt9916_data = {
-	.fw_version_info_addr = GOODIX_BERLIN_FW_VERSION_INFO_ADDR_D,
-	.ic_info_addr = GOODIX_BERLIN_IC_INFO_ADDR_D,
-	.read_dummy_len = GOODIX_BERLIN_SPI_READ_DUMMY_LEN_D,
-	.read_prefix_len = GOODIX_BERLIN_SPI_READ_PREFIX_LEN_D,
-};
-
 static const struct spi_device_id goodix_berlin_spi_ids[] = {
-	{ .name = "gt9897", .driver_data = (long)&gt9897_data },
-	{ .name = "gt9916", .driver_data = (long)&gt9916_data },
+	{ "gt9916" },
 	{ },
 };
 MODULE_DEVICE_TABLE(spi, goodix_berlin_spi_ids);
 
 static const struct of_device_id goodix_berlin_spi_of_match[] = {
-	{ .compatible = "goodix,gt9897", .data = &gt9897_data },
-	{ .compatible = "goodix,gt9916", .data = &gt9916_data },
+	{ .compatible = "goodix,gt9916", },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, goodix_berlin_spi_of_match);

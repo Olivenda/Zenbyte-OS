@@ -114,11 +114,13 @@ retry:
 
 int fd_statfs(int fd, struct kstatfs *st)
 {
-	CLASS(fd_raw, f)(fd);
-
-	if (fd_empty(f))
-		return -EBADF;
-	return vfs_statfs(&fd_file(f)->f_path, st);
+	struct fd f = fdget_raw(fd);
+	int error = -EBADF;
+	if (fd_file(f)) {
+		error = vfs_statfs(&fd_file(f)->f_path, st);
+		fdput(f);
+	}
+	return error;
 }
 
 static int do_statfs_native(struct kstatfs *st, struct statfs __user *p)

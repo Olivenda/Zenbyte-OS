@@ -123,8 +123,6 @@ enum bq27xxx_reg_index {
 	BQ27XXX_DM_BLOCK,	/* Data Block */
 	BQ27XXX_DM_DATA,	/* Block Data */
 	BQ27XXX_DM_CKSUM,	/* Block Data Checksum */
-	BQ27XXX_REG_SEDVF,	/* End-of-discharge Voltage */
-	BQ27XXX_REG_PKCFG,	/* Pack Configuration */
 	BQ27XXX_REG_MAX,	/* sentinel */
 };
 
@@ -161,8 +159,6 @@ static u8
 		[BQ27XXX_DM_BLOCK] = INVALID_REG_ADDR,
 		[BQ27XXX_DM_DATA] = INVALID_REG_ADDR,
 		[BQ27XXX_DM_CKSUM] = INVALID_REG_ADDR,
-		[BQ27XXX_REG_SEDVF] = 0x77,
-		[BQ27XXX_REG_PKCFG] = 0x7C,
 	},
 	bq27010_regs[BQ27XXX_REG_MAX] = {
 		[BQ27XXX_REG_CTRL] = 0x00,
@@ -188,8 +184,6 @@ static u8
 		[BQ27XXX_DM_BLOCK] = INVALID_REG_ADDR,
 		[BQ27XXX_DM_DATA] = INVALID_REG_ADDR,
 		[BQ27XXX_DM_CKSUM] = INVALID_REG_ADDR,
-		[BQ27XXX_REG_SEDVF] = 0x77,
-		[BQ27XXX_REG_PKCFG] = 0x7C,
 	},
 	bq2750x_regs[BQ27XXX_REG_MAX] = {
 		[BQ27XXX_REG_CTRL] = 0x00,
@@ -585,8 +579,6 @@ static enum power_supply_property bq27000_props[] = {
 	POWER_SUPPLY_PROP_POWER_AVG,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_MANUFACTURER,
-	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
-	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 };
 
 static enum power_supply_property bq27010_props[] = {
@@ -607,8 +599,6 @@ static enum power_supply_property bq27010_props[] = {
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_MANUFACTURER,
-	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
-	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 };
 
 #define bq2750x_props bq27510g3_props
@@ -2048,65 +2038,6 @@ static int bq27xxx_battery_voltage(struct bq27xxx_device_info *di,
 	return 0;
 }
 
-/*
- * Return the design maximum battery Voltage in microvolts, or < 0 if something
- * fails. The programmed value of the maximum battery voltage is determined by
- * QV0 and QV1 (bits 5 and 6) in the Pack Configuration register.
- */
-static int bq27xxx_battery_read_dmax_volt(struct bq27xxx_device_info *di,
-					  union power_supply_propval *val)
-{
-	int reg_val, qv;
-
-	if (di->voltage_max_design > 0) {
-		val->intval = di->voltage_max_design;
-		return 0;
-	}
-
-	reg_val = bq27xxx_read(di, BQ27XXX_REG_PKCFG, true);
-	if (reg_val < 0) {
-		dev_err(di->dev, "error reading design max voltage\n");
-		return reg_val;
-	}
-
-	qv = (reg_val >> 5) & 0x3;
-	val->intval = 3968000 + 48000 * qv;
-
-	di->voltage_max_design = val->intval;
-
-	return 0;
-}
-
-/*
- * Return the design minimum battery Voltage in microvolts
- * Or < 0 if something fails.
- */
-static int bq27xxx_battery_read_dmin_volt(struct bq27xxx_device_info *di,
-					  union power_supply_propval *val)
-{
-	int volt;
-
-	/* We only have to read design minimum voltage once */
-	if (di->voltage_min_design > 0) {
-		val->intval = di->voltage_min_design;
-		return 0;
-	}
-
-	volt = bq27xxx_read(di, BQ27XXX_REG_SEDVF, true);
-	if (volt < 0) {
-		dev_err(di->dev, "error reading design min voltage\n");
-		return volt;
-	}
-
-	/* SEDVF = Design EDVF / 8 - 256 */
-	val->intval = volt * 8000 + 2048000;
-
-	/* Save for later reads */
-	di->voltage_min_design = val->intval;
-
-	return 0;
-}
-
 static int bq27xxx_simple_value(int value,
 				union power_supply_propval *val)
 {
@@ -2187,13 +2118,8 @@ static int bq27xxx_battery_get_property(struct power_supply *psy,
 	 * power_supply_battery_info visible in sysfs.
 	 */
 	case POWER_SUPPLY_PROP_ENERGY_FULL_DESIGN:
-		return -EINVAL;
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
-		ret = bq27xxx_battery_read_dmin_volt(di, val);
-		break;
-	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
-		ret = bq27xxx_battery_read_dmax_volt(di, val);
-		break;
+		return -EINVAL;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
 		ret = bq27xxx_battery_read_cyct(di, val);
 		break;
@@ -2235,9 +2161,8 @@ int bq27xxx_battery_setup(struct bq27xxx_device_info *di)
 {
 	struct power_supply_desc *psy_desc;
 	struct power_supply_config psy_cfg = {
-		.fwnode = dev_fwnode(di->dev),
+		.of_node = di->dev->of_node,
 		.drv_data = di,
-		.no_wakeup_source = true,
 	};
 	int ret;
 
@@ -2264,7 +2189,7 @@ int bq27xxx_battery_setup(struct bq27xxx_device_info *di)
 	psy_desc->get_property = bq27xxx_battery_get_property;
 	psy_desc->external_power_changed = bq27xxx_external_power_changed;
 
-	di->bat = devm_power_supply_register(di->dev, psy_desc, &psy_cfg);
+	di->bat = devm_power_supply_register_no_ws(di->dev, psy_desc, &psy_cfg);
 	if (IS_ERR(di->bat))
 		return dev_err_probe(di->dev, PTR_ERR(di->bat),
 				     "failed to register battery\n");

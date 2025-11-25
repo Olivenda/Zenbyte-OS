@@ -1271,6 +1271,6 @@ static struct platform_driver w5100_mmio_driver = {
 		.pm	= &w5100_pm_ops,
 	},
 	.probe		= w5100_mmio_probe,
-	.remove		= w5100_mmio_remove,
+	.remove_new	= w5100_mmio_remove,
 };
 module_platform_driver(w5100_mmio_driver);

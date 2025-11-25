@@ -17,11 +17,8 @@ static enum scx_test_status setup(void **ctx)
 {
 	struct select_cpu_dfl_nodispatch *skel;
 
-	skel = select_cpu_dfl_nodispatch__open();
-	SCX_FAIL_IF(!skel, "Failed to open");
-	SCX_ENUM_INIT(skel);
-	SCX_FAIL_IF(select_cpu_dfl_nodispatch__load(skel), "Failed to load skel");
-
+	skel = select_cpu_dfl_nodispatch__open_and_load();
+	SCX_FAIL_IF(!skel, "Failed to open and load skel");
 	*ctx = skel;
 
 	return SCX_TEST_PASS;

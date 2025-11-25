@@ -822,6 +822,9 @@ bool pciehp_is_native(struct pci_dev *bridge)
 	if (!IS_ENABLED(CONFIG_HOTPLUG_PCI_PCIE))
 		return false;
 
+	if (!bridge->is_pciehp)
+		return false;
+
 	if (pcie_ports_native)
 		return true;
 
@@ -999,7 +1002,7 @@ bool acpi_pci_bridge_d3(struct pci_dev *dev)
 	struct acpi_device *adev, *rpadev;
 	const union acpi_object *obj;
 
-	if (acpi_pci_disabled || !dev->is_pciehp)
+	if (acpi_pci_disabled || !dev->is_hotplug_bridge)
 		return false;
 
 	adev = ACPI_COMPANION(&dev->dev);

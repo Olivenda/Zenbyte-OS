@@ -77,18 +77,38 @@ void show(unsigned long ps)
 	system(buf);
 }
 
+unsigned long read_sysfs(int warn, char *fmt, ...)
+{
+	char *line = NULL;
+	size_t linelen = 0;
+	char buf[100];
+	FILE *f;
+	va_list ap;
+	unsigned long val = 0;
+
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof buf, fmt, ap);
+	va_end(ap);
+
+	f = fopen(buf, "r");
+	if (!f) {
+		if (warn)
+			ksft_print_msg("missing %s\n", buf);
+		return 0;
+	}
+	if (getline(&line, &linelen, f) > 0) {
+		sscanf(line, "%lu", &val);
+	}
+	fclose(f);
+	free(line);
+	return val;
+}
+
 unsigned long read_free(unsigned long ps)
 {
-	unsigned long val = 0;
-	char buf[100];
-
-	snprintf(buf, sizeof(buf),
-		 "/sys/kernel/mm/hugepages/hugepages-%lukB/free_hugepages",
-		 ps >> 10);
-	if (read_sysfs(buf, &val) && ps != getpagesize())
-		ksft_print_msg("missing %s\n", buf);
-
-	return val;
+	return read_sysfs(ps != getpagesize(),
+			  "/sys/kernel/mm/hugepages/hugepages-%lukB/free_hugepages",
+			  ps >> 10);
 }
 
 void test_mmap(unsigned long size, unsigned flags)
@@ -107,7 +127,7 @@ void test_mmap(unsigned long size, unsigned flags)
 
 	show(size);
 	ksft_test_result(size == getpagesize() || (before - after) == NUM_PAGES,
-			 "%s mmap %lu %x\n", __func__, size, flags);
+			 "%s mmap\n", __func__);
 
 	if (munmap(map, size * NUM_PAGES))
 		ksft_exit_fail_msg("%s: unmap %s\n", __func__, strerror(errno));
@@ -145,7 +165,7 @@ void test_shmget(unsigned long size, unsigned flags)
 
 	show(size);
 	ksft_test_result(size == getpagesize() || (before - after) == NUM_PAGES,
-			 "%s: mmap %lu %x\n", __func__, size, flags);
+			 "%s: mmap\n", __func__);
 	if (shmdt(map))
 		ksft_exit_fail_msg("%s: shmdt: %s\n", __func__, strerror(errno));
 }
@@ -153,7 +173,6 @@ void test_shmget(unsigned long size, unsigned flags)
 void find_pagesizes(void)
 {
 	unsigned long largest = getpagesize();
-	unsigned long shmmax_val = 0;
 	int i;
 	glob_t g;
 
@@ -176,8 +195,7 @@ void find_pagesizes(void)
 	}
 	globfree(&g);
 
-	read_sysfs("/proc/sys/kernel/shmmax", &shmmax_val);
-	if (shmmax_val < NUM_PAGES * largest)
+	if (read_sysfs(0, "/proc/sys/kernel/shmmax") < NUM_PAGES * largest)
 		ksft_exit_fail_msg("Please do echo %lu > /proc/sys/kernel/shmmax",
 				   largest * NUM_PAGES);
 

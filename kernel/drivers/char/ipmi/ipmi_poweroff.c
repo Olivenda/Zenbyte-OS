@@ -650,7 +650,7 @@ static struct ipmi_smi_watcher smi_watcher = {
 #ifdef CONFIG_PROC_FS
 #include <linux/sysctl.h>
 
-static const struct ctl_table ipmi_table[] = {
+static struct ctl_table ipmi_table[] = {
 	{ .procname	= "poweroff_powercycle",
 	  .data		= &poweroff_powercycle,
 	  .maxlen	= sizeof(poweroff_powercycle),
@@ -699,6 +699,8 @@ static int __init ipmi_poweroff_init(void)
 #ifdef MODULE
 static void __exit ipmi_poweroff_cleanup(void)
 {
+	int rv;
+
 #ifdef CONFIG_PROC_FS
 	unregister_sysctl_table(ipmi_table_header);
 #endif
@@ -706,7 +708,9 @@ static void __exit ipmi_poweroff_cleanup(void)
 	ipmi_smi_watcher_unregister(&smi_watcher);
 
 	if (ready) {
-		ipmi_destroy_user(ipmi_user);
+		rv = ipmi_destroy_user(ipmi_user);
+		if (rv)
+			pr_err("could not cleanup the IPMI user: 0x%x\n", rv);
 		pm_power_off = old_poweroff_func;
 	}
 }

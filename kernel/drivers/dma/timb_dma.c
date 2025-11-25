@@ -761,7 +761,7 @@ static struct platform_driver td_driver = {
 		.name	= DRIVER_NAME,
 	},
 	.probe	= td_probe,
-	.remove = td_remove,
+	.remove_new = td_remove,
 };
 
 module_platform_driver(td_driver);

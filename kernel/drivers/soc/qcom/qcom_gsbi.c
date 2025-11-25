@@ -232,7 +232,7 @@ static struct platform_driver gsbi_driver = {
 		.of_match_table	= gsbi_dt_match,
 	},
 	.probe = gsbi_probe,
-	.remove = gsbi_remove,
+	.remove_new = gsbi_remove,
 };
 
 module_platform_driver(gsbi_driver);

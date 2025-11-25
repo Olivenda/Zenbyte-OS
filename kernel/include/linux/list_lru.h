@@ -32,8 +32,6 @@ struct list_lru_one {
 	struct list_head	list;
 	/* may become negative during memcg reparenting */
 	long			nr_items;
-	/* protects all fields above */
-	spinlock_t		lock;
 };
 
 struct list_lru_memcg {
@@ -43,9 +41,11 @@ struct list_lru_memcg {
 };
 
 struct list_lru_node {
+	/* protects all lists on the node, including per cgroup */
+	spinlock_t		lock;
 	/* global list, used for the root cgroup in cgroup aware lrus */
 	struct list_lru_one	lru;
-	atomic_long_t		nr_items;
+	long			nr_items;
 } ____cacheline_aligned_in_smp;
 
 struct list_lru {
@@ -56,28 +56,16 @@ struct list_lru {
 	bool			memcg_aware;
 	struct xarray		xa;
 #endif
-#ifdef CONFIG_LOCKDEP
-	struct lock_class_key	*key;
-#endif
 };
 
 void list_lru_destroy(struct list_lru *lru);
 int __list_lru_init(struct list_lru *lru, bool memcg_aware,
-		    struct shrinker *shrinker);
+		    struct lock_class_key *key, struct shrinker *shrinker);
 
 #define list_lru_init(lru)				\
-	__list_lru_init((lru), false, NULL)
+	__list_lru_init((lru), false, NULL, NULL)
 #define list_lru_init_memcg(lru, shrinker)		\
-	__list_lru_init((lru), true, shrinker)
-
-static inline int list_lru_init_memcg_key(struct list_lru *lru, struct shrinker *shrinker,
-					  struct lock_class_key *key)
-{
-#ifdef CONFIG_LOCKDEP
-	lru->key = key;
-#endif
-	return list_lru_init_memcg(lru, shrinker);
-}
+	__list_lru_init((lru), true, NULL, shrinker)
 
 int memcg_list_lru_alloc(struct mem_cgroup *memcg, struct list_lru *lru,
 			 gfp_t gfp);
@@ -91,24 +79,13 @@ void memcg_reparent_list_lrus(struct mem_cgroup *memcg, struct mem_cgroup *paren
  * @memcg: the cgroup of the sublist to add the item to.
  *
  * If the element is already part of a list, this function returns doing
- * nothing. This means that it is not necessary to keep state about whether or
- * not the element already belongs in the list. That said, this logic only
- * works if the item is in *this* list. If the item might be in some other
- * list, then you cannot rely on this check and you must remove it from the
- * other list before trying to insert it.
- *
- * The lru list consists of many sublists internally; the @nid and @memcg
- * parameters are used to determine which sublist to insert the item into.
- * It's important to use the right value of @nid and @memcg when deleting the
- * item, since it might otherwise get deleted from the wrong sublist.
- *
- * This also applies when attempting to insert the item multiple times - if
- * the item is currently in one sublist and you call list_lru_add() again, you
- * must pass the right @nid and @memcg parameters so that the same sublist is
- * used.
- *
- * You must ensure that the memcg is not freed during this call (e.g., with
- * rcu or by taking a css refcnt).
+ * nothing. Therefore the caller does not need to keep state about whether or
+ * not the element already belongs in the list and is allowed to lazy update
+ * it. Note however that this is valid for *a* list, not *this* list. If
+ * the caller organize itself in a way that elements can be in more than
+ * one type of list, it is up to the caller to fully remove the item from
+ * the previous list (with list_lru_del() for instance) before moving it
+ * to @lru.
  *
  * Return: true if the list was updated, false otherwise
  */
@@ -124,7 +101,7 @@ bool list_lru_add(struct list_lru *lru, struct list_head *item, int nid,
  * memcg of the sublist is determined by @item list_head. This assumption is
  * valid for slab objects LRU such as dentries, inodes, etc.
  *
- * Return: true if the list was updated, false otherwise
+ * Return value: true if the list was updated, false otherwise
  */
 bool list_lru_add_obj(struct list_lru *lru, struct list_head *item);
 
@@ -136,19 +113,8 @@ bool list_lru_add_obj(struct list_lru *lru, struct list_head *item);
  * @memcg: the cgroup of the sublist to delete the item from.
  *
  * This function works analogously as list_lru_add() in terms of list
- * manipulation.
- *
- * The comments in list_lru_add() about an element already being in a list are
- * also valid for list_lru_del(), that is, you can delete an item that has
- * already been removed or never been added. However, if the item is in a
- * list, it must be in *this* list, and you must pass the right value of @nid
- * and @memcg so that the right sublist is used.
- *
- * You must ensure that the memcg is not freed during this call (e.g., with
- * rcu or by taking a css refcnt). When a memcg is deleted, list_lru entries
- * are automatically moved to the parent memcg. This is done in a race-free
- * way, so during deletion of an memcg both the old and new memcg will resolve
- * to the same sublist internally.
+ * manipulation. The comments about an element already pertaining to
+ * a list are also valid for list_lru_del().
  *
  * Return: true if the list was updated, false otherwise
  */
@@ -164,7 +130,7 @@ bool list_lru_del(struct list_lru *lru, struct list_head *item, int nid,
  * memcg of the sublist is determined by @item list_head. This assumption is
  * valid for slab objects LRU such as dentries, inodes, etc.
  *
- * Return: true if the list was updated, false otherwise.
+ * Return value: true if the list was updated, false otherwise.
  */
 bool list_lru_del_obj(struct list_lru *lru, struct list_head *item);
 
@@ -206,7 +172,7 @@ void list_lru_isolate_move(struct list_lru_one *list, struct list_head *item,
 			   struct list_head *head);
 
 typedef enum lru_status (*list_lru_walk_cb)(struct list_head *item,
-		struct list_lru_one *list, void *cb_arg);
+		struct list_lru_one *list, spinlock_t *lock, void *cb_arg);
 
 /**
  * list_lru_walk_one: walk a @lru, isolating and disposing freeable items.

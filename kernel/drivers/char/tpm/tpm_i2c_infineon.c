@@ -514,8 +514,7 @@ out:
 	return size;
 }
 
-static int tpm_tis_i2c_send(struct tpm_chip *chip, u8 *buf, size_t bufsiz,
-			    size_t len)
+static int tpm_tis_i2c_send(struct tpm_chip *chip, u8 *buf, size_t len)
 {
 	int rc, status;
 	ssize_t burstcnt;

@@ -531,6 +531,8 @@ static const struct vb2_ops bdisp_qops = {
 	.queue_setup     = bdisp_queue_setup,
 	.buf_prepare     = bdisp_buf_prepare,
 	.buf_queue       = bdisp_buf_queue,
+	.wait_prepare    = vb2_ops_wait_prepare,
+	.wait_finish     = vb2_ops_wait_finish,
 	.stop_streaming  = bdisp_stop_streaming,
 	.start_streaming = bdisp_start_streaming,
 };
@@ -953,8 +955,8 @@ static int bdisp_s_selection(struct file *file, void *fh,
 	if ((out.left < 0) || (out.left >= frame->width) ||
 	    (out.top < 0) || (out.top >= frame->height)) {
 		dev_err(ctx->bdisp_dev->dev,
-			"Invalid crop: (%d,%d)/%ux%u vs frame: %dx%d\n",
-			out.left, out.top, out.width, out.height,
+			"Invalid crop: %dx%d@(%d,%d) vs frame: %dx%d\n",
+			out.width, out.height, out.left, out.top,
 			frame->width, frame->height);
 		return -EINVAL;
 	}
@@ -966,8 +968,8 @@ static int bdisp_s_selection(struct file *file, void *fh,
 	if (((out.left + out.width) > frame->width) ||
 	    ((out.top + out.height) > frame->height)) {
 		dev_err(ctx->bdisp_dev->dev,
-			"Invalid crop: (%d,%d)/%ux%u vs frame: %dx%d\n",
-			out.left, out.top, out.width, out.height,
+			"Invalid crop: %dx%d@(%d,%d) vs frame: %dx%d\n",
+			out.width, out.height, out.left, out.top,
 			frame->width, frame->height);
 		return -EINVAL;
 	}
@@ -982,9 +984,9 @@ static int bdisp_s_selection(struct file *file, void *fh,
 	if ((out.left != in->left) || (out.top != in->top) ||
 	    (out.width != in->width) || (out.height != in->height)) {
 		dev_dbg(ctx->bdisp_dev->dev,
-			"%s crop updated: (%d,%d)/%ux%u -> (%d,%d)/%ux%u\n",
-			__func__, in->left, in->top, in->width, in->height,
-			out.left, out.top, out.width, out.height);
+			"%s crop updated: %dx%d@(%d,%d) -> %dx%d@(%d,%d)\n",
+			__func__, in->width, in->height, in->left, in->top,
+			out.width, out.height, out.left, out.top);
 		*in = out;
 	}
 
@@ -1409,7 +1411,7 @@ MODULE_DEVICE_TABLE(of, bdisp_match_types);
 
 static struct platform_driver bdisp_driver = {
 	.probe          = bdisp_probe,
-	.remove         = bdisp_remove,
+	.remove_new     = bdisp_remove,
 	.driver         = {
 		.name           = BDISP_NAME,
 		.of_match_table = bdisp_match_types,

@@ -947,7 +947,7 @@ static const struct mmc_host_ops wbsd_ops = {
 
 static void wbsd_reset_ignore(struct timer_list *t)
 {
-	struct wbsd_host *host = timer_container_of(host, t, ignore_timer);
+	struct wbsd_host *host = from_timer(host, t, ignore_timer);
 
 	BUG_ON(host == NULL);
 
@@ -1190,7 +1190,7 @@ static int wbsd_alloc_mmc(struct device *dev)
 	/*
 	 * Allocate MMC structure.
 	 */
-	mmc = devm_mmc_alloc_host(dev, sizeof(*host));
+	mmc = mmc_alloc_host(sizeof(struct wbsd_host), dev);
 	if (!mmc)
 		return -ENOMEM;
 
@@ -1261,7 +1261,9 @@ static void wbsd_free_mmc(struct device *dev)
 	host = mmc_priv(mmc);
 	BUG_ON(host == NULL);
 
-	timer_delete_sync(&host->ignore_timer);
+	del_timer_sync(&host->ignore_timer);
+
+	mmc_free_host(mmc);
 }
 
 /*
@@ -1894,7 +1896,7 @@ static struct platform_device *wbsd_device;
 
 static struct platform_driver wbsd_driver = {
 	.probe		= wbsd_probe,
-	.remove		= wbsd_remove,
+	.remove_new	= wbsd_remove,
 	.suspend	= wbsd_platform_suspend,
 	.resume		= wbsd_platform_resume,
 	.driver		= {

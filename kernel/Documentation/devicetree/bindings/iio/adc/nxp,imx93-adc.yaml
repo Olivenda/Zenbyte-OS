@@ -19,14 +19,7 @@ description:
 
 properties:
   compatible:
-    oneOf:
-      - enum:
-          - nxp,imx93-adc
-      - items:
-          - enum:
-              - nxp,imx94-adc
-              - nxp,imx95-adc
-          - const: nxp,imx93-adc
+    const: nxp,imx93-adc
 
   reg:
     maxItems: 1

@@ -28,9 +28,6 @@
 
 #define MAX_VLS 16
 
-#define SIGNAL_INTERVAL_MS 25
-#define LOG_INTERVALS (1000 / SIGNAL_INTERVAL_MS)
-
 struct child_data {
 	char *name, *output;
 	pid_t pid;
@@ -223,7 +220,7 @@ static void child_output(struct child_data *child, uint32_t events,
 static void child_tickle(struct child_data *child)
 {
 	if (child->output_seen && !child->exited)
-		kill(child->pid, SIGUSR1);
+		kill(child->pid, SIGUSR2);
 }
 
 static void child_stop(struct child_data *child)
@@ -451,8 +448,7 @@ static const struct option options[] = {
 int main(int argc, char **argv)
 {
 	int ret;
-	int timeout = 10 * (1000 / SIGNAL_INTERVAL_MS);
-	int poll_interval = 5000;
+	int timeout = 10;
 	int cpus, i, j, c;
 	int sve_vl_count, sme_vl_count;
 	bool all_children_started = false;
@@ -508,7 +504,7 @@ int main(int argc, char **argv)
 		       have_sme2 ? "present" : "absent");
 
 	if (timeout > 0)
-		ksft_print_msg("Will run for %d\n", timeout);
+		ksft_print_msg("Will run for %ds\n", timeout);
 	else
 		ksft_print_msg("Will run until terminated\n");
 
@@ -581,14 +577,14 @@ int main(int argc, char **argv)
 			break;
 
 		/*
-		 * Timeout is counted in poll intervals with no
-		 * output, the tests print during startup then are
-		 * silent when running so this should ensure they all
-		 * ran enough to install the signal handler, this is
-		 * especially useful in emulation where we will both
-		 * be slow and likely to have a large set of VLs.
+		 * Timeout is counted in seconds with no output, the
+		 * tests print during startup then are silent when
+		 * running so this should ensure they all ran enough
+		 * to install the signal handler, this is especially
+		 * useful in emulation where we will both be slow and
+		 * likely to have a large set of VLs.
 		 */
-		ret = epoll_wait(epoll_fd, evs, tests, poll_interval);
+		ret = epoll_wait(epoll_fd, evs, tests, 1000);
 		if (ret < 0) {
 			if (errno == EINTR)
 				continue;
@@ -626,12 +622,10 @@ int main(int argc, char **argv)
 			}
 
 			all_children_started = true;
-			poll_interval = SIGNAL_INTERVAL_MS;
 		}
 
-		if ((timeout % LOG_INTERVALS) == 0)
-			ksft_print_msg("Sending signals, timeout remaining: %d\n",
-				       timeout);
+		ksft_print_msg("Sending signals, timeout remaining: %d\n",
+			       timeout);
 
 		for (i = 0; i < num_children; i++)
 			child_tickle(&children[i]);
@@ -656,5 +650,7 @@ int main(int argc, char **argv)
 
 	drain_output(true);
 
-	ksft_finished();
+	ksft_print_cnts();
+
+	return 0;
 }

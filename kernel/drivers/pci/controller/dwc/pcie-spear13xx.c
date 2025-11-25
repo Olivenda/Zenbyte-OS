@@ -110,12 +110,15 @@ static void spear13xx_pcie_enable_interrupts(struct spear13xx_pcie *spear13xx_pc
 				MSI_CTRL_INT, &app_reg->int_mask);
 }
 
-static bool spear13xx_pcie_link_up(struct dw_pcie *pci)
+static int spear13xx_pcie_link_up(struct dw_pcie *pci)
 {
 	struct spear13xx_pcie *spear13xx_pcie = to_spear13xx_pcie(pci);
 	struct pcie_app_reg __iomem *app_reg = spear13xx_pcie->app_base;
 
-	return readl(&app_reg->app_status_1) & XMLH_LINK_UP;
+	if (readl(&app_reg->app_status_1) & XMLH_LINK_UP)
+		return 1;
+
+	return 0;
 }
 
 static int spear13xx_pcie_host_init(struct dw_pcie_rp *pp)

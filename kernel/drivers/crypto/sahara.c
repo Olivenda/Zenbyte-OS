@@ -1421,7 +1421,7 @@ static void sahara_remove(struct platform_device *pdev)
 
 static struct platform_driver sahara_driver = {
 	.probe		= sahara_probe,
-	.remove		= sahara_remove,
+	.remove_new	= sahara_remove,
 	.driver		= {
 		.name	= SAHARA_NAME,
 		.of_match_table = sahara_dt_ids,

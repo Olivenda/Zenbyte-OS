@@ -14,7 +14,6 @@ properties:
     enum:
       - rockchip,px30-otp
       - rockchip,rk3308-otp
-      - rockchip,rk3576-otp
       - rockchip,rk3588-otp
 
   reg:
@@ -63,8 +62,6 @@ allOf:
       properties:
         clocks:
           maxItems: 3
-        clock-names:
-          maxItems: 3
         resets:
           maxItems: 1
         reset-names:
@@ -76,32 +73,10 @@ allOf:
         compatible:
           contains:
             enum:
-              - rockchip,rk3576-otp
-    then:
-      properties:
-        clocks:
-          maxItems: 3
-        clock-names:
-          maxItems: 3
-        resets:
-          minItems: 2
-          maxItems: 2
-        reset-names:
-          items:
-            - const: otp
-            - const: apb
-
-  - if:
-      properties:
-        compatible:
-          contains:
-            enum:
               - rockchip,rk3588-otp
     then:
       properties:
         clocks:
-          minItems: 4
-        clock-names:
           minItems: 4
         resets:
           minItems: 3

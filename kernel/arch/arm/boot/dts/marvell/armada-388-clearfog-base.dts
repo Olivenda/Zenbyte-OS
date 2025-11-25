@@ -34,7 +34,7 @@
 };
 
 &gpio0 {
-	phy1-reset-hog {
+	phy1_reset {
 		gpio-hog;
 		gpios = <19 GPIO_ACTIVE_LOW>;
 		output-low;

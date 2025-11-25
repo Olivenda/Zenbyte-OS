@@ -106,23 +106,12 @@ struct test_data_offset offsets[] = {
 /* move it from util/dso.c for compatibility */
 static int dso__data_fd(struct dso *dso, struct machine *machine)
 {
-	int fd = -1;
+	int fd = dso__data_get_fd(dso, machine);
 
-	if (dso__data_get_fd(dso, machine, &fd))
+	if (fd >= 0)
 		dso__data_put_fd(dso);
 
 	return fd;
-}
-
-static void dsos__delete(struct dsos *dsos)
-{
-	for (unsigned int i = 0; i < dsos->cnt; i++) {
-		struct dso *dso = dsos->dsos[i];
-
-		dso__data_close(dso);
-		unlink(dso__name(dso));
-	}
-	dsos__exit(dsos);
 }
 
 static int test__dso_data(struct test_suite *test __maybe_unused, int subtest __maybe_unused)
@@ -183,7 +172,7 @@ static int test__dso_data(struct test_suite *test __maybe_unused, int subtest __
 	}
 
 	dso__put(dso);
-	dsos__delete(&machine.dsos);
+	dsos__exit(&machine.dsos);
 	unlink(file);
 	return 0;
 }
@@ -231,6 +220,17 @@ static int dsos__create(int cnt, int size, struct dsos *dsos)
 	}
 
 	return 0;
+}
+
+static void dsos__delete(struct dsos *dsos)
+{
+	for (unsigned int i = 0; i < dsos->cnt; i++) {
+		struct dso *dso = dsos->dsos[i];
+
+		dso__data_close(dso);
+		unlink(dso__name(dso));
+	}
+	dsos__exit(dsos);
 }
 
 static int set_fd_limit(int n)

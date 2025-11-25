@@ -11,6 +11,9 @@
 #include <byteswap.h>
 #include "../../../arch/x86/include/asm/insn.h"
 
+#include "../../../arch/x86/lib/inat.c"
+#include "../../../arch/x86/lib/insn.c"
+
 #include "event.h"
 
 #include "intel-pt-insn-decoder.h"

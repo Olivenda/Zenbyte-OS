@@ -1081,26 +1081,44 @@ static void rvu_mcam_add_rule(struct npc_mcam *mcam,
 static void rvu_mcam_remove_counter_from_rule(struct rvu *rvu, u16 pcifunc,
 					      struct rvu_npc_mcam_rule *rule)
 {
-	struct npc_mcam *mcam = &rvu->hw->mcam;
+	struct npc_mcam_oper_counter_req free_req = { 0 };
+	struct msg_rsp free_rsp;
 
-	mutex_lock(&mcam->lock);
+	if (!rule->has_cntr)
+		return;
 
-	__rvu_mcam_remove_counter_from_rule(rvu, pcifunc, rule);
+	free_req.hdr.pcifunc = pcifunc;
+	free_req.cntr = rule->cntr;
 
-	mutex_unlock(&mcam->lock);
+	rvu_mbox_handler_npc_mcam_free_counter(rvu, &free_req, &free_rsp);
+	rule->has_cntr = false;
 }
 
 static void rvu_mcam_add_counter_to_rule(struct rvu *rvu, u16 pcifunc,
 					 struct rvu_npc_mcam_rule *rule,
 					 struct npc_install_flow_rsp *rsp)
 {
-	struct npc_mcam *mcam = &rvu->hw->mcam;
+	struct npc_mcam_alloc_counter_req cntr_req = { 0 };
+	struct npc_mcam_alloc_counter_rsp cntr_rsp = { 0 };
+	int err;
 
-	mutex_lock(&mcam->lock);
+	cntr_req.hdr.pcifunc = pcifunc;
+	cntr_req.contig = true;
+	cntr_req.count = 1;
 
-	__rvu_mcam_add_counter_to_rule(rvu, pcifunc, rule, rsp);
-
-	mutex_unlock(&mcam->lock);
+	/* we try to allocate a counter to track the stats of this
+	 * rule. If counter could not be allocated then proceed
+	 * without counter because counters are limited than entries.
+	 */
+	err = rvu_mbox_handler_npc_mcam_alloc_counter(rvu, &cntr_req,
+						      &cntr_rsp);
+	if (!err && cntr_rsp.count) {
+		rule->cntr = cntr_rsp.cntr;
+		rule->has_cntr = true;
+		rsp->counter = rule->cntr;
+	} else {
+		rsp->counter = err;
+	}
 }
 
 static int npc_mcast_update_action_index(struct rvu *rvu, struct npc_install_flow_req *req,
@@ -1398,7 +1416,6 @@ int rvu_mbox_handler_npc_install_flow(struct rvu *rvu,
 				      struct npc_install_flow_rsp *rsp)
 {
 	bool from_vf = !!(req->hdr.pcifunc & RVU_PFVF_FUNC_MASK);
-	bool from_rep_dev = !!is_rep_dev(rvu, req->hdr.pcifunc);
 	struct rvu_switch *rswitch = &rvu->rswitch;
 	int blkaddr, nixlf, err;
 	struct rvu_pfvf *pfvf;
@@ -1452,21 +1469,18 @@ process_flow:
 	 * hence modify pcifunc accordingly.
 	 */
 
-	if (!req->hdr.pcifunc) {
-		/* AF installing for a PF/VF */
+	/* AF installing for a PF/VF */
+	if (!req->hdr.pcifunc)
 		target = req->vf;
-	} else if (!from_vf && req->vf && !from_rep_dev) {
-		/* PF installing for its VF */
+	/* PF installing for its VF */
+	else if (!from_vf && req->vf) {
 		target = (req->hdr.pcifunc & ~RVU_PFVF_FUNC_MASK) | req->vf;
 		pf_set_vfs_mac = req->default_rule &&
 				(req->features & BIT_ULL(NPC_DMAC));
-	} else if (from_rep_dev && req->vf) {
-		/* Representor device installing for a representee */
-		target = req->vf;
-	} else {
-		/* msg received from PF/VF */
-		target = req->hdr.pcifunc;
 	}
+	/* msg received from PF/VF */
+	else
+		target = req->hdr.pcifunc;
 
 	/* ignore chan_mask in case pf func is not AF, revisit later */
 	if (!is_pffunc_af(req->hdr.pcifunc))
@@ -1478,10 +1492,8 @@ process_flow:
 
 	pfvf = rvu_get_pfvf(rvu, target);
 
-	if (from_rep_dev)
-		req->channel = pfvf->rx_chan_base;
 	/* PF installing for its VF */
-	if (req->hdr.pcifunc && !from_vf && req->vf && !from_rep_dev)
+	if (req->hdr.pcifunc && !from_vf && req->vf)
 		set_bit(PF_SET_VF_CFG, &pfvf->flags);
 
 	/* update req destination mac addr */

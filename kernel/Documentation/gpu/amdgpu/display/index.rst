@@ -90,7 +90,6 @@ table of content:
    display-manager.rst
    dcn-overview.rst
    dcn-blocks.rst
-   programming-model-dcn.rst
    mpo-overview.rst
    dc-debug.rst
    display-contributing.rst

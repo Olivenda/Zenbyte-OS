@@ -1257,7 +1257,7 @@ static int sdhci_omap_probe(struct platform_device *pdev)
 	sdhci_get_of_property(pdev);
 	ret = mmc_of_parse(mmc);
 	if (ret)
-		return ret;
+		goto err_pltfm_free;
 
 	soc = soc_device_match(sdhci_omap_soc_devices);
 	if (soc) {
@@ -1270,23 +1270,26 @@ static int sdhci_omap_probe(struct platform_device *pdev)
 			mmc->f_max = 48000000;
 	}
 
-	if (!mmc_host_can_gpio_ro(mmc))
+	if (!mmc_can_gpio_ro(mmc))
 		mmc->caps2 |= MMC_CAP2_NO_WRITE_PROTECT;
 
 	pltfm_host->clk = devm_clk_get(dev, "fck");
-	if (IS_ERR(pltfm_host->clk))
-		return PTR_ERR(pltfm_host->clk);
+	if (IS_ERR(pltfm_host->clk)) {
+		ret = PTR_ERR(pltfm_host->clk);
+		goto err_pltfm_free;
+	}
 
 	ret = clk_set_rate(pltfm_host->clk, mmc->f_max);
-	if (ret)
-		return dev_err_probe(dev, ret,
-				     "failed to set clock to %d\n", mmc->f_max);
+	if (ret) {
+		dev_err(dev, "failed to set clock to %d\n", mmc->f_max);
+		goto err_pltfm_free;
+	}
 
 	omap_host->pbias = devm_regulator_get_optional(dev, "pbias");
 	if (IS_ERR(omap_host->pbias)) {
 		ret = PTR_ERR(omap_host->pbias);
 		if (ret != -ENODEV)
-			return ret;
+			goto err_pltfm_free;
 		dev_dbg(dev, "unable to get pbias regulator %d\n", ret);
 	}
 	omap_host->pbias_enabled = false;
@@ -1370,6 +1373,7 @@ static int sdhci_omap_probe(struct platform_device *pdev)
 		host->mmc->pm_caps |= MMC_PM_KEEP_POWER | MMC_PM_WAKE_SDIO_IRQ;
 	}
 
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	return 0;
@@ -1378,10 +1382,14 @@ err_cleanup_host:
 	sdhci_cleanup_host(host);
 
 err_rpm_put:
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 err_rpm_disable:
 	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_disable(dev);
+
+err_pltfm_free:
+	sdhci_pltfm_free(pdev);
 	return ret;
 }
 
@@ -1398,6 +1406,7 @@ static void sdhci_omap_remove(struct platform_device *pdev)
 	pm_runtime_put_sync(dev);
 	/* Ensure device gets disabled despite userspace sysfs config */
 	pm_runtime_force_suspend(dev);
+	sdhci_pltfm_free(pdev);
 }
 
 #ifdef CONFIG_PM
@@ -1469,7 +1478,7 @@ static const struct dev_pm_ops sdhci_omap_dev_pm_ops = {
 
 static struct platform_driver sdhci_omap_driver = {
 	.probe = sdhci_omap_probe,
-	.remove = sdhci_omap_remove,
+	.remove_new = sdhci_omap_remove,
 	.driver = {
 		   .name = "sdhci-omap",
 		   .probe_type = PROBE_PREFER_ASYNCHRONOUS,

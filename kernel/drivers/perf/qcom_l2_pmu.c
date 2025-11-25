@@ -981,7 +981,7 @@ static struct platform_driver l2_cache_pmu_driver = {
 		.suppress_bind_attrs = true,
 	},
 	.probe = l2_cache_pmu_probe,
-	.remove = l2_cache_pmu_remove,
+	.remove_new = l2_cache_pmu_remove,
 };
 
 static int __init register_l2_cache_pmu_driver(void)

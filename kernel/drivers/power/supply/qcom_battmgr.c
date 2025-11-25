@@ -8,7 +8,6 @@
 #include <linux/mutex.h>
 #include <linux/of_device.h>
 #include <linux/power_supply.h>
-#include <linux/property.h>
 #include <linux/soc/qcom/pdr.h>
 #include <linux/soc/qcom/pmic_glink.h>
 #include <linux/math.h>
@@ -153,7 +152,7 @@ struct qcom_battmgr_message {
 			__le32 capacity_low;
 			__le32 capacity_warning;
 			__le32 cycle_count;
-			/* thousandth of percent */
+			/* thousandth of persent */
 			__le32 accuracy;
 			__le32 max_sample_time_ms;
 			__le32 min_sample_time_ms;
@@ -578,8 +577,6 @@ static int qcom_battmgr_bat_get_property(struct power_supply *psy,
 		val->intval = battmgr->status.capacity;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		if (battmgr->status.percent == (unsigned int)-1)
-			return -ENODATA;
 		val->intval = battmgr->status.percent;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
@@ -620,7 +617,6 @@ static const enum power_supply_property sc8280xp_bat_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
-	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
@@ -1072,26 +1068,6 @@ static void qcom_battmgr_sc8280xp_callback(struct qcom_battmgr *battmgr,
 		battmgr->ac.online = source == BATTMGR_CHARGING_SOURCE_AC;
 		battmgr->usb.online = source == BATTMGR_CHARGING_SOURCE_USB;
 		battmgr->wireless.online = source == BATTMGR_CHARGING_SOURCE_WIRELESS;
-		if (battmgr->info.last_full_capacity != 0) {
-			/*
-			 * 100 * battmgr->status.capacity can overflow a 32bit
-			 * unsigned integer. FW readings are in m{W/A}h, which
-			 * are multiplied by 1000 converting them to u{W/A}h,
-			 * the format the power_supply API expects.
-			 * To avoid overflow use the original value for dividend
-			 * and convert the divider back to m{W/A}h, which can be
-			 * done without any loss of precision.
-			 */
-			battmgr->status.percent =
-				(100 * le32_to_cpu(resp->status.capacity)) /
-				(battmgr->info.last_full_capacity / 1000);
-		} else {
-			/*
-			 * Let the sysfs handler know no data is available at
-			 * this time.
-			 */
-			battmgr->status.percent = (unsigned int)-1;
-		}
 		break;
 	case BATTMGR_BAT_DISCHARGE_TIME:
 		battmgr->status.discharge_time = le32_to_cpu(resp->time);
@@ -1366,10 +1342,10 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 	battmgr->dev = dev;
 
 	psy_cfg.drv_data = battmgr;
-	psy_cfg.fwnode = dev_fwnode(&adev->dev);
+	psy_cfg.of_node = adev->dev.of_node;
 
 	psy_cfg_supply.drv_data = battmgr;
-	psy_cfg_supply.fwnode = dev_fwnode(&adev->dev);
+	psy_cfg_supply.of_node = adev->dev.of_node;
 	psy_cfg_supply.supplied_to = qcom_battmgr_battery;
 	psy_cfg_supply.num_supplicants = 1;
 

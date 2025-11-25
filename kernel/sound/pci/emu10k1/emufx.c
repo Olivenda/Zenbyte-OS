@@ -12,7 +12,6 @@
 #include <linux/capability.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
-#include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <linux/init.h>
 #include <linux/mutex.h>
@@ -1176,7 +1175,7 @@ snd_emu10k1_init_mono_control2(struct snd_emu10k1_fx8010_control_gpr *ctl,
 			       const char *name, int gpr, int defval, int defval_hr)
 {
 	ctl->id.iface = (__force int)SNDRV_CTL_ELEM_IFACE_MIXER;
-	strscpy(ctl->id.name, name);
+	strcpy(ctl->id.name, name);
 	ctl->vcount = ctl->count = 1;
 	if (high_res_gpr_volume) {
 		ctl->min = -1;
@@ -1200,7 +1199,7 @@ snd_emu10k1_init_stereo_control2(struct snd_emu10k1_fx8010_control_gpr *ctl,
 				 const char *name, int gpr, int defval, int defval_hr)
 {
 	ctl->id.iface = (__force int)SNDRV_CTL_ELEM_IFACE_MIXER;
-	strscpy(ctl->id.name, name);
+	strcpy(ctl->id.name, name);
 	ctl->vcount = ctl->count = 2;
 	if (high_res_gpr_volume) {
 		ctl->min = -1;
@@ -1225,7 +1224,7 @@ snd_emu10k1_init_mono_onoff_control(struct snd_emu10k1_fx8010_control_gpr *ctl,
 				    const char *name, int gpr, int defval)
 {
 	ctl->id.iface = (__force int)SNDRV_CTL_ELEM_IFACE_MIXER;
-	strscpy(ctl->id.name, name);
+	strcpy(ctl->id.name, name);
 	ctl->vcount = ctl->count = 1;
 	ctl->gpr[0] = gpr + 0; ctl->value[0] = defval;
 	ctl->min = 0;
@@ -1238,7 +1237,7 @@ snd_emu10k1_init_stereo_onoff_control(struct snd_emu10k1_fx8010_control_gpr *ctl
 				      const char *name, int gpr, int defval)
 {
 	ctl->id.iface = (__force int)SNDRV_CTL_ELEM_IFACE_MIXER;
-	strscpy(ctl->id.name, name);
+	strcpy(ctl->id.name, name);
 	ctl->vcount = ctl->count = 2;
 	ctl->gpr[0] = gpr + 0; ctl->value[0] = defval;
 	ctl->gpr[1] = gpr + 1; ctl->value[1] = defval;
@@ -1326,7 +1325,7 @@ static int _snd_emu10k1_audigy_init_efx(struct snd_emu10k1 *emu)
 	/* clear TRAM data & address lines */
 	memset(icode->tram_valid, 0xff, 256 / 8);
 
-	strscpy(icode->name, "Audigy DSP code for ALSA");
+	strcpy(icode->name, "Audigy DSP code for ALSA");
 	ptr = 0;
 	nctl = 0;
 	gpr_map[bit_shifter16] = 0x00008000;
@@ -1564,7 +1563,7 @@ static int _snd_emu10k1_audigy_init_efx(struct snd_emu10k1 *emu)
 	 */
 	ctl = &controls[nctl + 0];
 	ctl->id.iface = (__force int)SNDRV_CTL_ELEM_IFACE_MIXER;
-	strscpy(ctl->id.name, "Tone Control - Bass");
+	strcpy(ctl->id.name, "Tone Control - Bass");
 	ctl->vcount = 2;
 	ctl->count = 10;
 	ctl->min = 0;
@@ -1573,7 +1572,7 @@ static int _snd_emu10k1_audigy_init_efx(struct snd_emu10k1 *emu)
 	ctl->translation = EMU10K1_GPR_TRANSLATION_BASS;
 	ctl = &controls[nctl + 1];
 	ctl->id.iface = (__force int)SNDRV_CTL_ELEM_IFACE_MIXER;
-	strscpy(ctl->id.name, "Tone Control - Treble");
+	strcpy(ctl->id.name, "Tone Control - Treble");
 	ctl->vcount = 2;
 	ctl->count = 10;
 	ctl->min = 0;
@@ -1850,7 +1849,7 @@ static int _snd_emu10k1_init_efx(struct snd_emu10k1 *emu)
 	/* clear TRAM data & address lines */
 	memset(icode->tram_valid, 0xff, 160 / 8);
 
-	strscpy(icode->name, "SB Live! FX8010 code for ALSA v1.2 by Jaroslav Kysela");
+	strcpy(icode->name, "SB Live! FX8010 code for ALSA v1.2 by Jaroslav Kysela");
 	ptr = 0; i = 0;
 	/* we have 12 inputs */
 	playback = SND_EMU10K1_INPUTS;
@@ -2161,7 +2160,7 @@ static int _snd_emu10k1_init_efx(struct snd_emu10k1 *emu)
 	 */
 	ctl = &controls[i + 0];
 	ctl->id.iface = (__force int)SNDRV_CTL_ELEM_IFACE_MIXER;
-	strscpy(ctl->id.name, "Tone Control - Bass");
+	strcpy(ctl->id.name, "Tone Control - Bass");
 	ctl->vcount = 2;
 	ctl->count = 10;
 	ctl->min = 0;
@@ -2171,7 +2170,7 @@ static int _snd_emu10k1_init_efx(struct snd_emu10k1 *emu)
 	ctl->translation = EMU10K1_GPR_TRANSLATION_BASS;
 	ctl = &controls[i + 1];
 	ctl->id.iface = (__force int)SNDRV_CTL_ELEM_IFACE_MIXER;
-	strscpy(ctl->id.name, "Tone Control - Treble");
+	strcpy(ctl->id.name, "Tone Control - Treble");
 	ctl->vcount = 2;
 	ctl->count = 10;
 	ctl->min = 0;
@@ -2624,7 +2623,7 @@ int snd_emu10k1_fx8010_new(struct snd_emu10k1 *emu, int device)
 	err = snd_hwdep_new(emu->card, "FX8010", device, &hw);
 	if (err < 0)
 		return err;
-	strscpy(hw->name, "EMU10K1 (FX8010)");
+	strcpy(hw->name, "EMU10K1 (FX8010)");
 	hw->iface = SNDRV_HWDEP_IFACE_EMU10K1;
 	hw->ops.open = snd_emu10k1_fx8010_open;
 	hw->ops.ioctl = snd_emu10k1_fx8010_ioctl;

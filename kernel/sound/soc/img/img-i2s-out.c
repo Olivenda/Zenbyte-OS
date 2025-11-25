@@ -539,6 +539,7 @@ static void img_i2s_out_dev_remove(struct platform_device *pdev)
 		img_i2s_out_runtime_suspend(&pdev->dev);
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int img_i2s_out_suspend(struct device *dev)
 {
 	struct img_i2s_out *i2s = dev_get_drvdata(dev);
@@ -585,6 +586,7 @@ static int img_i2s_out_resume(struct device *dev)
 
 	return 0;
 }
+#endif
 
 static const struct of_device_id img_i2s_out_of_match[] = {
 	{ .compatible = "img,i2s-out" },
@@ -593,15 +595,16 @@ static const struct of_device_id img_i2s_out_of_match[] = {
 MODULE_DEVICE_TABLE(of, img_i2s_out_of_match);
 
 static const struct dev_pm_ops img_i2s_out_pm_ops = {
-	RUNTIME_PM_OPS(img_i2s_out_runtime_suspend, img_i2s_out_runtime_resume, NULL)
-	SYSTEM_SLEEP_PM_OPS(img_i2s_out_suspend, img_i2s_out_resume)
+	SET_RUNTIME_PM_OPS(img_i2s_out_runtime_suspend,
+			   img_i2s_out_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(img_i2s_out_suspend, img_i2s_out_resume)
 };
 
 static struct platform_driver img_i2s_out_driver = {
 	.driver = {
 		.name = "img-i2s-out",
 		.of_match_table = img_i2s_out_of_match,
-		.pm = pm_ptr(&img_i2s_out_pm_ops)
+		.pm = &img_i2s_out_pm_ops
 	},
 	.probe = img_i2s_out_probe,
 	.remove = img_i2s_out_dev_remove

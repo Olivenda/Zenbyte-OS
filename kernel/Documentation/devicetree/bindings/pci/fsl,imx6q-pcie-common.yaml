@@ -17,11 +17,11 @@ description:
 properties:
   clocks:
     minItems: 3
-    maxItems: 5
+    maxItems: 4
 
   clock-names:
     minItems: 3
-    maxItems: 5
+    maxItems: 4
 
   num-lanes:
     const: 1

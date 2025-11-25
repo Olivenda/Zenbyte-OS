@@ -512,11 +512,15 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_core_device *vdev,
 	if (ret)
 		goto out_put_eventfd_ctx;
 
-	ret = irq_bypass_register_producer(&ctx->producer, trigger, irq);
+	ctx->producer.token = trigger;
+	ctx->producer.irq = irq;
+	ret = irq_bypass_register_producer(&ctx->producer);
 	if (unlikely(ret)) {
 		dev_info(&pdev->dev,
-		"irq bypass producer (eventfd %p) registration fails: %d\n",
-		trigger, ret);
+		"irq bypass producer (token %p) registration fails: %d\n",
+		ctx->producer.token, ret);
+
+		ctx->producer.token = NULL;
 	}
 	ctx->trigger = trigger;
 

@@ -7,7 +7,6 @@
 
 #include <linux/init.h>
 #include <linux/pci.h>
-#include <linux/string.h>
 #include <linux/time.h>
 #include <linux/module.h>
 #include <sound/core.h>
@@ -155,7 +154,7 @@ static int snd_card_emu10k1_probe(struct pci_dev *pci,
 	} else {
 		struct snd_emu10k1_synth_arg *arg;
 		arg = SNDRV_SEQ_DEVICE_ARGPTR(wave);
-		strscpy(wave->name, "Emu-10k1 Synth");
+		strcpy(wave->name, "Emu-10k1 Synth");
 		arg->hwptr = emu;
 		arg->index = 1;
 		arg->seq_ports = seq_ports[dev];

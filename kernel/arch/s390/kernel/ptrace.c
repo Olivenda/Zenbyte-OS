@@ -7,10 +7,10 @@
  *               Martin Schwidefsky (schwidefsky@de.ibm.com)
  */
 
+#include "asm/ptrace.h"
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/sched/task_stack.h>
-#include <linux/cpufeature.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/errno.h>
@@ -31,9 +31,6 @@
 #include <asm/unistd.h>
 #include <asm/runtime_instr.h>
 #include <asm/facility.h>
-#include <asm/machine.h>
-#include <asm/ptrace.h>
-#include <asm/rwonce.h>
 #include <asm/fpu.h>
 
 #include "entry.h"
@@ -63,7 +60,7 @@ void update_cr_regs(struct task_struct *task)
 	cr0_new = cr0_old;
 	cr2_new = cr2_old;
 	/* Take care of the enable/disable of transactional execution. */
-	if (machine_has_tx()) {
+	if (MACHINE_HAS_TE) {
 		/* Set or clear transaction execution TXC bit 8. */
 		cr0_new.tcx = 1;
 		if (task->thread.per_flags & PER_FLAG_NO_TE)
@@ -78,7 +75,7 @@ void update_cr_regs(struct task_struct *task)
 		}
 	}
 	/* Take care of enable/disable of guarded storage. */
-	if (cpu_has_gs()) {
+	if (MACHINE_HAS_GS) {
 		cr2_new.gse = 0;
 		if (task->thread.gs_cb)
 			cr2_new.gse = 1;
@@ -473,18 +470,18 @@ long arch_ptrace(struct task_struct *child, long request,
 	case PTRACE_GET_LAST_BREAK:
 		return put_user(child->thread.last_break, (unsigned long __user *)data);
 	case PTRACE_ENABLE_TE:
-		if (!machine_has_tx())
+		if (!MACHINE_HAS_TE)
 			return -EIO;
 		child->thread.per_flags &= ~PER_FLAG_NO_TE;
 		return 0;
 	case PTRACE_DISABLE_TE:
-		if (!machine_has_tx())
+		if (!MACHINE_HAS_TE)
 			return -EIO;
 		child->thread.per_flags |= PER_FLAG_NO_TE;
 		child->thread.per_flags &= ~PER_FLAG_TE_ABORT_RAND;
 		return 0;
 	case PTRACE_TE_ABORT_RAND:
-		if (!machine_has_tx() || (child->thread.per_flags & PER_FLAG_NO_TE))
+		if (!MACHINE_HAS_TE || (child->thread.per_flags & PER_FLAG_NO_TE))
 			return -EIO;
 		switch (data) {
 		case 0UL:
@@ -1036,7 +1033,7 @@ static int s390_gs_cb_get(struct task_struct *target,
 {
 	struct gs_cb *data = target->thread.gs_cb;
 
-	if (!cpu_has_gs())
+	if (!MACHINE_HAS_GS)
 		return -ENODEV;
 	if (!data)
 		return -ENODATA;
@@ -1053,7 +1050,7 @@ static int s390_gs_cb_set(struct task_struct *target,
 	struct gs_cb gs_cb = { }, *data = NULL;
 	int rc;
 
-	if (!cpu_has_gs())
+	if (!MACHINE_HAS_GS)
 		return -ENODEV;
 	if (!target->thread.gs_cb) {
 		data = kzalloc(sizeof(*data), GFP_KERNEL);
@@ -1090,7 +1087,7 @@ static int s390_gs_bc_get(struct task_struct *target,
 {
 	struct gs_cb *data = target->thread.gs_bc_cb;
 
-	if (!cpu_has_gs())
+	if (!MACHINE_HAS_GS)
 		return -ENODEV;
 	if (!data)
 		return -ENODATA;
@@ -1104,7 +1101,7 @@ static int s390_gs_bc_set(struct task_struct *target,
 {
 	struct gs_cb *data = target->thread.gs_bc_cb;
 
-	if (!cpu_has_gs())
+	if (!MACHINE_HAS_GS)
 		return -ENODEV;
 	if (!data) {
 		data = kzalloc(sizeof(*data), GFP_KERNEL);
@@ -1209,7 +1206,7 @@ static int s390_runtime_instr_set(struct task_struct *target,
 
 static const struct user_regset s390_regsets[] = {
 	{
-		USER_REGSET_NOTE_TYPE(PRSTATUS),
+		.core_note_type = NT_PRSTATUS,
 		.n = sizeof(s390_regs) / sizeof(long),
 		.size = sizeof(long),
 		.align = sizeof(long),
@@ -1217,7 +1214,7 @@ static const struct user_regset s390_regsets[] = {
 		.set = s390_regs_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(PRFPREG),
+		.core_note_type = NT_PRFPREG,
 		.n = sizeof(s390_fp_regs) / sizeof(long),
 		.size = sizeof(long),
 		.align = sizeof(long),
@@ -1225,7 +1222,7 @@ static const struct user_regset s390_regsets[] = {
 		.set = s390_fpregs_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_SYSTEM_CALL),
+		.core_note_type = NT_S390_SYSTEM_CALL,
 		.n = 1,
 		.size = sizeof(unsigned int),
 		.align = sizeof(unsigned int),
@@ -1233,7 +1230,7 @@ static const struct user_regset s390_regsets[] = {
 		.set = s390_system_call_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_LAST_BREAK),
+		.core_note_type = NT_S390_LAST_BREAK,
 		.n = 1,
 		.size = sizeof(long),
 		.align = sizeof(long),
@@ -1241,7 +1238,7 @@ static const struct user_regset s390_regsets[] = {
 		.set = s390_last_break_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_TDB),
+		.core_note_type = NT_S390_TDB,
 		.n = 1,
 		.size = 256,
 		.align = 1,
@@ -1249,7 +1246,7 @@ static const struct user_regset s390_regsets[] = {
 		.set = s390_tdb_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_VXRS_LOW),
+		.core_note_type = NT_S390_VXRS_LOW,
 		.n = __NUM_VXRS_LOW,
 		.size = sizeof(__u64),
 		.align = sizeof(__u64),
@@ -1257,7 +1254,7 @@ static const struct user_regset s390_regsets[] = {
 		.set = s390_vxrs_low_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_VXRS_HIGH),
+		.core_note_type = NT_S390_VXRS_HIGH,
 		.n = __NUM_VXRS_HIGH,
 		.size = sizeof(__vector128),
 		.align = sizeof(__vector128),
@@ -1265,7 +1262,7 @@ static const struct user_regset s390_regsets[] = {
 		.set = s390_vxrs_high_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_GS_CB),
+		.core_note_type = NT_S390_GS_CB,
 		.n = sizeof(struct gs_cb) / sizeof(__u64),
 		.size = sizeof(__u64),
 		.align = sizeof(__u64),
@@ -1273,7 +1270,7 @@ static const struct user_regset s390_regsets[] = {
 		.set = s390_gs_cb_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_GS_BC),
+		.core_note_type = NT_S390_GS_BC,
 		.n = sizeof(struct gs_cb) / sizeof(__u64),
 		.size = sizeof(__u64),
 		.align = sizeof(__u64),
@@ -1281,7 +1278,7 @@ static const struct user_regset s390_regsets[] = {
 		.set = s390_gs_bc_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_RI_CB),
+		.core_note_type = NT_S390_RI_CB,
 		.n = sizeof(struct runtime_instr_cb) / sizeof(__u64),
 		.size = sizeof(__u64),
 		.align = sizeof(__u64),
@@ -1413,7 +1410,7 @@ static int s390_compat_last_break_set(struct task_struct *target,
 
 static const struct user_regset s390_compat_regsets[] = {
 	{
-		USER_REGSET_NOTE_TYPE(PRSTATUS),
+		.core_note_type = NT_PRSTATUS,
 		.n = sizeof(s390_compat_regs) / sizeof(compat_long_t),
 		.size = sizeof(compat_long_t),
 		.align = sizeof(compat_long_t),
@@ -1421,7 +1418,7 @@ static const struct user_regset s390_compat_regsets[] = {
 		.set = s390_compat_regs_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(PRFPREG),
+		.core_note_type = NT_PRFPREG,
 		.n = sizeof(s390_fp_regs) / sizeof(compat_long_t),
 		.size = sizeof(compat_long_t),
 		.align = sizeof(compat_long_t),
@@ -1429,7 +1426,7 @@ static const struct user_regset s390_compat_regsets[] = {
 		.set = s390_fpregs_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_SYSTEM_CALL),
+		.core_note_type = NT_S390_SYSTEM_CALL,
 		.n = 1,
 		.size = sizeof(compat_uint_t),
 		.align = sizeof(compat_uint_t),
@@ -1437,7 +1434,7 @@ static const struct user_regset s390_compat_regsets[] = {
 		.set = s390_system_call_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_LAST_BREAK),
+		.core_note_type = NT_S390_LAST_BREAK,
 		.n = 1,
 		.size = sizeof(long),
 		.align = sizeof(long),
@@ -1445,7 +1442,7 @@ static const struct user_regset s390_compat_regsets[] = {
 		.set = s390_compat_last_break_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_TDB),
+		.core_note_type = NT_S390_TDB,
 		.n = 1,
 		.size = 256,
 		.align = 1,
@@ -1453,7 +1450,7 @@ static const struct user_regset s390_compat_regsets[] = {
 		.set = s390_tdb_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_VXRS_LOW),
+		.core_note_type = NT_S390_VXRS_LOW,
 		.n = __NUM_VXRS_LOW,
 		.size = sizeof(__u64),
 		.align = sizeof(__u64),
@@ -1461,7 +1458,7 @@ static const struct user_regset s390_compat_regsets[] = {
 		.set = s390_vxrs_low_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_VXRS_HIGH),
+		.core_note_type = NT_S390_VXRS_HIGH,
 		.n = __NUM_VXRS_HIGH,
 		.size = sizeof(__vector128),
 		.align = sizeof(__vector128),
@@ -1469,7 +1466,7 @@ static const struct user_regset s390_compat_regsets[] = {
 		.set = s390_vxrs_high_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_HIGH_GPRS),
+		.core_note_type = NT_S390_HIGH_GPRS,
 		.n = sizeof(s390_compat_regs_high) / sizeof(compat_long_t),
 		.size = sizeof(compat_long_t),
 		.align = sizeof(compat_long_t),
@@ -1477,7 +1474,7 @@ static const struct user_regset s390_compat_regsets[] = {
 		.set = s390_compat_regs_high_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_GS_CB),
+		.core_note_type = NT_S390_GS_CB,
 		.n = sizeof(struct gs_cb) / sizeof(__u64),
 		.size = sizeof(__u64),
 		.align = sizeof(__u64),
@@ -1485,7 +1482,7 @@ static const struct user_regset s390_compat_regsets[] = {
 		.set = s390_gs_cb_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_GS_BC),
+		.core_note_type = NT_S390_GS_BC,
 		.n = sizeof(struct gs_cb) / sizeof(__u64),
 		.size = sizeof(__u64),
 		.align = sizeof(__u64),
@@ -1493,7 +1490,7 @@ static const struct user_regset s390_compat_regsets[] = {
 		.set = s390_gs_bc_set,
 	},
 	{
-		USER_REGSET_NOTE_TYPE(S390_RI_CB),
+		.core_note_type = NT_S390_RI_CB,
 		.n = sizeof(struct runtime_instr_cb) / sizeof(__u64),
 		.size = sizeof(__u64),
 		.align = sizeof(__u64),
@@ -1524,6 +1521,13 @@ static const char *gpr_names[NUM_GPRS] = {
 	"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
 };
 
+unsigned long regs_get_register(struct pt_regs *regs, unsigned int offset)
+{
+	if (offset >= NUM_GPRS)
+		return 0;
+	return regs->gprs[offset];
+}
+
 int regs_query_register_offset(const char *name)
 {
 	unsigned long offset;
@@ -1542,4 +1546,30 @@ const char *regs_query_register_name(unsigned int offset)
 	if (offset >= NUM_GPRS)
 		return NULL;
 	return gpr_names[offset];
+}
+
+static int regs_within_kernel_stack(struct pt_regs *regs, unsigned long addr)
+{
+	unsigned long ksp = kernel_stack_pointer(regs);
+
+	return (addr & ~(THREAD_SIZE - 1)) == (ksp & ~(THREAD_SIZE - 1));
+}
+
+/**
+ * regs_get_kernel_stack_nth() - get Nth entry of the stack
+ * @regs:pt_regs which contains kernel stack pointer.
+ * @n:stack entry number.
+ *
+ * regs_get_kernel_stack_nth() returns @n th entry of the kernel stack which
+ * is specifined by @regs. If the @n th entry is NOT in the kernel stack,
+ * this returns 0.
+ */
+unsigned long regs_get_kernel_stack_nth(struct pt_regs *regs, unsigned int n)
+{
+	unsigned long addr;
+
+	addr = kernel_stack_pointer(regs) + n * sizeof(long);
+	if (!regs_within_kernel_stack(regs, addr))
+		return 0;
+	return *(unsigned long *)addr;
 }

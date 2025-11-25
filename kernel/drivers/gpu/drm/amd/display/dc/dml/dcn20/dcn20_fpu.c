@@ -1315,7 +1315,7 @@ static void swizzle_to_dml_params(
 int dcn20_populate_dml_pipes_from_context(struct dc *dc,
 					  struct dc_state *context,
 					  display_e2e_pipe_params_st *pipes,
-					  enum dc_validate_mode validate_mode)
+					  bool fast_validate)
 {
 	int pipe_cnt, i;
 	bool synchronized_vblank = true;
@@ -1733,7 +1733,7 @@ void dcn20_calculate_wm(struct dc *dc, struct dc_state *context,
 			int *out_pipe_cnt,
 			int *pipe_split_from,
 			int vlevel,
-			enum dc_validate_mode validate_mode)
+			bool fast_validate)
 {
 	int pipe_cnt, i, pipe_idx;
 
@@ -1780,10 +1780,10 @@ void dcn20_calculate_wm(struct dc *dc, struct dc_state *context,
 	if (pipe_cnt != pipe_idx) {
 		if (dc->res_pool->funcs->populate_dml_pipes)
 			pipe_cnt = dc->res_pool->funcs->populate_dml_pipes(dc,
-				context, pipes, validate_mode);
+				context, pipes, fast_validate);
 		else
 			pipe_cnt = dcn20_populate_dml_pipes_from_context(dc,
-				context, pipes, validate_mode);
+				context, pipes, fast_validate);
 	}
 
 	*out_pipe_cnt = pipe_cnt;
@@ -2027,7 +2027,7 @@ void dcn20_patch_bounding_box(struct dc *dc, struct _vcs_dpi_soc_bounding_box_st
 }
 
 static bool dcn20_validate_bandwidth_internal(struct dc *dc, struct dc_state *context,
-		enum dc_validate_mode validate_mode, display_e2e_pipe_params_st *pipes)
+		bool fast_validate, display_e2e_pipe_params_st *pipes)
 {
 	bool out = false;
 
@@ -2040,7 +2040,7 @@ static bool dcn20_validate_bandwidth_internal(struct dc *dc, struct dc_state *co
 
 	BW_VAL_TRACE_COUNT();
 
-	out = dcn20_fast_validate_bw(dc, context, pipes, &pipe_cnt, pipe_split_from, &vlevel, validate_mode);
+	out = dcn20_fast_validate_bw(dc, context, pipes, &pipe_cnt, pipe_split_from, &vlevel, fast_validate);
 
 	if (pipe_cnt == 0)
 		goto validate_out;
@@ -2050,12 +2050,12 @@ static bool dcn20_validate_bandwidth_internal(struct dc *dc, struct dc_state *co
 
 	BW_VAL_TRACE_END_VOLTAGE_LEVEL();
 
-	if (validate_mode != DC_VALIDATE_MODE_AND_PROGRAMMING) {
+	if (fast_validate) {
 		BW_VAL_TRACE_SKIP(fast);
 		goto validate_out;
 	}
 
-	dcn20_calculate_wm(dc, context, pipes, &pipe_cnt, pipe_split_from, vlevel, validate_mode);
+	dcn20_calculate_wm(dc, context, pipes, &pipe_cnt, pipe_split_from, vlevel, fast_validate);
 	dcn20_calculate_dlg_params(dc, context, pipes, pipe_cnt, vlevel);
 
 	BW_VAL_TRACE_END_WATERMARKS();
@@ -2077,7 +2077,7 @@ validate_out:
 }
 
 bool dcn20_validate_bandwidth_fp(struct dc *dc, struct dc_state *context,
-				 enum dc_validate_mode validate_mode, display_e2e_pipe_params_st *pipes)
+				 bool fast_validate, display_e2e_pipe_params_st *pipes)
 {
 	bool voltage_supported = false;
 	bool full_pstate_supported = false;
@@ -2095,11 +2095,12 @@ bool dcn20_validate_bandwidth_fp(struct dc *dc, struct dc_state *context,
 	/*Unsafe due to current pipe merge and split logic*/
 	ASSERT(context != dc->current_state);
 
-	if (validate_mode != DC_VALIDATE_MODE_AND_PROGRAMMING)
-		return dcn20_validate_bandwidth_internal(dc, context, validate_mode, pipes);
+	if (fast_validate) {
+		return dcn20_validate_bandwidth_internal(dc, context, true, pipes);
+	}
 
 	// Best case, we support full UCLK switch latency
-	voltage_supported = dcn20_validate_bandwidth_internal(dc, context, DC_VALIDATE_MODE_AND_PROGRAMMING, pipes);
+	voltage_supported = dcn20_validate_bandwidth_internal(dc, context, false, pipes);
 	full_pstate_supported = context->bw_ctx.bw.dcn.clk.p_state_change_support;
 
 	if (context->bw_ctx.dml.soc.dummy_pstate_latency_us == 0 ||
@@ -2112,7 +2113,7 @@ bool dcn20_validate_bandwidth_fp(struct dc *dc, struct dc_state *context,
 	context->bw_ctx.dml.soc.dram_clock_change_latency_us = context->bw_ctx.dml.soc.dummy_pstate_latency_us;
 
 	memset(pipes, 0, dc->res_pool->pipe_count * sizeof(display_e2e_pipe_params_st));
-	voltage_supported = dcn20_validate_bandwidth_internal(dc, context, DC_VALIDATE_MODE_AND_PROGRAMMING, pipes);
+	voltage_supported = dcn20_validate_bandwidth_internal(dc, context, false, pipes);
 	dummy_pstate_supported = context->bw_ctx.bw.dcn.clk.p_state_change_support;
 
 	if (voltage_supported && (dummy_pstate_supported || !(context->stream_count))) {
@@ -2155,14 +2156,14 @@ void dcn20_fpu_adjust_dppclk(struct vba_vars_st *v,
 int dcn21_populate_dml_pipes_from_context(struct dc *dc,
 					  struct dc_state *context,
 					  display_e2e_pipe_params_st *pipes,
-					  enum dc_validate_mode validate_mode)
+					  bool fast_validate)
 {
 	uint32_t pipe_cnt;
 	int i;
 
 	dc_assert_fp_enabled();
 
-	pipe_cnt = dcn20_populate_dml_pipes_from_context(dc, context, pipes, validate_mode);
+	pipe_cnt = dcn20_populate_dml_pipes_from_context(dc, context, pipes, fast_validate);
 
 	for (i = 0; i < pipe_cnt; i++) {
 
@@ -2238,7 +2239,7 @@ static void dcn21_calculate_wm(struct dc *dc, struct dc_state *context,
 			int *out_pipe_cnt,
 			int *pipe_split_from,
 			int vlevel_req,
-			enum dc_validate_mode validate_mode)
+			bool fast_validate)
 {
 	int pipe_cnt, i, pipe_idx;
 	int vlevel, vlevel_max;
@@ -2280,10 +2281,10 @@ static void dcn21_calculate_wm(struct dc *dc, struct dc_state *context,
 	if (pipe_cnt != pipe_idx) {
 		if (dc->res_pool->funcs->populate_dml_pipes)
 			pipe_cnt = dc->res_pool->funcs->populate_dml_pipes(dc,
-				context, pipes, validate_mode);
+				context, pipes, fast_validate);
 		else
 			pipe_cnt = dcn21_populate_dml_pipes_from_context(dc,
-				context, pipes, validate_mode);
+				context, pipes, fast_validate);
 	}
 
 	*out_pipe_cnt = pipe_cnt;
@@ -2318,7 +2319,7 @@ static void dcn21_calculate_wm(struct dc *dc, struct dc_state *context,
 }
 
 bool dcn21_validate_bandwidth_fp(struct dc *dc, struct dc_state *context,
-				 enum dc_validate_mode validate_mode, display_e2e_pipe_params_st *pipes)
+				 bool fast_validate, display_e2e_pipe_params_st *pipes)
 {
 	bool out = false;
 
@@ -2336,7 +2337,7 @@ bool dcn21_validate_bandwidth_fp(struct dc *dc, struct dc_state *context,
 	/*Unsafe due to current pipe merge and split logic*/
 	ASSERT(context != dc->current_state);
 
-	out = dcn21_fast_validate_bw(dc, context, pipes, &pipe_cnt, pipe_split_from, &vlevel, validate_mode);
+	out = dcn21_fast_validate_bw(dc, context, pipes, &pipe_cnt, pipe_split_from, &vlevel, fast_validate);
 
 	if (pipe_cnt == 0)
 		goto validate_out;
@@ -2346,12 +2347,12 @@ bool dcn21_validate_bandwidth_fp(struct dc *dc, struct dc_state *context,
 
 	BW_VAL_TRACE_END_VOLTAGE_LEVEL();
 
-	if (validate_mode != DC_VALIDATE_MODE_AND_PROGRAMMING) {
+	if (fast_validate) {
 		BW_VAL_TRACE_SKIP(fast);
 		goto validate_out;
 	}
 
-	dcn21_calculate_wm(dc, context, pipes, &pipe_cnt, pipe_split_from, vlevel, validate_mode);
+	dcn21_calculate_wm(dc, context, pipes, &pipe_cnt, pipe_split_from, vlevel, fast_validate);
 	dcn20_calculate_dlg_params(dc, context, pipes, pipe_cnt, vlevel);
 
 	BW_VAL_TRACE_END_WATERMARKS();

@@ -34,7 +34,6 @@
 #include "instructions/xe_gsc_commands.h"
 #include "regs/xe_gsc_regs.h"
 #include "regs/xe_gt_regs.h"
-#include "regs/xe_irq_regs.h"
 
 static struct xe_gt *
 gsc_to_gt(struct xe_gsc *gsc)
@@ -59,8 +58,7 @@ static int memcpy_fw(struct xe_gsc *gsc)
 
 	xe_map_memcpy_from(xe, storage, &gsc->fw.bo->vmap, 0, fw_size);
 	xe_map_memcpy_to(xe, &gsc->private->vmap, 0, storage, fw_size);
-	xe_map_memset(xe, &gsc->private->vmap, fw_size, 0,
-		      xe_bo_size(gsc->private) - fw_size);
+	xe_map_memset(xe, &gsc->private->vmap, fw_size, 0, gsc->private->size - fw_size);
 
 	kfree(storage);
 
@@ -83,8 +81,7 @@ static int emit_gsc_upload(struct xe_gsc *gsc)
 	bb->cs[bb->len++] = GSC_FW_LOAD;
 	bb->cs[bb->len++] = lower_32_bits(offset);
 	bb->cs[bb->len++] = upper_32_bits(offset);
-	bb->cs[bb->len++] = (xe_bo_size(gsc->private) / SZ_4K) |
-		GSC_FW_LOAD_LIMIT_VALID;
+	bb->cs[bb->len++] = (gsc->private->size / SZ_4K) | GSC_FW_LOAD_LIMIT_VALID;
 
 	job = xe_bb_create_job(gsc->q, bb);
 	if (IS_ERR(job)) {
@@ -182,7 +179,7 @@ out_bo:
 
 static int gsc_fw_is_loaded(struct xe_gt *gt)
 {
-	return xe_mmio_read32(&gt->mmio, HECI_FWSTS1(MTL_GSC_HECI1_BASE)) &
+	return xe_mmio_read32(gt, HECI_FWSTS1(MTL_GSC_HECI1_BASE)) &
 			      HECI1_FWSTS1_INIT_COMPLETE;
 }
 
@@ -193,7 +190,7 @@ static int gsc_fw_wait(struct xe_gt *gt)
 	 * executed by the GSCCS. To account for possible submission delays or
 	 * other issues, we use a 500ms timeout in the wait here.
 	 */
-	return xe_mmio_wait32(&gt->mmio, HECI_FWSTS1(MTL_GSC_HECI1_BASE),
+	return xe_mmio_wait32(gt, HECI_FWSTS1(MTL_GSC_HECI1_BASE),
 			      HECI1_FWSTS1_INIT_COMPLETE,
 			      HECI1_FWSTS1_INIT_COMPLETE,
 			      500 * USEC_PER_MSEC, NULL, false);
@@ -263,17 +260,19 @@ static int gsc_upload_and_init(struct xe_gsc *gsc)
 {
 	struct xe_gt *gt = gsc_to_gt(gsc);
 	struct xe_tile *tile = gt_to_tile(gt);
-	unsigned int fw_ref;
 	int ret;
 
 	if (XE_WA(tile->primary_gt, 14018094691)) {
-		fw_ref = xe_force_wake_get(gt_to_fw(tile->primary_gt), XE_FORCEWAKE_ALL);
+		ret = xe_force_wake_get(gt_to_fw(tile->primary_gt), XE_FORCEWAKE_ALL);
 
 		/*
 		 * If the forcewake fails we want to keep going, because the worst
 		 * case outcome in failing to apply the WA is that PXP won't work,
-		 * which is not fatal. Forcewake get warns implicitly in case of failure
+		 * which is not fatal. We still throw a warning so the issue is
+		 * seen if it happens.
 		 */
+		xe_gt_WARN_ON(tile->primary_gt, ret);
+
 		xe_gt_mcr_multicast_write(tile->primary_gt,
 					  EU_SYSTOLIC_LIC_THROTTLE_CTL_WITH_LOCK,
 					  EU_SYSTOLIC_LIC_THROTTLE_CTL_LOCK_BIT);
@@ -282,7 +281,7 @@ static int gsc_upload_and_init(struct xe_gsc *gsc)
 	ret = gsc_upload(gsc);
 
 	if (XE_WA(tile->primary_gt, 14018094691))
-		xe_force_wake_put(gt_to_fw(tile->primary_gt), fw_ref);
+		xe_force_wake_put(gt_to_fw(tile->primary_gt), XE_FORCEWAKE_ALL);
 
 	if (ret)
 		return ret;
@@ -331,7 +330,7 @@ static int gsc_er_complete(struct xe_gt *gt)
 	 * so in that scenario we're always guaranteed to find the correct
 	 * value.
 	 */
-	er_status = xe_mmio_read32(&gt->mmio, GSCI_TIMER_STATUS) & GSCI_TIMER_STATUS_VALUE;
+	er_status = xe_mmio_read32(gt, GSCI_TIMER_STATUS) & GSCI_TIMER_STATUS_VALUE;
 
 	if (er_status == GSCI_TIMER_STATUS_TIMER_EXPIRED) {
 		/*
@@ -352,7 +351,6 @@ static void gsc_work(struct work_struct *work)
 	struct xe_gsc *gsc = container_of(work, typeof(*gsc), work);
 	struct xe_gt *gt = gsc_to_gt(gsc);
 	struct xe_device *xe = gt_to_xe(gt);
-	unsigned int fw_ref;
 	u32 actions;
 	int ret;
 
@@ -362,7 +360,7 @@ static void gsc_work(struct work_struct *work)
 	spin_unlock_irq(&gsc->lock);
 
 	xe_pm_runtime_get(xe);
-	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GSC);
+	xe_gt_WARN_ON(gt, xe_force_wake_get(gt_to_fw(gt), XE_FW_GSC));
 
 	if (actions & GSC_ACTION_ER_COMPLETE) {
 		ret = gsc_er_complete(gt);
@@ -382,7 +380,7 @@ static void gsc_work(struct work_struct *work)
 		xe_gsc_proxy_request_handler(gsc);
 
 out:
-	xe_force_wake_put(gt_to_fw(gt), fw_ref);
+	xe_force_wake_put(gt_to_fw(gt), XE_FW_GSC);
 	xe_pm_runtime_put(xe);
 }
 
@@ -557,6 +555,15 @@ void xe_gsc_wait_for_worker_completion(struct xe_gsc *gsc)
 		flush_work(&gsc->work);
 }
 
+/**
+ * xe_gsc_remove() - Clean up the GSC structures before driver removal
+ * @gsc: the GSC uC
+ */
+void xe_gsc_remove(struct xe_gsc *gsc)
+{
+	xe_gsc_proxy_remove(gsc);
+}
+
 void xe_gsc_stop_prepare(struct xe_gsc *gsc)
 {
 	struct xe_gt *gt = gsc_to_gt(gsc);
@@ -596,11 +603,11 @@ void xe_gsc_wa_14015076503(struct xe_gt *gt, bool prep)
 	if (!XE_WA(gt, 14015076503) || !gsc_fw_is_loaded(gt))
 		return;
 
-	xe_mmio_rmw32(&gt->mmio, HECI_H_GS1(MTL_GSC_HECI2_BASE), gs1_clr, gs1_set);
+	xe_mmio_rmw32(gt, HECI_H_GS1(MTL_GSC_HECI2_BASE), gs1_clr, gs1_set);
 
 	if (prep) {
 		/* make sure the reset bit is clear when writing the CSR reg */
-		xe_mmio_rmw32(&gt->mmio, HECI_H_CSR(MTL_GSC_HECI2_BASE),
+		xe_mmio_rmw32(gt, HECI_H_CSR(MTL_GSC_HECI2_BASE),
 			      HECI_H_CSR_RST, HECI_H_CSR_IG);
 		msleep(200);
 	}
@@ -614,8 +621,7 @@ void xe_gsc_wa_14015076503(struct xe_gt *gt, bool prep)
 void xe_gsc_print_info(struct xe_gsc *gsc, struct drm_printer *p)
 {
 	struct xe_gt *gt = gsc_to_gt(gsc);
-	struct xe_mmio *mmio = &gt->mmio;
-	unsigned int fw_ref;
+	int err;
 
 	xe_uc_fw_print(&gsc->fw, p);
 
@@ -624,17 +630,17 @@ void xe_gsc_print_info(struct xe_gsc *gsc, struct drm_printer *p)
 	if (!xe_uc_fw_is_enabled(&gsc->fw))
 		return;
 
-	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GSC);
-	if (!fw_ref)
+	err = xe_force_wake_get(gt_to_fw(gt), XE_FW_GSC);
+	if (err)
 		return;
 
 	drm_printf(p, "\nHECI1 FWSTS: 0x%08x 0x%08x 0x%08x 0x%08x 0x%08x 0x%08x\n",
-			xe_mmio_read32(mmio, HECI_FWSTS1(MTL_GSC_HECI1_BASE)),
-			xe_mmio_read32(mmio, HECI_FWSTS2(MTL_GSC_HECI1_BASE)),
-			xe_mmio_read32(mmio, HECI_FWSTS3(MTL_GSC_HECI1_BASE)),
-			xe_mmio_read32(mmio, HECI_FWSTS4(MTL_GSC_HECI1_BASE)),
-			xe_mmio_read32(mmio, HECI_FWSTS5(MTL_GSC_HECI1_BASE)),
-			xe_mmio_read32(mmio, HECI_FWSTS6(MTL_GSC_HECI1_BASE)));
+			xe_mmio_read32(gt, HECI_FWSTS1(MTL_GSC_HECI1_BASE)),
+			xe_mmio_read32(gt, HECI_FWSTS2(MTL_GSC_HECI1_BASE)),
+			xe_mmio_read32(gt, HECI_FWSTS3(MTL_GSC_HECI1_BASE)),
+			xe_mmio_read32(gt, HECI_FWSTS4(MTL_GSC_HECI1_BASE)),
+			xe_mmio_read32(gt, HECI_FWSTS5(MTL_GSC_HECI1_BASE)),
+			xe_mmio_read32(gt, HECI_FWSTS6(MTL_GSC_HECI1_BASE)));
 
-	xe_force_wake_put(gt_to_fw(gt), fw_ref);
+	xe_force_wake_put(gt_to_fw(gt), XE_FW_GSC);
 }

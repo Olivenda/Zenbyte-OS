@@ -19,6 +19,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
+#include <linux/platform_data/max6639.h>
 #include <linux/regmap.h>
 #include <linux/util_macros.h>
 
@@ -80,7 +81,6 @@ struct max6639_data {
 	/* Register values initialized only once */
 	u8 ppr[MAX6639_NUM_CHANNELS];	/* Pulses per rotation 0..3 for 1..4 ppr */
 	u8 rpm_range[MAX6639_NUM_CHANNELS]; /* Index in above rpm_ranges table */
-	u32 target_rpm[MAX6639_NUM_CHANNELS];
 
 	/* Optional regulator for FAN supply */
 	struct regulator *reg;
@@ -531,54 +531,14 @@ static int rpm_range_to_reg(int range)
 	return 1; /* default: 4000 RPM */
 }
 
-static int max6639_probe_child_from_dt(struct i2c_client *client,
-				       struct device_node *child,
-				       struct max6639_data *data)
-
-{
-	struct device *dev = &client->dev;
-	u32 i;
-	int err, val;
-
-	err = of_property_read_u32(child, "reg", &i);
-	if (err) {
-		dev_err(dev, "missing reg property of %pOFn\n", child);
-		return err;
-	}
-
-	if (i > 1) {
-		dev_err(dev, "Invalid fan index reg %d\n", i);
-		return -EINVAL;
-	}
-
-	err = of_property_read_u32(child, "pulses-per-revolution", &val);
-	if (!err) {
-		if (val < 1 || val > 5) {
-			dev_err(dev, "invalid pulses-per-revolution %d of %pOFn\n", val, child);
-			return -EINVAL;
-		}
-		data->ppr[i] = val;
-	}
-
-	err = of_property_read_u32(child, "max-rpm", &val);
-	if (!err)
-		data->rpm_range[i] = rpm_range_to_reg(val);
-
-	err = of_property_read_u32(child, "target-rpm", &val);
-	if (!err)
-		data->target_rpm[i] = val;
-
-	return 0;
-}
-
 static int max6639_init_client(struct i2c_client *client,
 			       struct max6639_data *data)
 {
-	struct device *dev = &client->dev;
-	const struct device_node *np = dev->of_node;
-	struct device_node *child;
-	int i, err;
-	u8 target_duty;
+	struct max6639_platform_data *max6639_info =
+		dev_get_platdata(&client->dev);
+	int i;
+	int rpm_range = 1; /* default: 4000 RPM */
+	int err, ppr;
 
 	/* Reset chip to default values, see below for GCONFIG setup */
 	err = regmap_write(data->regmap, MAX6639_REG_GCONFIG, MAX6639_GCONFIG_POR);
@@ -586,31 +546,21 @@ static int max6639_init_client(struct i2c_client *client,
 		return err;
 
 	/* Fans pulse per revolution is 2 by default */
-	data->ppr[0] = 2;
-	data->ppr[1] = 2;
+	if (max6639_info && max6639_info->ppr > 0 &&
+			max6639_info->ppr < 5)
+		ppr = max6639_info->ppr;
+	else
+		ppr = 2;
 
-	/* default: 4000 RPM */
-	data->rpm_range[0] = 1;
-	data->rpm_range[1] = 1;
-	data->target_rpm[0] = 4000;
-	data->target_rpm[1] = 4000;
+	data->ppr[0] = ppr;
+	data->ppr[1] = ppr;
 
-	for_each_child_of_node(np, child) {
-		if (strcmp(child->name, "fan"))
-			continue;
-
-		err = max6639_probe_child_from_dt(client, child, data);
-		if (err) {
-			of_node_put(child);
-			return err;
-		}
-	}
+	if (max6639_info)
+		rpm_range = rpm_range_to_reg(max6639_info->rpm_range);
+	data->rpm_range[0] = rpm_range;
+	data->rpm_range[1] = rpm_range;
 
 	for (i = 0; i < MAX6639_NUM_CHANNELS; i++) {
-		err = regmap_set_bits(data->regmap, MAX6639_REG_OUTPUT_MASK, BIT(1 - i));
-		if (err)
-			return err;
-
 		/* Set Fan pulse per revolution */
 		err = max6639_set_ppr(data, i, data->ppr[i]);
 		if (err)
@@ -623,7 +573,12 @@ static int max6639_init_client(struct i2c_client *client,
 			return err;
 
 		/* Fans PWM polarity high by default */
-		err = regmap_write(data->regmap, MAX6639_REG_FAN_CONFIG2a(i), 0x00);
+		if (max6639_info) {
+			if (max6639_info->pwm_polarity == 0)
+				err = regmap_write(data->regmap, MAX6639_REG_FAN_CONFIG2a(i), 0x00);
+			else
+				err = regmap_write(data->regmap, MAX6639_REG_FAN_CONFIG2a(i), 0x02);
+		}
 		if (err)
 			return err;
 
@@ -647,12 +602,8 @@ static int max6639_init_client(struct i2c_client *client,
 		if (err)
 			return err;
 
-		/* Set PWM based on target RPM if specified */
-		if (data->target_rpm[i] >  rpm_ranges[data->rpm_range[i]])
-			data->target_rpm[i] = rpm_ranges[data->rpm_range[i]];
-
-		target_duty = 120 * data->target_rpm[i] / rpm_ranges[data->rpm_range[i]];
-		err = regmap_write(data->regmap, MAX6639_REG_TARGTDUTY(i), target_duty);
+		/* PWM 120/120 (i.e. 100%) */
+		err = regmap_write(data->regmap, MAX6639_REG_TARGTDUTY(i), 120);
 		if (err)
 			return err;
 	}

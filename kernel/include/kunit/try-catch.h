@@ -47,7 +47,6 @@ struct kunit_try_catch {
 	int try_result;
 	kunit_try_catch_func_t try;
 	kunit_try_catch_func_t catch;
-	unsigned long timeout;
 	void *context;
 };
 

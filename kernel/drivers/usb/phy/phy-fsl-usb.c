@@ -12,7 +12,6 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 #include <linux/proc_fs.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
@@ -530,7 +529,7 @@ int fsl_otg_start_gadget(struct otg_fsm *fsm, int on)
 	if (!otg->gadget || !otg->gadget->dev.parent)
 		return -ENODEV;
 
-	VDBG("gadget %s\n", str_on_off(on));
+	VDBG("gadget %s\n", on ? "on" : "off");
 	dev = otg->gadget->dev.parent;
 
 	if (on) {
@@ -1003,7 +1002,7 @@ static void fsl_otg_remove(struct platform_device *pdev)
 
 struct platform_driver fsl_otg_driver = {
 	.probe = fsl_otg_probe,
-	.remove = fsl_otg_remove,
+	.remove_new = fsl_otg_remove,
 	.driver = {
 		.name = driver_name,
 	},

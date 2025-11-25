@@ -8,7 +8,6 @@ title: NXP PCF2127 Real Time Clock
 
 allOf:
   - $ref: rtc.yaml#
-  - $ref: /schemas/spi/spi-peripheral-props.yaml#
 
 maintainers:
   - Alexandre Belloni <alexandre.belloni@bootlin.com>
@@ -35,7 +34,7 @@ required:
   - compatible
   - reg
 
-unevaluatedProperties: false
+additionalProperties: false
 
 examples:
   - |

@@ -543,7 +543,7 @@ static void au1xmmc_cmd_complete(struct au1xmmc_host *host, u32 status)
 					cmd->resp[i] |= (r[i + 1] & 0xFF000000) >> 24;
 			}
 		} else {
-			/* Technically, we should be getting all 48 bits of
+			/* Techincally, we should be getting all 48 bits of
 			 * the response (SD_RESP1 + SD_RESP2), but because
 			 * our response omits the CRC, our data ends up
 			 * being shifted 8 bits to the right.  In this case,
@@ -937,10 +937,11 @@ static int au1xmmc_probe(struct platform_device *pdev)
 	struct resource *r;
 	int ret, iflag;
 
-	mmc = devm_mmc_alloc_host(&pdev->dev, sizeof(*host));
+	mmc = mmc_alloc_host(sizeof(struct au1xmmc_host), &pdev->dev);
 	if (!mmc) {
 		dev_err(&pdev->dev, "no memory for mmc_host\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out0;
 	}
 
 	host = mmc_priv(mmc);
@@ -952,14 +953,14 @@ static int au1xmmc_probe(struct platform_device *pdev)
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!r) {
 		dev_err(&pdev->dev, "no mmio defined\n");
-		return ret;
+		goto out1;
 	}
 
 	host->ioarea = request_mem_region(r->start, resource_size(r),
 					   pdev->name);
 	if (!host->ioarea) {
 		dev_err(&pdev->dev, "mmio already in use\n");
-		return ret;
+		goto out1;
 	}
 
 	host->iobase = ioremap(r->start, 0x3c);
@@ -1108,6 +1109,9 @@ out3:
 out2:
 	release_resource(host->ioarea);
 	kfree(host->ioarea);
+out1:
+	mmc_free_host(mmc);
+out0:
 	return ret;
 }
 
@@ -1147,6 +1151,8 @@ static void au1xmmc_remove(struct platform_device *pdev)
 		iounmap((void *)host->iobase);
 		release_resource(host->ioarea);
 		kfree(host->ioarea);
+
+		mmc_free_host(host->mmc);
 	}
 }
 
@@ -1179,7 +1185,7 @@ static int au1xmmc_resume(struct platform_device *pdev)
 
 static struct platform_driver au1xmmc_driver = {
 	.probe         = au1xmmc_probe,
-	.remove        = au1xmmc_remove,
+	.remove_new    = au1xmmc_remove,
 	.suspend       = au1xmmc_suspend,
 	.resume        = au1xmmc_resume,
 	.driver        = {

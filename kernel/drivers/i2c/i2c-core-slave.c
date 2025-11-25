@@ -11,7 +11,6 @@
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/of.h>
-#include <linux/property.h>
 
 #include "i2c-core.h"
 
@@ -109,18 +108,15 @@ EXPORT_SYMBOL_GPL(i2c_slave_event);
  */
 bool i2c_detect_slave_mode(struct device *dev)
 {
-	struct fwnode_handle *fwnode = dev_fwnode(dev);
-
-	if (is_of_node(fwnode)) {
-		struct fwnode_handle *child __free(fwnode_handle) = NULL;
+	if (IS_BUILTIN(CONFIG_OF) && dev->of_node) {
 		u32 reg;
 
-		fwnode_for_each_child_node(fwnode, child) {
-			fwnode_property_read_u32(child, "reg", &reg);
+		for_each_child_of_node_scoped(dev->of_node, child) {
+			of_property_read_u32(child, "reg", &reg);
 			if (reg & I2C_OWN_SLAVE_ADDRESS)
 				return true;
 		}
-	} else if (is_acpi_device_node(fwnode)) {
+	} else if (IS_BUILTIN(CONFIG_ACPI) && ACPI_HANDLE(dev)) {
 		dev_dbg(dev, "ACPI slave is not supported yet\n");
 	}
 	return false;

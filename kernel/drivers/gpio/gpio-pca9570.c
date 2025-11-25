@@ -88,7 +88,7 @@ static int pca9570_get(struct gpio_chip *chip, unsigned offset)
 	return !!(buffer & BIT(offset));
 }
 
-static int pca9570_set(struct gpio_chip *chip, unsigned int offset, int value)
+static void pca9570_set(struct gpio_chip *chip, unsigned offset, int value)
 {
 	struct pca9570 *gpio = gpiochip_get_data(chip);
 	u8 buffer;
@@ -110,7 +110,6 @@ static int pca9570_set(struct gpio_chip *chip, unsigned int offset, int value)
 
 out:
 	mutex_unlock(&gpio->lock);
-	return ret;
 }
 
 static int pca9570_probe(struct i2c_client *client)

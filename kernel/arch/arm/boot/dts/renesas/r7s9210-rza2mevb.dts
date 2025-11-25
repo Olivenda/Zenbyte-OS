@@ -55,7 +55,8 @@
 		pinctrl-0 = <&keyboard_pins>;
 
 		key-3 {
-			interrupts-extended = <&irqc 0 IRQ_TYPE_EDGE_BOTH>;
+			interrupt-parent = <&irqc>;
+			interrupts = <0 IRQ_TYPE_EDGE_BOTH>;
 			linux,code = <KEY_3>;
 			label = "SW3";
 			wakeup-source;

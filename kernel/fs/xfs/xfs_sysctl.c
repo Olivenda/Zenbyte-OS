@@ -66,7 +66,7 @@ xfs_deprecated_dointvec_minmax(
 	return proc_dointvec_minmax(ctl, write, buffer, lenp, ppos);
 }
 
-static const struct ctl_table xfs_table[] = {
+static struct ctl_table xfs_table[] = {
 	{
 		.procname	= "irix_sgid_inherit",
 		.data		= &xfs_params.sgid_inherit.val,

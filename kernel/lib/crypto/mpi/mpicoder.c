@@ -19,9 +19,8 @@
  */
 
 #include <linux/bitops.h>
-#include <linux/byteorder/generic.h>
 #include <linux/count_zeros.h>
-#include <linux/export.h>
+#include <linux/byteorder/generic.h>
 #include <linux/scatterlist.h>
 #include <linux/string.h>
 #include "mpi-internal.h"

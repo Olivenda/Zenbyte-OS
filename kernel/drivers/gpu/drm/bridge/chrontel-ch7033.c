@@ -215,7 +215,7 @@ static enum drm_connector_status ch7033_connector_detect(
 {
 	struct ch7033_priv *priv = conn_to_ch7033_priv(connector);
 
-	return drm_bridge_detect(priv->next_bridge, connector);
+	return drm_bridge_detect(priv->next_bridge);
 }
 
 static const struct drm_connector_funcs ch7033_connector_funcs = {
@@ -268,14 +268,13 @@ static void ch7033_hpd_event(void *arg, enum drm_connector_status status)
 }
 
 static int ch7033_bridge_attach(struct drm_bridge *bridge,
-				struct drm_encoder *encoder,
 				enum drm_bridge_attach_flags flags)
 {
 	struct ch7033_priv *priv = bridge_to_ch7033_priv(bridge);
 	struct drm_connector *connector = &priv->connector;
 	int ret;
 
-	ret = drm_bridge_attach(encoder, priv->next_bridge, bridge,
+	ret = drm_bridge_attach(bridge->encoder, priv->next_bridge, bridge,
 				DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 	if (ret)
 		return ret;
@@ -306,7 +305,7 @@ static int ch7033_bridge_attach(struct drm_bridge *bridge,
 		return ret;
 	}
 
-	return drm_connector_attach_encoder(&priv->connector, encoder);
+	return drm_connector_attach_encoder(&priv->connector, bridge->encoder);
 }
 
 static void ch7033_bridge_detach(struct drm_bridge *bridge)
@@ -536,10 +535,9 @@ static int ch7033_probe(struct i2c_client *client)
 	unsigned int val;
 	int ret;
 
-	priv = devm_drm_bridge_alloc(dev, struct ch7033_priv, bridge,
-				     &ch7033_bridge_funcs);
-	if (IS_ERR(priv))
-		return PTR_ERR(priv);
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
 
 	dev_set_drvdata(dev, priv);
 
@@ -576,6 +574,7 @@ static int ch7033_probe(struct i2c_client *client)
 	}
 
 	INIT_LIST_HEAD(&priv->bridge.list);
+	priv->bridge.funcs = &ch7033_bridge_funcs;
 	priv->bridge.of_node = dev->of_node;
 	drm_bridge_add(&priv->bridge);
 
@@ -598,7 +597,7 @@ static const struct of_device_id ch7033_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, ch7033_dt_ids);
 
 static const struct i2c_device_id ch7033_ids[] = {
-	{ "ch7033" },
+	{ "ch7033", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ch7033_ids);

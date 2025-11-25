@@ -134,17 +134,27 @@ int gfs2_make_fs_rw(struct gfs2_sbd *sdp)
 {
 	struct gfs2_inode *ip = GFS2_I(sdp->sd_jdesc->jd_inode);
 	struct gfs2_glock *j_gl = ip->i_gl;
+	struct gfs2_log_header_host head;
 	int error;
 
 	j_gl->gl_ops->go_inval(j_gl, DIO_METADATA);
 	if (gfs2_withdrawing_or_withdrawn(sdp))
 		return -EIO;
 
-	if (sdp->sd_log_sequence == 0) {
-		fs_err(sdp, "unknown status of our own journal jid %d",
-		       sdp->sd_lockstruct.ls_jid);
+	error = gfs2_find_jhead(sdp->sd_jdesc, &head, false);
+	if (error) {
+		gfs2_consist(sdp);
+		return error;
+	}
+
+	if (!(head.lh_flags & GFS2_LOG_HEAD_UNMOUNT)) {
+		gfs2_consist(sdp);
 		return -EIO;
 	}
+
+	/*  Initialize some head of the log stuff  */
+	sdp->sd_log_sequence = head.lh_sequence + 1;
+	gfs2_log_pointers_init(sdp, head.lh_blkno);
 
 	error = gfs2_quota_init(sdp);
 	if (!error && gfs2_withdrawing_or_withdrawn(sdp))
@@ -360,7 +370,7 @@ static int gfs2_lock_fs_check_clean(struct gfs2_sbd *sdp)
 		error = gfs2_jdesc_check(jd);
 		if (error)
 			break;
-		error = gfs2_find_jhead(jd, &lh);
+		error = gfs2_find_jhead(jd, &lh, false);
 		if (error)
 			break;
 		if (!(lh.lh_flags & GFS2_LOG_HEAD_UNMOUNT)) {
@@ -487,9 +497,11 @@ static void gfs2_dirty_inode(struct inode *inode, int flags)
 	int need_endtrans = 0;
 	int ret;
 
-	/* This can only happen during incomplete inode creation. */
-	if (unlikely(!ip->i_gl))
+	if (unlikely(!ip->i_gl)) {
+		/* This can only happen during incomplete inode creation. */
+		BUG_ON(!test_bit(GIF_ALLOC_FAILED, &ip->i_flags));
 		return;
+	}
 
 	if (gfs2_withdrawing_or_withdrawn(sdp))
 		return;
@@ -662,7 +674,7 @@ static int gfs2_sync_fs(struct super_block *sb, int wait)
 	return sdp->sd_log_error;
 }
 
-static int gfs2_do_thaw(struct gfs2_sbd *sdp, enum freeze_holder who, const void *freeze_owner)
+static int gfs2_do_thaw(struct gfs2_sbd *sdp, enum freeze_holder who)
 {
 	struct super_block *sb = sdp->sd_vfs;
 	int error;
@@ -670,7 +682,7 @@ static int gfs2_do_thaw(struct gfs2_sbd *sdp, enum freeze_holder who, const void
 	error = gfs2_freeze_lock_shared(sdp);
 	if (error)
 		goto fail;
-	error = thaw_super(sb, who, freeze_owner);
+	error = thaw_super(sb, who);
 	if (!error)
 		return 0;
 
@@ -691,14 +703,14 @@ void gfs2_freeze_func(struct work_struct *work)
 	if (test_bit(SDF_FROZEN, &sdp->sd_flags))
 		goto freeze_failed;
 
-	error = freeze_super(sb, FREEZE_HOLDER_USERSPACE, NULL);
+	error = freeze_super(sb, FREEZE_HOLDER_USERSPACE);
 	if (error)
 		goto freeze_failed;
 
 	gfs2_freeze_unlock(sdp);
 	set_bit(SDF_FROZEN, &sdp->sd_flags);
 
-	error = gfs2_do_thaw(sdp, FREEZE_HOLDER_USERSPACE, NULL);
+	error = gfs2_do_thaw(sdp, FREEZE_HOLDER_USERSPACE);
 	if (error)
 		goto out;
 
@@ -717,12 +729,10 @@ out:
  * gfs2_freeze_super - prevent further writes to the filesystem
  * @sb: the VFS structure for the filesystem
  * @who: freeze flags
- * @freeze_owner: owner of the freeze
  *
  */
 
-static int gfs2_freeze_super(struct super_block *sb, enum freeze_holder who,
-			     const void *freeze_owner)
+static int gfs2_freeze_super(struct super_block *sb, enum freeze_holder who)
 {
 	struct gfs2_sbd *sdp = sb->s_fs_info;
 	int error;
@@ -735,7 +745,7 @@ static int gfs2_freeze_super(struct super_block *sb, enum freeze_holder who,
 	}
 
 	for (;;) {
-		error = freeze_super(sb, who, freeze_owner);
+		error = freeze_super(sb, who);
 		if (error) {
 			fs_info(sdp, "GFS2: couldn't freeze filesystem: %d\n",
 				error);
@@ -749,7 +759,7 @@ static int gfs2_freeze_super(struct super_block *sb, enum freeze_holder who,
 			break;
 		}
 
-		error = gfs2_do_thaw(sdp, who, freeze_owner);
+		error = gfs2_do_thaw(sdp, who);
 		if (error)
 			goto out;
 
@@ -788,12 +798,10 @@ static int gfs2_freeze_fs(struct super_block *sb)
  * gfs2_thaw_super - reallow writes to the filesystem
  * @sb: the VFS structure for the filesystem
  * @who: freeze flags
- * @freeze_owner: owner of the freeze
  *
  */
 
-static int gfs2_thaw_super(struct super_block *sb, enum freeze_holder who,
-			   const void *freeze_owner)
+static int gfs2_thaw_super(struct super_block *sb, enum freeze_holder who)
 {
 	struct gfs2_sbd *sdp = sb->s_fs_info;
 	int error;
@@ -808,7 +816,7 @@ static int gfs2_thaw_super(struct super_block *sb, enum freeze_holder who,
 	atomic_inc(&sb->s_active);
 	gfs2_freeze_unlock(sdp);
 
-	error = gfs2_do_thaw(sdp, who, freeze_owner);
+	error = gfs2_do_thaw(sdp, who);
 
 	if (!error) {
 		clear_bit(SDF_FREEZE_INITIATOR, &sdp->sd_flags);
@@ -1024,7 +1032,7 @@ static int gfs2_drop_inode(struct inode *inode)
 	if (inode->i_nlink &&
 	    gfs2_holder_initialized(&ip->i_iopen_gh)) {
 		struct gfs2_glock *gl = ip->i_iopen_gh.gh_gl;
-		if (glock_needs_demote(gl))
+		if (test_bit(GLF_DEMOTE, &gl->gl_flags))
 			clear_nlink(inode);
 	}
 
@@ -1183,7 +1191,7 @@ static void gfs2_glock_put_eventually(struct gfs2_glock *gl)
 		gfs2_glock_put(gl);
 }
 
-static enum evict_behavior gfs2_upgrade_iopen_glock(struct inode *inode)
+static bool gfs2_upgrade_iopen_glock(struct inode *inode)
 {
 	struct gfs2_inode *ip = GFS2_I(inode);
 	struct gfs2_sbd *sdp = GFS2_SB(inode);
@@ -1198,9 +1206,9 @@ static enum evict_behavior gfs2_upgrade_iopen_glock(struct inode *inode)
 	 * exclusive access to the iopen glock here.
 	 *
 	 * Otherwise, the other nodes holding the lock will be notified about
-	 * our locking request (see iopen_go_callback()).  If they do not have
-	 * the inode open, they are expected to evict the cached inode and
-	 * release the lock, allowing us to proceed.
+	 * our locking request.  If they do not have the inode open, they are
+	 * expected to evict the cached inode and release the lock, allowing us
+	 * to proceed.
 	 *
 	 * Otherwise, if they cannot evict the inode, they are expected to poke
 	 * the inode glock (note: not the iopen glock).  We will notice that
@@ -1216,22 +1224,17 @@ static enum evict_behavior gfs2_upgrade_iopen_glock(struct inode *inode)
 	gfs2_holder_reinit(LM_ST_EXCLUSIVE, GL_ASYNC | GL_NOCACHE, gh);
 	error = gfs2_glock_nq(gh);
 	if (error)
-		return EVICT_SHOULD_SKIP_DELETE;
+		return false;
 
 	wait_event_interruptible_timeout(sdp->sd_async_glock_wait,
 		!test_bit(HIF_WAIT, &gh->gh_iflags) ||
-		glock_needs_demote(ip->i_gl),
+		test_bit(GLF_DEMOTE, &ip->i_gl->gl_flags),
 		5 * HZ);
 	if (!test_bit(HIF_HOLDER, &gh->gh_iflags)) {
 		gfs2_glock_dq(gh);
-		if (glock_needs_demote(ip->i_gl))
-			return EVICT_SHOULD_SKIP_DELETE;
-		return EVICT_SHOULD_DEFER_DELETE;
+		return false;
 	}
-	error = gfs2_glock_holder_ready(gh);
-	if (error)
-		return EVICT_SHOULD_SKIP_DELETE;
-	return EVICT_SHOULD_DELETE;
+	return gfs2_glock_holder_ready(gh) == 0;
 }
 
 /**
@@ -1262,8 +1265,12 @@ static enum evict_behavior evict_should_delete(struct inode *inode,
 
 	/* Must not read inode block until block type has been verified */
 	ret = gfs2_glock_nq_init(ip->i_gl, LM_ST_EXCLUSIVE, GL_SKIP, gh);
-	if (unlikely(ret))
-		return EVICT_SHOULD_SKIP_DELETE;
+	if (unlikely(ret)) {
+		glock_clear_object(ip->i_iopen_gh.gh_gl, ip);
+		ip->i_iopen_gh.gh_flags |= GL_NOCACHE;
+		gfs2_glock_dq_uninit(&ip->i_iopen_gh);
+		return EVICT_SHOULD_DEFER_DELETE;
+	}
 
 	if (gfs2_inode_already_deleted(ip->i_gl, ip->i_no_formal_ino))
 		return EVICT_SHOULD_SKIP_DELETE;
@@ -1282,8 +1289,12 @@ static enum evict_behavior evict_should_delete(struct inode *inode,
 		return EVICT_SHOULD_SKIP_DELETE;
 
 	if (gfs2_holder_initialized(&ip->i_iopen_gh) &&
-	    test_bit(HIF_HOLDER, &ip->i_iopen_gh.gh_iflags))
-		return gfs2_upgrade_iopen_glock(inode);
+	    test_bit(HIF_HOLDER, &ip->i_iopen_gh.gh_iflags)) {
+		if (!gfs2_upgrade_iopen_glock(inode)) {
+			gfs2_holder_uninit(&ip->i_iopen_gh);
+			return EVICT_SHOULD_SKIP_DELETE;
+		}
+	}
 	return EVICT_SHOULD_DELETE;
 }
 
@@ -1398,7 +1409,6 @@ static void gfs2_evict_inode(struct inode *inode)
 	enum evict_behavior behavior;
 	int ret;
 
-	gfs2_holder_mark_uninitialized(&gh);
 	if (inode->i_nlink || sb_rdonly(sb) || !ip->i_no_addr)
 		goto out;
 
@@ -1410,19 +1420,10 @@ static void gfs2_evict_inode(struct inode *inode)
 	if (!sdp->sd_jdesc)
 		goto out;
 
+	gfs2_holder_mark_uninitialized(&gh);
 	behavior = evict_should_delete(inode, &gh);
-	if (behavior == EVICT_SHOULD_DEFER_DELETE &&
-	    !test_bit(SDF_KILL, &sdp->sd_flags)) {
-		struct gfs2_glock *io_gl = ip->i_iopen_gh.gh_gl;
-
-		if (io_gl) {
-			gfs2_glock_hold(io_gl);
-			if (!gfs2_queue_verify_delete(io_gl, true))
-				gfs2_glock_put(io_gl);
-			goto out;
-		}
-		behavior = EVICT_SHOULD_SKIP_DELETE;
-	}
+	if (behavior == EVICT_SHOULD_DEFER_DELETE)
+		goto out;
 	if (behavior == EVICT_SHOULD_DELETE)
 		ret = evict_unlinked_inode(inode);
 	else
@@ -1431,11 +1432,11 @@ static void gfs2_evict_inode(struct inode *inode)
 	if (gfs2_rs_active(&ip->i_res))
 		gfs2_rs_deltree(&ip->i_res);
 
+	if (gfs2_holder_initialized(&gh))
+		gfs2_glock_dq_uninit(&gh);
 	if (ret && ret != GLR_TRYFAILED && ret != -EROFS)
 		fs_warn(sdp, "gfs2_evict_inode: %d\n", ret);
 out:
-	if (gfs2_holder_initialized(&gh))
-		gfs2_glock_dq_uninit(&gh);
 	truncate_inode_pages_final(&inode->i_data);
 	if (ip->i_qadata)
 		gfs2_assert_warn(sdp, ip->i_qadata->qa_ref == 0);

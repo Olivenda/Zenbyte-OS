@@ -11,13 +11,11 @@
  * This has not yet undergone a rigorous security audit.
  */
 
+#include <linux/namei.h>
+#include <linux/scatterlist.h>
 #include <crypto/hash.h>
 #include <crypto/sha2.h>
 #include <crypto/skcipher.h>
-#include <linux/export.h>
-#include <linux/namei.h>
-#include <linux/scatterlist.h>
-
 #include "fscrypt_private.h"
 
 /*
@@ -94,12 +92,13 @@ static inline bool fscrypt_is_dot_dotdot(const struct qstr *str)
 int fscrypt_fname_encrypt(const struct inode *inode, const struct qstr *iname,
 			  u8 *out, unsigned int olen)
 {
+	struct skcipher_request *req = NULL;
+	DECLARE_CRYPTO_WAIT(wait);
 	const struct fscrypt_inode_info *ci = inode->i_crypt_info;
-	struct crypto_sync_skcipher *tfm = ci->ci_enc_key.tfm;
-	SYNC_SKCIPHER_REQUEST_ON_STACK(req, tfm);
+	struct crypto_skcipher *tfm = ci->ci_enc_key.tfm;
 	union fscrypt_iv iv;
 	struct scatterlist sg;
-	int err;
+	int res;
 
 	/*
 	 * Copy the filename to the output buffer for encrypting in-place and
@@ -110,17 +109,28 @@ int fscrypt_fname_encrypt(const struct inode *inode, const struct qstr *iname,
 	memcpy(out, iname->name, iname->len);
 	memset(out + iname->len, 0, olen - iname->len);
 
+	/* Initialize the IV */
 	fscrypt_generate_iv(&iv, 0, ci);
 
-	skcipher_request_set_callback(
-		req, CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
-		NULL, NULL);
+	/* Set up the encryption request */
+	req = skcipher_request_alloc(tfm, GFP_NOFS);
+	if (!req)
+		return -ENOMEM;
+	skcipher_request_set_callback(req,
+			CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
+			crypto_req_done, &wait);
 	sg_init_one(&sg, out, olen);
 	skcipher_request_set_crypt(req, &sg, &sg, olen, &iv);
-	err = crypto_skcipher_encrypt(req);
-	if (err)
-		fscrypt_err(inode, "Filename encryption failed: %d", err);
-	return err;
+
+	/* Do the encryption */
+	res = crypto_wait_req(crypto_skcipher_encrypt(req), &wait);
+	skcipher_request_free(req);
+	if (res < 0) {
+		fscrypt_err(inode, "Filename encryption failed: %d", res);
+		return res;
+	}
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(fscrypt_fname_encrypt);
 
@@ -138,25 +148,34 @@ static int fname_decrypt(const struct inode *inode,
 			 const struct fscrypt_str *iname,
 			 struct fscrypt_str *oname)
 {
-	const struct fscrypt_inode_info *ci = inode->i_crypt_info;
-	struct crypto_sync_skcipher *tfm = ci->ci_enc_key.tfm;
-	SYNC_SKCIPHER_REQUEST_ON_STACK(req, tfm);
-	union fscrypt_iv iv;
+	struct skcipher_request *req = NULL;
+	DECLARE_CRYPTO_WAIT(wait);
 	struct scatterlist src_sg, dst_sg;
-	int err;
+	const struct fscrypt_inode_info *ci = inode->i_crypt_info;
+	struct crypto_skcipher *tfm = ci->ci_enc_key.tfm;
+	union fscrypt_iv iv;
+	int res;
 
+	/* Allocate request */
+	req = skcipher_request_alloc(tfm, GFP_NOFS);
+	if (!req)
+		return -ENOMEM;
+	skcipher_request_set_callback(req,
+		CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
+		crypto_req_done, &wait);
+
+	/* Initialize IV */
 	fscrypt_generate_iv(&iv, 0, ci);
 
-	skcipher_request_set_callback(
-		req, CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
-		NULL, NULL);
+	/* Create decryption request */
 	sg_init_one(&src_sg, iname->name, iname->len);
 	sg_init_one(&dst_sg, oname->name, oname->len);
 	skcipher_request_set_crypt(req, &src_sg, &dst_sg, iname->len, &iv);
-	err = crypto_skcipher_decrypt(req);
-	if (err) {
-		fscrypt_err(inode, "Filename decryption failed: %d", err);
-		return err;
+	res = crypto_wait_req(crypto_skcipher_decrypt(req), &wait);
+	skcipher_request_free(req);
+	if (res < 0) {
+		fscrypt_err(inode, "Filename decryption failed: %d", res);
+		return res;
 	}
 
 	oname->len = strnlen(oname->name, iname->len);
@@ -555,10 +574,11 @@ EXPORT_SYMBOL_GPL(fscrypt_fname_siphash);
  * Validate dentries in encrypted directories to make sure we aren't potentially
  * caching stale dentries after a key has been added.
  */
-int fscrypt_d_revalidate(struct inode *dir, const struct qstr *name,
-			 struct dentry *dentry, unsigned int flags)
+int fscrypt_d_revalidate(struct dentry *dentry, unsigned int flags)
 {
+	struct dentry *dir;
 	int err;
+	int valid;
 
 	/*
 	 * Plaintext names are always valid, since fscrypt doesn't support
@@ -571,21 +591,30 @@ int fscrypt_d_revalidate(struct inode *dir, const struct qstr *name,
 	/*
 	 * No-key name; valid if the directory's key is still unavailable.
 	 *
-	 * Note in RCU mode we have to bail if we get here -
-	 * fscrypt_get_encryption_info() may block.
+	 * Although fscrypt forbids rename() on no-key names, we still must use
+	 * dget_parent() here rather than use ->d_parent directly.  That's
+	 * because a corrupted fs image may contain directory hard links, which
+	 * the VFS handles by moving the directory's dentry tree in the dcache
+	 * each time ->lookup() finds the directory and it already has a dentry
+	 * elsewhere.  Thus ->d_parent can be changing, and we must safely grab
+	 * a reference to some ->d_parent to prevent it from being freed.
 	 */
 
 	if (flags & LOOKUP_RCU)
 		return -ECHILD;
 
+	dir = dget_parent(dentry);
 	/*
 	 * Pass allow_unsupported=true, so that files with an unsupported
 	 * encryption policy can be deleted.
 	 */
-	err = fscrypt_get_encryption_info(dir, true);
+	err = fscrypt_get_encryption_info(d_inode(dir), true);
+	valid = !fscrypt_has_encryption_key(d_inode(dir));
+	dput(dir);
+
 	if (err < 0)
 		return err;
 
-	return !fscrypt_has_encryption_key(dir);
+	return valid;
 }
 EXPORT_SYMBOL_GPL(fscrypt_d_revalidate);

@@ -422,7 +422,7 @@ int kvmppc_core_prepare_to_enter(struct kvm_vcpu *vcpu)
 EXPORT_SYMBOL_GPL(kvmppc_core_prepare_to_enter);
 
 kvm_pfn_t kvmppc_gpa_to_pfn(struct kvm_vcpu *vcpu, gpa_t gpa, bool writing,
-			    bool *writable, struct page **page)
+			bool *writable)
 {
 	ulong mp_pa = vcpu->arch.magic_page_pa & KVM_PAM;
 	gfn_t gfn = gpa >> PAGE_SHIFT;
@@ -437,14 +437,13 @@ kvm_pfn_t kvmppc_gpa_to_pfn(struct kvm_vcpu *vcpu, gpa_t gpa, bool writing,
 		kvm_pfn_t pfn;
 
 		pfn = (kvm_pfn_t)virt_to_phys((void*)shared_page) >> PAGE_SHIFT;
-		*page = pfn_to_page(pfn);
-		get_page(*page);
+		get_page(pfn_to_page(pfn));
 		if (writable)
 			*writable = true;
 		return pfn;
 	}
 
-	return kvm_faultin_pfn(vcpu, gfn, writing, writable, page);
+	return gfn_to_pfn_prot(vcpu->kvm, gfn, writing, writable);
 }
 EXPORT_SYMBOL_GPL(kvmppc_gpa_to_pfn);
 

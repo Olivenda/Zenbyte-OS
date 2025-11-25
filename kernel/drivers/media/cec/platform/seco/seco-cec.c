@@ -778,7 +778,7 @@ static struct platform_driver secocec_driver = {
 		   .pm = SECOCEC_PM_OPS,
 	},
 	.probe = secocec_probe,
-	.remove = secocec_remove,
+	.remove_new = secocec_remove,
 };
 
 module_platform_driver(secocec_driver);

@@ -226,7 +226,8 @@ int obj_new_no_composite(void *ctx)
 SEC("?tc")
 int obj_new_no_struct(void *ctx)
 {
-	(void)bpf_obj_new(union { int data; unsigned udata; });
+
+	bpf_obj_new(union { int data; unsigned udata; });
 	return 0;
 }
 
@@ -251,7 +252,7 @@ int new_null_ret(void *ctx)
 SEC("?tc")
 int obj_new_acq(void *ctx)
 {
-	(void)bpf_obj_new(struct foo);
+	bpf_obj_new(struct foo);
 	return 0;
 }
 

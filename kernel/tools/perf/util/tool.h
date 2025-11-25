@@ -77,8 +77,7 @@ struct perf_tool {
 			stat,
 			stat_round,
 			feature,
-			finished_init,
-			bpf_metadata;
+			finished_init;
 	event_op4	compressed;
 	event_op3	auxtrace;
 	bool		ordered_events;

@@ -58,15 +58,17 @@
 		pinctrl-0 = <&keypad0_pins>;
 		pinctrl-names = "default";
 
+		interrupt-parent = <&gpio0>;
+
 		key-1 {
-			interrupts-extended = <&gpio0 17 IRQ_TYPE_EDGE_FALLING>;
+			interrupts = <17 IRQ_TYPE_EDGE_FALLING>;
 			linux,code = <KEY_1>;
 			label = "SW1-1";
 			wakeup-source;
 			debounce-interval = <20>;
 		};
 		key-2 {
-			interrupts-extended = <&gpio0 18 IRQ_TYPE_EDGE_FALLING>;
+			interrupts = <18 IRQ_TYPE_EDGE_FALLING>;
 			linux,code = <KEY_2>;
 			label = "SW1-2";
 			wakeup-source;
@@ -249,7 +251,8 @@
 		pinctrl-names = "default";
 
 		phy-mode = "mii";
-		interrupts-extended = <&irqpin0 1 IRQ_TYPE_EDGE_FALLING>;
+		interrupt-parent = <&irqpin0>;
+		interrupts = <1 IRQ_TYPE_EDGE_FALLING>;
 		smsc,irq-push-pull;
 		reg-io-width = <4>;
 		vddvario-supply = <&fixedregulator3v3>;

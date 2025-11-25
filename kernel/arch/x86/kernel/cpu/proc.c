@@ -41,11 +41,11 @@ static void show_cpuinfo_misc(struct seq_file *m, struct cpuinfo_x86 *c)
 		   "fpu_exception\t: %s\n"
 		   "cpuid level\t: %d\n"
 		   "wp\t\t: yes\n",
-		   str_yes_no(boot_cpu_has_bug(X86_BUG_FDIV)),
-		   str_yes_no(boot_cpu_has_bug(X86_BUG_F00F)),
-		   str_yes_no(boot_cpu_has_bug(X86_BUG_COMA)),
-		   str_yes_no(boot_cpu_has(X86_FEATURE_FPU)),
-		   str_yes_no(boot_cpu_has(X86_FEATURE_FPU)),
+		   boot_cpu_has_bug(X86_BUG_FDIV) ? "yes" : "no",
+		   boot_cpu_has_bug(X86_BUG_F00F) ? "yes" : "no",
+		   boot_cpu_has_bug(X86_BUG_COMA) ? "yes" : "no",
+		   boot_cpu_has(X86_FEATURE_FPU) ? "yes" : "no",
+		   boot_cpu_has(X86_FEATURE_FPU) ? "yes" : "no",
 		   c->cpuid_level);
 }
 #else
@@ -86,12 +86,9 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		seq_printf(m, "microcode\t: 0x%x\n", c->microcode);
 
 	if (cpu_has(c, X86_FEATURE_TSC)) {
-		int freq = arch_freq_get_on_cpu(cpu);
+		unsigned int freq = arch_freq_get_on_cpu(cpu);
 
-		if (freq < 0)
-			seq_puts(m, "cpu MHz\t\t: Unknown\n");
-		else
-			seq_printf(m, "cpu MHz\t\t: %u.%03u\n", freq / 1000, (freq % 1000));
+		seq_printf(m, "cpu MHz\t\t: %u.%03u\n", freq / 1000, (freq % 1000));
 	}
 
 	/* Cache size */

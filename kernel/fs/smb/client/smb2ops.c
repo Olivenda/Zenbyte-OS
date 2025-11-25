@@ -91,7 +91,7 @@ smb2_add_credits(struct TCP_Server_Info *server,
 	if (*val > 65000) {
 		*val = 65000; /* Don't get near 64K credits, avoid srv bugs */
 		pr_warn_once("server overflowed SMB3 credits\n");
-		trace_smb3_overflow_credits(server->current_mid,
+		trace_smb3_overflow_credits(server->CurrentMid,
 					    server->conn_id, server->hostname, *val,
 					    add, server->in_flight);
 	}
@@ -136,7 +136,7 @@ smb2_add_credits(struct TCP_Server_Info *server,
 	wake_up(&server->request_q);
 
 	if (reconnect_detected) {
-		trace_smb3_reconnect_detected(server->current_mid,
+		trace_smb3_reconnect_detected(server->CurrentMid,
 			server->conn_id, server->hostname, scredits, add, in_flight);
 
 		cifs_dbg(FYI, "trying to put %d credits from the old server instance %d\n",
@@ -144,7 +144,7 @@ smb2_add_credits(struct TCP_Server_Info *server,
 	}
 
 	if (reconnect_with_invalid_credits) {
-		trace_smb3_reconnect_with_invalid_credits(server->current_mid,
+		trace_smb3_reconnect_with_invalid_credits(server->CurrentMid,
 			server->conn_id, server->hostname, scredits, add, in_flight);
 		cifs_dbg(FYI, "Negotiate operation when server credits is non-zero. Optype: %d, server credits: %d, credits added: %d\n",
 			 optype, scredits, add);
@@ -176,7 +176,7 @@ smb2_add_credits(struct TCP_Server_Info *server,
 		break;
 	}
 
-	trace_smb3_add_credits(server->current_mid,
+	trace_smb3_add_credits(server->CurrentMid,
 			server->conn_id, server->hostname, scredits, add, in_flight);
 	cifs_dbg(FYI, "%s: added %u credits total=%d\n", __func__, add, scredits);
 }
@@ -203,7 +203,7 @@ smb2_set_credits(struct TCP_Server_Info *server, const int val)
 	in_flight = server->in_flight;
 	spin_unlock(&server->req_lock);
 
-	trace_smb3_set_credits(server->current_mid,
+	trace_smb3_set_credits(server->CurrentMid,
 			server->conn_id, server->hostname, scredits, val, in_flight);
 	cifs_dbg(FYI, "%s: set %u credits\n", __func__, val);
 
@@ -288,7 +288,7 @@ smb2_wait_mtu_credits(struct TCP_Server_Info *server, size_t size,
 	in_flight = server->in_flight;
 	spin_unlock(&server->req_lock);
 
-	trace_smb3_wait_credits(server->current_mid,
+	trace_smb3_wait_credits(server->CurrentMid,
 			server->conn_id, server->hostname, scredits, -(credits->value), in_flight);
 	cifs_dbg(FYI, "%s: removed %u credits total=%d\n",
 			__func__, credits->value, scredits);
@@ -316,7 +316,7 @@ smb2_adjust_credits(struct TCP_Server_Info *server,
 				      server->credits, server->in_flight,
 				      new_val - credits->value,
 				      cifs_trace_rw_credits_no_adjust_up);
-		trace_smb3_too_many_credits(server->current_mid,
+		trace_smb3_too_many_credits(server->CurrentMid,
 				server->conn_id, server->hostname, 0, credits->value - new_val, 0);
 		cifs_server_dbg(VFS, "R=%x[%x] request has less credits (%d) than required (%d)",
 				subreq->rreq->debug_id, subreq->subreq.debug_index,
@@ -338,7 +338,7 @@ smb2_adjust_credits(struct TCP_Server_Info *server,
 				      server->credits, server->in_flight,
 				      new_val - credits->value,
 				      cifs_trace_rw_credits_old_session);
-		trace_smb3_reconnect_detected(server->current_mid,
+		trace_smb3_reconnect_detected(server->CurrentMid,
 			server->conn_id, server->hostname, scredits,
 			credits->value - new_val, in_flight);
 		cifs_server_dbg(VFS, "R=%x[%x] trying to return %d credits to old session\n",
@@ -358,7 +358,7 @@ smb2_adjust_credits(struct TCP_Server_Info *server,
 	spin_unlock(&server->req_lock);
 	wake_up(&server->request_q);
 
-	trace_smb3_adj_credits(server->current_mid,
+	trace_smb3_adj_credits(server->CurrentMid,
 			server->conn_id, server->hostname, scredits,
 			credits->value - new_val, in_flight);
 	cifs_dbg(FYI, "%s: adjust added %u credits total=%d\n",
@@ -374,19 +374,19 @@ smb2_get_next_mid(struct TCP_Server_Info *server)
 {
 	__u64 mid;
 	/* for SMB2 we need the current value */
-	spin_lock(&server->mid_counter_lock);
-	mid = server->current_mid++;
-	spin_unlock(&server->mid_counter_lock);
+	spin_lock(&server->mid_lock);
+	mid = server->CurrentMid++;
+	spin_unlock(&server->mid_lock);
 	return mid;
 }
 
 static void
 smb2_revert_current_mid(struct TCP_Server_Info *server, const unsigned int val)
 {
-	spin_lock(&server->mid_counter_lock);
-	if (server->current_mid >= val)
-		server->current_mid -= val;
-	spin_unlock(&server->mid_counter_lock);
+	spin_lock(&server->mid_lock);
+	if (server->CurrentMid >= val)
+		server->CurrentMid -= val;
+	spin_unlock(&server->mid_lock);
 }
 
 static struct mid_q_entry *
@@ -401,7 +401,7 @@ __smb2_find_mid(struct TCP_Server_Info *server, char *buf, bool dequeue)
 		return NULL;
 	}
 
-	spin_lock(&server->mid_queue_lock);
+	spin_lock(&server->mid_lock);
 	list_for_each_entry(mid, &server->pending_mid_q, qhead) {
 		if ((mid->mid == wire_mid) &&
 		    (mid->mid_state == MID_REQUEST_SUBMITTED) &&
@@ -409,13 +409,13 @@ __smb2_find_mid(struct TCP_Server_Info *server, char *buf, bool dequeue)
 			kref_get(&mid->refcount);
 			if (dequeue) {
 				list_del_init(&mid->qhead);
-				mid->deleted_from_q = true;
+				mid->mid_flags |= MID_DELETED;
 			}
-			spin_unlock(&server->mid_queue_lock);
+			spin_unlock(&server->mid_lock);
 			return mid;
 		}
 	}
-	spin_unlock(&server->mid_queue_lock);
+	spin_unlock(&server->mid_lock);
 	return NULL;
 }
 
@@ -460,9 +460,9 @@ smb2_negotiate(const unsigned int xid,
 {
 	int rc;
 
-	spin_lock(&server->mid_counter_lock);
-	server->current_mid = 0;
-	spin_unlock(&server->mid_counter_lock);
+	spin_lock(&server->mid_lock);
+	server->CurrentMid = 0;
+	spin_unlock(&server->mid_lock);
 	rc = SMB2_negotiate(xid, ses, server);
 	return rc;
 }
@@ -992,7 +992,7 @@ smb2_is_path_accessible(const unsigned int xid, struct cifs_tcon *tcon,
 			if (islink)
 				rc = -EREMOTE;
 		}
-		if (rc == -EREMOTE && IS_ENABLED(CONFIG_CIFS_DFS_UPCALL) &&
+		if (rc == -EREMOTE && IS_ENABLED(CONFIG_CIFS_DFS_UPCALL) && cifs_sb &&
 		    (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_NO_DFS))
 			rc = -EOPNOTSUPP;
 		goto out;
@@ -2507,7 +2507,7 @@ smb2_is_status_pending(char *buf, struct TCP_Server_Info *server)
 		spin_unlock(&server->req_lock);
 		wake_up(&server->request_q);
 
-		trace_smb3_pend_credits(server->current_mid,
+		trace_smb3_pend_credits(server->CurrentMid,
 				server->conn_id, server->hostname, scredits,
 				le16_to_cpu(shdr->CreditRequest), in_flight);
 		cifs_dbg(FYI, "%s: status pending add %u credits total=%d\n",
@@ -2631,7 +2631,7 @@ smb2_set_next_command(struct cifs_tcon *tcon, struct smb_rqst *rqst)
 	struct cifs_ses *ses = tcon->ses;
 	struct TCP_Server_Info *server = ses->server;
 	unsigned long len = smb_rqst_len(server, rqst);
-	int num_padding;
+	int i, num_padding;
 
 	shdr = (struct smb2_hdr *)(rqst->rq_iov[0].iov_base);
 	if (shdr == NULL) {
@@ -2640,16 +2640,28 @@ smb2_set_next_command(struct cifs_tcon *tcon, struct smb_rqst *rqst)
 	}
 
 	/* SMB headers in a compound are 8 byte aligned. */
-	if (IS_ALIGNED(len, 8))
-		goto out;
+
+	/* No padding needed */
+	if (!(len & 7))
+		goto finished;
 
 	num_padding = 8 - (len & 7);
-	if (smb3_encryption_required(tcon)) {
-		int i;
-
+	if (!smb3_encryption_required(tcon)) {
 		/*
-		 * Flatten request into a single buffer with required padding as
-		 * the encryption layer can't handle the padding iovs.
+		 * If we do not have encryption then we can just add an extra
+		 * iov for the padding.
+		 */
+		rqst->rq_iov[rqst->rq_nvec].iov_base = smb2_padding;
+		rqst->rq_iov[rqst->rq_nvec].iov_len = num_padding;
+		rqst->rq_nvec++;
+		len += num_padding;
+	} else {
+		/*
+		 * We can not add a small padding iov for the encryption case
+		 * because the encryption framework can not handle the padding
+		 * iovs.
+		 * We have to flatten this into a single buffer and add
+		 * the padding to it.
 		 */
 		for (i = 1; i < rqst->rq_nvec; i++) {
 			memcpy(rqst->rq_iov[0].iov_base +
@@ -2661,14 +2673,11 @@ smb2_set_next_command(struct cifs_tcon *tcon, struct smb_rqst *rqst)
 		memset(rqst->rq_iov[0].iov_base + rqst->rq_iov[0].iov_len,
 		       0, num_padding);
 		rqst->rq_iov[0].iov_len += num_padding;
+		len += num_padding;
 		rqst->rq_nvec = 1;
-	} else {
-		rqst->rq_iov[rqst->rq_nvec].iov_base = smb2_padding;
-		rqst->rq_iov[rqst->rq_nvec].iov_len = num_padding;
-		rqst->rq_nvec++;
 	}
-	len += num_padding;
-out:
+
+ finished:
 	shdr->NextCommand = cpu_to_le32(len);
 }
 
@@ -2980,7 +2989,7 @@ smb2_get_dfs_refer(const unsigned int xid, struct cifs_ses *ses,
 	struct fsctl_get_dfs_referral_req *dfs_req = NULL;
 	struct get_dfs_referral_rsp *dfs_rsp = NULL;
 	u32 dfs_req_size = 0, dfs_rsp_size = 0;
-	int retry_once = 0;
+	int retry_count = 0;
 
 	cifs_dbg(FYI, "%s: path: %s\n", __func__, search_name);
 
@@ -3029,25 +3038,21 @@ smb2_get_dfs_refer(const unsigned int xid, struct cifs_ses *ses,
 	/* Path to resolve in an UTF-16 null-terminated string */
 	memcpy(dfs_req->RequestFileName, utf16_path, utf16_path_len);
 
-	for (;;) {
+	do {
 		rc = SMB2_ioctl(xid, tcon, NO_FILE_ID, NO_FILE_ID,
 				FSCTL_DFS_GET_REFERRALS,
 				(char *)dfs_req, dfs_req_size, CIFSMaxBufSize,
 				(char **)&dfs_rsp, &dfs_rsp_size);
-		if (fatal_signal_pending(current)) {
-			rc = -EINTR;
-			break;
-		}
-		if (!is_retryable_error(rc) || retry_once++)
+		if (!is_retryable_error(rc))
 			break;
 		usleep_range(512, 2048);
-	}
+	} while (++retry_count < 5);
 
 	if (!rc && !dfs_rsp)
 		rc = -EIO;
 	if (rc) {
 		if (!is_retryable_error(rc) && rc != -ENOENT && rc != -EOPNOTSUPP)
-			cifs_tcon_dbg(FYI, "%s: ioctl error: rc=%d\n", __func__, rc);
+			cifs_tcon_dbg(VFS, "%s: ioctl error: rc=%d\n", __func__, rc);
 		goto out;
 	}
 
@@ -3055,9 +3060,9 @@ smb2_get_dfs_refer(const unsigned int xid, struct cifs_ses *ses,
 				 num_of_nodes, target_nodes,
 				 nls_codepage, remap, search_name,
 				 true /* is_unicode */);
-	if (rc && rc != -ENOENT) {
-		cifs_tcon_dbg(VFS, "%s: failed to parse DFS referral %s: %d\n",
-			      __func__, search_name, rc);
+	if (rc) {
+		cifs_tcon_dbg(VFS, "parse error in %s rc=%d\n", __func__, rc);
+		goto out;
 	}
 
  out:
@@ -3572,6 +3577,8 @@ static long smb3_simple_falloc(struct file *file, struct cifs_tcon *tcon,
 		if (rc == 0) {
 			netfs_resize_file(&cifsi->netfs, new_eof, true);
 			cifs_setsize(inode, new_eof);
+			cifs_truncate_page(inode->i_mapping, inode->i_size);
+			truncate_setsize(inode, new_eof);
 		}
 		goto out;
 	}
@@ -4107,7 +4114,7 @@ map_oplock_to_lease(u8 oplock)
 }
 
 static char *
-smb2_create_lease_buf(u8 *lease_key, u8 oplock, u8 *parent_lease_key, __le32 flags)
+smb2_create_lease_buf(u8 *lease_key, u8 oplock)
 {
 	struct create_lease *buf;
 
@@ -4133,7 +4140,7 @@ smb2_create_lease_buf(u8 *lease_key, u8 oplock, u8 *parent_lease_key, __le32 fla
 }
 
 static char *
-smb3_create_lease_buf(u8 *lease_key, u8 oplock, u8 *parent_lease_key, __le32 flags)
+smb3_create_lease_buf(u8 *lease_key, u8 oplock)
 {
 	struct create_lease_v2 *buf;
 
@@ -4143,9 +4150,6 @@ smb3_create_lease_buf(u8 *lease_key, u8 oplock, u8 *parent_lease_key, __le32 fla
 
 	memcpy(&buf->lcontext.LeaseKey, lease_key, SMB2_LEASE_KEY_SIZE);
 	buf->lcontext.LeaseState = map_oplock_to_lease(oplock);
-	buf->lcontext.LeaseFlags = flags;
-	if (flags & SMB2_LEASE_FLAG_PARENT_LEASE_KEY_SET_LE)
-		memcpy(&buf->lcontext.ParentLeaseKey, parent_lease_key, SMB2_LEASE_KEY_SIZE);
 
 	buf->ccontext.DataOffset = cpu_to_le16(offsetof
 					(struct create_lease_v2, lcontext));
@@ -4437,7 +4441,7 @@ static struct folio_queue *cifs_alloc_folioq_buffer(ssize_t size)
 			p = kmalloc(sizeof(*p), GFP_NOFS);
 			if (!p)
 				goto nomem;
-			folioq_init(p, 0);
+			folioq_init(p);
 			if (tail) {
 				tail->next = p;
 				p->prev = tail;
@@ -4832,22 +4836,22 @@ static void smb2_decrypt_offload(struct work_struct *work)
 				dw->server->ops->is_network_name_deleted(dw->buf,
 									 dw->server);
 
-			mid_execute_callback(mid);
+			mid->callback(mid);
 		} else {
 			spin_lock(&dw->server->srv_lock);
 			if (dw->server->tcpStatus == CifsNeedReconnect) {
-				spin_lock(&dw->server->mid_queue_lock);
+				spin_lock(&dw->server->mid_lock);
 				mid->mid_state = MID_RETRY_NEEDED;
-				spin_unlock(&dw->server->mid_queue_lock);
+				spin_unlock(&dw->server->mid_lock);
 				spin_unlock(&dw->server->srv_lock);
-				mid_execute_callback(mid);
+				mid->callback(mid);
 			} else {
-				spin_lock(&dw->server->mid_queue_lock);
+				spin_lock(&dw->server->mid_lock);
 				mid->mid_state = MID_REQUEST_SUBMITTED;
-				mid->deleted_from_q = false;
+				mid->mid_flags &= ~(MID_DELETED);
 				list_add_tail(&mid->qhead,
 					&dw->server->pending_mid_q);
-				spin_unlock(&dw->server->mid_queue_lock);
+				spin_unlock(&dw->server->mid_lock);
 				spin_unlock(&dw->server->srv_lock);
 			}
 		}
@@ -5276,7 +5280,7 @@ static int smb2_make_node(unsigned int xid, struct inode *inode,
 			  const char *full_path, umode_t mode, dev_t dev)
 {
 	struct cifs_sb_info *cifs_sb = CIFS_SB(inode->i_sb);
-	int rc = -EOPNOTSUPP;
+	int rc;
 
 	/*
 	 * Check if mounted with mount parm 'sfu' mount parm.
@@ -5287,9 +5291,9 @@ static int smb2_make_node(unsigned int xid, struct inode *inode,
 	if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_UNX_EMUL) {
 		rc = cifs_sfu_make_node(xid, inode, dentry, tcon,
 					full_path, mode, dev);
-	} else if (CIFS_REPARSE_SUPPORT(tcon)) {
-		rc = mknod_reparse(xid, inode, dentry, tcon,
-				   full_path, mode, dev);
+	} else {
+		rc = smb2_mknod_reparse(xid, inode, dentry, tcon,
+					full_path, mode, dev);
 	}
 	return rc;
 }
@@ -5344,10 +5348,10 @@ struct smb_version_operations smb20_operations = {
 	.unlink = smb2_unlink,
 	.rename = smb2_rename_path,
 	.create_hardlink = smb2_create_hardlink,
-	.get_reparse_point_buffer = smb2_get_reparse_point_buffer,
+	.parse_reparse_point = smb2_parse_reparse_point,
 	.query_mf_symlink = smb3_query_mf_symlink,
 	.create_mf_symlink = smb3_create_mf_symlink,
-	.create_reparse_inode = smb2_create_reparse_inode,
+	.create_reparse_symlink = smb2_create_reparse_symlink,
 	.open = smb2_open_file,
 	.set_fid = smb2_set_fid,
 	.close = smb2_close_file,
@@ -5394,7 +5398,6 @@ struct smb_version_operations smb20_operations = {
 	.llseek = smb3_llseek,
 	.is_status_io_timeout = smb2_is_status_io_timeout,
 	.is_network_name_deleted = smb2_is_network_name_deleted,
-	.rename_pending_delete = smb2_rename_pending_delete,
 };
 #endif /* CIFS_ALLOW_INSECURE_LEGACY */
 
@@ -5448,10 +5451,10 @@ struct smb_version_operations smb21_operations = {
 	.unlink = smb2_unlink,
 	.rename = smb2_rename_path,
 	.create_hardlink = smb2_create_hardlink,
-	.get_reparse_point_buffer = smb2_get_reparse_point_buffer,
+	.parse_reparse_point = smb2_parse_reparse_point,
 	.query_mf_symlink = smb3_query_mf_symlink,
 	.create_mf_symlink = smb3_create_mf_symlink,
-	.create_reparse_inode = smb2_create_reparse_inode,
+	.create_reparse_symlink = smb2_create_reparse_symlink,
 	.open = smb2_open_file,
 	.set_fid = smb2_set_fid,
 	.close = smb2_close_file,
@@ -5500,7 +5503,6 @@ struct smb_version_operations smb21_operations = {
 	.llseek = smb3_llseek,
 	.is_status_io_timeout = smb2_is_status_io_timeout,
 	.is_network_name_deleted = smb2_is_network_name_deleted,
-	.rename_pending_delete = smb2_rename_pending_delete,
 };
 
 struct smb_version_operations smb30_operations = {
@@ -5556,10 +5558,10 @@ struct smb_version_operations smb30_operations = {
 	.unlink = smb2_unlink,
 	.rename = smb2_rename_path,
 	.create_hardlink = smb2_create_hardlink,
-	.get_reparse_point_buffer = smb2_get_reparse_point_buffer,
+	.parse_reparse_point = smb2_parse_reparse_point,
 	.query_mf_symlink = smb3_query_mf_symlink,
 	.create_mf_symlink = smb3_create_mf_symlink,
-	.create_reparse_inode = smb2_create_reparse_inode,
+	.create_reparse_symlink = smb2_create_reparse_symlink,
 	.open = smb2_open_file,
 	.set_fid = smb2_set_fid,
 	.close = smb2_close_file,
@@ -5617,7 +5619,6 @@ struct smb_version_operations smb30_operations = {
 	.llseek = smb3_llseek,
 	.is_status_io_timeout = smb2_is_status_io_timeout,
 	.is_network_name_deleted = smb2_is_network_name_deleted,
-	.rename_pending_delete = smb2_rename_pending_delete,
 };
 
 struct smb_version_operations smb311_operations = {
@@ -5673,10 +5674,10 @@ struct smb_version_operations smb311_operations = {
 	.unlink = smb2_unlink,
 	.rename = smb2_rename_path,
 	.create_hardlink = smb2_create_hardlink,
-	.get_reparse_point_buffer = smb2_get_reparse_point_buffer,
+	.parse_reparse_point = smb2_parse_reparse_point,
 	.query_mf_symlink = smb3_query_mf_symlink,
 	.create_mf_symlink = smb3_create_mf_symlink,
-	.create_reparse_inode = smb2_create_reparse_inode,
+	.create_reparse_symlink = smb2_create_reparse_symlink,
 	.open = smb2_open_file,
 	.set_fid = smb2_set_fid,
 	.close = smb2_close_file,
@@ -5734,7 +5735,6 @@ struct smb_version_operations smb311_operations = {
 	.llseek = smb3_llseek,
 	.is_status_io_timeout = smb2_is_status_io_timeout,
 	.is_network_name_deleted = smb2_is_network_name_deleted,
-	.rename_pending_delete = smb2_rename_pending_delete,
 };
 
 #ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY

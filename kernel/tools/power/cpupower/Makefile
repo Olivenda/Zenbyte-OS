@@ -2,7 +2,6 @@
 # Makefile for cpupower
 #
 # Copyright (C) 2005,2006 Dominik Brodowski <linux@dominikbrodowski.net>
-# Copyright (C) 2025      Francesco Poli <invernomuto@paranoici.org>
 #
 # Based largely on the Makefile for udev by:
 #
@@ -53,15 +52,12 @@ DESTDIR ?=
 # and _should_ modify the PACKAGE_BUGREPORT definition
 
 VERSION:=			$(shell ./utils/version-gen.sh)
-LIB_FIX=			1
-LIB_MIN=			0
-LIB_MAJ=			1
-LIB_VER=			$(LIB_MAJ).$(LIB_MIN).$(LIB_FIX)
-
+LIB_MAJ=			0.0.1
+LIB_MIN=			1
 
 PACKAGE =			cpupower
 PACKAGE_BUGREPORT =		linux-pm@vger.kernel.org
-LANGUAGES = 			de fr it cs pt ka zh_CN
+LANGUAGES = 			de fr it cs pt ka
 
 
 # Directory definitions. These are default and most probably
@@ -72,8 +68,6 @@ bindir ?=	/usr/bin
 sbindir ?=	/usr/sbin
 mandir ?=	/usr/man
 libdir ?=	/usr/lib
-libexecdir ?=	/usr/libexec
-unitdir ?=	/usr/lib/systemd/system
 includedir ?=	/usr/include
 localedir ?=	/usr/share/locale
 docdir ?=       /usr/share/doc/packages/cpupower
@@ -86,27 +80,18 @@ CP = cp -fpR
 INSTALL = /usr/bin/install -c
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_DATA  = ${INSTALL} -m 644
-SETPERM_DATA  = chmod 644
 #bash completion scripts get sourced and so they should be rw only.
 INSTALL_SCRIPT = ${INSTALL} -m 644
 
 # If you are running a cross compiler, you may want to set this
 # to something more interesting, like "arm-linux-".  If you want
 # to compile vs uClibc, that can be done here as well.
-CROSS ?= #/usr/i386-linux-uclibc/usr/bin/i386-uclibc-
-ifneq ($(CROSS), )
+CROSS = #/usr/i386-linux-uclibc/usr/bin/i386-uclibc-
 CC = $(CROSS)gcc
 LD = $(CROSS)gcc
 AR = $(CROSS)ar
 STRIP = $(CROSS)strip
 RANLIB = $(CROSS)ranlib
-else
-CC ?= $(CROSS)gcc
-LD ?= $(CROSS)gcc
-AR ?= $(CROSS)ar
-STRIP ?= $(CROSS)strip
-RANLIB ?= $(CROSS)ranlib
-endif
 HOSTCC = gcc
 MKDIR = mkdir
 
@@ -207,14 +192,14 @@ $(OUTPUT)lib/%.o: $(LIB_SRC) $(LIB_HEADERS)
 	$(ECHO) "  CC      " $@
 	$(QUIET) $(CC) $(CFLAGS) -fPIC -o $@ -c lib/$*.c
 
-$(OUTPUT)libcpupower.so.$(LIB_VER): $(LIB_OBJS)
+$(OUTPUT)libcpupower.so.$(LIB_MAJ): $(LIB_OBJS)
 	$(ECHO) "  LD      " $@
 	$(QUIET) $(CC) -shared $(CFLAGS) $(LDFLAGS) -o $@ \
-		-Wl,-soname,libcpupower.so.$(LIB_MAJ) $(LIB_OBJS)
+		-Wl,-soname,libcpupower.so.$(LIB_MIN) $(LIB_OBJS)
 	@ln -sf $(@F) $(OUTPUT)libcpupower.so
-	@ln -sf $(@F) $(OUTPUT)libcpupower.so.$(LIB_MAJ)
+	@ln -sf $(@F) $(OUTPUT)libcpupower.so.$(LIB_MIN)
 
-libcpupower: $(OUTPUT)libcpupower.so.$(LIB_VER)
+libcpupower: $(OUTPUT)libcpupower.so.$(LIB_MAJ)
 
 # Let all .o files depend on its .c file and all headers
 # Might be worth to put this into utils/Makefile at some point of time
@@ -224,7 +209,7 @@ $(OUTPUT)%.o: %.c
 	$(ECHO) "  CC      " $@
 	$(QUIET) $(CC) $(CFLAGS) -I./lib -I ./utils -o $@ -c $*.c
 
-$(OUTPUT)cpupower: $(UTIL_OBJS) $(OUTPUT)libcpupower.so.$(LIB_VER)
+$(OUTPUT)cpupower: $(UTIL_OBJS) $(OUTPUT)libcpupower.so.$(LIB_MAJ)
 	$(ECHO) "  CC      " $@
 ifeq ($(strip $(STATIC)),true)
 	$(QUIET) $(CC) $(CFLAGS) $(LDFLAGS) $(UTIL_OBJS) -lrt -lpci -L$(OUTPUT) -o $@
@@ -233,28 +218,17 @@ else
 endif
 	$(QUIET) $(STRIPCMD) $@
 
-ifeq (, $(shell which xgettext))
-$(warning "Install xgettext to extract translatable strings.")
-else
 $(OUTPUT)po/$(PACKAGE).pot: $(UTIL_SRC)
 	$(ECHO) "  GETTEXT " $@
 	$(QUIET) xgettext --default-domain=$(PACKAGE) --add-comments \
 		--keyword=_ --keyword=N_ $(UTIL_SRC) -p $(@D) -o $(@F)
-endif
 
-ifeq (, $(shell which msgfmt))
-$(warning "Install msgfmt to generate binary message catalogs.")
-else
 $(OUTPUT)po/%.gmo: po/%.po
 	$(ECHO) "  MSGFMT  " $@
 	$(QUIET) msgfmt -o $@ po/$*.po
-endif
 
 create-gmo: ${GMO_FILES}
 
-ifeq (, $(shell which msgmerge))
-$(warning "Install msgmerge to merge translations.")
-else
 update-po: $(OUTPUT)po/$(PACKAGE).pot
 	$(ECHO) "  MSGMRG  " $@
 	$(QUIET) @for HLANG in $(LANGUAGES); do \
@@ -267,9 +241,8 @@ update-po: $(OUTPUT)po/$(PACKAGE).pot
 			rm -f $(OUTPUT)po/$$HLANG.new.po; \
 		fi; \
 	done;
-endif
 
-compile-bench: $(OUTPUT)libcpupower.so.$(LIB_VER)
+compile-bench: $(OUTPUT)libcpupower.so.$(LIB_MAJ)
 	@V=$(V) confdir=$(confdir) $(MAKE) -C bench O=$(OUTPUT)
 
 # we compile into subdirectories. if the target directory is not the
@@ -306,13 +279,6 @@ install-tools: $(OUTPUT)cpupower
 	$(INSTALL_PROGRAM) $(OUTPUT)cpupower $(DESTDIR)${bindir}
 	$(INSTALL) -d $(DESTDIR)${bash_completion_dir}
 	$(INSTALL_SCRIPT) cpupower-completion.sh '$(DESTDIR)${bash_completion_dir}/cpupower'
-	$(INSTALL) -d $(DESTDIR)${confdir}
-	$(INSTALL_DATA) cpupower-service.conf '$(DESTDIR)${confdir}'
-	$(INSTALL) -d $(DESTDIR)${libexecdir}
-	$(INSTALL_PROGRAM) cpupower.sh '$(DESTDIR)${libexecdir}/cpupower'
-	$(INSTALL) -d $(DESTDIR)${unitdir}
-	sed 's|___CDIR___|${confdir}|; s|___LDIR___|${libexecdir}|' cpupower.service.in > '$(DESTDIR)${unitdir}/cpupower.service'
-	$(SETPERM_DATA) '$(DESTDIR)${unitdir}/cpupower.service'
 
 install-man:
 	$(INSTALL_DATA) -D man/cpupower.1 $(DESTDIR)${mandir}/man1/cpupower.1
@@ -347,9 +313,6 @@ uninstall:
 	- rm -f $(DESTDIR)${includedir}/cpufreq.h
 	- rm -f $(DESTDIR)${includedir}/cpuidle.h
 	- rm -f $(DESTDIR)${bindir}/utils/cpupower
-	- rm -f $(DESTDIR)${confdir}cpupower-service.conf
-	- rm -f $(DESTDIR)${libexecdir}/cpupower
-	- rm -f $(DESTDIR)${unitdir}/cpupower.service
 	- rm -f $(DESTDIR)${mandir}/man1/cpupower.1
 	- rm -f $(DESTDIR)${mandir}/man1/cpupower-frequency-set.1
 	- rm -f $(DESTDIR)${mandir}/man1/cpupower-frequency-info.1

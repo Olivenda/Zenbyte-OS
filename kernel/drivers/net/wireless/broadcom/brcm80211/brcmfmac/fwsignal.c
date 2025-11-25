@@ -1810,7 +1810,7 @@ void brcmf_fws_rxreorder(struct brcmf_if *ifp, struct sk_buff *pkt)
 			rfi->cur_idx = cur_idx;
 		}
 	} else {
-		/* explicitly window move updating the expected index */
+		/* explicity window move updating the expected index */
 		exp_idx = reorder_data[BRCMF_RXREORDER_EXPIDX_OFFSET];
 
 		brcmf_dbg(DATA, "flow-%d (0x%x): change expected: %d -> %d\n",

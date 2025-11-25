@@ -25,6 +25,7 @@
 #include <linux/acct.h>
 #include <linux/tsacct_kern.h>
 #include <linux/file.h>
+#include <linux/fdtable.h>
 #include <linux/freezer.h>
 #include <linux/binfmts.h>
 #include <linux/nsproxy.h>
@@ -68,9 +69,7 @@
 #include <linux/rethook.h>
 #include <linux/sysfs.h>
 #include <linux/user_events.h>
-#include <linux/unwind_deferred.h>
 #include <linux/uaccess.h>
-#include <linux/pidfs.h>
 
 #include <uapi/linux/wait.h>
 
@@ -87,7 +86,7 @@
 static unsigned int oops_limit = 10000;
 
 #ifdef CONFIG_SYSCTL
-static const struct ctl_table kern_exit_table[] = {
+static struct ctl_table kern_exit_table[] = {
 	{
 		.procname       = "oops_limit",
 		.data           = &oops_limit,
@@ -124,27 +123,14 @@ static __init int kernel_exit_sysfs_init(void)
 late_initcall(kernel_exit_sysfs_init);
 #endif
 
-/*
- * For things release_task() would like to do *after* tasklist_lock is released.
- */
-struct release_task_post {
-	struct pid *pids[PIDTYPE_MAX];
-};
-
-static void __unhash_process(struct release_task_post *post, struct task_struct *p,
-			     bool group_dead)
+static void __unhash_process(struct task_struct *p, bool group_dead)
 {
-	struct pid *pid = task_pid(p);
-
 	nr_threads--;
-
-	detach_pid(post->pids, p, PIDTYPE_PID);
-	wake_up_all(&pid->wait_pidfd);
-
+	detach_pid(p, PIDTYPE_PID);
 	if (group_dead) {
-		detach_pid(post->pids, p, PIDTYPE_TGID);
-		detach_pid(post->pids, p, PIDTYPE_PGID);
-		detach_pid(post->pids, p, PIDTYPE_SID);
+		detach_pid(p, PIDTYPE_TGID);
+		detach_pid(p, PIDTYPE_PGID);
+		detach_pid(p, PIDTYPE_SID);
 
 		list_del_rcu(&p->tasks);
 		list_del_init(&p->sibling);
@@ -156,7 +142,7 @@ static void __unhash_process(struct release_task_post *post, struct task_struct 
 /*
  * This function expects the tasklist_lock write-locked.
  */
-static void __exit_signal(struct release_task_post *post, struct task_struct *tsk)
+static void __exit_signal(struct task_struct *tsk)
 {
 	struct signal_struct *sig = tsk->signal;
 	bool group_dead = thread_group_leader(tsk);
@@ -189,6 +175,9 @@ static void __exit_signal(struct release_task_post *post, struct task_struct *ts
 			sig->curr_target = next_thread(tsk);
 	}
 
+	add_device_randomness((const void*) &tsk->se.sum_exec_runtime,
+			      sizeof(unsigned long long));
+
 	/*
 	 * Accumulate here the counters for all threads as they die. We could
 	 * skip the group leader because it is the last user of signal_struct,
@@ -209,15 +198,23 @@ static void __exit_signal(struct release_task_post *post, struct task_struct *ts
 	task_io_accounting_add(&sig->ioac, &tsk->ioac);
 	sig->sum_sched_runtime += tsk->se.sum_exec_runtime;
 	sig->nr_threads--;
-	__unhash_process(post, tsk, group_dead);
+	__unhash_process(tsk, group_dead);
 	write_sequnlock(&sig->stats_lock);
 
+	/*
+	 * Do this under ->siglock, we can race with another thread
+	 * doing sigqueue_free() if we have SIGQUEUE_PREALLOC signals.
+	 */
+	flush_sigqueue(&tsk->pending);
 	tsk->sighand = NULL;
 	spin_unlock(&sighand->siglock);
 
 	__cleanup_sighand(sighand);
-	if (group_dead)
+	clear_tsk_thread_flag(tsk, TIF_SIGPENDING);
+	if (group_dead) {
+		flush_sigqueue(&sig->shared_pending);
 		tty_kref_put(tty);
+	}
 }
 
 static void delayed_put_task_struct(struct rcu_head *rhp)
@@ -243,28 +240,22 @@ void __weak release_thread(struct task_struct *dead_task)
 
 void release_task(struct task_struct *p)
 {
-	struct release_task_post post;
 	struct task_struct *leader;
 	struct pid *thread_pid;
 	int zap_leader;
 repeat:
-	memset(&post, 0, sizeof(post));
-
 	/* don't need to get the RCU readlock here - the process is dead and
 	 * can't be modifying its own credentials. But shut RCU-lockdep up */
 	rcu_read_lock();
 	dec_rlimit_ucounts(task_ucounts(p), UCOUNT_RLIMIT_NPROC, 1);
 	rcu_read_unlock();
 
-	pidfs_exit(p);
 	cgroup_release(p);
-
-	/* Retrieve @thread_pid before __unhash_process() may set it to NULL. */
-	thread_pid = task_pid(p);
 
 	write_lock_irq(&tasklist_lock);
 	ptrace_release_task(p);
-	__exit_signal(&post, p);
+	thread_pid = get_pid(p->thread_pid);
+	__exit_signal(p);
 
 	/*
 	 * If we are the last non-leader member of the thread
@@ -275,9 +266,6 @@ repeat:
 	leader = p->group_leader;
 	if (leader != p && thread_group_empty(leader)
 			&& leader->exit_state == EXIT_ZOMBIE) {
-		/* for pidfs_exit() and do_notify_parent() */
-		if (leader->signal->flags & SIGNAL_GROUP_EXIT)
-			leader->exit_code = leader->signal->group_exit_code;
 		/*
 		 * If we were the last child thread and the leader has
 		 * exited already, and the leader's parent ignores SIGCHLD,
@@ -289,22 +277,9 @@ repeat:
 	}
 
 	write_unlock_irq(&tasklist_lock);
-	/* @thread_pid can't go away until free_pids() below */
 	proc_flush_pid(thread_pid);
-	add_device_randomness(&p->se.sum_exec_runtime,
-			      sizeof(p->se.sum_exec_runtime));
-	free_pids(post.pids);
+	put_pid(thread_pid);
 	release_thread(p);
-	/*
-	 * This task was already removed from the process/thread/pid lists
-	 * and lock_task_sighand(p) can't succeed. Nobody else can touch
-	 * ->pending or, if group dead, signal->shared_pending. We can call
-	 * flush_sigqueue() lockless.
-	 */
-	flush_sigqueue(&p->pending);
-	if (thread_group_leader(p))
-		flush_sigqueue(&p->signal->shared_pending);
-
 	put_task_struct_rcu_user(p);
 
 	p = leader;
@@ -422,30 +397,44 @@ kill_orphaned_pgrp(struct task_struct *tsk, struct task_struct *parent)
 	}
 }
 
-static void coredump_task_exit(struct task_struct *tsk,
-			       struct core_state *core_state)
+static void coredump_task_exit(struct task_struct *tsk)
 {
-	struct core_thread self;
+	struct core_state *core_state;
 
-	self.task = tsk;
-	if (self.task->flags & PF_SIGNALED)
-		self.next = xchg(&core_state->dumper.next, &self);
-	else
-		self.task = NULL;
 	/*
-	 * Implies mb(), the result of xchg() must be visible
-	 * to core_state->dumper.
+	 * Serialize with any possible pending coredump.
+	 * We must hold siglock around checking core_state
+	 * and setting PF_POSTCOREDUMP.  The core-inducing thread
+	 * will increment ->nr_threads for each thread in the
+	 * group without PF_POSTCOREDUMP set.
 	 */
-	if (atomic_dec_and_test(&core_state->nr_threads))
-		complete(&core_state->startup);
+	spin_lock_irq(&tsk->sighand->siglock);
+	tsk->flags |= PF_POSTCOREDUMP;
+	core_state = tsk->signal->core_state;
+	spin_unlock_irq(&tsk->sighand->siglock);
+	if (core_state) {
+		struct core_thread self;
 
-	for (;;) {
-		set_current_state(TASK_IDLE|TASK_FREEZABLE);
-		if (!self.task) /* see coredump_finish() */
-			break;
-		schedule();
+		self.task = current;
+		if (self.task->flags & PF_SIGNALED)
+			self.next = xchg(&core_state->dumper.next, &self);
+		else
+			self.task = NULL;
+		/*
+		 * Implies mb(), the result of xchg() must be visible
+		 * to core_state->dumper.
+		 */
+		if (atomic_dec_and_test(&core_state->nr_threads))
+			complete(&core_state->startup);
+
+		for (;;) {
+			set_current_state(TASK_IDLE|TASK_FREEZABLE);
+			if (!self.task) /* see coredump_finish() */
+				break;
+			schedule();
+		}
+		__set_current_state(TASK_RUNNING);
 	}
-	__set_current_state(TASK_RUNNING);
 }
 
 #ifdef CONFIG_MEMCG
@@ -693,7 +682,12 @@ static void reparent_leader(struct task_struct *father, struct task_struct *p,
 }
 
 /*
- * Make init inherit all the child processes
+ * This does two things:
+ *
+ * A.  Make init inherit all the child processes
+ * B.  Check to see if any process groups have become orphaned
+ *	as a result of our exiting, and if they have any stopped
+ *	jobs, send them a SIGHUP and then a SIGCONT.  (POSIX 3.2.2.2)
  */
 static void forget_original_parent(struct task_struct *father,
 					struct list_head *dead)
@@ -747,6 +741,12 @@ static void exit_notify(struct task_struct *tsk, int group_dead)
 		kill_orphaned_pgrp(tsk->group_leader, NULL);
 
 	tsk->exit_state = EXIT_ZOMBIE;
+	/*
+	 * Ignore thread-group leaders that exited before all
+	 * subthreads did.
+	 */
+	if (!delay_group_leader(tsk))
+		do_notify_pidfd(tsk);
 
 	if (unlikely(tsk->ptrace)) {
 		int sig = thread_group_leader(tsk) &&
@@ -759,8 +759,6 @@ static void exit_notify(struct task_struct *tsk, int group_dead)
 			do_notify_parent(tsk, tsk->exit_signal);
 	} else {
 		autoreap = true;
-		/* untraced sub-thread */
-		do_notify_pidfd(tsk);
 	}
 
 	if (autoreap) {
@@ -864,7 +862,6 @@ static void synchronize_group_exit(struct task_struct *tsk, long code)
 {
 	struct sighand_struct *sighand = tsk->sighand;
 	struct signal_struct *signal = tsk->signal;
-	struct core_state *core_state;
 
 	spin_lock_irq(&sighand->siglock);
 	signal->quick_threads--;
@@ -874,19 +871,7 @@ static void synchronize_group_exit(struct task_struct *tsk, long code)
 		signal->group_exit_code = code;
 		signal->group_stop_count = 0;
 	}
-	/*
-	 * Serialize with any possible pending coredump.
-	 * We must hold siglock around checking core_state
-	 * and setting PF_POSTCOREDUMP.  The core-inducing thread
-	 * will increment ->nr_threads for each thread in the
-	 * group without PF_POSTCOREDUMP set.
-	 */
-	tsk->flags |= PF_POSTCOREDUMP;
-	core_state = signal->core_state;
 	spin_unlock_irq(&sighand->siglock);
-
-	if (unlikely(core_state))
-		coredump_task_exit(tsk, core_state);
 }
 
 void __noreturn do_exit(long code)
@@ -895,12 +880,15 @@ void __noreturn do_exit(long code)
 	int group_dead;
 
 	WARN_ON(irqs_disabled());
+
+	synchronize_group_exit(tsk, code);
+
 	WARN_ON(tsk->plug);
 
 	kcov_task_exit(tsk);
 	kmsan_task_exit(tsk);
 
-	synchronize_group_exit(tsk, code);
+	coredump_task_exit(tsk);
 	ptrace_event(PTRACE_EVENT_EXIT, code);
 	user_events_exit(tsk);
 
@@ -934,8 +922,6 @@ void __noreturn do_exit(long code)
 
 	tsk->exit_code = code;
 	taskstats_exit(tsk, group_dead);
-	unwind_deferred_task_exit(tsk);
-	trace_sched_process_exit(tsk, group_dead);
 
 	/*
 	 * Since sampling can touch ->mm, make sure to stop everything before we
@@ -950,6 +936,7 @@ void __noreturn do_exit(long code)
 
 	if (group_dead)
 		acct_process();
+	trace_sched_process_exit(tsk);
 
 	exit_sem(tsk);
 	exit_shm(tsk);

@@ -2,7 +2,7 @@
 /*
  * Virtual NCI device simulation driver
  *
- * Copyright (C) 2020 Samsung Electronics
+ * Copyright (C) 2020 Samsung Electrnoics
  * Bongsu Jeon <bongsu.jeon@samsung.com>
  */
 

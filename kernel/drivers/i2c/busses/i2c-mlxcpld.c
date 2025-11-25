@@ -591,7 +591,7 @@ static void mlxcpld_i2c_remove(struct platform_device *pdev)
 
 static struct platform_driver mlxcpld_i2c_driver = {
 	.probe		= mlxcpld_i2c_probe,
-	.remove		= mlxcpld_i2c_remove,
+	.remove_new	= mlxcpld_i2c_remove,
 	.driver = {
 		.name = MLXCPLD_I2C_DEVICE_NAME,
 	},

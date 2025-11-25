@@ -218,8 +218,6 @@ void autofs_clean_ino(struct autofs_info *);
 
 static inline int autofs_check_pipe(struct file *pipe)
 {
-	if (pipe->f_mode & FMODE_PATH)
-		return -EINVAL;
 	if (!(pipe->f_mode & FMODE_CAN_WRITE))
 		return -EINVAL;
 	if (!S_ISFIFO(file_inode(pipe)->i_mode))

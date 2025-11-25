@@ -25,8 +25,6 @@
 
 #include "amdgpu_socbb.h"
 
-#define RS64_FW_UC_START_ADDR_LO 0x3000
-
 struct common_firmware_header {
 	uint32_t size_bytes; /* size of the entire header+image(s) in bytes */
 	uint32_t header_size_bytes; /* size of just the header in bytes */
@@ -128,7 +126,6 @@ enum psp_fw_type {
 	PSP_FW_TYPE_PSP_DBG_DRV,
 	PSP_FW_TYPE_PSP_RAS_DRV,
 	PSP_FW_TYPE_PSP_IPKEYMGR_DRV,
-	PSP_FW_TYPE_PSP_SPDM_DRV,
 	PSP_FW_TYPE_MAX_INDEX,
 };
 
@@ -166,7 +163,6 @@ enum ta_fw_type {
 	TA_FW_TYPE_PSP_DTM,
 	TA_FW_TYPE_PSP_RAP,
 	TA_FW_TYPE_PSP_SECUREDISPLAY,
-	TA_FW_TYPE_PSP_XGMI_AUX,
 	TA_FW_TYPE_MAX_INDEX,
 };
 
@@ -554,11 +550,6 @@ enum amdgpu_firmware_load_type {
 	AMDGPU_FW_LOAD_RLC_BACKDOOR_AUTO,
 };
 
-enum amdgpu_ucode_required {
-	AMDGPU_UCODE_OPTIONAL,
-	AMDGPU_UCODE_REQUIRED,
-};
-
 /* conform to smu_ucode_xfer_cz.h */
 #define AMDGPU_SDMA0_UCODE_LOADED	0x00000001
 #define AMDGPU_SDMA1_UCODE_LOADED	0x00000002
@@ -602,7 +593,6 @@ struct amdgpu_firmware {
 
 	void *fw_buf_ptr;
 	uint64_t fw_buf_mc;
-	uint32_t pldm_version;
 };
 
 struct kicker_device{
@@ -618,9 +608,9 @@ void amdgpu_ucode_print_rlc_hdr(const struct common_firmware_header *hdr);
 void amdgpu_ucode_print_sdma_hdr(const struct common_firmware_header *hdr);
 void amdgpu_ucode_print_psp_hdr(const struct common_firmware_header *hdr);
 void amdgpu_ucode_print_gpu_info_hdr(const struct common_firmware_header *hdr);
-__printf(4, 5)
+__printf(3, 4)
 int amdgpu_ucode_request(struct amdgpu_device *adev, const struct firmware **fw,
-			 enum amdgpu_ucode_required required, const char *fmt, ...);
+			 const char *fmt, ...);
 void amdgpu_ucode_release(const struct firmware **fw);
 bool amdgpu_ucode_hdr_version(union amdgpu_firmware_header *hdr,
 				uint16_t hdr_major, uint16_t hdr_minor);

@@ -86,7 +86,7 @@ static int fch_misc_setup(struct apd_private_data *pdata)
 		if (!clk_data->name)
 			return -ENOMEM;
 
-		strscpy(clk_data->name, obj->string.pointer, obj->string.length);
+		strcpy(clk_data->name, obj->string.pointer);
 	} else {
 		/* Set default name to mclk if entry missing in firmware */
 		clk_data->name = "mclk";

@@ -229,7 +229,7 @@ struct ice_32b_rx_flex_desc_nic {
 	__le16 status_error1;
 	u8 flexi_flags2;
 	u8 ts_low;
-	__le16 raw_csum;
+	__le16 l2tag2_1st;
 	__le16 l2tag2_2nd;
 
 	/* Qword 3 */
@@ -371,21 +371,29 @@ enum ice_rx_flex_desc_status_error_1_bits {
 	ICE_RX_FLEX_DESC_STATUS1_LAST /* this entry must be last!!! */
 };
 
+#define ICE_RXQ_CTX_SIZE_DWORDS		8
+#define ICE_RXQ_CTX_SZ			(ICE_RXQ_CTX_SIZE_DWORDS * sizeof(u32))
 #define ICE_TX_CMPLTNQ_CTX_SIZE_DWORDS	22
 #define ICE_TX_DRBELL_Q_CTX_SIZE_DWORDS	5
 #define GLTCLAN_CQ_CNTX(i, CQ)		(GLTCLAN_CQ_CNTX0(CQ) + ((i) * 0x0800))
 
-/* RLAN Rx queue context data */
+/* RLAN Rx queue context data
+ *
+ * The sizes of the variables may be larger than needed due to crossing byte
+ * boundaries. If we do not have the width of the variable set to the correct
+ * size then we could end up shifting bits off the top of the variable when the
+ * variable is at the top of a byte and crosses over into the next byte.
+ */
 struct ice_rlan_ctx {
 	u16 head;
-	u8 cpuid;
+	u16 cpuid; /* bigger than needed, see above for reason */
 #define ICE_RLAN_BASE_S 7
 	u64 base;
 	u16 qlen;
 #define ICE_RLAN_CTX_DBUF_S 7
-	u8 dbuf;
+	u16 dbuf; /* bigger than needed, see above for reason */
 #define ICE_RLAN_CTX_HBUF_S 6
-	u8 hbuf;
+	u16 hbuf; /* bigger than needed, see above for reason */
 	u8 dtype;
 	u8 dsize;
 	u8 crcstrip;
@@ -393,14 +401,28 @@ struct ice_rlan_ctx {
 	u8 hsplit_0;
 	u8 hsplit_1;
 	u8 showiv;
-	u16 rxmax;
+	u32 rxmax; /* bigger than needed, see above for reason */
 	u8 tphrdesc_ena;
 	u8 tphwdesc_ena;
 	u8 tphdata_ena;
 	u8 tphhead_ena;
-	u8 lrxqthresh;
+	u16 lrxqthresh; /* bigger than needed, see above for reason */
 	u8 prefena;	/* NOTE: normally must be set to 1 at init */
 };
+
+struct ice_ctx_ele {
+	u16 offset;
+	u16 size_of;
+	u16 width;
+	u16 lsb;
+};
+
+#define ICE_CTX_STORE(_struct, _ele, _width, _lsb) {	\
+	.offset = offsetof(struct _struct, _ele),	\
+	.size_of = sizeof_field(struct _struct, _ele),	\
+	.width = _width,				\
+	.lsb = _lsb,					\
+}
 
 /* for hsplit_0 field of Rx RLAN context */
 enum ice_rlan_ctx_rx_hsplit_0 {
@@ -478,14 +500,9 @@ enum ice_tx_desc_len_fields {
 struct ice_tx_ctx_desc {
 	__le32 tunneling_params;
 	__le16 l2tag2;
-	__le16 gcs;
+	__le16 rsvd;
 	__le64 qw1;
 };
-
-#define ICE_TX_GCS_DESC_START_M		GENMASK(7, 0)
-#define ICE_TX_GCS_DESC_OFFSET_M	GENMASK(11, 8)
-#define ICE_TX_GCS_DESC_TYPE_M		GENMASK(14, 12)
-#define ICE_TX_GCS_DESC_CSUM_PSH	1
 
 #define ICE_TXD_CTX_QW1_CMD_S	4
 #define ICE_TXD_CTX_QW1_CMD_M	(0x7FUL << ICE_TXD_CTX_QW1_CMD_S)
@@ -534,12 +551,18 @@ enum ice_tx_ctx_desc_eipt_offload {
 #define ICE_LAN_TXQ_MAX_QGRPS	127
 #define ICE_LAN_TXQ_MAX_QDIS	1023
 
-/* Tx queue context data */
+/* Tx queue context data
+ *
+ * The sizes of the variables may be larger than needed due to crossing byte
+ * boundaries. If we do not have the width of the variable set to the correct
+ * size then we could end up shifting bits off the top of the variable when the
+ * variable is at the top of a byte and crosses over into the next byte.
+ */
 struct ice_tlan_ctx {
 #define ICE_TLAN_CTX_BASE_S	7
 	u64 base;		/* base is defined in 128-byte units */
 	u8 port_num;
-	u8 cgd_num;
+	u16 cgd_num;		/* bigger than needed, see above for reason */
 	u8 pf_num;
 	u16 vmvf_num;
 	u8 vmvf_type;
@@ -550,7 +573,7 @@ struct ice_tlan_ctx {
 	u8 tsyn_ena;
 	u8 internal_usage_flag;
 	u8 alt_vlan;
-	u8 cpuid;
+	u16 cpuid;		/* bigger than needed, see above for reason */
 	u8 wb_mode;
 	u8 tphrd_desc;
 	u8 tphrd;
@@ -559,7 +582,7 @@ struct ice_tlan_ctx {
 	u16 qnum_in_func;
 	u8 itr_notification_mode;
 	u8 adjust_prof_id;
-	u16 qlen;
+	u32 qlen;		/* bigger than needed, see above for reason */
 	u8 quanta_prof_idx;
 	u8 tso_ena;
 	u16 tso_qnum;
@@ -567,6 +590,7 @@ struct ice_tlan_ctx {
 	u8 drop_ena;
 	u8 cache_prof_idx;
 	u8 pkt_shaper_prof_idx;
+	u8 int_q_state;	/* width not needed - internal - DO NOT WRITE!!! */
 };
 
 #endif /* _ICE_LAN_TX_RX_H_ */

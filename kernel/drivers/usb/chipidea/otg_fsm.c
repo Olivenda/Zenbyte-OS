@@ -424,7 +424,8 @@ static enum hrtimer_restart ci_otg_hrtimer_func(struct hrtimer *t)
 /* Initialize timers */
 static int ci_otg_init_timers(struct ci_hdrc *ci)
 {
-	hrtimer_setup(&ci->otg_fsm_hrtimer, ci_otg_hrtimer_func, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+	hrtimer_init(&ci->otg_fsm_hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+	ci->otg_fsm_hrtimer.function = ci_otg_hrtimer_func;
 
 	return 0;
 }

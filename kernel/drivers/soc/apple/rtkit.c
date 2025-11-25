@@ -12,7 +12,6 @@ enum {
 	APPLE_RTKIT_PWR_STATE_IDLE = 0x201, /* sleeping, retain state */
 	APPLE_RTKIT_PWR_STATE_QUIESCED = 0x10, /* running but no communication */
 	APPLE_RTKIT_PWR_STATE_ON = 0x20, /* normal operating state */
-	APPLE_RTKIT_PWR_STATE_INIT = 0x220, /* init after starting the coproc */
 };
 
 enum {
@@ -99,19 +98,12 @@ bool apple_rtkit_is_crashed(struct apple_rtkit *rtk)
 }
 EXPORT_SYMBOL_GPL(apple_rtkit_is_crashed);
 
-static int apple_rtkit_management_send(struct apple_rtkit *rtk, u8 type,
+static void apple_rtkit_management_send(struct apple_rtkit *rtk, u8 type,
 					u64 msg)
 {
-	int ret;
-
 	msg &= ~APPLE_RTKIT_MGMT_TYPE;
 	msg |= FIELD_PREP(APPLE_RTKIT_MGMT_TYPE, type);
-	ret = apple_rtkit_send_message(rtk, APPLE_RTKIT_EP_MGMT, msg, NULL, false);
-
-	if (ret)
-		dev_err(rtk->dev, "RTKit: Failed to send management message: %d\n", ret);
-
-	return ret;
+	apple_rtkit_send_message(rtk, APPLE_RTKIT_EP_MGMT, msg, NULL, false);
 }
 
 static void apple_rtkit_management_rx_hello(struct apple_rtkit *rtk, u64 msg)
@@ -279,7 +271,8 @@ static int apple_rtkit_common_rx_get_buffer(struct apple_rtkit *rtk,
 	dev_dbg(rtk->dev, "RTKit: buffer request for 0x%zx bytes at %pad\n",
 		buffer->size, &buffer->iova);
 
-	if (buffer->iova && !rtk->ops->shmem_setup) {
+	if (buffer->iova &&
+	    (!rtk->ops->shmem_setup || !rtk->ops->shmem_destroy)) {
 		err = -EINVAL;
 		goto error;
 	}
@@ -319,9 +312,6 @@ static int apple_rtkit_common_rx_get_buffer(struct apple_rtkit *rtk,
 	return 0;
 
 error:
-	dev_err(rtk->dev, "RTKit: failed buffer request for 0x%zx bytes (%d)\n",
-		buffer->size, err);
-
 	buffer->buffer = NULL;
 	buffer->iomem = NULL;
 	buffer->iova = 0;
@@ -387,6 +377,7 @@ static void apple_rtkit_crashlog_rx(struct apple_rtkit *rtk, u64 msg)
 		apple_rtkit_memcpy(rtk, bfr, &rtk->crashlog_buffer, 0,
 				   rtk->crashlog_buffer.size);
 		apple_rtkit_crashlog_dump(rtk, bfr, rtk->crashlog_buffer.size);
+		kfree(bfr);
 	} else {
 		dev_err(rtk->dev,
 			"RTKit: Couldn't allocate crashlog shadow buffer\n");
@@ -394,9 +385,7 @@ static void apple_rtkit_crashlog_rx(struct apple_rtkit *rtk, u64 msg)
 
 	rtk->crashed = true;
 	if (rtk->ops->crashed)
-		rtk->ops->crashed(rtk->cookie, bfr, rtk->crashlog_buffer.size);
-
-	kfree(bfr);
+		rtk->ops->crashed(rtk->cookie);
 }
 
 static void apple_rtkit_ioreport_rx(struct apple_rtkit *rtk, u64 msg)
@@ -476,7 +465,7 @@ static void apple_rtkit_syslog_rx_log(struct apple_rtkit *rtk, u64 msg)
 
 	log_context[sizeof(log_context) - 1] = 0;
 
-	msglen = strnlen(rtk->syslog_msg_buffer, rtk->syslog_msg_size - 1);
+	msglen = rtk->syslog_msg_size - 1;
 	while (msglen > 0 &&
 		   should_crop_syslog_char(rtk->syslog_msg_buffer[msglen - 1]))
 		msglen--;
@@ -609,18 +598,11 @@ int apple_rtkit_send_message(struct apple_rtkit *rtk, u8 ep, u64 message,
 		.msg1 = ep,
 	};
 
-	if (rtk->crashed) {
-		dev_warn(rtk->dev,
-			 "RTKit: Device is crashed, cannot send message\n");
+	if (rtk->crashed)
 		return -EINVAL;
-	}
-
 	if (ep >= APPLE_RTKIT_APP_ENDPOINT_START &&
-	    !apple_rtkit_is_running(rtk)) {
-		dev_warn(rtk->dev,
-			 "RTKit: Endpoint 0x%02x is not running, cannot send message\n", ep);
+	    !apple_rtkit_is_running(rtk))
 		return -EINVAL;
-	}
 
 	/*
 	 * The message will be sent with a MMIO write. We need the barrier
@@ -771,10 +753,8 @@ static int apple_rtkit_set_ap_power_state(struct apple_rtkit *rtk,
 	reinit_completion(&rtk->ap_pwr_ack_completion);
 
 	msg = FIELD_PREP(APPLE_RTKIT_MGMT_PWR_STATE, state);
-	ret = apple_rtkit_management_send(rtk, APPLE_RTKIT_MGMT_SET_AP_PWR_STATE,
-					  msg);
-	if (ret)
-		return ret;
+	apple_rtkit_management_send(rtk, APPLE_RTKIT_MGMT_SET_AP_PWR_STATE,
+				    msg);
 
 	ret = apple_rtkit_wait_for_completion(&rtk->ap_pwr_ack_completion);
 	if (ret)
@@ -794,10 +774,8 @@ static int apple_rtkit_set_iop_power_state(struct apple_rtkit *rtk,
 	reinit_completion(&rtk->iop_pwr_ack_completion);
 
 	msg = FIELD_PREP(APPLE_RTKIT_MGMT_PWR_STATE, state);
-	ret = apple_rtkit_management_send(rtk, APPLE_RTKIT_MGMT_SET_IOP_PWR_STATE,
-					  msg);
-	if (ret)
-		return ret;
+	apple_rtkit_management_send(rtk, APPLE_RTKIT_MGMT_SET_IOP_PWR_STATE,
+				    msg);
 
 	ret = apple_rtkit_wait_for_completion(&rtk->iop_pwr_ack_completion);
 	if (ret)
@@ -898,7 +876,6 @@ EXPORT_SYMBOL_GPL(apple_rtkit_quiesce);
 int apple_rtkit_wake(struct apple_rtkit *rtk)
 {
 	u64 msg;
-	int ret;
 
 	if (apple_rtkit_is_running(rtk))
 		return -EINVAL;
@@ -909,11 +886,9 @@ int apple_rtkit_wake(struct apple_rtkit *rtk)
 	 * Use open-coded apple_rtkit_set_iop_power_state since apple_rtkit_boot
 	 * will wait for the completion anyway.
 	 */
-	msg = FIELD_PREP(APPLE_RTKIT_MGMT_PWR_STATE, APPLE_RTKIT_PWR_STATE_INIT);
-	ret = apple_rtkit_management_send(rtk, APPLE_RTKIT_MGMT_SET_IOP_PWR_STATE,
-					  msg);
-	if (ret)
-		return ret;
+	msg = FIELD_PREP(APPLE_RTKIT_MGMT_PWR_STATE, APPLE_RTKIT_PWR_STATE_ON);
+	apple_rtkit_management_send(rtk, APPLE_RTKIT_MGMT_SET_IOP_PWR_STATE,
+				    msg);
 
 	return apple_rtkit_boot(rtk);
 }

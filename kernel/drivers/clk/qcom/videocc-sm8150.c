@@ -179,7 +179,7 @@ static struct gdsc vcodec0_gdsc = {
 	.pd = {
 		.name = "vcodec0_gdsc",
 	},
-	.flags = HW_CTRL_TRIGGER,
+	.flags = HW_CTRL,
 	.pwrsts = PWRSTS_OFF_ON,
 };
 
@@ -188,7 +188,7 @@ static struct gdsc vcodec1_gdsc = {
 	.pd = {
 		.name = "vcodec1_gdsc",
 	},
-	.flags = HW_CTRL_TRIGGER,
+	.flags = HW_CTRL,
 	.pwrsts = PWRSTS_OFF_ON,
 };
 static struct clk_regmap *video_cc_sm8150_clocks[] = {

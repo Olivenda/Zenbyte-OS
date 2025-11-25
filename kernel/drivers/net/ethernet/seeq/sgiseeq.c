@@ -832,7 +832,7 @@ static void sgiseeq_remove(struct platform_device *pdev)
 
 static struct platform_driver sgiseeq_driver = {
 	.probe	= sgiseeq_probe,
-	.remove = sgiseeq_remove,
+	.remove_new = sgiseeq_remove,
 	.driver = {
 		.name	= "sgiseeq",
 	}

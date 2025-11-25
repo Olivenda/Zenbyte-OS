@@ -1,5 +1,6 @@
-// SPDX-License-Identifier: MIT
 /*
+ * SPDX-License-Identifier: MIT
+ *
  * Copyright © 2019 Intel Corporation
  */
 
@@ -12,7 +13,7 @@
 #include "i915_driver.h"
 #include "i915_drv.h"
 
-#if IS_ENABLED(CONFIG_X86)
+#if defined(CONFIG_X86)
 #include <asm/smp.h>
 #else
 #define wbinvd_on_all_cpus() \

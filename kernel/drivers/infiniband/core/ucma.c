@@ -69,9 +69,7 @@ static struct ctl_table ucma_ctl_table[] = {
 		.data		= &max_backlog,
 		.maxlen		= sizeof max_backlog,
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_INT_MAX,
+		.proc_handler	= proc_dointvec,
 	},
 };
 
@@ -1617,6 +1615,7 @@ static ssize_t ucma_migrate_id(struct ucma_file *new_file,
 	struct ucma_event *uevent, *tmp;
 	struct ucma_context *ctx;
 	LIST_HEAD(event_list);
+	struct fd f;
 	struct ucma_file *cur_file;
 	int ret = 0;
 
@@ -1624,17 +1623,21 @@ static ssize_t ucma_migrate_id(struct ucma_file *new_file,
 		return -EFAULT;
 
 	/* Get current fd to protect against it being closed */
-	CLASS(fd, f)(cmd.fd);
-	if (fd_empty(f))
+	f = fdget(cmd.fd);
+	if (!fd_file(f))
 		return -ENOENT;
-	if (fd_file(f)->f_op != &ucma_fops)
-		return -EINVAL;
+	if (fd_file(f)->f_op != &ucma_fops) {
+		ret = -EINVAL;
+		goto file_put;
+	}
 	cur_file = fd_file(f)->private_data;
 
 	/* Validate current fd and prevent destruction of id. */
 	ctx = ucma_get_ctx(cur_file, cmd.id);
-	if (IS_ERR(ctx))
-		return PTR_ERR(ctx);
+	if (IS_ERR(ctx)) {
+		ret = PTR_ERR(ctx);
+		goto file_put;
+	}
 
 	rdma_lock_handler(ctx->cm_id);
 	/*
@@ -1675,6 +1678,8 @@ static ssize_t ucma_migrate_id(struct ucma_file *new_file,
 err_unlock:
 	rdma_unlock_handler(ctx->cm_id);
 	ucma_put_ctx(ctx);
+file_put:
+	fdput(f);
 	return ret;
 }
 

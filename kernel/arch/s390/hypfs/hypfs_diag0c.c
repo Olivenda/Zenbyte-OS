@@ -9,7 +9,6 @@
 
 #include <linux/slab.h>
 #include <linux/cpu.h>
-#include <asm/machine.h>
 #include <asm/diag.h>
 #include <asm/hypfs.h>
 #include "hypfs.h"
@@ -108,7 +107,7 @@ static struct hypfs_dbfs_file dbfs_file_0c = {
  */
 int __init hypfs_diag0c_init(void)
 {
-	if (!machine_is_vm())
+	if (!MACHINE_IS_VM)
 		return 0;
 	hypfs_dbfs_create_file(&dbfs_file_0c);
 	return 0;
@@ -119,7 +118,7 @@ int __init hypfs_diag0c_init(void)
  */
 void hypfs_diag0c_exit(void)
 {
-	if (!machine_is_vm())
+	if (!MACHINE_IS_VM)
 		return;
 	hypfs_dbfs_remove_file(&dbfs_file_0c);
 }

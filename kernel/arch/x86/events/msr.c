@@ -3,8 +3,6 @@
 #include <linux/sysfs.h>
 #include <linux/nospec.h>
 #include <asm/cpu_device_id.h>
-#include <asm/msr.h>
-
 #include "probe.h"
 
 enum perf_msr_id {
@@ -233,7 +231,7 @@ static inline u64 msr_read_counter(struct perf_event *event)
 	u64 now;
 
 	if (event->hw.event_base)
-		rdmsrq(event->hw.event_base, now);
+		rdmsrl(event->hw.event_base, now);
 	else
 		now = rdtsc_ordered();
 

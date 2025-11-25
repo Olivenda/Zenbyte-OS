@@ -20,16 +20,6 @@ pub const PAGE_SIZE: usize = bindings::PAGE_SIZE;
 /// A bitmask that gives the page containing a given address.
 pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 
-/// Round up the given number to the next multiple of [`PAGE_SIZE`].
-///
-/// It is incorrect to pass an address where the next multiple of [`PAGE_SIZE`] doesn't fit in a
-/// [`usize`].
-pub const fn page_align(addr: usize) -> usize {
-    // Parentheses around `PAGE_SIZE - 1` to avoid triggering overflow sanitizers in the wrong
-    // cases.
-    (addr + (PAGE_SIZE - 1)) & PAGE_MASK
-}
-
 /// A pointer to a page that owns the page allocation.
 ///
 /// # Invariants
@@ -57,8 +47,9 @@ impl Page {
     /// ```
     /// use kernel::page::Page;
     ///
+    /// # fn dox() -> Result<(), kernel::alloc::AllocError> {
     /// let page = Page::alloc_page(GFP_KERNEL)?;
-    /// # Ok::<(), kernel::alloc::AllocError>(())
+    /// # Ok(()) }
     /// ```
     ///
     /// Allocate memory for a page and zero its contents.
@@ -66,10 +57,10 @@ impl Page {
     /// ```
     /// use kernel::page::Page;
     ///
+    /// # fn dox() -> Result<(), kernel::alloc::AllocError> {
     /// let page = Page::alloc_page(GFP_KERNEL | __GFP_ZERO)?;
-    /// # Ok::<(), kernel::alloc::AllocError>(())
+    /// # Ok(()) }
     /// ```
-    #[inline]
     pub fn alloc_page(flags: Flags) -> Result<Self, AllocError> {
         // SAFETY: Depending on the value of `gfp_flags`, this call may sleep. Other than that, it
         // is always safe to call this method.
@@ -252,7 +243,6 @@ impl Page {
 }
 
 impl Drop for Page {
-    #[inline]
     fn drop(&mut self) {
         // SAFETY: By the type invariants, we have ownership of the page and can free it.
         unsafe { bindings::__free_pages(self.page.as_ptr(), 0) };

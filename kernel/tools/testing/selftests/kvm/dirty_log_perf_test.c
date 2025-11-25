@@ -21,7 +21,7 @@
 #include "ucall_common.h"
 
 #ifdef __aarch64__
-#include "arm64/vgic.h"
+#include "aarch64/vgic.h"
 
 static int gic_fd;
 

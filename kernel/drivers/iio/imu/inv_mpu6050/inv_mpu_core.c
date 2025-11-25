@@ -277,38 +277,12 @@ static const struct inv_mpu6050_hw hw_info[] = {
 		.temp = {INV_ICM20608_TEMP_OFFSET, INV_ICM20608_TEMP_SCALE},
 		.startup_time = {INV_ICM20690_GYRO_STARTUP_TIME, INV_ICM20690_ACCEL_STARTUP_TIME},
 	},
-	{	.whoami = INV_IAM20380_WHOAMI_VALUE,
-		.name = "IAM20380",
-		.reg = &reg_set_6500,
-		.config = &chip_config_6500,
-		.fifo_size = 512,
-		.temp = {INV_ICM20608_TEMP_OFFSET, INV_ICM20608_TEMP_SCALE},
-		.startup_time = {INV_MPU6500_GYRO_STARTUP_TIME, INV_MPU6500_ACCEL_STARTUP_TIME},
-	},
 	{
 		.whoami = INV_IAM20680_WHOAMI_VALUE,
 		.name = "IAM20680",
 		.reg = &reg_set_6500,
 		.config = &chip_config_6500,
 		.fifo_size = 512,
-		.temp = {INV_ICM20608_TEMP_OFFSET, INV_ICM20608_TEMP_SCALE},
-		.startup_time = {INV_MPU6500_GYRO_STARTUP_TIME, INV_MPU6500_ACCEL_STARTUP_TIME},
-	},
-	{
-		.whoami = INV_IAM20680HP_WHOAMI_VALUE,
-		.name = "IAM20680HP",
-		.reg = &reg_set_6500,
-		.config = &chip_config_6500,
-		.fifo_size = 4 * 1024,
-		.temp = {INV_ICM20608_TEMP_OFFSET, INV_ICM20608_TEMP_SCALE},
-		.startup_time = {INV_MPU6500_GYRO_STARTUP_TIME, INV_MPU6500_ACCEL_STARTUP_TIME},
-	},
-	{
-		.whoami = INV_IAM20680HT_WHOAMI_VALUE,
-		.name = "IAM20680HT",
-		.reg = &reg_set_6500,
-		.config = &chip_config_6500,
-		.fifo_size = 4 * 1024,
 		.temp = {INV_ICM20608_TEMP_OFFSET, INV_ICM20608_TEMP_SCALE},
 		.startup_time = {INV_MPU6500_GYRO_STARTUP_TIME, INV_MPU6500_ACCEL_STARTUP_TIME},
 	},
@@ -536,8 +510,6 @@ static int inv_mpu6050_set_accel_lpf_regs(struct inv_mpu6050_state *st,
 		return 0;
 	case INV_ICM20689:
 	case INV_ICM20690:
-	case INV_IAM20680HT:
-	case INV_IAM20680HP:
 		/* set FIFO size to maximum value */
 		val |= INV_ICM20689_BITS_FIFO_SIZE_MAX;
 		break;
@@ -755,12 +727,13 @@ inv_mpu6050_read_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
 		mutex_lock(&st->lock);
 		ret = inv_mpu6050_read_channel_data(indio_dev, chan, val);
 		mutex_unlock(&st->lock);
-		iio_device_release_direct(indio_dev);
+		iio_device_release_direct_mode(indio_dev);
 		return ret;
 	case IIO_CHAN_INFO_SCALE:
 		switch (chan->type) {
@@ -894,8 +867,9 @@ static int inv_mpu6050_write_raw(struct iio_dev *indio_dev,
 	 * we should only update scale when the chip is disabled, i.e.
 	 * not running
 	 */
-	if (!iio_device_claim_direct(indio_dev))
-		return -EBUSY;
+	result = iio_device_claim_direct_mode(indio_dev);
+	if (result)
+		return result;
 
 	mutex_lock(&st->lock);
 	result = pm_runtime_resume_and_get(pdev);
@@ -942,7 +916,7 @@ static int inv_mpu6050_write_raw(struct iio_dev *indio_dev,
 	pm_runtime_put_autosuspend(pdev);
 error_write_raw_unlock:
 	mutex_unlock(&st->lock);
-	iio_device_release_direct(indio_dev);
+	iio_device_release_direct_mode(indio_dev);
 
 	return result;
 }
@@ -1179,21 +1153,24 @@ static int inv_mpu6050_write_event_config(struct iio_dev *indio_dev,
 					  const struct iio_chan_spec *chan,
 					  enum iio_event_type type,
 					  enum iio_event_direction dir,
-					  bool state)
+					  int state)
 {
 	struct inv_mpu6050_state *st = iio_priv(indio_dev);
+	int enable;
 
 	/* support only WoM (accel roc rising) event */
 	if (chan->type != IIO_ACCEL || type != IIO_EV_TYPE_ROC ||
 	    dir != IIO_EV_DIR_RISING)
 		return -EINVAL;
 
+	enable = !!state;
+
 	guard(mutex)(&st->lock);
 
-	if (st->chip_config.wom_en == state)
+	if (st->chip_config.wom_en == enable)
 		return 0;
 
-	return inv_mpu6050_enable_wom(st, state);
+	return inv_mpu6050_enable_wom(st, enable);
 }
 
 static int inv_mpu6050_read_event_value(struct iio_dev *indio_dev,
@@ -1382,7 +1359,7 @@ inv_fifo_rate_show(struct device *dev, struct device_attribute *attr,
 	fifo_rate = INV_MPU6050_DIVIDER_TO_FIFO_RATE(st->chip_config.divider);
 	mutex_unlock(&st->lock);
 
-	return sysfs_emit(buf, "%u\n", fifo_rate);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", fifo_rate);
 }
 
 /*
@@ -1409,7 +1386,8 @@ static ssize_t inv_attr_show(struct device *dev, struct device_attribute *attr,
 	case ATTR_ACCL_MATRIX:
 		m = st->plat_data.orientation;
 
-		return sysfs_emit(buf, "%d, %d, %d; %d, %d, %d; %d, %d, %d\n",
+		return scnprintf(buf, PAGE_SIZE,
+			"%d, %d, %d; %d, %d, %d; %d, %d, %d\n",
 			m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8]);
 	default:
 		return -EINVAL;
@@ -1524,14 +1502,6 @@ static const struct iio_chan_spec inv_mpu6050_channels[] = {
 	INV_MPU6050_CHAN(IIO_ACCEL, IIO_MOD_Z, INV_MPU6050_SCAN_ACCL_Z),
 };
 
-static const struct iio_chan_spec inv_iam20380_channels[] = {
-	IIO_CHAN_SOFT_TIMESTAMP(INV_MPU6050_SCAN_TIMESTAMP),
-
-	INV_MPU6050_CHAN(IIO_ANGL_VEL, IIO_MOD_X, INV_MPU6050_SCAN_GYRO_X),
-	INV_MPU6050_CHAN(IIO_ANGL_VEL, IIO_MOD_Y, INV_MPU6050_SCAN_GYRO_Y),
-	INV_MPU6050_CHAN(IIO_ANGL_VEL, IIO_MOD_Z, INV_MPU6050_SCAN_GYRO_Z),
-};
-
 static const struct iio_chan_spec inv_mpu6500_channels[] = {
 	IIO_CHAN_SOFT_TIMESTAMP(INV_MPU6050_SCAN_TIMESTAMP),
 
@@ -1635,10 +1605,6 @@ static const struct iio_chan_spec inv_mpu9250_channels[] = {
 	(BIT(INV_MPU9X50_SCAN_MAGN_X)		\
 	| BIT(INV_MPU9X50_SCAN_MAGN_Y)		\
 	| BIT(INV_MPU9X50_SCAN_MAGN_Z))
-
-static const unsigned long inv_iam20380_scan_masks[] = {
-	INV_MPU6050_SCAN_MASK_3AXIS_GYRO,
-};
 
 static const unsigned long inv_mpu9x50_scan_masks[] = {
 	/* 3-axis accel */
@@ -1893,6 +1859,7 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 	struct inv_mpu6050_platform_data *pdata;
 	struct device *dev = regmap_get_device(regmap);
 	int result;
+	struct irq_data *desc;
 	int irq_type;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
@@ -1926,7 +1893,13 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 	}
 
 	if (irq > 0) {
-		irq_type = irq_get_trigger_type(irq);
+		desc = irq_get_irq_data(irq);
+		if (!desc) {
+			dev_err(dev, "Could not find IRQ %d\n", irq);
+			return -EINVAL;
+		}
+
+		irq_type = irqd_get_trigger_type(desc);
 		if (!irq_type)
 			irq_type = IRQF_TRIGGER_RISING;
 	} else {
@@ -2043,11 +2016,6 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 		indio_dev->num_channels = ARRAY_SIZE(inv_mpu9250_channels);
 		indio_dev->available_scan_masks = inv_mpu9x50_scan_masks;
 		break;
-	case INV_IAM20380:
-		indio_dev->channels = inv_iam20380_channels;
-		indio_dev->num_channels = ARRAY_SIZE(inv_iam20380_channels);
-		indio_dev->available_scan_masks = inv_iam20380_scan_masks;
-		break;
 	case INV_ICM20600:
 	case INV_ICM20602:
 		indio_dev->channels = inv_mpu6500_channels;
@@ -2114,7 +2082,7 @@ error_power_off:
 	inv_mpu6050_set_power_itg(st, false);
 	return result;
 }
-EXPORT_SYMBOL_NS_GPL(inv_mpu_core_probe, "IIO_MPU6050");
+EXPORT_SYMBOL_NS_GPL(inv_mpu_core_probe, IIO_MPU6050);
 
 static int inv_mpu_resume(struct device *dev)
 {
@@ -2265,4 +2233,4 @@ EXPORT_NS_GPL_DEV_PM_OPS(inv_mpu_pmops, IIO_MPU6050) = {
 MODULE_AUTHOR("Invensense Corporation");
 MODULE_DESCRIPTION("Invensense device MPU6050 driver");
 MODULE_LICENSE("GPL");
-MODULE_IMPORT_NS("IIO_INV_SENSORS_TIMESTAMP");
+MODULE_IMPORT_NS(IIO_INV_SENSORS_TIMESTAMP);

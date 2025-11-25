@@ -81,18 +81,20 @@ static int show_irq_affinity(int type, struct seq_file *m)
 static int irq_affinity_hint_proc_show(struct seq_file *m, void *v)
 {
 	struct irq_desc *desc = irq_to_desc((long)m->private);
+	unsigned long flags;
 	cpumask_var_t mask;
 
 	if (!zalloc_cpumask_var(&mask, GFP_KERNEL))
 		return -ENOMEM;
 
-	scoped_guard(raw_spinlock_irq, &desc->lock) {
-		if (desc->affinity_hint)
-			cpumask_copy(mask, desc->affinity_hint);
-	}
+	raw_spin_lock_irqsave(&desc->lock, flags);
+	if (desc->affinity_hint)
+		cpumask_copy(mask, desc->affinity_hint);
+	raw_spin_unlock_irqrestore(&desc->lock, flags);
 
 	seq_printf(m, "%*pb\n", cpumask_pr_args(mask));
 	free_cpumask_var(mask);
+
 	return 0;
 }
 
@@ -293,26 +295,32 @@ static int irq_spurious_proc_show(struct seq_file *m, void *v)
 
 #define MAX_NAMELEN 128
 
-static bool name_unique(unsigned int irq, struct irqaction *new_action)
+static int name_unique(unsigned int irq, struct irqaction *new_action)
 {
 	struct irq_desc *desc = irq_to_desc(irq);
 	struct irqaction *action;
+	unsigned long flags;
+	int ret = 1;
 
-	guard(raw_spinlock_irq)(&desc->lock);
+	raw_spin_lock_irqsave(&desc->lock, flags);
 	for_each_action_of_desc(desc, action) {
 		if ((action != new_action) && action->name &&
-		    !strcmp(new_action->name, action->name))
-			return false;
+				!strcmp(new_action->name, action->name)) {
+			ret = 0;
+			break;
+		}
 	}
-	return true;
+	raw_spin_unlock_irqrestore(&desc->lock, flags);
+	return ret;
 }
 
 void register_handler_proc(unsigned int irq, struct irqaction *action)
 {
-	char name[MAX_NAMELEN];
+	char name [MAX_NAMELEN];
 	struct irq_desc *desc = irq_to_desc(irq);
 
-	if (!desc->dir || action->dir || !action->name || !name_unique(irq, action))
+	if (!desc->dir || action->dir || !action->name ||
+					!name_unique(irq, action))
 		return;
 
 	snprintf(name, MAX_NAMELEN, "%s", action->name);
@@ -339,16 +347,17 @@ void register_irq_proc(unsigned int irq, struct irq_desc *desc)
 	 * added, not when the descriptor is created, so multiple
 	 * tasks might try to register at the same time.
 	 */
-	guard(mutex)(&register_lock);
+	mutex_lock(&register_lock);
 
 	if (desc->dir)
-		return;
+		goto out_unlock;
+
+	sprintf(name, "%d", irq);
 
 	/* create /proc/irq/1234 */
-	sprintf(name, "%u", irq);
 	desc->dir = proc_mkdir(name, root_irq_dir);
 	if (!desc->dir)
-		return;
+		goto out_unlock;
 
 #ifdef CONFIG_SMP
 	umode_t umode = S_IRUGO;
@@ -357,27 +366,31 @@ void register_irq_proc(unsigned int irq, struct irq_desc *desc)
 		umode |= S_IWUSR;
 
 	/* create /proc/irq/<irq>/smp_affinity */
-	proc_create_data("smp_affinity", umode, desc->dir, &irq_affinity_proc_ops, irqp);
+	proc_create_data("smp_affinity", umode, desc->dir,
+			 &irq_affinity_proc_ops, irqp);
 
 	/* create /proc/irq/<irq>/affinity_hint */
 	proc_create_single_data("affinity_hint", 0444, desc->dir,
-				irq_affinity_hint_proc_show, irqp);
+			irq_affinity_hint_proc_show, irqp);
 
 	/* create /proc/irq/<irq>/smp_affinity_list */
 	proc_create_data("smp_affinity_list", umode, desc->dir,
 			 &irq_affinity_list_proc_ops, irqp);
 
-	proc_create_single_data("node", 0444, desc->dir, irq_node_proc_show, irqp);
+	proc_create_single_data("node", 0444, desc->dir, irq_node_proc_show,
+			irqp);
 # ifdef CONFIG_GENERIC_IRQ_EFFECTIVE_AFF_MASK
 	proc_create_single_data("effective_affinity", 0444, desc->dir,
-				irq_effective_aff_proc_show, irqp);
+			irq_effective_aff_proc_show, irqp);
 	proc_create_single_data("effective_affinity_list", 0444, desc->dir,
-				irq_effective_aff_list_proc_show, irqp);
+			irq_effective_aff_list_proc_show, irqp);
 # endif
 #endif
 	proc_create_single_data("spurious", 0444, desc->dir,
-				irq_spurious_proc_show, (void *)(long)irq);
+			irq_spurious_proc_show, (void *)(long)irq);
 
+out_unlock:
+	mutex_unlock(&register_lock);
 }
 
 void unregister_irq_proc(unsigned int irq, struct irq_desc *desc)
@@ -444,17 +457,17 @@ int __weak arch_show_interrupts(struct seq_file *p, int prec)
 }
 
 #ifndef ACTUAL_NR_IRQS
-# define ACTUAL_NR_IRQS irq_get_nr_irqs()
+# define ACTUAL_NR_IRQS nr_irqs
 #endif
 
 int show_interrupts(struct seq_file *p, void *v)
 {
-	const unsigned int nr_irqs = irq_get_nr_irqs();
 	static int prec;
 
 	int i = *(loff_t *) v, j;
 	struct irqaction *action;
 	struct irq_desc *desc;
+	unsigned long flags;
 
 	if (i > ACTUAL_NR_IRQS)
 		return 0;
@@ -473,32 +486,28 @@ int show_interrupts(struct seq_file *p, void *v)
 		seq_putc(p, '\n');
 	}
 
-	guard(rcu)();
+	rcu_read_lock();
 	desc = irq_to_desc(i);
 	if (!desc || irq_settings_is_hidden(desc))
-		return 0;
+		goto outsparse;
 
 	if (!desc->action || irq_desc_is_chained(desc) || !desc->kstat_irqs)
-		return 0;
+		goto outsparse;
 
-	seq_printf(p, "%*d:", prec, i);
-	for_each_online_cpu(j) {
-		unsigned int cnt = desc->kstat_irqs ? per_cpu(desc->kstat_irqs->cnt, j) : 0;
+	seq_printf(p, "%*d: ", prec, i);
+	for_each_online_cpu(j)
+		seq_printf(p, "%10u ", desc->kstat_irqs ? per_cpu(desc->kstat_irqs->cnt, j) : 0);
 
-		seq_put_decimal_ull_width(p, " ", cnt, 10);
-	}
-	seq_putc(p, ' ');
-
-	guard(raw_spinlock_irq)(&desc->lock);
+	raw_spin_lock_irqsave(&desc->lock, flags);
 	if (desc->irq_data.chip) {
 		if (desc->irq_data.chip->irq_print_chip)
 			desc->irq_data.chip->irq_print_chip(&desc->irq_data, p);
 		else if (desc->irq_data.chip->name)
-			seq_printf(p, "%8s", desc->irq_data.chip->name);
+			seq_printf(p, " %8s", desc->irq_data.chip->name);
 		else
-			seq_printf(p, "%8s", "-");
+			seq_printf(p, " %8s", "-");
 	} else {
-		seq_printf(p, "%8s", "None");
+		seq_printf(p, " %8s", "None");
 	}
 	if (desc->irq_data.domain)
 		seq_printf(p, " %*lu", prec, desc->irq_data.hwirq);
@@ -518,6 +527,9 @@ int show_interrupts(struct seq_file *p, void *v)
 	}
 
 	seq_putc(p, '\n');
+	raw_spin_unlock_irqrestore(&desc->lock, flags);
+outsparse:
+	rcu_read_unlock();
 	return 0;
 }
 #endif

@@ -245,15 +245,18 @@ static int silicom_gpio_direction_input(struct gpio_chip *gc,
 	return direction == GPIO_LINE_DIRECTION_IN ? 0 : -EINVAL;
 }
 
-static int silicom_gpio_set(struct gpio_chip *gc, unsigned int offset,
-			    int value)
+static void silicom_gpio_set(struct gpio_chip *gc,
+			     unsigned int offset,
+			     int value)
 {
+	int direction = silicom_gpio_get_direction(gc, offset);
 	u8 *channels = gpiochip_get_data(gc);
 	int channel = channels[offset];
 
-	silicom_mec_port_set(channel, !value);
+	if (direction == GPIO_LINE_DIRECTION_IN)
+		return;
 
-	return 0;
+	silicom_mec_port_set(channel, !value);
 }
 
 static int silicom_gpio_direction_output(struct gpio_chip *gc,

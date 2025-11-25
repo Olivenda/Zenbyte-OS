@@ -6,7 +6,7 @@
 #ifndef _ASM_ARC_MMU_H
 #define _ASM_ARC_MMU_H
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/threads.h>	/* NR_CPUS */
 

@@ -213,7 +213,7 @@ static struct platform_driver oppanel_driver = {
 		.of_match_table	= oppanel_match,
 	},
 	.probe	= oppanel_probe,
-	.remove	= oppanel_remove,
+	.remove_new = oppanel_remove,
 };
 
 module_platform_driver(oppanel_driver);

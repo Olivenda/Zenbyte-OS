@@ -208,7 +208,8 @@ static void parport_attach(struct parport *port)
 
 	calibrate_port(&device);
 
-	hrtimer_setup(&device.timer, hrtimer_event, CLOCK_REALTIME, HRTIMER_MODE_ABS);
+	hrtimer_init(&device.timer, CLOCK_REALTIME, HRTIMER_MODE_ABS);
+	device.timer.function = hrtimer_event;
 	hrtimer_start(&device.timer, next_intr_time(&device), HRTIMER_MODE_ABS);
 
 	return;
