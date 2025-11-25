@@ -31,7 +31,6 @@
 
 #define FRU_EEPROM_MADDR_6      0x60000
 #define FRU_EEPROM_MADDR_8      0x80000
-#define FRU_EEPROM_MADDR_INV    0xFFFFF
 
 static bool is_fru_eeprom_supported(struct amdgpu_device *adev, u32 *fru_addr)
 {
@@ -64,10 +63,10 @@ static bool is_fru_eeprom_supported(struct amdgpu_device *adev, u32 *fru_addr)
 		switch (adev->asic_type) {
 		case CHIP_VEGA20:
 			/* D161 and D163 are the VG20 server SKUs */
-			if (atom_ctx && (strnstr(atom_ctx->vbios_pn, "D161",
-						 sizeof(atom_ctx->vbios_pn)) ||
-					 strnstr(atom_ctx->vbios_pn, "D163",
-						 sizeof(atom_ctx->vbios_pn)))) {
+			if (strnstr(atom_ctx->vbios_pn, "D161",
+				    sizeof(atom_ctx->vbios_pn)) ||
+			    strnstr(atom_ctx->vbios_pn, "D163",
+				    sizeof(atom_ctx->vbios_pn))) {
 				if (fru_addr)
 					*fru_addr = FRU_EEPROM_MADDR_6;
 				return true;
@@ -79,8 +78,8 @@ static bool is_fru_eeprom_supported(struct amdgpu_device *adev, u32 *fru_addr)
 			return false;
 		}
 	case IP_VERSION(11, 0, 7):
-		if (atom_ctx && strnstr(atom_ctx->vbios_pn, "D603",
-					sizeof(atom_ctx->vbios_pn))) {
+		if (strnstr(atom_ctx->vbios_pn, "D603",
+			    sizeof(atom_ctx->vbios_pn))) {
 			if (strnstr(atom_ctx->vbios_pn, "D603GLXE",
 				    sizeof(atom_ctx->vbios_pn))) {
 				return false;
@@ -95,8 +94,8 @@ static bool is_fru_eeprom_supported(struct amdgpu_device *adev, u32 *fru_addr)
 		}
 	case IP_VERSION(13, 0, 2):
 		/* All Aldebaran SKUs have an FRU */
-		if (atom_ctx && !strnstr(atom_ctx->vbios_pn, "D673",
-					 sizeof(atom_ctx->vbios_pn)))
+		if (!strnstr(atom_ctx->vbios_pn, "D673",
+			     sizeof(atom_ctx->vbios_pn)))
 			if (fru_addr)
 				*fru_addr = FRU_EEPROM_MADDR_6;
 		return true;
@@ -104,10 +103,6 @@ static bool is_fru_eeprom_supported(struct amdgpu_device *adev, u32 *fru_addr)
 	case IP_VERSION(13, 0, 14):
 			if (fru_addr)
 				*fru_addr = FRU_EEPROM_MADDR_8;
-			return true;
-	case IP_VERSION(13, 0, 12):
-			if (fru_addr)
-				*fru_addr = FRU_EEPROM_MADDR_INV;
 			return true;
 	default:
 		return false;
@@ -125,10 +120,6 @@ int amdgpu_fru_get_product_info(struct amdgpu_device *adev)
 	if (!is_fru_eeprom_supported(adev, &fru_addr))
 		return 0;
 
-	/* FRU data avaialble, but no direct EEPROM access */
-	if (fru_addr == FRU_EEPROM_MADDR_INV)
-		return 0;
-
 	if (!adev->fru_info) {
 		adev->fru_info = kzalloc(sizeof(*adev->fru_info), GFP_KERNEL);
 		if (!adev->fru_info)
@@ -144,8 +135,7 @@ int amdgpu_fru_get_product_info(struct amdgpu_device *adev)
 
 	/* If algo exists, it means that the i2c_adapter's initialized */
 	if (!adev->pm.fru_eeprom_i2c_bus || !adev->pm.fru_eeprom_i2c_bus->algo) {
-		dev_warn(adev->dev,
-			 "Cannot access FRU, EEPROM accessor not initialized");
+		DRM_WARN("Cannot access FRU, EEPROM accessor not initialized");
 		return -ENODEV;
 	}
 
@@ -153,22 +143,19 @@ int amdgpu_fru_get_product_info(struct amdgpu_device *adev)
 	len = amdgpu_eeprom_read(adev->pm.fru_eeprom_i2c_bus, fru_addr, buf,
 				 sizeof(buf));
 	if (len != 8) {
-		dev_err(adev->dev, "Couldn't read the IPMI Common Header: %d",
-			len);
+		DRM_ERROR("Couldn't read the IPMI Common Header: %d", len);
 		return len < 0 ? len : -EIO;
 	}
 
 	if (buf[0] != 1) {
-		dev_err(adev->dev, "Bad IPMI Common Header version: 0x%02x",
-			buf[0]);
+		DRM_ERROR("Bad IPMI Common Header version: 0x%02x", buf[0]);
 		return -EIO;
 	}
 
 	for (csum = 0; len > 0; len--)
 		csum += buf[len - 1];
 	if (csum) {
-		dev_err(adev->dev, "Bad IPMI Common Header checksum: 0x%02x",
-			csum);
+		DRM_ERROR("Bad IPMI Common Header checksum: 0x%02x", csum);
 		return -EIO;
 	}
 
@@ -183,14 +170,12 @@ int amdgpu_fru_get_product_info(struct amdgpu_device *adev)
 	/* Read the header of the PIA. */
 	len = amdgpu_eeprom_read(adev->pm.fru_eeprom_i2c_bus, addr, buf, 3);
 	if (len != 3) {
-		dev_err(adev->dev,
-			"Couldn't read the Product Info Area header: %d", len);
+		DRM_ERROR("Couldn't read the Product Info Area header: %d", len);
 		return len < 0 ? len : -EIO;
 	}
 
 	if (buf[0] != 1) {
-		dev_err(adev->dev, "Bad IPMI Product Info Area version: 0x%02x",
-			buf[0]);
+		DRM_ERROR("Bad IPMI Product Info Area version: 0x%02x", buf[0]);
 		return -EIO;
 	}
 
@@ -203,16 +188,14 @@ int amdgpu_fru_get_product_info(struct amdgpu_device *adev)
 	len = amdgpu_eeprom_read(adev->pm.fru_eeprom_i2c_bus, addr, pia, size);
 	if (len != size) {
 		kfree(pia);
-		dev_err(adev->dev, "Couldn't read the Product Info Area: %d",
-			len);
+		DRM_ERROR("Couldn't read the Product Info Area: %d", len);
 		return len < 0 ? len : -EIO;
 	}
 
 	for (csum = 0; size > 0; size--)
 		csum += pia[size - 1];
 	if (csum) {
-		dev_err(adev->dev, "Bad Product Info Area checksum: 0x%02x",
-			csum);
+		DRM_ERROR("Bad Product Info Area checksum: 0x%02x", csum);
 		kfree(pia);
 		return -EIO;
 	}
@@ -401,7 +384,7 @@ int amdgpu_fru_sysfs_init(struct amdgpu_device *adev)
 
 void amdgpu_fru_sysfs_fini(struct amdgpu_device *adev)
 {
-	if (!adev->fru_info)
+	if (!is_fru_eeprom_supported(adev, NULL) || !adev->fru_info)
 		return;
 
 	sysfs_remove_files(&adev->dev->kobj, amdgpu_fru_attributes);

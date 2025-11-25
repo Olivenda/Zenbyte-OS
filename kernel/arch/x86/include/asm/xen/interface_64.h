@@ -77,7 +77,7 @@
 #define VGCF_in_syscall  (1<<_VGCF_in_syscall)
 #define VGCF_IN_SYSCALL  VGCF_in_syscall
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 struct iret_context {
     /* Top of stack (%rsp at point of hypercall). */
@@ -143,7 +143,7 @@ typedef unsigned long xen_callback_t;
 #define XEN_CALLBACK(__cs, __rip)				\
 	((unsigned long)(__rip))
 
-#endif /* !__ASSEMBLER__ */
+#endif /* !__ASSEMBLY__ */
 
 
 #endif /* _ASM_X86_XEN_INTERFACE_64_H */

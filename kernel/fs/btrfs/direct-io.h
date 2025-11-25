@@ -5,8 +5,6 @@
 
 #include <linux/types.h>
 
-struct kiocb;
-
 int __init btrfs_init_dio(void);
 void __cold btrfs_destroy_dio(void);
 

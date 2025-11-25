@@ -6,8 +6,8 @@
 
 char _license[] SEC("license") = "GPL";
 
-SEC("xdp")
-int xdp_prog1(struct xdp_md *xdp)
+SEC("kprobe")
+int kprobe_prog(void *ctx)
 {
-	return XDP_DROP;
+	return 1;
 }

@@ -1,5 +1,5 @@
 #!/bin/bash
-# perftool-testsuite_report (exclusive)
+# perftool-testsuite_report
 # SPDX-License-Identifier: GPL-2.0
 
 test -d "$(dirname "$0")/base_report" || exit 2

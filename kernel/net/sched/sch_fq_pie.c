@@ -130,7 +130,6 @@ static inline void flow_queue_add(struct fq_pie_flow *flow,
 static int fq_pie_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 				struct sk_buff **to_free)
 {
-	enum skb_drop_reason reason = SKB_DROP_REASON_QDISC_OVERLIMIT;
 	struct fq_pie_sched_data *q = qdisc_priv(sch);
 	struct fq_pie_flow *sel_flow;
 	int ret;
@@ -161,8 +160,6 @@ static int fq_pie_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	} else if (unlikely(memory_limited)) {
 		q->overmemory++;
 	}
-
-	reason = SKB_DROP_REASON_QDISC_CONGESTED;
 
 	if (!pie_drop_early(sch, &q->p_params, &sel_flow->vars,
 			    sel_flow->backlog, skb->len)) {
@@ -201,7 +198,8 @@ static int fq_pie_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 out:
 	q->stats.dropped++;
 	sel_flow->vars.accu_prob = 0;
-	qdisc_drop_reason(skb, sch, to_free, reason);
+	__qdisc_drop(skb, to_free);
+	qdisc_qstats_drop(sch);
 	return NET_XMIT_CN;
 }
 
@@ -287,9 +285,10 @@ begin:
 static int fq_pie_change(struct Qdisc *sch, struct nlattr *opt,
 			 struct netlink_ext_ack *extack)
 {
-	unsigned int dropped_pkts = 0, dropped_bytes = 0;
 	struct fq_pie_sched_data *q = qdisc_priv(sch);
 	struct nlattr *tb[TCA_FQ_PIE_MAX + 1];
+	unsigned int len_dropped = 0;
+	unsigned int num_dropped = 0;
 	int err;
 
 	err = nla_parse_nested(tb, TCA_FQ_PIE_MAX, opt, fq_pie_policy, extack);
@@ -367,14 +366,11 @@ static int fq_pie_change(struct Qdisc *sch, struct nlattr *opt,
 	while (sch->q.qlen > sch->limit) {
 		struct sk_buff *skb = qdisc_dequeue_internal(sch, false);
 
-		if (!skb)
-			break;
-
-		dropped_pkts++;
-		dropped_bytes += qdisc_pkt_len(skb);
+		len_dropped += qdisc_pkt_len(skb);
+		num_dropped += 1;
 		rtnl_kfree_skbs(skb, skb);
 	}
-	qdisc_tree_reduce_backlog(sch, dropped_pkts, dropped_bytes);
+	qdisc_tree_reduce_backlog(sch, num_dropped, len_dropped);
 
 	sch_tree_unlock(sch);
 	return 0;
@@ -386,7 +382,7 @@ flow_error:
 
 static void fq_pie_timer(struct timer_list *t)
 {
-	struct fq_pie_sched_data *q = timer_container_of(q, t, adapt_timer);
+	struct fq_pie_sched_data *q = from_timer(q, t, adapt_timer);
 	unsigned long next, tupdate;
 	struct Qdisc *sch = q->sch;
 	spinlock_t *root_lock; /* to lock qdisc for probability calculations */
@@ -557,7 +553,7 @@ static void fq_pie_destroy(struct Qdisc *sch)
 
 	tcf_block_put(q->block);
 	q->p_params.tupdate = 0;
-	timer_delete_sync(&q->adapt_timer);
+	del_timer_sync(&q->adapt_timer);
 	kvfree(q->flows);
 }
 

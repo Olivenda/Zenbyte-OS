@@ -135,7 +135,8 @@ void msm_hrtimer_work_init(struct msm_hrtimer_work *work,
 			   clockid_t clock_id,
 			   enum hrtimer_mode mode)
 {
-	hrtimer_setup(&work->timer, msm_hrtimer_worktimer, clock_id, mode);
+	hrtimer_init(&work->timer, clock_id, mode);
+	work->timer.function = msm_hrtimer_worktimer;
 	work->worker = worker;
 	kthread_init_work(&work->work, fn);
 }

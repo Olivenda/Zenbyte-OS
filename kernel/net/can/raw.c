@@ -129,7 +129,6 @@ static void raw_rcv(struct sk_buff *oskb, void *data)
 {
 	struct sock *sk = (struct sock *)data;
 	struct raw_sock *ro = raw_sk(sk);
-	enum skb_drop_reason reason;
 	struct sockaddr_can *addr;
 	struct sk_buff *skb;
 	unsigned int *pflags;
@@ -206,8 +205,8 @@ static void raw_rcv(struct sk_buff *oskb, void *data)
 	if (oskb->sk == sk)
 		*pflags |= MSG_CONFIRM;
 
-	if (sock_queue_rcv_skb_reason(sk, skb, &reason) < 0)
-		sk_skb_reason_drop(sk, skb, reason);
+	if (sock_queue_rcv_skb(sk, skb) < 0)
+		kfree_skb(skb);
 }
 
 static int raw_enable_filters(struct net *net, struct net_device *dev,
@@ -398,13 +397,11 @@ static int raw_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 	struct raw_sock *ro;
-	struct net *net;
 
 	if (!sk)
 		return 0;
 
 	ro = raw_sk(sk);
-	net = sock_net(sk);
 
 	spin_lock(&raw_notifier_lock);
 	while (raw_busy_notifier == ro) {
@@ -424,7 +421,7 @@ static int raw_release(struct socket *sock)
 			raw_disable_allfilters(dev_net(ro->dev), ro->dev, sk);
 			netdev_put(ro->dev, &ro->dev_tracker);
 		} else {
-			raw_disable_allfilters(net, NULL, sk);
+			raw_disable_allfilters(sock_net(sk), NULL, sk);
 		}
 	}
 
@@ -443,7 +440,6 @@ static int raw_release(struct socket *sock)
 	release_sock(sk);
 	rtnl_unlock();
 
-	sock_prot_inuse_add(net, sk->sk_prot, -1);
 	sock_put(sk);
 
 	return 0;
@@ -966,11 +962,11 @@ static int raw_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	}
 
 	skb->dev = dev;
-	skb->priority = sockc.priority;
-	skb->mark = sockc.mark;
+	skb->priority = READ_ONCE(sk->sk_priority);
+	skb->mark = READ_ONCE(sk->sk_mark);
 	skb->tstamp = sockc.transmit_time;
 
-	skb_setup_tx_timestamp(skb, &sockc);
+	skb_setup_tx_timestamp(skb, sockc.tsflags);
 
 	err = can_send(skb, ro->loopback);
 

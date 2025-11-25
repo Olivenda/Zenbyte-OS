@@ -31,9 +31,7 @@ properties:
           - const: fsl,imx8dxl-ddr-pmu
           - const: fsl,imx8-ddr-pmu
       - items:
-          - enum:
-              - fsl,imx91-ddr-pmu
-              - fsl,imx95-ddr-pmu
+          - const: fsl,imx95-ddr-pmu
           - const: fsl,imx93-ddr-pmu
 
   reg:

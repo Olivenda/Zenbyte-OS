@@ -31,7 +31,7 @@
 	};
 
 	/* Fixed crystal oscillator dedicated to MCP2517FD */
-	clk40m: can-clock {
+	clk40M: can-clock {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <40000000>;
@@ -444,6 +444,10 @@
 			   <GCC_LPASS_SWAY_CLK>;
 };
 
+&gmu {
+	status = "okay";
+};
+
 &gpi_dma0 {
 	status = "okay";
 };
@@ -555,8 +559,7 @@
 	qcom,dual-dsi-mode;
 
 	/* DSI1 is slave, so use DSI0 clocks */
-	assigned-clock-parents = <&mdss_dsi0_phy DSI_BYTE_PLL_CLK>,
-				 <&mdss_dsi0_phy DSI_PIXEL_PLL_CLK>;
+	assigned-clock-parents = <&mdss_dsi0_phy 0>, <&mdss_dsi0_phy 1>;
 
 	status = "okay";
 
@@ -714,19 +717,19 @@
 
 &q6asmdai {
 	dai@0 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
+		reg = <0>;
 	};
 
 	dai@1 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA2>;
+		reg = <1>;
 	};
 
 	dai@2 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
+		reg = <2>;
 	};
 
 	dai@3 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA4>;
+		reg = <3>;
 		direction = <2>;
 		is-compress-dai;
 	};
@@ -753,12 +756,6 @@
 	cd-gpios = <&tlmm 126 GPIO_ACTIVE_LOW>;
 };
 
-&slpi_pas {
-	firmware-name = "qcom/sdm845/Thundercomm/db845c/slpi.mbn";
-
-	status = "okay";
-};
-
 &sound {
 	compatible = "qcom,db845c-sndcard", "qcom,sdm845-sndcard";
 	pinctrl-0 = <&quat_mi2s_active
@@ -777,7 +774,11 @@
 		"DMIC2", "MIC BIAS3",
 		"DMIC3", "MIC BIAS3",
 		"SpkrLeft IN", "SPK1 OUT",
-		"SpkrRight IN", "SPK2 OUT";
+		"SpkrRight IN", "SPK2 OUT",
+		"MM_DL1",  "MultiMedia1 Playback",
+		"MM_DL2",  "MultiMedia2 Playback",
+		"MM_DL4",  "MultiMedia4 Playback",
+		"MultiMedia3 Capture", "MM_UL3";
 
 	mm1-dai-link {
 		link-name = "MultiMedia1";
@@ -862,7 +863,7 @@
 	can@0 {
 		compatible = "microchip,mcp2517fd";
 		reg = <0>;
-		clocks = <&clk40m>;
+		clocks = <&clk40M>;
 		interrupts-extended = <&tlmm 104 IRQ_TYPE_LEVEL_LOW>;
 		spi-max-frequency = <10000000>;
 		vdd-supply = <&vdc_5v>;
@@ -1165,7 +1166,7 @@
 	vdd-3.3-ch0-supply = <&vreg_l25a_3p3>;
 
 	qcom,snoc-host-cap-8bit-quirk;
-	qcom,calibration-variant = "Thundercomm_DB845C";
+	qcom,ath10k-calibration-variant = "Thundercomm_DB845C";
 };
 
 /* PINCTRL - additions to nodes defined in sdm845.dtsi */

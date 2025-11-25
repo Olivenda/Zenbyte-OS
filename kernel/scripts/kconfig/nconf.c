@@ -467,7 +467,7 @@ static void handle_f9(int *key, struct menu *current_item)
 	return;
 }
 
-/* return != 0 to indicate the key was handled */
+/* return != 0 to indicate the key was handles */
 static int process_special_keys(int *key, struct menu *menu)
 {
 	int i;

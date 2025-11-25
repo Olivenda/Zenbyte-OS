@@ -11,7 +11,6 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 
 #include "usbip_common.h"
 #include "vhci.h"
@@ -676,7 +675,7 @@ static void vhci_tx_urb(struct urb *urb, struct vhci_device *vdev)
 
 	spin_lock_irqsave(&vdev->priv_lock, flags);
 
-	priv->seqnum = (u32)atomic_inc_return(&vhci_hcd->seqnum);
+	priv->seqnum = atomic_inc_return(&vhci_hcd->seqnum);
 	if (priv->seqnum == 0xffff)
 		dev_info(&urb->dev->dev, "seqnum max\n");
 
@@ -1184,8 +1183,12 @@ static int vhci_setup(struct usb_hcd *hcd)
 		hcd->self.root_hub->speed = USB_SPEED_SUPER_PLUS;
 	}
 
-	/* accept arbitrarily long scatter-gather lists */
-	hcd->self.sg_tablesize = ~0;
+	/*
+	 * Support SG.
+	 * sg_tablesize is an arbitrary value to alleviate memory pressure
+	 * on the host.
+	 */
+	hcd->self.sg_tablesize = 32;
 	hcd->self.no_sg_constraint = 1;
 
 	return 0;
@@ -1472,7 +1475,7 @@ static int vhci_hcd_suspend(struct platform_device *pdev, pm_message_t state)
 	if (connected > 0) {
 		dev_info(&pdev->dev,
 			 "We have %d active connection%s. Do not suspend.\n",
-			 connected, str_plural(connected));
+			 connected, (connected == 1 ? "" : "s"));
 		ret =  -EBUSY;
 	} else {
 		dev_info(&pdev->dev, "suspend vhci_hcd");
@@ -1506,7 +1509,7 @@ static int vhci_hcd_resume(struct platform_device *pdev)
 
 static struct platform_driver vhci_driver = {
 	.probe	= vhci_hcd_probe,
-	.remove = vhci_hcd_remove,
+	.remove_new = vhci_hcd_remove,
 	.suspend = vhci_hcd_suspend,
 	.resume	= vhci_hcd_resume,
 	.driver	= {

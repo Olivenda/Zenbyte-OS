@@ -17,6 +17,9 @@ struct nvkm_cctx {
 };
 
 struct nvkm_chan_func {
+	int (*id_get)(struct nvkm_chan *, struct nvkm_memory *userd, u64 ouserd);
+	void (*id_put)(struct nvkm_chan *);
+
 	const struct nvkm_chan_func_inst {
 		u32 size;
 		bool zero;
@@ -24,7 +27,7 @@ struct nvkm_chan_func {
 	} *inst;
 
 	const struct nvkm_chan_func_userd {
-		enum nvkm_bar_id bar;
+		int bar;
 		u32 base;
 		u32 size;
 		void (*clear)(struct nvkm_chan *);

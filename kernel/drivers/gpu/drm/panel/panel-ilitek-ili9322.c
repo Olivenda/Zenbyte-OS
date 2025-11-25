@@ -318,7 +318,7 @@ static int ili9322_regmap_spi_read(void *context, const void *reg,
 	return spi_write_then_read(spi, buf, 1, val, 1);
 }
 
-static const struct regmap_bus ili9322_regmap_bus = {
+static struct regmap_bus ili9322_regmap_bus = {
 	.write = ili9322_regmap_spi_write,
 	.read = ili9322_regmap_spi_read,
 	.reg_format_endian_default = REGMAP_ENDIAN_BIG,
@@ -722,10 +722,9 @@ static int ili9322_probe(struct spi_device *spi)
 	int ret;
 	int i;
 
-	ili = devm_drm_panel_alloc(dev, struct ili9322, panel,
-				   &ili9322_drm_funcs, DRM_MODE_CONNECTOR_DPI);
-	if (IS_ERR(ili))
-		return PTR_ERR(ili);
+	ili = devm_kzalloc(dev, sizeof(struct ili9322), GFP_KERNEL);
+	if (!ili)
+		return -ENOMEM;
 
 	spi_set_drvdata(spi, ili);
 
@@ -883,6 +882,9 @@ static int ili9322_probe(struct spi_device *spi)
 	} else {
 		ili->input = ili->conf->input;
 	}
+
+	drm_panel_init(&ili->panel, dev, &ili9322_drm_funcs,
+		       DRM_MODE_CONNECTOR_DPI);
 
 	drm_panel_add(&ili->panel);
 

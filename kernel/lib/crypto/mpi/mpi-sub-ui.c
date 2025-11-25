@@ -32,8 +32,6 @@
  * see https://www.gnu.org/licenses/.
  */
 
-#include <linux/export.h>
-
 #include "mpi-internal.h"
 
 int mpi_sub_ui(MPI w, MPI u, unsigned long vval)

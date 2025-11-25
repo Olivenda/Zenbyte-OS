@@ -2070,7 +2070,7 @@ static struct platform_driver davinci_emac_driver = {
 		.of_match_table = davinci_emac_of_match,
 	},
 	.probe = davinci_emac_probe,
-	.remove = davinci_emac_remove,
+	.remove_new = davinci_emac_remove,
 };
 
 /**

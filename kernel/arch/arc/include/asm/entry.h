@@ -13,7 +13,7 @@
 #include <asm/processor.h>	/* For VMALLOC_START */
 #include <asm/mmu.h>
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 
 #ifdef CONFIG_ISA_ARCOMPACT
 #include <asm/entry-compact.h>	/* ISA specific bits */
@@ -146,7 +146,7 @@
 
 #endif	/* CONFIG_ARC_CURR_IN_REG */
 
-#else	/* !__ASSEMBLER__ */
+#else	/* !__ASSEMBLY__ */
 
 extern void do_signal(struct pt_regs *);
 extern void do_notify_resume(struct pt_regs *);

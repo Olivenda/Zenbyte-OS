@@ -30,6 +30,8 @@ PTE Page Table Helpers
 +---------------------------+--------------------------------------------------+
 | pte_protnone              | Tests a PROT_NONE PTE                            |
 +---------------------------+--------------------------------------------------+
+| pte_devmap                | Tests a ZONE_DEVICE mapped PTE                   |
++---------------------------+--------------------------------------------------+
 | pte_soft_dirty            | Tests a soft dirty PTE                           |
 +---------------------------+--------------------------------------------------+
 | pte_swp_soft_dirty        | Tests a soft dirty swapped PTE                   |
@@ -102,6 +104,8 @@ PMD Page Table Helpers
 +---------------------------+--------------------------------------------------+
 | pmd_protnone              | Tests a PROT_NONE PMD                            |
 +---------------------------+--------------------------------------------------+
+| pmd_devmap                | Tests a ZONE_DEVICE mapped PMD                   |
++---------------------------+--------------------------------------------------+
 | pmd_soft_dirty            | Tests a soft dirty PMD                           |
 +---------------------------+--------------------------------------------------+
 | pmd_swp_soft_dirty        | Tests a soft dirty swapped PMD                   |
@@ -173,6 +177,8 @@ PUD Page Table Helpers
 +---------------------------+--------------------------------------------------+
 | pud_write                 | Tests a writable PUD                             |
 +---------------------------+--------------------------------------------------+
+| pud_devmap                | Tests a ZONE_DEVICE mapped PUD                   |
++---------------------------+--------------------------------------------------+
 | pud_mkyoung               | Creates a young PUD                              |
 +---------------------------+--------------------------------------------------+
 | pud_mkold                 | Creates an old PUD                               |
@@ -236,13 +242,13 @@ SWAP Page Table Helpers
 ========================
 
 +---------------------------+--------------------------------------------------+
-| __pte_to_swp_entry        | Creates a swp_entry_t (arch) from a swap PTE     |
+| __pte_to_swp_entry        | Creates a swapped entry (arch) from a mapped PTE |
 +---------------------------+--------------------------------------------------+
-| __swp_entry_to_pte        | Creates a swap PTE from a swp_entry_t (arch)     |
+| __swp_to_pte_entry        | Creates a mapped PTE from a swapped entry (arch) |
 +---------------------------+--------------------------------------------------+
-| __pmd_to_swp_entry        | Creates a swp_entry_t (arch) from a swap PMD     |
+| __pmd_to_swp_entry        | Creates a swapped entry (arch) from a mapped PMD |
 +---------------------------+--------------------------------------------------+
-| __swp_entry_to_pmd        | Creates a swap PMD from a swp_entry_t (arch)     |
+| __swp_to_pmd_entry        | Creates a mapped PMD from a swapped entry (arch) |
 +---------------------------+--------------------------------------------------+
 | is_migration_entry        | Tests a migration (read or write) swapped entry  |
 +-------------------------------+----------------------------------------------+

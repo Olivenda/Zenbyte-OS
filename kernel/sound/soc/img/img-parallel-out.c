@@ -300,14 +300,15 @@ static const struct of_device_id img_prl_out_of_match[] = {
 MODULE_DEVICE_TABLE(of, img_prl_out_of_match);
 
 static const struct dev_pm_ops img_prl_out_pm_ops = {
-	RUNTIME_PM_OPS(img_prl_out_suspend, img_prl_out_resume, NULL)
+	SET_RUNTIME_PM_OPS(img_prl_out_suspend,
+			   img_prl_out_resume, NULL)
 };
 
 static struct platform_driver img_prl_out_driver = {
 	.driver = {
 		.name = "img-parallel-out",
 		.of_match_table = img_prl_out_of_match,
-		.pm = pm_ptr(&img_prl_out_pm_ops)
+		.pm = &img_prl_out_pm_ops
 	},
 	.probe = img_prl_out_probe,
 	.remove = img_prl_out_dev_remove

@@ -2,7 +2,7 @@
 #ifndef _ASM_ARC_JUMP_LABEL_H
 #define _ASM_ARC_JUMP_LABEL_H
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/stringify.h>
 #include <linux/types.h>
@@ -68,5 +68,5 @@ struct jump_entry {
 	jump_label_t key;
 };
 
-#endif  /* __ASSEMBLER__ */
+#endif  /* __ASSEMBLY__ */
 #endif

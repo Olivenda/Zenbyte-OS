@@ -59,7 +59,8 @@
 	 * without the explicit restore, thinks the stack is getting walloped.
 	 * Using an unwind hint is problematic due to x86-64's dynamic alignment.
 	 */
-	leave
+	mov %_ASM_BP, %_ASM_SP
+	pop %_ASM_BP
 	RET
 .endm
 

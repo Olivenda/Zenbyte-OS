@@ -38,7 +38,6 @@
 #include <asm/cacheflush.h>
 #include <asm/io.h>
 #include <linux/unaligned.h>
-#include <linux/string_choices.h>
 
 #define ATMCI_MAX_NR_SLOTS	2
 
@@ -542,6 +541,7 @@ static int atmci_regs_show(struct seq_file *s, void *v)
 	memcpy_fromio(buf, host->regs, ATMCI_REGS_SIZE);
 	spin_unlock_bh(&host->lock);
 
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	seq_printf(s, "MR:\t0x%08x%s%s ",
@@ -714,7 +714,7 @@ static inline unsigned int atmci_convert_chksize(struct atmel_mci *host,
 
 static void atmci_timeout_timer(struct timer_list *t)
 {
-	struct atmel_mci *host = timer_container_of(host, t, timer);
+	struct atmel_mci *host = from_timer(host, t, timer);
 	struct device *dev = host->dev;
 
 	dev_dbg(dev, "software timeout\n");
@@ -860,7 +860,7 @@ static void atmci_send_stop_cmd(struct atmel_mci *host, struct mmc_data *data)
 }
 
 /*
- * Configure given PDC buffer taking care of alignment issues.
+ * Configure given PDC buffer taking care of alignement issues.
  * Update host->data_size and host->sg.
  */
 static void atmci_pdc_set_single_buf(struct atmel_mci *host,
@@ -1592,7 +1592,7 @@ static void atmci_request_end(struct atmel_mci *host, struct mmc_request *mrq)
 
 	WARN_ON(host->cmd || host->data);
 
-	timer_delete(&host->timer);
+	del_timer(&host->timer);
 
 	/*
 	 * Update the MMC clock rate if necessary. This may be
@@ -1652,8 +1652,7 @@ static void atmci_command_complete(struct atmel_mci *host,
 
 static void atmci_detect_change(struct timer_list *t)
 {
-	struct atmel_mci_slot	*slot = timer_container_of(slot, t,
-								detect_timer);
+	struct atmel_mci_slot	*slot = from_timer(slot, t, detect_timer);
 	bool			present;
 	bool			present_old;
 
@@ -2248,7 +2247,7 @@ static int atmci_init_slot(struct atmel_mci *host,
 	struct atmel_mci_slot		*slot;
 	int ret;
 
-	mmc = devm_mmc_alloc_host(dev, sizeof(*slot));
+	mmc = mmc_alloc_host(sizeof(struct atmel_mci_slot), dev);
 	if (!mmc)
 		return -ENOMEM;
 
@@ -2264,7 +2263,7 @@ static int atmci_init_slot(struct atmel_mci *host,
 	        "slot[%u]: bus_width=%u, detect_pin=%d, "
 		"detect_is_active_high=%s, wp_pin=%d\n",
 		id, slot_data->bus_width, desc_to_gpio(slot_data->detect_pin),
-		str_true_false(!gpiod_is_active_low(slot_data->detect_pin)),
+		!gpiod_is_active_low(slot_data->detect_pin) ? "true" : "false",
 		desc_to_gpio(slot_data->wp_pin));
 
 	mmc->ops = &atmci_ops;
@@ -2321,8 +2320,10 @@ static int atmci_init_slot(struct atmel_mci *host,
 	host->slot[id] = slot;
 	mmc_regulator_get_supply(mmc);
 	ret = mmc_add_host(mmc);
-	if (ret)
+	if (ret) {
+		mmc_free_host(mmc);
 		return ret;
+	}
 
 	if (slot->detect_pin) {
 		timer_setup(&slot->detect_timer, atmci_detect_change, 0);
@@ -2356,10 +2357,11 @@ static void atmci_cleanup_slot(struct atmel_mci_slot *slot,
 
 	if (slot->detect_pin) {
 		free_irq(gpiod_to_irq(slot->detect_pin), slot);
-		timer_delete_sync(&slot->detect_timer);
+		del_timer_sync(&slot->detect_timer);
 	}
 
 	slot->host->slot[id] = NULL;
+	mmc_free_host(slot->mmc);
 }
 
 static int atmci_configure_dma(struct atmel_mci *host)
@@ -2567,6 +2569,7 @@ static int atmci_probe(struct platform_device *pdev)
 	dev_info(dev, "Atmel MCI controller at 0x%08lx irq %d, %u slots\n",
 		 host->mapbase, irq, nr_slots);
 
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	return 0;
@@ -2582,7 +2585,7 @@ err_init_slot:
 	pm_runtime_disable(dev);
 	pm_runtime_put_noidle(dev);
 
-	timer_delete_sync(&host->timer);
+	del_timer_sync(&host->timer);
 	if (!IS_ERR(host->dma.chan))
 		dma_release_channel(host->dma.chan);
 err_dma_probe_defer:
@@ -2610,7 +2613,7 @@ static void atmci_remove(struct platform_device *pdev)
 	atmci_writel(host, ATMCI_CR, ATMCI_CR_MCIDIS);
 	atmci_readl(host, ATMCI_SR);
 
-	timer_delete_sync(&host->timer);
+	del_timer_sync(&host->timer);
 	if (!IS_ERR(host->dma.chan))
 		dma_release_channel(host->dma.chan);
 
@@ -2652,7 +2655,7 @@ static const struct dev_pm_ops atmci_dev_pm_ops = {
 
 static struct platform_driver atmci_driver = {
 	.probe		= atmci_probe,
-	.remove		= atmci_remove,
+	.remove_new	= atmci_remove,
 	.driver		= {
 		.name		= "atmel_mci",
 		.probe_type	= PROBE_PREFER_ASYNCHRONOUS,

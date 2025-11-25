@@ -12,6 +12,7 @@
 #include <linux/clk-provider.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/fwnode.h>
 #include <linux/gpio/driver.h>
 #include <linux/i2c-atr.h>
 #include <linux/i2c.h>
@@ -118,65 +119,43 @@ static const struct ub913_format_info *ub913_find_format(u32 incode)
 	return NULL;
 }
 
-static int ub913_read(const struct ub913_data *priv, u8 reg, u8 *val,
-		      int *err)
+static int ub913_read(const struct ub913_data *priv, u8 reg, u8 *val)
 {
 	unsigned int v;
 	int ret;
 
-	if (err && *err)
-		return *err;
-
 	ret = regmap_read(priv->regmap, reg, &v);
-	if (ret) {
+	if (ret < 0) {
 		dev_err(&priv->client->dev,
 			"Cannot read register 0x%02x: %d!\n", reg, ret);
-		goto out;
+		return ret;
 	}
 
 	*val = v;
-
-out:
-	if (ret && err)
-		*err = ret;
-
-	return ret;
+	return 0;
 }
 
-static int ub913_write(const struct ub913_data *priv, u8 reg, u8 val,
-		       int *err)
+static int ub913_write(const struct ub913_data *priv, u8 reg, u8 val)
 {
 	int ret;
-
-	if (err && *err)
-		return *err;
 
 	ret = regmap_write(priv->regmap, reg, val);
 	if (ret < 0)
 		dev_err(&priv->client->dev,
 			"Cannot write register 0x%02x: %d!\n", reg, ret);
 
-	if (ret && err)
-		*err = ret;
-
 	return ret;
 }
 
 static int ub913_update_bits(const struct ub913_data *priv, u8 reg, u8 mask,
-			     u8 val, int *err)
+			     u8 val)
 {
 	int ret;
-
-	if (err && *err)
-		return *err;
 
 	ret = regmap_update_bits(priv->regmap, reg, mask, val);
 	if (ret < 0)
 		dev_err(&priv->client->dev,
 			"Cannot update register 0x%02x %d!\n", reg, ret);
-
-	if (ret && err)
-		*err = ret;
 
 	return ret;
 }
@@ -203,9 +182,9 @@ static int ub913_gpio_direction_out(struct gpio_chip *gc, unsigned int offset,
 						   0));
 }
 
-static int ub913_gpio_set(struct gpio_chip *gc, unsigned int offset, int value)
+static void ub913_gpio_set(struct gpio_chip *gc, unsigned int offset, int value)
 {
-	return ub913_gpio_direction_out(gc, offset, value);
+	ub913_gpio_direction_out(gc, offset, value);
 }
 
 static int ub913_gpio_of_xlate(struct gpio_chip *gc,
@@ -225,7 +204,7 @@ static int ub913_gpiochip_probe(struct ub913_data *priv)
 	int ret;
 
 	/* Initialize GPIOs 0 and 1 to local control, tri-state */
-	ub913_write(priv, UB913_REG_GPIO_CFG(0), 0, NULL);
+	ub913_write(priv, UB913_REG_GPIO_CFG(0), 0);
 
 	gc->label = dev_name(dev);
 	gc->parent = dev;
@@ -336,6 +315,14 @@ static int _ub913_set_routing(struct v4l2_subdev *sd,
 	struct v4l2_subdev_stream_configs *stream_configs;
 	unsigned int i;
 	int ret;
+
+	/*
+	 * Note: we can only support up to V4L2_FRAME_DESC_ENTRY_MAX, until
+	 * frame desc is made dynamically allocated.
+	 */
+
+	if (routing->num_routes > V4L2_FRAME_DESC_ENTRY_MAX)
+		return -EINVAL;
 
 	ret = v4l2_subdev_routing_validate(sd, routing,
 					   V4L2_SUBDEV_ROUTING_ONLY_1_TO_1);
@@ -495,41 +482,25 @@ static int ub913_log_status(struct v4l2_subdev *sd)
 {
 	struct ub913_data *priv = sd_to_ub913(sd);
 	struct device *dev = &priv->client->dev;
-	u8 v, v1, v2;
-	int ret;
+	u8 v = 0, v1 = 0, v2 = 0;
 
-	ret = ub913_read(priv, UB913_REG_MODE_SEL, &v, NULL);
-	if (ret)
-		return ret;
-
+	ub913_read(priv, UB913_REG_MODE_SEL, &v);
 	dev_info(dev, "MODE_SEL %#02x\n", v);
 
-	ub913_read(priv, UB913_REG_CRC_ERRORS_LSB, &v1, &ret);
-	ub913_read(priv, UB913_REG_CRC_ERRORS_MSB, &v2, &ret);
-	if (ret)
-		return ret;
-
+	ub913_read(priv, UB913_REG_CRC_ERRORS_LSB, &v1);
+	ub913_read(priv, UB913_REG_CRC_ERRORS_MSB, &v2);
 	dev_info(dev, "CRC errors %u\n", v1 | (v2 << 8));
 
 	/* clear CRC errors */
-	ub913_read(priv, UB913_REG_GENERAL_CFG, &v, &ret);
+	ub913_read(priv, UB913_REG_GENERAL_CFG, &v);
 	ub913_write(priv, UB913_REG_GENERAL_CFG,
-		    v | UB913_REG_GENERAL_CFG_CRC_ERR_RESET, &ret);
-	ub913_write(priv, UB913_REG_GENERAL_CFG, v, &ret);
+		    v | UB913_REG_GENERAL_CFG_CRC_ERR_RESET);
+	ub913_write(priv, UB913_REG_GENERAL_CFG, v);
 
-	if (ret)
-		return ret;
-
-	ret = ub913_read(priv, UB913_REG_GENERAL_STATUS, &v, NULL);
-	if (ret)
-		return ret;
-
+	ub913_read(priv, UB913_REG_GENERAL_STATUS, &v);
 	dev_info(dev, "GENERAL_STATUS %#02x\n", v);
 
-	ret = ub913_read(priv, UB913_REG_PLL_OVR, &v, NULL);
-	if (ret)
-		return ret;
-
+	ub913_read(priv, UB913_REG_PLL_OVR, &v);
 	dev_info(dev, "PLL_OVR %#02x\n", v);
 
 	return 0;
@@ -685,11 +656,11 @@ static int ub913_i2c_master_init(struct ub913_data *priv)
 	scl_high = div64_u64((u64)scl_high * ref, 1000000000);
 	scl_low = div64_u64((u64)scl_low * ref, 1000000000);
 
-	ret = ub913_write(priv, UB913_REG_SCL_HIGH_TIME, scl_high, NULL);
+	ret = ub913_write(priv, UB913_REG_SCL_HIGH_TIME, scl_high);
 	if (ret)
 		return ret;
 
-	ret = ub913_write(priv, UB913_REG_SCL_LOW_TIME, scl_low, NULL);
+	ret = ub913_write(priv, UB913_REG_SCL_LOW_TIME, scl_low);
 	if (ret)
 		return ret;
 
@@ -699,7 +670,6 @@ static int ub913_i2c_master_init(struct ub913_data *priv)
 static int ub913_add_i2c_adapter(struct ub913_data *priv)
 {
 	struct device *dev = &priv->client->dev;
-	struct i2c_atr_adap_desc desc = { };
 	struct fwnode_handle *i2c_handle;
 	int ret;
 
@@ -707,12 +677,8 @@ static int ub913_add_i2c_adapter(struct ub913_data *priv)
 	if (!i2c_handle)
 		return 0;
 
-	desc.chan_id = priv->plat_data->port;
-	desc.parent = dev;
-	desc.bus_handle = i2c_handle;
-	desc.num_aliases = 0;
-
-	ret = i2c_atr_add_adapter(priv->plat_data->atr, &desc);
+	ret = i2c_atr_add_adapter(priv->plat_data->atr, priv->plat_data->port,
+				  dev, i2c_handle);
 
 	fwnode_handle_put(i2c_handle);
 
@@ -763,7 +729,7 @@ static int ub913_hw_init(struct ub913_data *priv)
 	int ret;
 	u8 v;
 
-	ret = ub913_read(priv, UB913_REG_MODE_SEL, &v, NULL);
+	ret = ub913_read(priv, UB913_REG_MODE_SEL, &v);
 	if (ret)
 		return ret;
 
@@ -784,7 +750,7 @@ static int ub913_hw_init(struct ub913_data *priv)
 	ret = ub913_update_bits(priv, UB913_REG_GENERAL_CFG,
 				UB913_REG_GENERAL_CFG_PCLK_RISING,
 				FIELD_PREP(UB913_REG_GENERAL_CFG_PCLK_RISING,
-					   priv->pclk_polarity_rising), NULL);
+					   priv->pclk_polarity_rising));
 
 	if (ret)
 		return ret;
@@ -954,4 +920,4 @@ MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Texas Instruments DS90UB913 FPD-Link III Serializer Driver");
 MODULE_AUTHOR("Luca Ceresoli <luca@lucaceresoli.net>");
 MODULE_AUTHOR("Tomi Valkeinen <tomi.valkeinen@ideasonboard.com>");
-MODULE_IMPORT_NS("I2C_ATR");
+MODULE_IMPORT_NS(I2C_ATR);

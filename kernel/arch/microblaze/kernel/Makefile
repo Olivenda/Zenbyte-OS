@@ -11,7 +11,7 @@ CFLAGS_REMOVE_ftrace.o = -pg
 CFLAGS_REMOVE_process.o = -pg
 endif
 
-always-$(KBUILD_BUILTIN) := vmlinux.lds
+extra-y := vmlinux.lds
 
 obj-y += head.o dma.o exceptions.o \
 	hw_exception_handler.o irq.o \

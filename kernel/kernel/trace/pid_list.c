@@ -81,9 +81,13 @@ static inline bool upper_empty(union upper_chunk *chunk)
 {
 	/*
 	 * If chunk->data has no lower chunks, it will be the same
-	 * as a zeroed bitmask.
+	 * as a zeroed bitmask. Use find_first_bit() to test it
+	 * and if it doesn't find any bits set, then the array
+	 * is empty.
 	 */
-	return bitmap_empty((unsigned long *)chunk->data, BITS_PER_TYPE(chunk->data));
+	int bit = find_first_bit((unsigned long *)chunk->data,
+				 sizeof(chunk->data) * 8);
+	return bit >= sizeof(chunk->data) * 8;
 }
 
 static inline int pid_split(unsigned int pid, unsigned int *upper1,
@@ -410,7 +414,7 @@ struct trace_pid_list *trace_pid_list_alloc(void)
 	int i;
 
 	/* According to linux/thread.h, pids can be no bigger that 30 bits */
-	WARN_ON_ONCE(init_pid_ns.pid_max > (1 << 30));
+	WARN_ON_ONCE(pid_max > (1 << 30));
 
 	pid_list = kzalloc(sizeof(*pid_list), GFP_KERNEL);
 	if (!pid_list)

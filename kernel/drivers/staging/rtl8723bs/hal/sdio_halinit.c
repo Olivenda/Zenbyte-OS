@@ -583,7 +583,7 @@ static bool HalDetectPwrDownMode(struct adapter *Adapter)
 	return pHalData->pwrdown;
 }	/*  HalDetectPwrDownMode */
 
-u32 rtl8723bs_hal_init(struct adapter *padapter)
+static u32 rtl8723bs_hal_init(struct adapter *padapter)
 {
 	s32 ret;
 	struct hal_com_data *pHalData;
@@ -884,7 +884,7 @@ static void CardDisableRTL8723BSdio(struct adapter *padapter)
 	HalPwrSeqCmdParsing(padapter, PWR_CUT_ALL_MSK, PWR_FAB_ALL_MSK, PWR_INTF_SDIO_MSK, rtl8723B_card_disable_flow);
 }
 
-u32 rtl8723bs_hal_deinit(struct adapter *padapter)
+static u32 rtl8723bs_hal_deinit(struct adapter *padapter)
 {
 	struct dvobj_priv *psdpriv = padapter->dvobj;
 	struct debug_priv *pdbgpriv = &psdpriv->drv_dbg;
@@ -937,7 +937,17 @@ u32 rtl8723bs_hal_deinit(struct adapter *padapter)
 	return _SUCCESS;
 }
 
-void rtl8723bs_init_default_value(struct adapter *padapter)
+static u32 rtl8723bs_inirp_init(struct adapter *padapter)
+{
+	return _SUCCESS;
+}
+
+static u32 rtl8723bs_inirp_deinit(struct adapter *padapter)
+{
+	return _SUCCESS;
+}
+
+static void rtl8723bs_init_default_value(struct adapter *padapter)
 {
 	struct hal_com_data *pHalData;
 
@@ -950,7 +960,7 @@ void rtl8723bs_init_default_value(struct adapter *padapter)
 	pHalData->SdioRxFIFOCnt = 0;
 }
 
-void rtl8723bs_interface_configure(struct adapter *padapter)
+static void rtl8723bs_interface_configure(struct adapter *padapter)
 {
 	struct hal_com_data *pHalData = GET_HAL_DATA(padapter);
 	struct dvobj_priv *pdvobjpriv = adapter_to_dvobj(padapter);
@@ -1094,6 +1104,10 @@ static void _ReadPROMContent(struct adapter *padapter)
 	_ReadEfuseInfo8723BS(padapter);
 }
 
+static void _InitOtherVariable(struct adapter *Adapter)
+{
+}
+
 /*  */
 /* 	Description: */
 /* 		Read HW adapter information by E-Fuse or EEPROM according CR9346 reported. */
@@ -1118,6 +1132,7 @@ static s32 _ReadAdapterInfo8723BS(struct adapter *padapter)
 	_EfuseCellSel(padapter);
 	_ReadRFType(padapter);
 	_ReadPROMContent(padapter);
+	_InitOtherVariable(padapter);
 
 	if (!padapter->hw_init_completed) {
 		rtw_write8(padapter, 0x67, 0x00); /*  for BT, Switch Ant control to BT */
@@ -1127,7 +1142,7 @@ static s32 _ReadAdapterInfo8723BS(struct adapter *padapter)
 	return _SUCCESS;
 }
 
-void ReadAdapterInfo8723BS(struct adapter *padapter)
+static void ReadAdapterInfo8723BS(struct adapter *padapter)
 {
 	/*  Read EEPROM size before call any EEPROM function */
 	padapter->EepromAddressSize = GetEEPROMSize8723B(padapter);
@@ -1139,7 +1154,7 @@ void ReadAdapterInfo8723BS(struct adapter *padapter)
  * If variable not handled here,
  * some variables will be processed in SetHwReg8723B()
  */
-void SetHwReg8723BS(struct adapter *padapter, u8 variable, u8 *val)
+static void SetHwReg8723BS(struct adapter *padapter, u8 variable, u8 *val)
 {
 	u8 val8;
 
@@ -1180,7 +1195,7 @@ void SetHwReg8723BS(struct adapter *padapter, u8 variable, u8 *val)
  * If variable not handled here,
  * some variables will be processed in GetHwReg8723B()
  */
-void GetHwReg8723BS(struct adapter *padapter, u8 variable, u8 *val)
+static void GetHwReg8723BS(struct adapter *padapter, u8 variable, u8 *val)
 {
 	switch (variable) {
 	case HW_VAR_CPWM:
@@ -1199,7 +1214,7 @@ void GetHwReg8723BS(struct adapter *padapter, u8 variable, u8 *val)
 	}
 }
 
-void SetHwRegWithBuf8723B(struct adapter *padapter, u8 variable, u8 *pbuf, int len)
+static void SetHwRegWithBuf8723B(struct adapter *padapter, u8 variable, u8 *pbuf, int len)
 {
 	switch (variable) {
 	case HW_VAR_C2H_HANDLE:
@@ -1214,7 +1229,7 @@ void SetHwRegWithBuf8723B(struct adapter *padapter, u8 variable, u8 *pbuf, int l
 /* 	Description: */
 /* 		Query setting of specified variable. */
 /*  */
-u8 GetHalDefVar8723BSDIO(
+static u8 GetHalDefVar8723BSDIO(
 	struct adapter *Adapter, enum hal_def_variable eVariable, void *pValue
 )
 {
@@ -1242,7 +1257,44 @@ u8 GetHalDefVar8723BSDIO(
 /* 	Description: */
 /* 		Change default setting of specified variable. */
 /*  */
-u8 SetHalDefVar8723BSDIO(struct adapter *Adapter, enum hal_def_variable eVariable, void *pValue)
+static u8 SetHalDefVar8723BSDIO(struct adapter *Adapter,
+				enum hal_def_variable eVariable, void *pValue)
 {
 	return SetHalDefVar8723B(Adapter, eVariable, pValue);
+}
+
+void rtl8723bs_set_hal_ops(struct adapter *padapter)
+{
+	struct hal_ops *pHalFunc = &padapter->HalFunc;
+
+	rtl8723b_set_hal_ops(pHalFunc);
+
+	pHalFunc->hal_init = &rtl8723bs_hal_init;
+	pHalFunc->hal_deinit = &rtl8723bs_hal_deinit;
+
+	pHalFunc->inirp_init = &rtl8723bs_inirp_init;
+	pHalFunc->inirp_deinit = &rtl8723bs_inirp_deinit;
+
+	pHalFunc->init_xmit_priv = &rtl8723bs_init_xmit_priv;
+	pHalFunc->free_xmit_priv = &rtl8723bs_free_xmit_priv;
+
+	pHalFunc->init_recv_priv = &rtl8723bs_init_recv_priv;
+	pHalFunc->free_recv_priv = &rtl8723bs_free_recv_priv;
+
+	pHalFunc->init_default_value = &rtl8723bs_init_default_value;
+	pHalFunc->intf_chip_configure = &rtl8723bs_interface_configure;
+	pHalFunc->read_adapter_info = &ReadAdapterInfo8723BS;
+
+	pHalFunc->enable_interrupt = &EnableInterrupt8723BSdio;
+	pHalFunc->disable_interrupt = &DisableInterrupt8723BSdio;
+	pHalFunc->check_ips_status = &CheckIPSStatus;
+	pHalFunc->SetHwRegHandler = &SetHwReg8723BS;
+	pHalFunc->GetHwRegHandler = &GetHwReg8723BS;
+	pHalFunc->SetHwRegHandlerWithBuf = &SetHwRegWithBuf8723B;
+	pHalFunc->GetHalDefVarHandler = &GetHalDefVar8723BSDIO;
+	pHalFunc->SetHalDefVarHandler = &SetHalDefVar8723BSDIO;
+
+	pHalFunc->hal_xmit = &rtl8723bs_hal_xmit;
+	pHalFunc->mgnt_xmit = &rtl8723bs_mgnt_xmit;
+	pHalFunc->hal_xmitframe_enqueue = &rtl8723bs_hal_xmitframe_enqueue;
 }

@@ -43,9 +43,6 @@ static int (*const check_part[])(struct parsed_partitions *) = {
 #ifdef CONFIG_CMDLINE_PARTITION
 	cmdline_partition,
 #endif
-#ifdef CONFIG_OF_PARTITION
-	of_partition,		/* cmdline have priority to OF */
-#endif
 #ifdef CONFIG_EFI_PARTITION
 	efi_partition,		/* this must come before msdos */
 #endif
@@ -256,8 +253,6 @@ static int part_uevent(const struct device *dev, struct kobj_uevent_env *env)
 	add_uevent_var(env, "PARTN=%u", bdev_partno(part));
 	if (part->bd_meta_info && part->bd_meta_info->volname[0])
 		add_uevent_var(env, "PARTNAME=%s", part->bd_meta_info->volname);
-	if (part->bd_meta_info && part->bd_meta_info->uuid[0])
-		add_uevent_var(env, "PARTUUID=%s", part->bd_meta_info->uuid);
 	return 0;
 }
 
@@ -377,9 +372,6 @@ static struct block_device *add_partition(struct gendisk *disk, int partno,
 		if (err)
 			goto out_del;
 	}
-
-	if (flags & ADDPART_FLAG_READONLY)
-		bdev_set_flag(bdev, BD_READ_ONLY);
 
 	/* everything is up and running, commence */
 	err = xa_insert(&disk->part_tbl, partno, bdev, GFP_KERNEL);

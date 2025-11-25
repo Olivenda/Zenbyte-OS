@@ -366,7 +366,8 @@ static void carl9170_tx_shift_bm(struct ar9170 *ar,
 	if (WARN_ON_ONCE(off >= CARL9170_BAW_BITS))
 		return;
 
-	off = min(off, find_first_bit(tid_info->bitmap, off));
+	if (!bitmap_empty(tid_info->bitmap, off))
+		off = find_first_bit(tid_info->bitmap, off);
 
 	tid_info->bsn += off;
 	tid_info->bsn &= 0x0fff;

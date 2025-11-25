@@ -499,7 +499,8 @@ static void flush_to_ldisc(struct work_struct *work)
 		if (!rcvd)
 			break;
 
-		cond_resched();
+		if (need_resched())
+			cond_resched();
 	}
 
 	mutex_unlock(&buf->lock);

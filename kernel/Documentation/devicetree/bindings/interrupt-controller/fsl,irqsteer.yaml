@@ -19,7 +19,6 @@ properties:
               - fsl,imx8mp-irqsteer
               - fsl,imx8qm-irqsteer
               - fsl,imx8qxp-irqsteer
-              - fsl,imx94-irqsteer
           - const: fsl,imx-irqsteer
 
   reg:

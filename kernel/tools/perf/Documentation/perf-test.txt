@@ -28,22 +28,18 @@ OPTIONS
 	Tests to skip (comma separated numeric list).
 
 -v::
--vv::
--vvv::
 --verbose::
-	With a single '-v', verbose level 1, only failing test output
-	is displayed. With '-vv' and higher all test output is shown.
+	Be more verbose.
 
 -S::
 --sequential::
-	Run all tests one after the other. By default "exclusive"
-	tests are run sequentially, but other tests are run in
-	parallel to speed execution.
+	Run tests one after the other, this is the default mode.
 
--r::
---runs-per-test::
-	Run each test the given number of times, by default once. This
-	option can be useful to determine if a test is flaky.
+-p:: 
+--parallel::
+	Run tests in parallel, speeds up the whole process but is not safe with
+	the current infrastructure, where some tests that compete for some resources,
+	for instance, 'perf probe' tests that add/remove probes or clean all probes, etc.
 
 -F::
 --dont-fork::
@@ -52,20 +48,3 @@ OPTIONS
 
 --dso::
 	Specify a DSO for the "Symbols" test.
-
--w::
---workload=::
-	Run a built-in workload, to list them use '--list-workloads', current ones include:
-	noploop, thloop, leafloop, sqrtloop, brstack, datasym and landlock.
-
-	Used with the shell script regression tests.
-
-	Some accept an extra parameter:
-
-		seconds: leafloop, noploop, sqrtloop, thloop
-		nrloops: brstack
-
-	The datasym and landlock workloads don't accept any.
-
---list-workloads::
-	List the available workloads to use with -w/--workload.

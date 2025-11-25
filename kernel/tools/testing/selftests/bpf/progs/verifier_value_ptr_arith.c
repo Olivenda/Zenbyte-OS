@@ -231,10 +231,6 @@ __retval(1)
 __naked void ptr_unknown_vs_unknown_lt(void)
 {
 	asm volatile ("					\
-	r8 = r1;					\
-	call %[bpf_get_prandom_u32];			\
-	r9 = r0;					\
-	r1 = r8;					\
 	r0 = *(u32*)(r1 + %[__sk_buff_len]);		\
 	r1 = 0;						\
 	*(u64*)(r10 - 8) = r1;				\
@@ -249,11 +245,11 @@ l1_%=:	call %[bpf_map_lookup_elem];			\
 	r4 = *(u8*)(r0 + 0);				\
 	if r4 == 1 goto l3_%=;				\
 	r1 = 6;						\
-	r1 = r9;					\
+	r1 = -r1;					\
 	r1 &= 0x3;					\
 	goto l4_%=;					\
 l3_%=:	r1 = 6;						\
-	r1 = r9;					\
+	r1 = -r1;					\
 	r1 &= 0x7;					\
 l4_%=:	r1 += r0;					\
 	r0 = *(u8*)(r1 + 0);				\
@@ -263,8 +259,7 @@ l2_%=:	r0 = 1;						\
 	: __imm(bpf_map_lookup_elem),
 	  __imm_addr(map_array_48b),
 	  __imm_addr(map_hash_16b),
-	  __imm_const(__sk_buff_len, offsetof(struct __sk_buff, len)),
-	  __imm(bpf_get_prandom_u32)
+	  __imm_const(__sk_buff_len, offsetof(struct __sk_buff, len))
 	: __clobber_all);
 }
 
@@ -276,10 +271,6 @@ __retval(1)
 __naked void ptr_unknown_vs_unknown_gt(void)
 {
 	asm volatile ("					\
-	r8 = r1;					\
-	call %[bpf_get_prandom_u32];			\
-	r9 = r0;					\
-	r1 = r8;					\
 	r0 = *(u32*)(r1 + %[__sk_buff_len]);		\
 	r1 = 0;						\
 	*(u64*)(r10 - 8) = r1;				\
@@ -294,11 +285,11 @@ l1_%=:	call %[bpf_map_lookup_elem];			\
 	r4 = *(u8*)(r0 + 0);				\
 	if r4 == 1 goto l3_%=;				\
 	r1 = 6;						\
-	r1 = r9;					\
+	r1 = -r1;					\
 	r1 &= 0x7;					\
 	goto l4_%=;					\
 l3_%=:	r1 = 6;						\
-	r1 = r9;					\
+	r1 = -r1;					\
 	r1 &= 0x3;					\
 l4_%=:	r1 += r0;					\
 	r0 = *(u8*)(r1 + 0);				\
@@ -308,8 +299,7 @@ l2_%=:	r0 = 1;						\
 	: __imm(bpf_map_lookup_elem),
 	  __imm_addr(map_array_48b),
 	  __imm_addr(map_hash_16b),
-	  __imm_const(__sk_buff_len, offsetof(struct __sk_buff, len)),
-	  __imm(bpf_get_prandom_u32)
+	  __imm_const(__sk_buff_len, offsetof(struct __sk_buff, len))
 	: __clobber_all);
 }
 
@@ -408,8 +398,7 @@ l2_%=:	r0 = 1;						\
 
 SEC("socket")
 __description("map access: mixing value pointer and scalar, 1")
-__success __failure_unpriv
-__msg_unpriv("R2 tried to add from different maps, paths or scalars, pointer arithmetic with it prohibited for !root")
+__success __failure_unpriv __msg_unpriv("R2 pointer comparison prohibited")
 __retval(0)
 __naked void value_pointer_and_scalar_1(void)
 {
@@ -444,7 +433,6 @@ l2_%=:	/* common instruction */			\
 l3_%=:	/* branch B */					\
 	r0 = 0x13371337;				\
 	/* verifier follows fall-through */		\
-	/* unpriv: nospec (inserted to prevent `R2 pointer comparison prohibited`) */\
 	if r2 != 0x100000 goto l4_%=;			\
 	r0 = 0;						\
 	exit;						\
@@ -462,8 +450,7 @@ l4_%=:	/* fake-dead code; targeted from branch A to	\
 
 SEC("socket")
 __description("map access: mixing value pointer and scalar, 2")
-__success __failure_unpriv
-__msg_unpriv("R2 tried to add from different maps, paths or scalars, pointer arithmetic with it prohibited for !root")
+__success __failure_unpriv __msg_unpriv("R0 invalid mem access 'scalar'")
 __retval(0)
 __naked void value_pointer_and_scalar_2(void)
 {
@@ -505,7 +492,6 @@ l4_%=:	/* fake-dead code; targeted from branch A to	\
 	 * prevent dead code sanitization, rejected	\
 	 * via branch B however				\
 	 */						\
-	/* unpriv: nospec (inserted to prevent `R0 invalid mem access 'scalar'`) */\
 	r0 = *(u8*)(r0 + 0);				\
 	r0 = 0;						\
 	exit;						\
@@ -1310,13 +1296,9 @@ l0_%=:	r0 = 1;						\
 
 SEC("socket")
 __description("map access: value_ptr -= unknown scalar, 2")
-__success __success_unpriv
+__success __failure_unpriv
+__msg_unpriv("R0 pointer arithmetic of map value goes out of range")
 __retval(1)
-#ifdef SPEC_V1
-__xlated_unpriv("r1 &= 7")
-__xlated_unpriv("nospec") /* inserted to prevent `R0 pointer arithmetic of map value goes out of range` */
-__xlated_unpriv("r0 -= r1")
-#endif
 __naked void value_ptr_unknown_scalar_2_2(void)
 {
 	asm volatile ("					\

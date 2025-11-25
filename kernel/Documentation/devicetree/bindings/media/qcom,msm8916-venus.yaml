@@ -45,7 +45,6 @@ properties:
     required:
       - compatible
 
-    deprecated: true
     additionalProperties: false
 
   video-encoder:
@@ -58,12 +57,13 @@ properties:
     required:
       - compatible
 
-    deprecated: true
     additionalProperties: false
 
 required:
   - compatible
   - iommus
+  - video-decoder
+  - video-encoder
 
 unevaluatedProperties: false
 
@@ -83,4 +83,12 @@ examples:
         power-domains = <&gcc VENUS_GDSC>;
         iommus = <&apps_iommu 5>;
         memory-region = <&venus_mem>;
+
+        video-decoder {
+            compatible = "venus-decoder";
+        };
+
+        video-encoder {
+            compatible = "venus-encoder";
+        };
     };

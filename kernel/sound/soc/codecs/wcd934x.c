@@ -23,8 +23,6 @@
 #include "wcd-clsh-v2.h"
 #include "wcd-mbhc-v2.h"
 
-#include <dt-bindings/sound/qcom,wcd934x.h>
-
 #define WCD934X_RATES_MASK (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |\
 			    SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |\
 			    SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_192000)
@@ -309,7 +307,6 @@
 	{"SLIM TX" #id, NULL, "CDC_IF TX" #id " MUX"}
 
 #define WCD934X_MAX_MICBIAS	MIC_BIAS_4
-#define NUM_CODEC_DAIS          9
 
 enum {
 	SIDO_SOURCE_INTERNAL,
@@ -438,6 +435,19 @@ enum {
 };
 
 enum {
+	AIF1_PB = 0,
+	AIF1_CAP,
+	AIF2_PB,
+	AIF2_CAP,
+	AIF3_PB,
+	AIF3_CAP,
+	AIF4_PB,
+	AIF4_VIFEED,
+	AIF4_MAD_TX,
+	NUM_CODEC_DAIS,
+};
+
+enum {
 	INTn_1_INP_SEL_ZERO = 0,
 	INTn_1_INP_SEL_DEC0,
 	INTn_1_INP_SEL_DEC1,
@@ -537,6 +547,8 @@ struct wcd934x_codec {
 	int rate;
 	u32 version;
 	u32 hph_mode;
+	int num_rx_port;
+	int num_tx_port;
 	u32 tx_port_value[WCD934X_TX_MAX];
 	u32 rx_port_value[WCD934X_RX_MAX];
 	int sido_input_src;
@@ -1926,11 +1938,13 @@ static int wcd934x_set_channel_map(struct snd_soc_dai *dai,
 		return -EINVAL;
 	}
 
+	wcd->num_rx_port = rx_num;
 	for (i = 0; i < rx_num; i++) {
 		wcd->rx_chs[i].ch_num = rx_slot[i];
 		INIT_LIST_HEAD(&wcd->rx_chs[i].list);
 	}
 
+	wcd->num_tx_port = tx_num;
 	for (i = 0; i < tx_num; i++) {
 		wcd->tx_chs[i].ch_num = tx_slot[i];
 		INIT_LIST_HEAD(&wcd->tx_chs[i].list);

@@ -64,12 +64,6 @@ properties:
       - const: rmii_internal
       - const: mac_cg
 
-  interrupts:
-    maxItems: 1
-
-  interrupt-names:
-    const: macirq
-
   power-domains:
     maxItems: 1
 

@@ -21,8 +21,6 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <linux/export.h>
-
 #include <drm/drm_atomic.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_device.h>

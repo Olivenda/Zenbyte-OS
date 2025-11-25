@@ -15,12 +15,8 @@
 
 #include "../libwx/wx_type.h"
 #include "../libwx/wx_lib.h"
-#include "../libwx/wx_ptp.h"
-#include "../libwx/wx_sriov.h"
-#include "../libwx/wx_mbx.h"
 #include "../libwx/wx_hw.h"
 #include "txgbe_type.h"
-#include "txgbe_aml.h"
 #include "txgbe_phy.h"
 #include "txgbe_hw.h"
 
@@ -126,7 +122,7 @@ static int txgbe_pcs_write(struct mii_bus *bus, int addr, int devnum, int regnum
 static int txgbe_mdio_pcs_init(struct txgbe *txgbe)
 {
 	struct mii_bus *mii_bus;
-	struct phylink_pcs *pcs;
+	struct dw_xpcs *xpcs;
 	struct pci_dev *pdev;
 	struct wx *wx;
 	int ret = 0;
@@ -151,11 +147,11 @@ static int txgbe_mdio_pcs_init(struct txgbe *txgbe)
 	if (ret)
 		return ret;
 
-	pcs = xpcs_create_pcs_mdiodev(mii_bus, 0);
-	if (IS_ERR(pcs))
-		return PTR_ERR(pcs);
+	xpcs = xpcs_create_mdiodev(mii_bus, 0, PHY_INTERFACE_MODE_10GBASER);
+	if (IS_ERR(xpcs))
+		return PTR_ERR(xpcs);
 
-	txgbe->pcs = pcs;
+	txgbe->xpcs = xpcs;
 
 	return 0;
 }
@@ -166,8 +162,8 @@ static struct phylink_pcs *txgbe_phylink_mac_select(struct phylink_config *confi
 	struct wx *wx = phylink_to_wx(config);
 	struct txgbe *txgbe = wx->priv;
 
-	if (wx->media_type != wx_media_copper)
-		return txgbe->pcs;
+	if (wx->media_type != sp_media_copper)
+		return &txgbe->xpcs->pcs;
 
 	return NULL;
 }
@@ -183,12 +179,6 @@ static void txgbe_mac_link_down(struct phylink_config *config,
 	struct wx *wx = phylink_to_wx(config);
 
 	wr32m(wx, WX_MAC_TX_CFG, WX_MAC_TX_CFG_TE, 0);
-
-	wx->speed = SPEED_UNKNOWN;
-	if (test_bit(WX_STATE_PTP_RUNNING, wx->state))
-		wx_ptp_reset_cyclecounter(wx);
-	/* ping all the active vfs to let them know we are going down */
-	wx_ping_all_vfs_with_link_status(wx, false);
 }
 
 static void txgbe_mac_link_up(struct phylink_config *config,
@@ -225,13 +215,6 @@ static void txgbe_mac_link_up(struct phylink_config *config,
 	wr32(wx, WX_MAC_PKT_FLT, WX_MAC_PKT_FLT_PR);
 	wdg = rd32(wx, WX_MAC_WDG_TIMEOUT);
 	wr32(wx, WX_MAC_WDG_TIMEOUT, wdg);
-
-	wx->speed = speed;
-	wx->last_rx_ptp_check = jiffies;
-	if (test_bit(WX_STATE_PTP_RUNNING, wx->state))
-		wx_ptp_reset_cyclecounter(wx);
-	/* ping all the active vfs to let them know we are going up */
-	wx_ping_all_vfs_with_link_status(wx, true);
 }
 
 static int txgbe_mac_prepare(struct phylink_config *config, unsigned int mode,
@@ -279,7 +262,7 @@ static int txgbe_phylink_init(struct txgbe *txgbe)
 	config->mac_capabilities = MAC_10000FD | MAC_1000FD | MAC_100FD |
 				   MAC_SYM_PAUSE | MAC_ASYM_PAUSE;
 
-	if (wx->media_type == wx_media_copper) {
+	if (wx->media_type == sp_media_copper) {
 		phy_mode = PHY_INTERFACE_MODE_XAUI;
 		__set_bit(PHY_INTERFACE_MODE_XAUI, config->supported_interfaces);
 	} else {
@@ -319,10 +302,7 @@ irqreturn_t txgbe_link_irq_handler(int irq, void *data)
 	status = rd32(wx, TXGBE_CFG_PORT_ST);
 	up = !!(status & TXGBE_CFG_PORT_ST_LINK_UP);
 
-	if (txgbe->pcs)
-		phylink_pcs_change(txgbe->pcs, up);
-	else
-		phylink_mac_change(wx->phylink, up);
+	phylink_pcs_change(&txgbe->xpcs->pcs, up);
 
 	return IRQ_HANDLED;
 }
@@ -432,7 +412,7 @@ static int txgbe_clock_register(struct txgbe *txgbe)
 	if (IS_ERR(clk))
 		return PTR_ERR(clk);
 
-	clock = clkdev_create(clk, NULL, "%s", clk_name);
+	clock = clkdev_create(clk, NULL, clk_name);
 	if (!clock) {
 		clk_unregister(clk);
 		return -ENOMEM;
@@ -577,18 +557,8 @@ int txgbe_init_phy(struct txgbe *txgbe)
 	struct wx *wx = txgbe->wx;
 	int ret;
 
-	switch (wx->mac.type) {
-	case wx_mac_aml40:
-		return 0;
-	case wx_mac_aml:
-		return txgbe_phylink_init_aml(txgbe);
-	case wx_mac_sp:
-		if (wx->media_type == wx_media_copper)
-			return txgbe_ext_phy_init(txgbe);
-		break;
-	default:
-		break;
-	}
+	if (txgbe->wx->media_type == sp_media_copper)
+		return txgbe_ext_phy_init(txgbe);
 
 	ret = txgbe_swnodes_register(txgbe);
 	if (ret) {
@@ -642,7 +612,7 @@ err_unregister_clk:
 err_destroy_phylink:
 	phylink_destroy(wx->phylink);
 err_destroy_xpcs:
-	xpcs_destroy_pcs(txgbe->pcs);
+	xpcs_destroy(txgbe->xpcs);
 err_unregister_swnode:
 	software_node_unregister_node_group(txgbe->nodes.group);
 
@@ -651,21 +621,10 @@ err_unregister_swnode:
 
 void txgbe_remove_phy(struct txgbe *txgbe)
 {
-	switch (txgbe->wx->mac.type) {
-	case wx_mac_aml40:
-		return;
-	case wx_mac_aml:
+	if (txgbe->wx->media_type == sp_media_copper) {
+		phylink_disconnect_phy(txgbe->wx->phylink);
 		phylink_destroy(txgbe->wx->phylink);
 		return;
-	case wx_mac_sp:
-		if (txgbe->wx->media_type == wx_media_copper) {
-			phylink_disconnect_phy(txgbe->wx->phylink);
-			phylink_destroy(txgbe->wx->phylink);
-			return;
-		}
-		break;
-	default:
-		break;
 	}
 
 	platform_device_unregister(txgbe->sfp_dev);
@@ -673,6 +632,6 @@ void txgbe_remove_phy(struct txgbe *txgbe)
 	clkdev_drop(txgbe->clock);
 	clk_unregister(txgbe->clk);
 	phylink_destroy(txgbe->wx->phylink);
-	xpcs_destroy_pcs(txgbe->pcs);
+	xpcs_destroy(txgbe->xpcs);
 	software_node_unregister_node_group(txgbe->nodes.group);
 }

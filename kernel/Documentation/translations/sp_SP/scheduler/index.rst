@@ -7,4 +7,3 @@
 
     sched-design-CFS
     sched-eevdf
-    sched-bwc

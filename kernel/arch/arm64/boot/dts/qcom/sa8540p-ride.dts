@@ -155,6 +155,7 @@
 	snps,mtl-rx-config = <&ethernet0_mtl_rx_setup>;
 	snps,mtl-tx-config = <&ethernet0_mtl_tx_setup>;
 
+	max-speed = <1000>;
 	phy-handle = <&rgmii_phy>;
 	phy-mode = "rgmii-txid";
 
@@ -224,6 +225,7 @@
 
 	ethernet0_mtl_tx_setup: tx-queues-config {
 		snps,tx-queues-to-use = <1>;
+		snps,tx-sched-sp;
 
 		queue0 {
 			snps,dcb-algorithm;
@@ -255,6 +257,7 @@
 	snps,mtl-rx-config = <&ethernet1_mtl_rx_setup>;
 	snps,mtl-tx-config = <&ethernet1_mtl_tx_setup>;
 
+	max-speed = <1000>;
 	phy-mode = "rgmii-txid";
 
 	pinctrl-names = "default";
@@ -299,6 +302,7 @@
 
 	ethernet1_mtl_tx_setup: tx-queues-config {
 		snps,tx-queues-to-use = <1>;
+		snps,tx-sched-sp;
 
 		queue0 {
 			snps,dcb-algorithm;

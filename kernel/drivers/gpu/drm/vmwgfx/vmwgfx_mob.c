@@ -282,7 +282,8 @@ out_no_setup:
 	}
 
 	vmw_bo_unpin_unlocked(&batch->otable_bo->tbo);
-	vmw_bo_unreference(&batch->otable_bo);
+	ttm_bo_put(&batch->otable_bo->tbo);
+	batch->otable_bo = NULL;
 	return ret;
 }
 

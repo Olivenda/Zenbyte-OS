@@ -23,7 +23,6 @@
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
 #include <net/iucv/iucv.h>
-#include <asm/machine.h>
 #include "smsgiucv.h"
 
 /* prefix used for SMSG registration */
@@ -154,7 +153,7 @@ static int __init smsgiucv_app_init(void)
 	struct device_driver *smsgiucv_drv;
 	int rc;
 
-	if (!machine_is_vm())
+	if (!MACHINE_IS_VM)
 		return -ENODEV;
 
 	smsgiucv_drv = driver_find(SMSGIUCV_DRV_NAME, &iucv_bus);

@@ -263,7 +263,7 @@ int snd_pdacf_pcm_new(struct snd_pdacf *chip)
 	pcm->private_data = chip;
 	pcm->info_flags = 0;
 	pcm->nonatomic = true;
-	strscpy(pcm->name, chip->card->shortname);
+	strcpy(pcm->name, chip->card->shortname);
 	chip->pcm = pcm;
 	
 	err = snd_ak4117_build(chip->ak4117, pcm->streams[SNDRV_PCM_STREAM_CAPTURE].substream);

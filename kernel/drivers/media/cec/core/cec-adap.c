@@ -7,13 +7,12 @@
 
 #include <linux/errno.h>
 #include <linux/init.h>
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/kmod.h>
 #include <linux/ktime.h>
-#include <linux/mm.h>
-#include <linux/module.h>
-#include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/types.h>
 

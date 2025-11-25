@@ -4,14 +4,15 @@
  */
 #include <asm/page.h>
 #include <asm/vdso.h>
-#include <vdso/datapage.h>
 
 OUTPUT_ARCH(riscv)
 
 SECTIONS
 {
-	VDSO_VVAR_SYMS
-
+	PROVIDE(_vdso_data = . - __VVAR_PAGES * PAGE_SIZE);
+#ifdef CONFIG_TIME_NS
+	PROVIDE(_timens_data = _vdso_data + PAGE_SIZE);
+#endif
 	. = SIZEOF_HEADERS;
 
 	.hash		: { *(.hash) }			:text
@@ -79,9 +80,6 @@ VERSION
 		__vdso_flush_icache;
 #ifndef COMPAT_VDSO
 		__vdso_riscv_hwprobe;
-#endif
-#if defined(CONFIG_VDSO_GETRANDOM) && !defined(COMPAT_VDSO)
-		__vdso_getrandom;
 #endif
 	local: *;
 	};

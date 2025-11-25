@@ -22,12 +22,6 @@
 #define KPMMASK (KPMSIZE - 1)
 #define KPMBITS (KPMSIZE * BITS_PER_BYTE)
 
-enum kpage_operation {
-	KPAGE_FLAGS,
-	KPAGE_COUNT,
-	KPAGE_CGROUP,
-};
-
 static inline unsigned long get_max_dump_pfn(void)
 {
 #ifdef CONFIG_SPARSEMEM
@@ -43,33 +37,19 @@ static inline unsigned long get_max_dump_pfn(void)
 #endif
 }
 
-static u64 get_kpage_count(const struct page *page)
-{
-	struct page_snapshot ps;
-	u64 ret;
-
-	snapshot_page(&ps, page);
-
-	if (IS_ENABLED(CONFIG_PAGE_MAPCOUNT))
-		ret = folio_precise_page_mapcount(&ps.folio_snapshot,
-						  &ps.page_snapshot);
-	else
-		ret = folio_average_page_mapcount(&ps.folio_snapshot);
-
-	return ret;
-}
-
-static ssize_t kpage_read(struct file *file, char __user *buf,
-		size_t count, loff_t *ppos,
-		enum kpage_operation op)
+/* /proc/kpagecount - an array exposing page mapcounts
+ *
+ * Each entry is a u64 representing the corresponding
+ * physical page mapcount.
+ */
+static ssize_t kpagecount_read(struct file *file, char __user *buf,
+			     size_t count, loff_t *ppos)
 {
 	const unsigned long max_dump_pfn = get_max_dump_pfn();
 	u64 __user *out = (u64 __user *)buf;
-	struct page *page;
 	unsigned long src = *ppos;
 	unsigned long pfn;
 	ssize_t ret = 0;
-	u64 info;
 
 	pfn = src / KPMSIZE;
 	if (src & KPMMASK || count & KPMMASK)
@@ -79,31 +59,19 @@ static ssize_t kpage_read(struct file *file, char __user *buf,
 	count = min_t(unsigned long, count, (max_dump_pfn * KPMSIZE) - src);
 
 	while (count > 0) {
+		struct page *page;
+		u64 mapcount = 0;
+
 		/*
 		 * TODO: ZONE_DEVICE support requires to identify
 		 * memmaps that were actually initialized.
 		 */
 		page = pfn_to_online_page(pfn);
+		if (page)
+			mapcount = folio_precise_page_mapcount(page_folio(page),
+							       page);
 
-		if (page) {
-			switch (op) {
-			case KPAGE_FLAGS:
-				info = stable_page_flags(page);
-				break;
-			case KPAGE_COUNT:
-				info = get_kpage_count(page);
-				break;
-			case KPAGE_CGROUP:
-				info = page_cgroup_ino(page);
-				break;
-			default:
-				info = 0;
-				break;
-			}
-		} else
-			info = 0;
-
-		if (put_user(info, out)) {
+		if (put_user(mapcount, out)) {
 			ret = -EFAULT;
 			break;
 		}
@@ -121,23 +89,17 @@ static ssize_t kpage_read(struct file *file, char __user *buf,
 	return ret;
 }
 
-/* /proc/kpagecount - an array exposing page mapcounts
- *
- * Each entry is a u64 representing the corresponding
- * physical page mapcount.
- */
-static ssize_t kpagecount_read(struct file *file, char __user *buf,
-		size_t count, loff_t *ppos)
-{
-	return kpage_read(file, buf, count, ppos, KPAGE_COUNT);
-}
-
 static const struct proc_ops kpagecount_proc_ops = {
 	.proc_flags	= PROC_ENTRY_PERMANENT,
 	.proc_lseek	= mem_lseek,
 	.proc_read	= kpagecount_read,
 };
 
+/* /proc/kpageflags - an array exposing page flags
+ *
+ * Each entry is a u64 representing the corresponding
+ * physical page flags.
+ */
 
 static inline u64 kpf_copy_bit(u64 kflags, int ubit, int kbit)
 {
@@ -147,7 +109,6 @@ static inline u64 kpf_copy_bit(u64 kflags, int ubit, int kbit)
 u64 stable_page_flags(const struct page *page)
 {
 	const struct folio *folio;
-	struct page_snapshot ps;
 	unsigned long k;
 	unsigned long mapping;
 	bool is_anon;
@@ -159,22 +120,20 @@ u64 stable_page_flags(const struct page *page)
 	 */
 	if (!page)
 		return 1 << KPF_NOPAGE;
-
-	snapshot_page(&ps, page);
-	folio = &ps.folio_snapshot;
+	folio = page_folio(page);
 
 	k = folio->flags;
 	mapping = (unsigned long)folio->mapping;
-	is_anon = mapping & FOLIO_MAPPING_ANON;
+	is_anon = mapping & PAGE_MAPPING_ANON;
 
 	/*
 	 * pseudo flags for the well known (anonymous) memory mapped pages
 	 */
-	if (folio_mapped(folio))
+	if (page_mapped(page))
 		u |= 1 << KPF_MMAP;
 	if (is_anon) {
 		u |= 1 << KPF_ANON;
-		if (mapping & FOLIO_MAPPING_KSM)
+		if (mapping & PAGE_MAPPING_KSM)
 			u |= 1 << KPF_KSM;
 	}
 
@@ -182,7 +141,7 @@ u64 stable_page_flags(const struct page *page)
 	 * compound pages: export both head/tail info
 	 * they together define a compound page's start/end pos and order
 	 */
-	if (ps.idx == 0)
+	if (page == &folio->page)
 		u |= kpf_copy_bit(k, KPF_COMPOUND_HEAD, PG_head);
 	else
 		u |= 1 << KPF_COMPOUND_TAIL;
@@ -192,19 +151,25 @@ u64 stable_page_flags(const struct page *page)
 	         folio_test_large_rmappable(folio)) {
 		/* Note: we indicate any THPs here, not just PMD-sized ones */
 		u |= 1 << KPF_THP;
-	} else if (is_huge_zero_pfn(ps.pfn)) {
+	} else if (is_huge_zero_folio(folio)) {
 		u |= 1 << KPF_ZERO_PAGE;
 		u |= 1 << KPF_THP;
-	} else if (is_zero_pfn(ps.pfn)) {
+	} else if (is_zero_folio(folio)) {
 		u |= 1 << KPF_ZERO_PAGE;
 	}
 
-	if (ps.flags & PAGE_SNAPSHOT_PG_BUDDY)
+	/*
+	 * Caveats on high order pages: PG_buddy and PG_slab will only be set
+	 * on the head page.
+	 */
+	if (PageBuddy(page))
+		u |= 1 << KPF_BUDDY;
+	else if (page_count(page) == 0 && is_free_buddy_page(page))
 		u |= 1 << KPF_BUDDY;
 
-	if (folio_test_offline(folio))
+	if (PageOffline(page))
 		u |= 1 << KPF_OFFLINE;
-	if (folio_test_pgtable(folio))
+	if (PageTable(page))
 		u |= 1 << KPF_PGTABLE;
 	if (folio_test_slab(folio))
 		u |= 1 << KPF_SLAB;
@@ -212,7 +177,7 @@ u64 stable_page_flags(const struct page *page)
 #if defined(CONFIG_PAGE_IDLE_FLAG) && defined(CONFIG_64BIT)
 	u |= kpf_copy_bit(k, KPF_IDLE,          PG_idle);
 #else
-	if (ps.flags & PAGE_SNAPSHOT_PG_IDLE)
+	if (folio_test_idle(folio))
 		u |= 1 << KPF_IDLE;
 #endif
 
@@ -238,7 +203,7 @@ u64 stable_page_flags(const struct page *page)
 	if (u & (1 << KPF_HUGE))
 		u |= kpf_copy_bit(k, KPF_HWPOISON,	PG_hwpoison);
 	else
-		u |= kpf_copy_bit(ps.page_snapshot.flags, KPF_HWPOISON, PG_hwpoison);
+		u |= kpf_copy_bit(page->flags, KPF_HWPOISON,	PG_hwpoison);
 #endif
 
 	u |= kpf_copy_bit(k, KPF_RESERVED,	PG_reserved);
@@ -255,17 +220,47 @@ u64 stable_page_flags(const struct page *page)
 #endif
 
 	return u;
-}
+};
 
-/* /proc/kpageflags - an array exposing page flags
- *
- * Each entry is a u64 representing the corresponding
- * physical page flags.
- */
 static ssize_t kpageflags_read(struct file *file, char __user *buf,
-		size_t count, loff_t *ppos)
+			     size_t count, loff_t *ppos)
 {
-	return kpage_read(file, buf, count, ppos, KPAGE_FLAGS);
+	const unsigned long max_dump_pfn = get_max_dump_pfn();
+	u64 __user *out = (u64 __user *)buf;
+	unsigned long src = *ppos;
+	unsigned long pfn;
+	ssize_t ret = 0;
+
+	pfn = src / KPMSIZE;
+	if (src & KPMMASK || count & KPMMASK)
+		return -EINVAL;
+	if (src >= max_dump_pfn * KPMSIZE)
+		return 0;
+	count = min_t(unsigned long, count, (max_dump_pfn * KPMSIZE) - src);
+
+	while (count > 0) {
+		/*
+		 * TODO: ZONE_DEVICE support requires to identify
+		 * memmaps that were actually initialized.
+		 */
+		struct page *page = pfn_to_online_page(pfn);
+
+		if (put_user(stable_page_flags(page), out)) {
+			ret = -EFAULT;
+			break;
+		}
+
+		pfn++;
+		out++;
+		count -= KPMSIZE;
+
+		cond_resched();
+	}
+
+	*ppos += (char __user *)out - buf;
+	if (!ret)
+		ret = (char __user *)out - buf;
+	return ret;
 }
 
 static const struct proc_ops kpageflags_proc_ops = {
@@ -276,10 +271,53 @@ static const struct proc_ops kpageflags_proc_ops = {
 
 #ifdef CONFIG_MEMCG
 static ssize_t kpagecgroup_read(struct file *file, char __user *buf,
-		size_t count, loff_t *ppos)
+				size_t count, loff_t *ppos)
 {
-	return kpage_read(file, buf, count, ppos, KPAGE_CGROUP);
+	const unsigned long max_dump_pfn = get_max_dump_pfn();
+	u64 __user *out = (u64 __user *)buf;
+	struct page *ppage;
+	unsigned long src = *ppos;
+	unsigned long pfn;
+	ssize_t ret = 0;
+	u64 ino;
+
+	pfn = src / KPMSIZE;
+	if (src & KPMMASK || count & KPMMASK)
+		return -EINVAL;
+	if (src >= max_dump_pfn * KPMSIZE)
+		return 0;
+	count = min_t(unsigned long, count, (max_dump_pfn * KPMSIZE) - src);
+
+	while (count > 0) {
+		/*
+		 * TODO: ZONE_DEVICE support requires to identify
+		 * memmaps that were actually initialized.
+		 */
+		ppage = pfn_to_online_page(pfn);
+
+		if (ppage)
+			ino = page_cgroup_ino(ppage);
+		else
+			ino = 0;
+
+		if (put_user(ino, out)) {
+			ret = -EFAULT;
+			break;
+		}
+
+		pfn++;
+		out++;
+		count -= KPMSIZE;
+
+		cond_resched();
+	}
+
+	*ppos += (char __user *)out - buf;
+	if (!ret)
+		ret = (char __user *)out - buf;
+	return ret;
 }
+
 static const struct proc_ops kpagecgroup_proc_ops = {
 	.proc_flags	= PROC_ENTRY_PERMANENT,
 	.proc_lseek	= mem_lseek,

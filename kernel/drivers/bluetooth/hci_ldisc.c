@@ -598,7 +598,7 @@ static void hci_uart_tty_wakeup(struct tty_struct *tty)
  *     Called by tty low level driver when receive data is
  *     available.
  *
- * Arguments:  tty          pointer to tty instance data
+ * Arguments:  tty          pointer to tty isntance data
  *             data         pointer to received data
  *             flags        pointer to flags for data
  *             count        count of received data in bytes
@@ -667,13 +667,13 @@ static int hci_uart_register_dev(struct hci_uart *hu)
 	SET_HCIDEV_DEV(hdev, hu->tty->dev);
 
 	if (test_bit(HCI_UART_RAW_DEVICE, &hu->hdev_flags))
-		hci_set_quirk(hdev, HCI_QUIRK_RAW_DEVICE);
+		set_bit(HCI_QUIRK_RAW_DEVICE, &hdev->quirks);
 
 	if (test_bit(HCI_UART_EXT_CONFIG, &hu->hdev_flags))
-		hci_set_quirk(hdev, HCI_QUIRK_EXTERNAL_CONFIG);
+		set_bit(HCI_QUIRK_EXTERNAL_CONFIG, &hdev->quirks);
 
 	if (!test_bit(HCI_UART_RESET_ON_INIT, &hu->hdev_flags))
-		hci_set_quirk(hdev, HCI_QUIRK_RESET_ON_CLOSE);
+		set_bit(HCI_QUIRK_RESET_ON_CLOSE, &hdev->quirks);
 
 	/* Only call open() for the protocol after hdev is fully initialized as
 	 * open() (or a timer/workqueue it starts) may attempt to reference it.

@@ -387,7 +387,7 @@ static struct platform_driver aspeed_driver = {
 		.of_match_table = aspeed_of_match
 	},
 	.probe		= aspeed_probe,
-	.remove		= aspeed_remove
+	.remove_new	= aspeed_remove
 };
 module_platform_driver(aspeed_driver);
 

@@ -835,7 +835,6 @@ static int stm32_rproc_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct stm32_rproc *ddata;
 	struct device_node *np = dev->of_node;
-	const char *fw_name;
 	struct rproc *rproc;
 	unsigned int state;
 	int ret;
@@ -844,12 +843,7 @@ static int stm32_rproc_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	/* Look for an optional firmware name */
-	ret = rproc_of_parse_firmware(dev, 0, &fw_name);
-	if (ret < 0 && ret != -EINVAL)
-		return ret;
-
-	rproc = devm_rproc_alloc(dev, np->name, &st_rproc_ops, fw_name, sizeof(*ddata));
+	rproc = devm_rproc_alloc(dev, np->name, &st_rproc_ops, NULL, sizeof(*ddata));
 	if (!rproc)
 		return -ENOMEM;
 
@@ -952,7 +946,7 @@ static DEFINE_SIMPLE_DEV_PM_OPS(stm32_rproc_pm_ops,
 
 static struct platform_driver stm32_rproc_driver = {
 	.probe = stm32_rproc_probe,
-	.remove = stm32_rproc_remove,
+	.remove_new = stm32_rproc_remove,
 	.driver = {
 		.name = "stm32-rproc",
 		.pm = pm_ptr(&stm32_rproc_pm_ops),

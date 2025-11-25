@@ -18,7 +18,6 @@
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/irqchip/irq-msi-lib.h>
 #include <linux/irqdomain.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -171,8 +170,8 @@ static int rcar_pcie_config_access(struct rcar_pcie_host *host,
 	 * space, it's generally only accessible when in endpoint mode.
 	 * When in root complex mode, the controller is unable to target
 	 * itself with either type 0 or type 1 accesses, and indeed, any
-	 * controller-initiated target transfer to its own config space
-	 * results in a completer abort.
+	 * controller initiated target transfer to its own config space
+	 * result in a completer abort.
 	 *
 	 * Each channel effectively only supports a single device, but as
 	 * the same channel <-> device access works for any PCI_SLOT()
@@ -576,7 +575,7 @@ static irqreturn_t rcar_pcie_msi_irq(int irq, void *data)
 		unsigned int index = find_first_bit(&reg, 32);
 		int ret;
 
-		ret = generic_handle_domain_irq(msi->domain, index);
+		ret = generic_handle_domain_irq(msi->domain->parent, index);
 		if (ret) {
 			/* Unknown MSI, just clear it */
 			dev_dbg(dev, "unexpected MSI\n");
@@ -589,6 +588,30 @@ static irqreturn_t rcar_pcie_msi_irq(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
+
+static void rcar_msi_top_irq_ack(struct irq_data *d)
+{
+	irq_chip_ack_parent(d);
+}
+
+static void rcar_msi_top_irq_mask(struct irq_data *d)
+{
+	pci_msi_mask_irq(d);
+	irq_chip_mask_parent(d);
+}
+
+static void rcar_msi_top_irq_unmask(struct irq_data *d)
+{
+	pci_msi_unmask_irq(d);
+	irq_chip_unmask_parent(d);
+}
+
+static struct irq_chip rcar_msi_top_chip = {
+	.name		= "PCIe MSI",
+	.irq_ack	= rcar_msi_top_irq_ack,
+	.irq_mask	= rcar_msi_top_irq_mask,
+	.irq_unmask	= rcar_msi_top_irq_unmask,
+};
 
 static void rcar_msi_irq_ack(struct irq_data *d)
 {
@@ -685,36 +708,30 @@ static const struct irq_domain_ops rcar_msi_domain_ops = {
 	.free	= rcar_msi_domain_free,
 };
 
-#define RCAR_MSI_FLAGS_REQUIRED (MSI_FLAG_USE_DEF_DOM_OPS	| \
-				 MSI_FLAG_USE_DEF_CHIP_OPS	| \
-				 MSI_FLAG_PCI_MSI_MASK_PARENT	| \
-				 MSI_FLAG_NO_AFFINITY)
-
-#define RCAR_MSI_FLAGS_SUPPORTED (MSI_GENERIC_FLAGS_MASK	| \
-				  MSI_FLAG_MULTI_PCI_MSI)
-
-static const struct msi_parent_ops rcar_msi_parent_ops = {
-	.required_flags		= RCAR_MSI_FLAGS_REQUIRED,
-	.supported_flags	= RCAR_MSI_FLAGS_SUPPORTED,
-	.bus_select_token	= DOMAIN_BUS_PCI_MSI,
-	.chip_flags		= MSI_CHIP_FLAG_SET_ACK,
-	.prefix			= "RCAR-",
-	.init_dev_msi_info	= msi_lib_init_dev_msi_info,
+static struct msi_domain_info rcar_msi_info = {
+	.flags	= MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS |
+		  MSI_FLAG_NO_AFFINITY | MSI_FLAG_MULTI_PCI_MSI,
+	.chip	= &rcar_msi_top_chip,
 };
 
 static int rcar_allocate_domains(struct rcar_msi *msi)
 {
 	struct rcar_pcie *pcie = &msi_to_host(msi)->pcie;
-	struct irq_domain_info info = {
-		.fwnode		= dev_fwnode(pcie->dev),
-		.ops		= &rcar_msi_domain_ops,
-		.host_data	= msi,
-		.size		= INT_PCI_MSI_NR,
-	};
+	struct fwnode_handle *fwnode = dev_fwnode(pcie->dev);
+	struct irq_domain *parent;
 
-	msi->domain = msi_create_parent_irq_domain(&info, &rcar_msi_parent_ops);
-	if (!msi->domain) {
+	parent = irq_domain_create_linear(fwnode, INT_PCI_MSI_NR,
+					  &rcar_msi_domain_ops, msi);
+	if (!parent) {
 		dev_err(pcie->dev, "failed to create IRQ domain\n");
+		return -ENOMEM;
+	}
+	irq_domain_update_bus_token(parent, DOMAIN_BUS_NEXUS);
+
+	msi->domain = pci_msi_create_irq_domain(fwnode, &rcar_msi_info, parent);
+	if (!msi->domain) {
+		dev_err(pcie->dev, "failed to create MSI domain\n");
+		irq_domain_remove(parent);
 		return -ENOMEM;
 	}
 
@@ -723,7 +740,10 @@ static int rcar_allocate_domains(struct rcar_msi *msi)
 
 static void rcar_free_domains(struct rcar_msi *msi)
 {
+	struct irq_domain *parent = msi->domain->parent;
+
 	irq_domain_remove(msi->domain);
+	irq_domain_remove(parent);
 }
 
 static int rcar_pcie_enable_msi(struct rcar_pcie_host *host)
@@ -745,7 +765,7 @@ static int rcar_pcie_enable_msi(struct rcar_pcie_host *host)
 	if (err)
 		return err;
 
-	/* Two IRQs are for MSI, but they are also used for non-MSI IRQs */
+	/* Two irqs are for MSI, but they are also used for non-MSI irqs */
 	err = devm_request_irq(dev, msi->irq1, rcar_pcie_msi_irq,
 			       IRQF_SHARED | IRQF_NO_THREAD,
 			       rcar_msi_bottom_chip.name, host);
@@ -762,12 +782,12 @@ static int rcar_pcie_enable_msi(struct rcar_pcie_host *host)
 		goto err;
 	}
 
-	/* Disable all MSIs */
+	/* disable all MSIs */
 	rcar_pci_write_reg(pcie, 0, PCIEMSIIER);
 
 	/*
-	 * Setup MSI data target using RC base address, which is guaranteed
-	 * to be in the low 32bit range on any R-Car HW.
+	 * Setup MSI data target using RC base address address, which
+	 * is guaranteed to be in the low 32bit range on any R-Car HW.
 	 */
 	rcar_pci_write_reg(pcie, lower_32_bits(res.start) | MSIFE, PCIEMSIALR);
 	rcar_pci_write_reg(pcie, upper_32_bits(res.start), PCIEMSIAUR);
@@ -862,7 +882,6 @@ static int rcar_pcie_inbound_ranges(struct rcar_pcie *pcie,
 			dev_err(pcie->dev, "Failed to map inbound regions!\n");
 			return -EINVAL;
 		}
-
 		/*
 		 * If the size of the range is larger than the alignment of
 		 * the start address, we have to use multiple entries to
@@ -874,7 +893,6 @@ static int rcar_pcie_inbound_ranges(struct rcar_pcie *pcie,
 
 			size = min(size, alignment);
 		}
-
 		/* Hardware supports max 4GiB inbound region */
 		size = min(size, 1ULL << 32);
 

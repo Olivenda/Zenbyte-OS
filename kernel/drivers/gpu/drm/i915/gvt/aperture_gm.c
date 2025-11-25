@@ -46,7 +46,6 @@ static int alloc_gm(struct intel_vgpu *vgpu, bool high_gm)
 	unsigned int flags;
 	u64 start, end, size;
 	struct drm_mm_node *node;
-	intel_wakeref_t wakeref;
 	int ret;
 
 	if (high_gm) {
@@ -64,12 +63,12 @@ static int alloc_gm(struct intel_vgpu *vgpu, bool high_gm)
 	}
 
 	mutex_lock(&gt->ggtt->vm.mutex);
-	wakeref = mmio_hw_access_pre(gt);
+	mmio_hw_access_pre(gt);
 	ret = i915_gem_gtt_insert(&gt->ggtt->vm, NULL, node,
 				  size, I915_GTT_PAGE_SIZE,
 				  I915_COLOR_UNEVICTABLE,
 				  start, end, flags);
-	mmio_hw_access_post(gt, wakeref);
+	mmio_hw_access_post(gt);
 	mutex_unlock(&gt->ggtt->vm.mutex);
 	if (ret)
 		gvt_err("fail to alloc %s gm space from host\n",
@@ -227,7 +226,7 @@ out_free_fence:
 		vgpu->fence.regs[i] = NULL;
 	}
 	mutex_unlock(&gvt->gt->ggtt->vm.mutex);
-	intel_runtime_pm_put(uncore->rpm, wakeref);
+	intel_runtime_pm_put_unchecked(uncore->rpm);
 	return -ENOSPC;
 }
 

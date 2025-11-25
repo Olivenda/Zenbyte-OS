@@ -21,9 +21,6 @@ Kernel Build System
     reproducible-builds
     gcc-plugins
     llvm
-    gendwarfksyms
-
-    bash-completion
 
 .. only::  subproject and html
 

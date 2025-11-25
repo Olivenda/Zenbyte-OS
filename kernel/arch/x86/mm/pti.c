@@ -38,7 +38,6 @@
 #include <asm/desc.h>
 #include <asm/sections.h>
 #include <asm/set_memory.h>
-#include <asm/bugs.h>
 
 #undef pr_fmt
 #define pr_fmt(fmt)     "Kernel/User page tables isolation: " fmt
@@ -85,8 +84,7 @@ void __init pti_check_boottime_disable(void)
 		return;
 	}
 
-	if (pti_mode == PTI_AUTO &&
-	    !cpu_attack_vector_mitigated(CPU_MITIGATE_USER_KERNEL))
+	if (cpu_mitigations_off())
 		pti_mode = PTI_FORCE_OFF;
 	if (pti_mode == PTI_FORCE_OFF) {
 		pti_print_if_insecure("disabled on command line.");
@@ -100,11 +98,6 @@ void __init pti_check_boottime_disable(void)
 		return;
 
 	setup_force_cpu_cap(X86_FEATURE_PTI);
-
-	if (cpu_feature_enabled(X86_FEATURE_INVLPGB)) {
-		pr_debug("PTI enabled, disabling INVLPGB\n");
-		setup_clear_cpu_cap(X86_FEATURE_INVLPGB);
-	}
 }
 
 static int __init pti_parse_cmdline(char *arg)
@@ -192,7 +185,7 @@ static p4d_t *pti_user_pagetable_walk_p4d(unsigned long address)
 
 		set_pgd(pgd, __pgd(_KERNPG_TABLE | __pa(new_p4d_page)));
 	}
-	BUILD_BUG_ON(pgd_leaf(*pgd));
+	BUILD_BUG_ON(pgd_leaf(*pgd) != 0);
 
 	return p4d_offset(pgd, address);
 }
@@ -213,7 +206,7 @@ static pmd_t *pti_user_pagetable_walk_pmd(unsigned long address)
 	if (!p4d)
 		return NULL;
 
-	BUILD_BUG_ON(p4d_leaf(*p4d));
+	BUILD_BUG_ON(p4d_leaf(*p4d) != 0);
 	if (p4d_none(*p4d)) {
 		unsigned long new_pud_page = __get_free_page(gfp);
 		if (WARN_ON_ONCE(!new_pud_page))

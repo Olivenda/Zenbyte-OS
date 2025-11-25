@@ -6,7 +6,6 @@ Designs and Implementations
 
    control-names
    channel-mapping-api
-   compress-accel
    compress-offload
    timestamping
    jack-controls

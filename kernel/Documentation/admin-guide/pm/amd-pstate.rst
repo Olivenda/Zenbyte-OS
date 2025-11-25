@@ -72,7 +72,7 @@ to manage each performance update behavior. ::
   Lowest non-        |                       |                         |                       |
   linear perf ------>+-----------------------+                         +-----------------------+
                      |                       |                         |                       |
-                     |                       |          Min perf  ---->|                       |
+                     |                       |       Lowest perf  ---->|                       |
                      |                       |                         |                       |
   Lowest perf ------>+-----------------------+                         +-----------------------+
                      |                       |                         |                       |
@@ -251,7 +251,9 @@ performance supported in `AMD CPPC Performance Capability <perf_cap_>`_).
 In some ASICs, the highest CPPC performance is not the one in the ``_CPC``
 table, so we need to expose it to sysfs. If boost is not active, but
 still supported, this maximum frequency will be larger than the one in
-``cpuinfo``.
+``cpuinfo``. On systems that support preferred core, the driver will have
+different values for some cores than others and this will reflect the values
+advertised by the platform at bootup.
 This attribute is read-only.
 
 ``amd_pstate_lowest_nonlinear_freq``

@@ -20,9 +20,6 @@
 #define Mbps_to_icc(x)	((x) * 1000 / 8)
 #define Gbps_to_icc(x)	((x) * 1000 * 1000 / 8)
 
-/* macro to indicate dynamic id allocation */
-#define ICC_ALLOC_DYN_ID	-1
-
 struct icc_path;
 struct device;
 

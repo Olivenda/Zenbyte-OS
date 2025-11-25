@@ -168,9 +168,6 @@ static void add_stack_record_to_list(struct stack_record *stack_record,
 	unsigned long flags;
 	struct stack *stack;
 
-	if (!gfpflags_allow_spinning(gfp_mask))
-		return;
-
 	set_current_in_page_owner();
 	stack = kmalloc(sizeof(*stack), gfp_nested_mask(gfp_mask));
 	if (!stack) {
@@ -232,19 +229,17 @@ static void dec_stack_record_count(depot_stack_handle_t handle,
 			handle);
 }
 
-static inline void __update_page_owner_handle(struct page *page,
+static inline void __update_page_owner_handle(struct page_ext *page_ext,
 					      depot_stack_handle_t handle,
 					      unsigned short order,
 					      gfp_t gfp_mask,
 					      short last_migrate_reason, u64 ts_nsec,
 					      pid_t pid, pid_t tgid, char *comm)
 {
-	struct page_ext_iter iter;
-	struct page_ext *page_ext;
+	int i;
 	struct page_owner *page_owner;
 
-	rcu_read_lock();
-	for_each_page_ext(page, 1 << order, page_ext, iter) {
+	for (i = 0; i < (1 << order); i++) {
 		page_owner = get_page_owner(page_ext);
 		page_owner->handle = handle;
 		page_owner->order = order;
@@ -257,22 +252,20 @@ static inline void __update_page_owner_handle(struct page *page,
 			sizeof(page_owner->comm));
 		__set_bit(PAGE_EXT_OWNER, &page_ext->flags);
 		__set_bit(PAGE_EXT_OWNER_ALLOCATED, &page_ext->flags);
+		page_ext = page_ext_next(page_ext);
 	}
-	rcu_read_unlock();
 }
 
-static inline void __update_page_owner_free_handle(struct page *page,
+static inline void __update_page_owner_free_handle(struct page_ext *page_ext,
 						   depot_stack_handle_t handle,
 						   unsigned short order,
 						   pid_t pid, pid_t tgid,
 						   u64 free_ts_nsec)
 {
-	struct page_ext_iter iter;
-	struct page_ext *page_ext;
+	int i;
 	struct page_owner *page_owner;
 
-	rcu_read_lock();
-	for_each_page_ext(page, 1 << order, page_ext, iter) {
+	for (i = 0; i < (1 << order); i++) {
 		page_owner = get_page_owner(page_ext);
 		/* Only __reset_page_owner() wants to clear the bit */
 		if (handle) {
@@ -282,8 +275,8 @@ static inline void __update_page_owner_free_handle(struct page *page,
 		page_owner->free_ts_nsec = free_ts_nsec;
 		page_owner->free_pid = current->pid;
 		page_owner->free_tgid = current->tgid;
+		page_ext = page_ext_next(page_ext);
 	}
-	rcu_read_unlock();
 }
 
 void __reset_page_owner(struct page *page, unsigned short order)
@@ -300,17 +293,11 @@ void __reset_page_owner(struct page *page, unsigned short order)
 
 	page_owner = get_page_owner(page_ext);
 	alloc_handle = page_owner->handle;
-	page_ext_put(page_ext);
 
-	/*
-	 * Do not specify GFP_NOWAIT to make gfpflags_allow_spinning() == false
-	 * to prevent issues in stack_depot_save().
-	 * This is similar to alloc_pages_nolock() gfp flags, but only used
-	 * to signal stack_depot to avoid spin_locks.
-	 */
-	handle = save_stack(__GFP_NOWARN);
-	__update_page_owner_free_handle(page, handle, order, current->pid,
+	handle = save_stack(GFP_NOWAIT | __GFP_NOWARN);
+	__update_page_owner_free_handle(page_ext, handle, order, current->pid,
 					current->tgid, free_ts_nsec);
+	page_ext_put(page_ext);
 
 	if (alloc_handle != early_handle)
 		/*
@@ -326,19 +313,25 @@ void __reset_page_owner(struct page *page, unsigned short order)
 noinline void __set_page_owner(struct page *page, unsigned short order,
 					gfp_t gfp_mask)
 {
+	struct page_ext *page_ext;
 	u64 ts_nsec = local_clock();
 	depot_stack_handle_t handle;
 
 	handle = save_stack(gfp_mask);
-	__update_page_owner_handle(page, handle, order, gfp_mask, -1,
+
+	page_ext = page_ext_get(page);
+	if (unlikely(!page_ext))
+		return;
+	__update_page_owner_handle(page_ext, handle, order, gfp_mask, -1,
 				   ts_nsec, current->pid, current->tgid,
 				   current->comm);
+	page_ext_put(page_ext);
 	inc_stack_record_count(handle, gfp_mask, 1 << order);
 }
 
-void __folio_set_owner_migrate_reason(struct folio *folio, int reason)
+void __set_page_owner_migrate_reason(struct page *page, int reason)
 {
-	struct page_ext *page_ext = page_ext_get(&folio->page);
+	struct page_ext *page_ext = page_ext_get(page);
 	struct page_owner *page_owner;
 
 	if (unlikely(!page_ext))
@@ -351,42 +344,44 @@ void __folio_set_owner_migrate_reason(struct folio *folio, int reason)
 
 void __split_page_owner(struct page *page, int old_order, int new_order)
 {
-	struct page_ext_iter iter;
-	struct page_ext *page_ext;
+	int i;
+	struct page_ext *page_ext = page_ext_get(page);
 	struct page_owner *page_owner;
 
-	rcu_read_lock();
-	for_each_page_ext(page, 1 << old_order, page_ext, iter) {
+	if (unlikely(!page_ext))
+		return;
+
+	for (i = 0; i < (1 << old_order); i++) {
 		page_owner = get_page_owner(page_ext);
 		page_owner->order = new_order;
+		page_ext = page_ext_next(page_ext);
 	}
-	rcu_read_unlock();
+	page_ext_put(page_ext);
 }
 
 void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 {
-	struct page_ext *page_ext;
-	struct page_ext_iter iter;
+	int i;
+	struct page_ext *old_ext;
+	struct page_ext *new_ext;
 	struct page_owner *old_page_owner;
 	struct page_owner *new_page_owner;
 	depot_stack_handle_t migrate_handle;
 
-	page_ext = page_ext_get(&old->page);
-	if (unlikely(!page_ext))
+	old_ext = page_ext_get(&old->page);
+	if (unlikely(!old_ext))
 		return;
 
-	old_page_owner = get_page_owner(page_ext);
-	page_ext_put(page_ext);
-
-	page_ext = page_ext_get(&newfolio->page);
-	if (unlikely(!page_ext))
+	new_ext = page_ext_get(&newfolio->page);
+	if (unlikely(!new_ext)) {
+		page_ext_put(old_ext);
 		return;
+	}
 
-	new_page_owner = get_page_owner(page_ext);
-	page_ext_put(page_ext);
-
+	old_page_owner = get_page_owner(old_ext);
+	new_page_owner = get_page_owner(new_ext);
 	migrate_handle = new_page_owner->handle;
-	__update_page_owner_handle(&newfolio->page, old_page_owner->handle,
+	__update_page_owner_handle(new_ext, old_page_owner->handle,
 				   old_page_owner->order, old_page_owner->gfp_mask,
 				   old_page_owner->last_migrate_reason,
 				   old_page_owner->ts_nsec, old_page_owner->pid,
@@ -396,7 +391,7 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	 * will be freed after migration. Keep them until then as they may be
 	 * useful.
 	 */
-	__update_page_owner_free_handle(&newfolio->page, 0, old_page_owner->order,
+	__update_page_owner_free_handle(new_ext, 0, old_page_owner->order,
 					old_page_owner->free_pid,
 					old_page_owner->free_tgid,
 					old_page_owner->free_ts_nsec);
@@ -405,12 +400,14 @@ void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 	 * for the new one and the old folio otherwise there will be an imbalance
 	 * when subtracting those pages from the stack.
 	 */
-	rcu_read_lock();
-	for_each_page_ext(&old->page, 1 << new_page_owner->order, page_ext, iter) {
-		old_page_owner = get_page_owner(page_ext);
+	for (i = 0; i < (1 << new_page_owner->order); i++) {
 		old_page_owner->handle = migrate_handle;
+		old_ext = page_ext_next(old_ext);
+		old_page_owner = get_page_owner(old_ext);
 	}
-	rcu_read_unlock();
+
+	page_ext_put(new_ext);
+	page_ext_put(old_ext);
 }
 
 void pagetypeinfo_showmixedcount_print(struct seq_file *m,
@@ -510,7 +507,7 @@ static inline int print_page_owner_memcg(char *kbuf, size_t count, int ret,
 
 	rcu_read_lock();
 	memcg_data = READ_ONCE(page->memcg_data);
-	if (!memcg_data || PageTail(page))
+	if (!memcg_data)
 		goto out_unlock;
 
 	if (memcg_data & MEMCG_DATA_OBJEXTS)
@@ -816,7 +813,7 @@ static void init_pages_in_zone(pg_data_t *pgdat, struct zone *zone)
 				goto ext_put_continue;
 
 			/* Found early allocated page */
-			__update_page_owner_handle(page, early_handle, 0, 0,
+			__update_page_owner_handle(page_ext, early_handle, 0, 0,
 						   -1, local_clock(), current->pid,
 						   current->tgid, current->comm);
 			count++;

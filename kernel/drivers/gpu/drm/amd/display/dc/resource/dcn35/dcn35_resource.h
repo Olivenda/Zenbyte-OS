@@ -35,7 +35,6 @@
 
 extern struct _vcs_dpi_ip_params_st dcn3_5_ip;
 extern struct _vcs_dpi_soc_bounding_box_st dcn3_5_soc;
-enum dc_status dcn35_patch_unknown_plane_state(struct dc_plane_state *plane_state);
 
 struct dcn35_resource_pool {
 	struct resource_pool base;
@@ -305,8 +304,7 @@ struct resource_pool *dcn35_create_resource_pool(
 	SRI_ARR(OPTC_WIDTH_CONTROL, ODM, inst),\
 	SRI_ARR(OPTC_MEMORY_CONFIG, ODM, inst),\
 	SRI_ARR(OTG_DRR_CONTROL, OTG, inst),\
-	SRI2_ARR(OPTC_CLOCK_CONTROL, OPTC, inst),\
-	SRI_ARR(INTERRUPT_DEST, OTG, inst)
+	SRI2_ARR(OPTC_CLOCK_CONTROL, OPTC, inst)
 
 /* DPP */
 #define DPP_REG_LIST_DCN35_RI(id)\

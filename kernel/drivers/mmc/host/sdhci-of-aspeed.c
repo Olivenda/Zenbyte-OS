@@ -425,8 +425,10 @@ static int aspeed_sdhci_probe(struct platform_device *pdev)
 		return PTR_ERR(pltfm_host->clk);
 
 	ret = clk_prepare_enable(pltfm_host->clk);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "Unable to enable SDIO clock\n");
+	if (ret) {
+		dev_err(&pdev->dev, "Unable to enable SDIO clock\n");
+		goto err_pltfm_free;
+	}
 
 	ret = mmc_of_parse(host->mmc);
 	if (ret)
@@ -443,6 +445,8 @@ static int aspeed_sdhci_probe(struct platform_device *pdev)
 
 err_sdhci_add:
 	clk_disable_unprepare(pltfm_host->clk);
+err_pltfm_free:
+	sdhci_pltfm_free(pdev);
 	return ret;
 }
 
@@ -457,6 +461,8 @@ static void aspeed_sdhci_remove(struct platform_device *pdev)
 	sdhci_remove_host(host, 0);
 
 	clk_disable_unprepare(pltfm_host->clk);
+
+	sdhci_pltfm_free(pdev);
 }
 
 static const struct aspeed_sdhci_pdata ast2400_sdhci_pdata = {
@@ -513,7 +519,7 @@ static struct platform_driver aspeed_sdhci_driver = {
 		.of_match_table = aspeed_sdhci_of_match,
 	},
 	.probe		= aspeed_sdhci_probe,
-	.remove		= aspeed_sdhci_remove,
+	.remove_new	= aspeed_sdhci_remove,
 };
 
 static int aspeed_sdc_probe(struct platform_device *pdev)
@@ -590,7 +596,7 @@ static struct platform_driver aspeed_sdc_driver = {
 		.of_match_table = aspeed_sdc_of_match,
 	},
 	.probe		= aspeed_sdc_probe,
-	.remove		= aspeed_sdc_remove,
+	.remove_new	= aspeed_sdc_remove,
 };
 
 #if defined(CONFIG_MMC_SDHCI_OF_ASPEED_TEST)

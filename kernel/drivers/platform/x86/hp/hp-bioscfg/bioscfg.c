@@ -388,13 +388,16 @@ union acpi_object *hp_get_wmiobj_pointer(int instance_id, const char *guid_strin
  */
 int hp_get_instance_count(const char *guid_string)
 {
-	int ret;
+	union acpi_object *wmi_obj = NULL;
+	int i = 0;
 
-	ret = wmi_instance_count(guid_string);
-	if (ret < 0)
-		return 0;
+	do {
+		kfree(wmi_obj);
+		wmi_obj = hp_get_wmiobj_pointer(i, guid_string);
+		i++;
+	} while (wmi_obj);
 
-	return ret;
+	return i - 1;
 }
 
 /**
@@ -445,7 +448,7 @@ int hp_convert_hexstr_to_str(const char *input, u32 input_len, char **str, int *
 		return -ENOMEM;
 
 	for (i = 0; i < input_len; i += 5) {
-		strscpy(tmp, input + i);
+		strncpy(tmp, input + i, strlen(tmp));
 		if (kstrtol(tmp, 16, &ch) == 0) {
 			// escape char
 			if (ch == '\\' ||

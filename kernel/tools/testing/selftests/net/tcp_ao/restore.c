@@ -16,11 +16,11 @@ const size_t quota = nr_packets * msg_len;
 static void try_server_run(const char *tst_name, unsigned int port,
 			   fault_t inj, test_cnt cnt_expected)
 {
-	test_cnt poll_cnt = (cnt_expected == TEST_CNT_GOOD) ? 0 : cnt_expected;
 	const char *cnt_name = "TCPAOGood";
-	struct tcp_counters cnt1, cnt2;
+	struct tcp_ao_counters ao1, ao2;
 	uint64_t before_cnt, after_cnt;
-	int sk, lsk, dummy;
+	int sk, lsk;
+	time_t timeout;
 	ssize_t bytes;
 
 	if (fault(TIMEOUT))
@@ -48,10 +48,11 @@ static void try_server_run(const char *tst_name, unsigned int port,
 	}
 
 	before_cnt = netstat_get_one(cnt_name, NULL);
-	if (test_get_tcp_counters(sk, &cnt1))
-		test_error("test_get_tcp_counters()");
+	if (test_get_tcp_ao_counters(sk, &ao1))
+		test_error("test_get_tcp_ao_counters()");
 
-	bytes = test_skpair_server(sk, quota, poll_cnt, &dummy);
+	timeout = fault(TIMEOUT) ? TEST_RETRANSMIT_SEC : TEST_TIMEOUT_SEC;
+	bytes = test_server_run(sk, quota, timeout);
 	if (fault(TIMEOUT)) {
 		if (bytes > 0)
 			test_fail("%s: server served: %zd", tst_name, bytes);
@@ -64,17 +65,17 @@ static void try_server_run(const char *tst_name, unsigned int port,
 			test_ok("%s: server alive", tst_name);
 	}
 	synchronize_threads(); /* 3: counters checks */
-	if (test_get_tcp_counters(sk, &cnt2))
-		test_error("test_get_tcp_counters()");
+	if (test_get_tcp_ao_counters(sk, &ao2))
+		test_error("test_get_tcp_ao_counters()");
 	after_cnt = netstat_get_one(cnt_name, NULL);
 
-	test_assert_counters(tst_name, &cnt1, &cnt2, cnt_expected);
+	test_tcp_ao_counters_cmp(tst_name, &ao1, &ao2, cnt_expected);
 
 	if (after_cnt <= before_cnt) {
-		test_fail("%s(server): %s counter did not increase: %" PRIu64 " <= %" PRIu64,
-			  tst_name, cnt_name, after_cnt, before_cnt);
+		test_fail("%s: %s counter did not increase: %" PRIu64 " <= %" PRIu64,
+				tst_name, cnt_name, after_cnt, before_cnt);
 	} else {
-		test_ok("%s(server): counter %s increased %" PRIu64 " => %" PRIu64,
+		test_ok("%s: counter %s increased %" PRIu64 " => %" PRIu64,
 			tst_name, cnt_name, before_cnt, after_cnt);
 	}
 
@@ -91,16 +92,16 @@ static void *server_fn(void *arg)
 {
 	unsigned int port = test_server_port;
 
-	try_server_run("TCP-AO migrate to another socket (server)", port++,
+	try_server_run("TCP-AO migrate to another socket", port++,
 		       0, TEST_CNT_GOOD);
-	try_server_run("TCP-AO with wrong send ISN (server)", port++,
+	try_server_run("TCP-AO with wrong send ISN", port++,
 		       FAULT_TIMEOUT, TEST_CNT_BAD);
-	try_server_run("TCP-AO with wrong receive ISN (server)", port++,
+	try_server_run("TCP-AO with wrong receive ISN", port++,
 		       FAULT_TIMEOUT, TEST_CNT_BAD);
-	try_server_run("TCP-AO with wrong send SEQ ext number (server)", port++,
+	try_server_run("TCP-AO with wrong send SEQ ext number", port++,
 		       FAULT_TIMEOUT, TEST_CNT_BAD);
-	try_server_run("TCP-AO with wrong receive SEQ ext number (server)",
-		       port++, FAULT_TIMEOUT, TEST_CNT_NS_BAD | TEST_CNT_GOOD);
+	try_server_run("TCP-AO with wrong receive SEQ ext number", port++,
+		       FAULT_TIMEOUT, TEST_CNT_NS_BAD | TEST_CNT_GOOD);
 
 	synchronize_threads(); /* don't race to exit: client exits */
 	return NULL;
@@ -124,7 +125,7 @@ static void test_get_sk_checkpoint(unsigned int server_port, sockaddr_af *saddr,
 		test_error("failed to connect()");
 
 	synchronize_threads(); /* 2: accepted => send data */
-	if (test_client_verify(sk, msg_len, nr_packets))
+	if (test_client_verify(sk, msg_len, nr_packets, TEST_TIMEOUT_SEC))
 		test_fail("pre-migrate verify failed");
 
 	test_enable_repair(sk);
@@ -138,11 +139,11 @@ static void test_sk_restore(const char *tst_name, unsigned int server_port,
 			    struct tcp_ao_repair *ao_img,
 			    fault_t inj, test_cnt cnt_expected)
 {
-	test_cnt poll_cnt = (cnt_expected == TEST_CNT_GOOD) ? 0 : cnt_expected;
 	const char *cnt_name = "TCPAOGood";
-	struct tcp_counters cnt1, cnt2;
+	struct tcp_ao_counters ao1, ao2;
 	uint64_t before_cnt, after_cnt;
-	int sk, dummy;
+	time_t timeout;
+	int sk;
 
 	if (fault(TIMEOUT))
 		cnt_name = "TCPAOBad";
@@ -158,30 +159,30 @@ static void test_sk_restore(const char *tst_name, unsigned int server_port,
 		test_error("setsockopt(TCP_AO_ADD_KEY)");
 	test_ao_restore(sk, ao_img);
 
-	if (test_get_tcp_counters(sk, &cnt1))
-		test_error("test_get_tcp_counters()");
+	if (test_get_tcp_ao_counters(sk, &ao1))
+		test_error("test_get_tcp_ao_counters()");
 
 	test_disable_repair(sk);
 	test_sock_state_free(img);
 
-	if (test_skpair_client(sk, msg_len, nr_packets, poll_cnt, &dummy)) {
+	timeout = fault(TIMEOUT) ? TEST_RETRANSMIT_SEC : TEST_TIMEOUT_SEC;
+	if (test_client_verify(sk, msg_len, nr_packets, timeout)) {
 		if (fault(TIMEOUT))
 			test_ok("%s: post-migrate connection is broken", tst_name);
 		else
 			test_fail("%s: post-migrate connection is working", tst_name);
 	} else {
 		if (fault(TIMEOUT))
-			test_fail("%s: post-migrate connection is working", tst_name);
+			test_fail("%s: post-migrate connection still working", tst_name);
 		else
 			test_ok("%s: post-migrate connection is alive", tst_name);
 	}
-
 	synchronize_threads(); /* 3: counters checks */
-	if (test_get_tcp_counters(sk, &cnt2))
-		test_error("test_get_tcp_counters()");
+	if (test_get_tcp_ao_counters(sk, &ao2))
+		test_error("test_get_tcp_ao_counters()");
 	after_cnt = netstat_get_one(cnt_name, NULL);
 
-	test_assert_counters(tst_name, &cnt1, &cnt2, cnt_expected);
+	test_tcp_ao_counters_cmp(tst_name, &ao1, &ao2, cnt_expected);
 
 	if (after_cnt <= before_cnt) {
 		test_fail("%s: %s counter did not increase: %" PRIu64 " <= %" PRIu64,
@@ -202,7 +203,7 @@ static void *client_fn(void *arg)
 	sockaddr_af saddr;
 
 	test_get_sk_checkpoint(port, &saddr, &tcp_img, &ao_img);
-	test_sk_restore("TCP-AO migrate to another socket (client)", port++,
+	test_sk_restore("TCP-AO migrate to another socket", port++,
 			&saddr, &tcp_img, &ao_img, 0, TEST_CNT_GOOD);
 
 	test_get_sk_checkpoint(port, &saddr, &tcp_img, &ao_img);
@@ -211,7 +212,7 @@ static void *client_fn(void *arg)
 			      -1, port, 0, -1, -1, -1, -1, -1, 100, 100, -1);
 	trace_ao_event_expect(TCP_AO_MISMATCH, this_ip_dest, this_ip_addr,
 			      port, -1, 0, -1, -1, -1, -1, -1, 100, 100, -1);
-	test_sk_restore("TCP-AO with wrong send ISN (client)", port++,
+	test_sk_restore("TCP-AO with wrong send ISN", port++,
 			&saddr, &tcp_img, &ao_img, FAULT_TIMEOUT, TEST_CNT_BAD);
 
 	test_get_sk_checkpoint(port, &saddr, &tcp_img, &ao_img);
@@ -220,7 +221,7 @@ static void *client_fn(void *arg)
 			      -1, port, 0, -1, -1, -1, -1, -1, 100, 100, -1);
 	trace_ao_event_expect(TCP_AO_MISMATCH, this_ip_dest, this_ip_addr,
 			      port, -1, 0, -1, -1, -1, -1, -1, 100, 100, -1);
-	test_sk_restore("TCP-AO with wrong receive ISN (client)", port++,
+	test_sk_restore("TCP-AO with wrong receive ISN", port++,
 			&saddr, &tcp_img, &ao_img, FAULT_TIMEOUT, TEST_CNT_BAD);
 
 	test_get_sk_checkpoint(port, &saddr, &tcp_img, &ao_img);
@@ -228,8 +229,8 @@ static void *client_fn(void *arg)
 	trace_ao_event_expect(TCP_AO_MISMATCH, this_ip_addr, this_ip_dest,
 			      -1, port, 0, -1, -1, -1, -1, -1, 100, 100, -1);
 	/* not expecting server => client mismatches as only snd sne is broken */
-	test_sk_restore("TCP-AO with wrong send SEQ ext number (client)",
-			port++, &saddr, &tcp_img, &ao_img, FAULT_TIMEOUT,
+	test_sk_restore("TCP-AO with wrong send SEQ ext number", port++,
+			&saddr, &tcp_img, &ao_img, FAULT_TIMEOUT,
 			TEST_CNT_NS_BAD | TEST_CNT_GOOD);
 
 	test_get_sk_checkpoint(port, &saddr, &tcp_img, &ao_img);
@@ -237,8 +238,8 @@ static void *client_fn(void *arg)
 	/* not expecting client => server mismatches as only rcv sne is broken */
 	trace_ao_event_expect(TCP_AO_MISMATCH, this_ip_dest, this_ip_addr,
 			      port, -1, 0, -1, -1, -1, -1, -1, 100, 100, -1);
-	test_sk_restore("TCP-AO with wrong receive SEQ ext number (client)",
-			port++, &saddr, &tcp_img, &ao_img, FAULT_TIMEOUT,
+	test_sk_restore("TCP-AO with wrong receive SEQ ext number", port++,
+			&saddr, &tcp_img, &ao_img, FAULT_TIMEOUT,
 			TEST_CNT_NS_GOOD | TEST_CNT_BAD);
 
 	return NULL;

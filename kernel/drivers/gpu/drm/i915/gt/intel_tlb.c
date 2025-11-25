@@ -122,7 +122,7 @@ void intel_gt_invalidate_tlb_full(struct intel_gt *gt, u32 seqno)
 {
 	intel_wakeref_t wakeref;
 
-	if (is_mock_gt(gt))
+	if (I915_SELFTEST_ONLY(gt->awake == -ENODEV))
 		return;
 
 	if (intel_gt_is_wedged(gt))

@@ -556,38 +556,36 @@ static const struct vdpa_config_ops snet_config_ops = {
 static int psnet_open_pf_bar(struct pci_dev *pdev, struct psnet *psnet)
 {
 	char *name;
-	unsigned short i;
-	bool bars_found = false;
-
-	name = devm_kasprintf(&pdev->dev, GFP_KERNEL, "psnet[%s]-bars", pci_name(pdev));
-	if (!name)
-		return -ENOMEM;
-
+	int ret, i, mask = 0;
 	/* We don't know which BAR will be used to communicate..
 	 * We will map every bar with len > 0.
 	 *
 	 * Later, we will discover the BAR and unmap all other BARs.
 	 */
 	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
-		void __iomem *io;
-
-		if (pci_resource_len(pdev, i) == 0)
-			continue;
-
-		io = pcim_iomap_region(pdev, i, name);
-		if (IS_ERR(io)) {
-			SNET_ERR(pdev, "Failed to request and map PCI BARs\n");
-			return PTR_ERR(io);
-		}
-
-		psnet->bars[i] = io;
-		bars_found = true;
+		if (pci_resource_len(pdev, i))
+			mask |= (1 << i);
 	}
 
 	/* No BAR can be used.. */
-	if (!bars_found) {
+	if (!mask) {
 		SNET_ERR(pdev, "Failed to find a PCI BAR\n");
 		return -ENODEV;
+	}
+
+	name = devm_kasprintf(&pdev->dev, GFP_KERNEL, "psnet[%s]-bars", pci_name(pdev));
+	if (!name)
+		return -ENOMEM;
+
+	ret = pcim_iomap_regions(pdev, mask, name);
+	if (ret) {
+		SNET_ERR(pdev, "Failed to request and map PCI BARs\n");
+		return ret;
+	}
+
+	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
+		if (mask & (1 << i))
+			psnet->bars[i] = pcim_iomap_table(pdev)[i];
 	}
 
 	return 0;
@@ -596,20 +594,20 @@ static int psnet_open_pf_bar(struct pci_dev *pdev, struct psnet *psnet)
 static int snet_open_vf_bar(struct pci_dev *pdev, struct snet *snet)
 {
 	char *name;
-	void __iomem *io;
+	int ret;
 
 	name = devm_kasprintf(&pdev->dev, GFP_KERNEL, "snet[%s]-bars", pci_name(pdev));
 	if (!name)
 		return -ENOMEM;
 
 	/* Request and map BAR */
-	io = pcim_iomap_region(pdev, snet->psnet->cfg.vf_bar, name);
-	if (IS_ERR(io)) {
+	ret = pcim_iomap_regions(pdev, BIT(snet->psnet->cfg.vf_bar), name);
+	if (ret) {
 		SNET_ERR(pdev, "Failed to request and map PCI BAR for a VF\n");
-		return PTR_ERR(io);
+		return ret;
 	}
 
-	snet->bar = io;
+	snet->bar = pcim_iomap_table(pdev)[snet->psnet->cfg.vf_bar];
 
 	return 0;
 }
@@ -658,12 +656,15 @@ static int psnet_detect_bar(struct psnet *psnet, u32 off)
 
 static void psnet_unmap_unused_bars(struct pci_dev *pdev, struct psnet *psnet)
 {
-	unsigned short i;
+	int i, mask = 0;
 
 	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
 		if (psnet->bars[i] && i != psnet->barno)
-			pcim_iounmap_region(pdev, i);
+			mask |= (1 << i);
 	}
+
+	if (mask)
+		pcim_iounmap_regions(pdev, mask);
 }
 
 /* Read SNET config from PCI BAR */

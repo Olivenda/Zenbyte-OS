@@ -7,7 +7,6 @@
 
 #include <linux/types.h>
 #include <linux/irq.h>
-#include <linux/seq_file.h>
 #include <linux/smp.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>

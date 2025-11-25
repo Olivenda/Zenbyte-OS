@@ -9,7 +9,7 @@
 #define TH_FLAGS_SME_ACTIVE_BIT		0
 #define TH_FLAGS_SME_ACTIVE		BIT(TH_FLAGS_SME_ACTIVE_BIT)
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/types.h>
 #include <asm/io.h>
@@ -78,7 +78,7 @@ extern unsigned char secondary_startup_64[];
 extern unsigned char secondary_startup_64_no_verify[];
 #endif
 
-static __always_inline size_t real_mode_size_needed(void)
+static inline size_t real_mode_size_needed(void)
 {
 	if (real_mode_header)
 		return 0;	/* already allocated. */
@@ -95,6 +95,6 @@ void reserve_real_mode(void);
 void load_trampoline_pgtable(void);
 void init_real_mode(void);
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 
 #endif /* _ARCH_X86_REALMODE_H */

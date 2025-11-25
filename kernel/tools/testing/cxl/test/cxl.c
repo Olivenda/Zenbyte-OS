@@ -2,7 +2,6 @@
 // Copyright(c) 2021 Intel Corporation. All rights reserved.
 
 #include <linux/platform_device.h>
-#include <linux/memory_hotplug.h>
 #include <linux/genalloc.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -156,7 +155,7 @@ static struct {
 	} cfmws7;
 	struct {
 		struct acpi_cedt_cfmws cfmws;
-		u32 target[3];
+		u32 target[4];
 	} cfmws8;
 	struct {
 		struct acpi_cedt_cxims cxims;
@@ -332,14 +331,14 @@ static struct {
 				.length = sizeof(mock_cedt.cfmws8),
 			},
 			.interleave_arithmetic = ACPI_CEDT_CFMWS_ARITHMETIC_XOR,
-			.interleave_ways = 8,
-			.granularity = 1,
+			.interleave_ways = 2,
+			.granularity = 0,
 			.restrictions = ACPI_CEDT_CFMWS_RESTRICT_TYPE3 |
 					ACPI_CEDT_CFMWS_RESTRICT_PMEM,
 			.qtg_id = FAKE_QTG_ID,
-			.window_size = SZ_512M * 6UL,
+			.window_size = SZ_256M * 16UL,
 		},
-		.target = { 0, 1, 2, },
+		.target = { 0, 1, 0, 1, },
 	},
 	.cxims0 = {
 		.cxims = {
@@ -726,7 +725,7 @@ static void default_mock_decoder(struct cxl_decoder *cxld)
 	cxld->reset = mock_decoder_reset;
 }
 
-static int first_decoder(struct device *dev, const void *data)
+static int first_decoder(struct device *dev, void *data)
 {
 	struct cxl_decoder *cxld;
 
@@ -1001,21 +1000,25 @@ static void mock_cxl_endpoint_parse_cdat(struct cxl_port *port)
 		find_cxl_root(port);
 	struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
+	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
 	struct access_coordinate ep_c[ACCESS_COORDINATE_MAX];
+	struct range pmem_range = {
+		.start = cxlds->pmem_res.start,
+		.end = cxlds->pmem_res.end,
+	};
+	struct range ram_range = {
+		.start = cxlds->ram_res.start,
+		.end = cxlds->ram_res.end,
+	};
 
 	if (!cxl_root)
 		return;
 
-	for (int i = 0; i < cxlds->nr_partitions; i++) {
-		struct resource *res = &cxlds->part[i].res;
-		struct cxl_dpa_perf *perf = &cxlds->part[i].perf;
-		struct range range = {
-			.start = res->start,
-			.end = res->end,
-		};
+	if (range_len(&ram_range))
+		dpa_perf_setup(port, &ram_range, &mds->ram_perf);
 
-		dpa_perf_setup(port, &range, perf);
-	}
+	if (range_len(&pmem_range))
+		dpa_perf_setup(port, &pmem_range, &mds->pmem_perf);
 
 	cxl_memdev_update_perf(cxlmd);
 
@@ -1329,7 +1332,6 @@ err_mem:
 static __init int cxl_test_init(void)
 {
 	int rc, i;
-	struct range mappable;
 
 	cxl_acpi_test();
 	cxl_core_test();
@@ -1344,11 +1346,8 @@ static __init int cxl_test_init(void)
 		rc = -ENOMEM;
 		goto err_gen_pool_create;
 	}
-	mappable = mhp_get_pluggable_range(true);
 
-	rc = gen_pool_add(cxl_mock_pool,
-			  min(iomem_resource.end + 1 - SZ_64G,
-			      mappable.end + 1 - SZ_64G),
+	rc = gen_pool_add(cxl_mock_pool, iomem_resource.end + 1 - SZ_64G,
 			  SZ_64G, NUMA_NO_NODE);
 	if (rc)
 		goto err_gen_pool_add;
@@ -1532,6 +1531,5 @@ MODULE_PARM_DESC(interleave_arithmetic, "Modulo:0, XOR:1");
 module_init(cxl_test_init);
 module_exit(cxl_test_exit);
 MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION("cxl_test: setup module");
-MODULE_IMPORT_NS("ACPI");
-MODULE_IMPORT_NS("CXL");
+MODULE_IMPORT_NS(ACPI);
+MODULE_IMPORT_NS(CXL);

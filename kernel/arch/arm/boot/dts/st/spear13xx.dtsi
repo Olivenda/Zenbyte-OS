@@ -149,7 +149,7 @@
 			status = "disabled";
 		};
 
-		gmac0: ethernet@e2000000 {
+		gmac0: eth@e2000000 {
 			compatible = "st,spear600-gmac";
 			reg = <0xe2000000 0x8000>;
 			interrupts = <0 33 0x4>,
@@ -174,7 +174,7 @@
 			status = "disabled";
 		};
 
-		usb@e4800000 {
+		ehci@e4800000 {
 			compatible = "st,spear600-ehci", "usb-ehci";
 			reg = <0xe4800000 0x1000>;
 			interrupts = <0 64 0x4>;
@@ -182,7 +182,7 @@
 			status = "disabled";
 		};
 
-		usb@e5800000 {
+		ehci@e5800000 {
 			compatible = "st,spear600-ehci", "usb-ehci";
 			reg = <0xe5800000 0x1000>;
 			interrupts = <0 66 0x4>;
@@ -190,7 +190,7 @@
 			status = "disabled";
 		};
 
-		usb@e4000000 {
+		ohci@e4000000 {
 			compatible = "st,spear600-ohci", "usb-ohci";
 			reg = <0xe4000000 0x1000>;
 			interrupts = <0 65 0x4>;
@@ -198,7 +198,7 @@
 			status = "disabled";
 		};
 
-		usb@e5000000 {
+		ohci@e5000000 {
 			compatible = "st,spear600-ohci", "usb-ohci";
 			reg = <0xe5000000 0x1000>;
 			interrupts = <0 67 0x4>;

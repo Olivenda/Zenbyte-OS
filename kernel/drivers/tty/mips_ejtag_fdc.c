@@ -683,8 +683,7 @@ static irqreturn_t mips_ejtag_fdc_isr(int irq, void *dev_id)
  */
 static void mips_ejtag_fdc_tty_timer(struct timer_list *t)
 {
-	struct mips_ejtag_fdc_tty *priv = timer_container_of(priv, t,
-						             poll_timer);
+	struct mips_ejtag_fdc_tty *priv = from_timer(priv, t, poll_timer);
 
 	mips_ejtag_fdc_handle(priv);
 	if (!priv->removing)
@@ -1032,7 +1031,7 @@ err_stop_irq:
 		raw_spin_unlock_irq(&priv->lock);
 	} else {
 		priv->removing = true;
-		timer_delete_sync(&priv->poll_timer);
+		del_timer_sync(&priv->poll_timer);
 	}
 	kthread_stop(priv->thread);
 err_destroy_ports:
@@ -1062,7 +1061,7 @@ static int mips_ejtag_fdc_tty_cpu_down(struct mips_cdmm_device *dev)
 		raw_spin_unlock_irq(&priv->lock);
 	} else {
 		priv->removing = true;
-		timer_delete_sync(&priv->poll_timer);
+		del_timer_sync(&priv->poll_timer);
 	}
 	kthread_stop(priv->thread);
 

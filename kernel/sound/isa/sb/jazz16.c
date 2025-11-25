@@ -15,7 +15,6 @@
 #include <linux/module.h>
 #include <linux/io.h>
 #include <linux/delay.h>
-#include <linux/string.h>
 #include <asm/dma.h>
 #include <linux/isa.h>
 #include <sound/core.h>
@@ -287,8 +286,8 @@ static int snd_jazz16_probe(struct device *devptr, unsigned int dev)
 
 	jazz16->chip = chip;
 
-	strscpy(card->driver, "jazz16");
-	strscpy(card->shortname, "Media Vision Jazz16");
+	strcpy(card->driver, "jazz16");
+	strcpy(card->shortname, "Media Vision Jazz16");
 	sprintf(card->longname,
 		"Media Vision Jazz16 at 0x%lx, irq %d, dma8 %d, dma16 %d",
 		port[dev], xirq, xdma8, xdma16);

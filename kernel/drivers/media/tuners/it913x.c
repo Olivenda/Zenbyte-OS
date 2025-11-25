@@ -444,7 +444,7 @@ static struct platform_driver it913x_driver = {
 		.suppress_bind_attrs	= true,
 	},
 	.probe		= it913x_probe,
-	.remove		= it913x_remove,
+	.remove_new	= it913x_remove,
 	.id_table	= it913x_id_table,
 };
 

@@ -210,10 +210,7 @@ static int sprd_pmic_probe(struct spi_device *spi)
 		return ret;
 	}
 
-	ret = devm_device_init_wakeup(&spi->dev);
-	if (ret)
-		return dev_err_probe(&spi->dev, ret, "Failed to init wakeup\n");
-
+	device_init_wakeup(&spi->dev, true);
 	return 0;
 }
 

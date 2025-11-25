@@ -236,7 +236,8 @@ err_regulator:
 	return ret;
 }
 
-static int exynos_bus_parse_of(struct exynos_bus *bus)
+static int exynos_bus_parse_of(struct device_node *np,
+			      struct exynos_bus *bus)
 {
 	struct device *dev = bus->dev;
 	struct dev_pm_opp *opp;
@@ -407,7 +408,7 @@ static int exynos_bus_probe(struct platform_device *pdev)
 	}
 
 	/* Parse the device-tree to get the resource information */
-	ret = exynos_bus_parse_of(bus);
+	ret = exynos_bus_parse_of(np, bus);
 	if (ret < 0)
 		goto err_reg;
 

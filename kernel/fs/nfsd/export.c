@@ -82,7 +82,8 @@ static int expkey_parse(struct cache_detail *cd, char *mesg, int mlen)
 	int len;
 	struct auth_domain *dom = NULL;
 	int err;
-	u8 fsidtype;
+	int fsidtype;
+	char *ep;
 	struct svc_expkey key;
 	struct svc_expkey *ek = NULL;
 
@@ -108,9 +109,10 @@ static int expkey_parse(struct cache_detail *cd, char *mesg, int mlen)
 	err = -EINVAL;
 	if (qword_get(&mesg, buf, PAGE_SIZE) <= 0)
 		goto out;
-	if (kstrtou8(buf, 10, &fsidtype))
+	fsidtype = simple_strtoul(buf, &ep, 10);
+	if (*ep)
 		goto out;
-	dprintk("found fsidtype %u\n", fsidtype);
+	dprintk("found fsidtype %d\n", fsidtype);
 	if (key_len(fsidtype)==0) /* invalid type */
 		goto out;
 	if ((len=qword_get(&mesg, buf, PAGE_SIZE)) <= 0)
@@ -353,25 +355,16 @@ static void export_stats_destroy(struct export_stats *stats)
 					    EXP_STATS_COUNTERS_NUM);
 }
 
-static void svc_export_release(struct rcu_head *rcu_head)
+static void svc_export_put(struct kref *ref)
 {
-	struct svc_export *exp = container_of(rcu_head, struct svc_export,
-			ex_rcu);
-
+	struct svc_export *exp = container_of(ref, struct svc_export, h.ref);
+	path_put(&exp->ex_path);
+	auth_domain_put(exp->ex_client);
 	nfsd4_fslocs_free(&exp->ex_fslocs);
 	export_stats_destroy(exp->ex_stats);
 	kfree(exp->ex_stats);
 	kfree(exp->ex_uuid);
-	kfree(exp);
-}
-
-static void svc_export_put(struct kref *ref)
-{
-	struct svc_export *exp = container_of(ref, struct svc_export, h.ref);
-
-	path_put(&exp->ex_path);
-	auth_domain_put(exp->ex_client);
-	call_rcu(&exp->ex_rcu, svc_export_release);
+	kfree_rcu(exp, ex_rcu);
 }
 
 static int svc_export_upcall(struct cache_detail *cd, struct cache_head *h)
@@ -1465,9 +1458,13 @@ static int e_show(struct seq_file *m, void *p)
 		return 0;
 	}
 
-	if (cache_check_rcu(cd, &exp->h, NULL))
+	if (!cache_get_rcu(&exp->h))
 		return 0;
 
+	if (cache_check(cd, &exp->h, NULL))
+		return 0;
+
+	exp_put(exp);
 	return svc_export_show(m, cd, cp);
 }
 

@@ -1594,9 +1594,7 @@ p9_client_read_once(struct p9_fid *fid, u64 offset, struct iov_iter *to,
 	}
 	if (rsize < received) {
 		pr_err("bogus RREAD count (%u > %u)\n", received, rsize);
-		*err = -EIO;
-		p9_req_put(clnt, req);
-		return 0;
+		received = rsize;
 	}
 
 	p9_debug(P9_DEBUG_9P, "<<< RREAD count %u\n", received);
@@ -1663,10 +1661,7 @@ p9_client_write(struct p9_fid *fid, u64 offset, struct iov_iter *from, int *err)
 		}
 		if (rsize < written) {
 			pr_err("bogus RWRITE count (%u > %u)\n", written, rsize);
-			*err = -EIO;
-			iov_iter_revert(from, count - iov_iter_count(from));
-			p9_req_put(clnt, req);
-			break;
+			written = rsize;
 		}
 
 		p9_debug(P9_DEBUG_9P, "<<< RWRITE count %u\n", written);
@@ -1704,7 +1699,7 @@ p9_client_write_subreq(struct netfs_io_subrequest *subreq)
 				    start, len, &subreq->io_iter);
 	}
 	if (IS_ERR(req)) {
-		netfs_write_subrequest_terminated(subreq, PTR_ERR(req));
+		netfs_write_subrequest_terminated(subreq, PTR_ERR(req), false);
 		return;
 	}
 
@@ -1712,19 +1707,19 @@ p9_client_write_subreq(struct netfs_io_subrequest *subreq)
 	if (err) {
 		trace_9p_protocol_dump(clnt, &req->rc);
 		p9_req_put(clnt, req);
-		netfs_write_subrequest_terminated(subreq, err);
+		netfs_write_subrequest_terminated(subreq, err, false);
 		return;
 	}
 
 	if (written > len) {
 		pr_err("bogus RWRITE count (%d > %u)\n", written, len);
-		written = -EIO;
+		written = len;
 	}
 
 	p9_debug(P9_DEBUG_9P, "<<< RWRITE count %d\n", len);
 
 	p9_req_put(clnt, req);
-	netfs_write_subrequest_terminated(subreq, written);
+	netfs_write_subrequest_terminated(subreq, written, false);
 }
 EXPORT_SYMBOL(p9_client_write_subreq);
 
@@ -2150,8 +2145,7 @@ int p9_client_readdir(struct p9_fid *fid, char *data, u32 count, u64 offset)
 	}
 	if (rsize < count) {
 		pr_err("bogus RREADDIR count (%u > %u)\n", count, rsize);
-		err = -EIO;
-		goto free_and_error;
+		count = rsize;
 	}
 
 	p9_debug(P9_DEBUG_9P, "<<< RREADDIR count %u\n", count);

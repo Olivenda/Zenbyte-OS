@@ -6,6 +6,7 @@
 #include <bpf/bpf.h>
 #include <sched.h>
 #include <scx/common.h>
+#include <sched.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -48,10 +49,8 @@ static enum scx_test_status test_hotplug(bool onlining, bool cbs_defined)
 
 	SCX_ASSERT(is_cpu_online());
 
-	skel = hotplug__open();
-	SCX_FAIL_IF(!skel, "Failed to open");
-	SCX_ENUM_INIT(skel);
-	SCX_FAIL_IF(hotplug__load(skel), "Failed to load skel");
+	skel = hotplug__open_and_load();
+	SCX_ASSERT(skel);
 
 	/* Testing the offline -> online path, so go offline before starting */
 	if (onlining)

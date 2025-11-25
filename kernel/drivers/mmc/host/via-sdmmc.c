@@ -937,7 +937,7 @@ static void via_sdc_timeout(struct timer_list *t)
 	struct via_crdr_mmc_host *sdhost;
 	unsigned long flags;
 
-	sdhost = timer_container_of(sdhost, t, timer);
+	sdhost = from_timer(sdhost, t, timer);
 
 	spin_lock_irqsave(&sdhost->lock, flags);
 
@@ -971,7 +971,7 @@ static void via_sdc_finish_bh_work(struct work_struct *t)
 
 	spin_lock_irqsave(&host->lock, flags);
 
-	timer_delete(&host->timer);
+	del_timer(&host->timer);
 	mrq = host->mrq;
 	host->mrq = NULL;
 	host->cmd = NULL;
@@ -1100,7 +1100,7 @@ static int via_sd_probe(struct pci_dev *pcidev,
 	pci_write_config_byte(pcidev, VIA_CRDR_PCI_WORK_MODE, 0);
 	pci_write_config_byte(pcidev, VIA_CRDR_PCI_DBG_MODE, 0);
 
-	mmc = devm_mmc_alloc_host(&pcidev->dev, sizeof(*sdhost));
+	mmc = mmc_alloc_host(sizeof(struct via_crdr_mmc_host), &pcidev->dev);
 	if (!mmc) {
 		ret = -ENOMEM;
 		goto release;
@@ -1115,7 +1115,7 @@ static int via_sd_probe(struct pci_dev *pcidev,
 	sdhost->mmiobase = ioremap(base, len);
 	if (!sdhost->mmiobase) {
 		ret = -ENOMEM;
-		goto release;
+		goto free_mmc_host;
 	}
 
 	sdhost->sdhc_mmiobase =
@@ -1160,6 +1160,8 @@ static int via_sd_probe(struct pci_dev *pcidev,
 
 unmap:
 	iounmap(sdhost->mmiobase);
+free_mmc_host:
+	mmc_free_host(mmc);
 release:
 	pci_release_regions(pcidev);
 disable:
@@ -1200,7 +1202,7 @@ static void via_sd_remove(struct pci_dev *pcidev)
 
 	free_irq(pcidev->irq, sdhost);
 
-	timer_delete_sync(&sdhost->timer);
+	del_timer_sync(&sdhost->timer);
 
 	cancel_work_sync(&sdhost->finish_bh_work);
 
@@ -1210,6 +1212,7 @@ static void via_sd_remove(struct pci_dev *pcidev)
 	writeb(gatt, sdhost->pcictrl_mmiobase + VIA_CRDR_PCICLKGATT);
 
 	iounmap(sdhost->mmiobase);
+	mmc_free_host(sdhost->mmc);
 	pci_release_regions(pcidev);
 	pci_disable_device(pcidev);
 

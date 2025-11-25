@@ -581,7 +581,7 @@ static __be16 vlan_get_protocol_dgram(const struct sk_buff *skb)
 
 static void prb_del_retire_blk_timer(struct tpacket_kbdq_core *pkc)
 {
-	timer_delete_sync(&pkc->retire_blk_timer);
+	del_timer_sync(&pkc->retire_blk_timer);
 }
 
 static void prb_shutdown_retire_blk_timer(struct packet_sock *po,
@@ -722,7 +722,7 @@ static void _prb_refresh_rx_retire_blk_timer(struct tpacket_kbdq_core *pkc)
 static void prb_retire_rx_blk_timer_expired(struct timer_list *t)
 {
 	struct packet_sock *po =
-		timer_container_of(po, t, rx_ring.prb_bdqc.retire_blk_timer);
+		from_timer(po, t, rx_ring.prb_bdqc.retire_blk_timer);
 	struct tpacket_kbdq_core *pkc = GET_PBDQC_FROM_RB(&po->rx_ring);
 	unsigned int frozen;
 	struct tpacket_block_desc *pbd;
@@ -1832,22 +1832,21 @@ static int fanout_add(struct sock *sk, struct fanout_args *args)
 	err = -EINVAL;
 
 	spin_lock(&po->bind_lock);
-	if (po->num &&
+	if (packet_sock_flag(po, PACKET_SOCK_RUNNING) &&
 	    match->type == type &&
 	    match->prot_hook.type == po->prot_hook.type &&
 	    match->prot_hook.dev == po->prot_hook.dev) {
 		err = -ENOSPC;
 		if (refcount_read(&match->sk_ref) < match->max_num_members) {
+			__dev_remove_pack(&po->prot_hook);
+
 			/* Paired with packet_setsockopt(PACKET_FANOUT_DATA) */
 			WRITE_ONCE(po->fanout, match);
 
 			po->rollover = rollover;
 			rollover = NULL;
 			refcount_set(&match->sk_ref, refcount_read(&match->sk_ref) + 1);
-			if (packet_sock_flag(po, PACKET_SOCK_RUNNING)) {
-				__dev_remove_pack(&po->prot_hook);
-				__fanout_link(sk, po);
-			}
+			__fanout_link(sk, po);
 			err = 0;
 		}
 	}
@@ -2102,10 +2101,10 @@ retry:
 
 	skb->protocol = proto;
 	skb->dev = dev;
-	skb->priority = sockc.priority;
-	skb->mark = sockc.mark;
+	skb->priority = READ_ONCE(sk->sk_priority);
+	skb->mark = READ_ONCE(sk->sk_mark);
 	skb_set_delivery_type_by_clockid(skb, sockc.transmit_time, sk->sk_clockid);
-	skb_setup_tx_timestamp(skb, &sockc);
+	skb_setup_tx_timestamp(skb, sockc.tsflags);
 
 	if (unlikely(extra_len == 4))
 		skb->no_fcs = 1;
@@ -2634,10 +2633,10 @@ static int tpacket_fill_skb(struct packet_sock *po, struct sk_buff *skb,
 
 	skb->protocol = proto;
 	skb->dev = dev;
-	skb->priority = sockc->priority;
-	skb->mark = sockc->mark;
+	skb->priority = READ_ONCE(po->sk.sk_priority);
+	skb->mark = READ_ONCE(po->sk.sk_mark);
 	skb_set_delivery_type_by_clockid(skb, sockc->transmit_time, po->sk.sk_clockid);
-	skb_setup_tx_timestamp(skb, sockc);
+	skb_setup_tx_timestamp(skb, sockc->tsflags);
 	skb_zcopy_set_nouarg(skb, ph.raw);
 
 	skb_reserve(skb, hlen);
@@ -3038,6 +3037,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 		goto out_unlock;
 
 	sockcm_init(&sockc, sk);
+	sockc.mark = READ_ONCE(sk->sk_mark);
 	if (msg->msg_controllen) {
 		err = sock_cmsg_send(sk, msg, &sockc);
 		if (unlikely(err))
@@ -3100,7 +3100,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 		goto out_free;
 	}
 
-	skb_setup_tx_timestamp(skb, &sockc);
+	skb_setup_tx_timestamp(skb, sockc.tsflags);
 
 	if (!vnet_hdr.gso_type && (len > dev->mtu + reserve + extra_len) &&
 	    !packet_extra_vlan_len_allowed(dev, skb)) {
@@ -3110,7 +3110,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 
 	skb->protocol = proto;
 	skb->dev = dev;
-	skb->priority = sockc.priority;
+	skb->priority = READ_ONCE(sk->sk_priority);
 	skb->mark = sockc.mark;
 	skb_set_delivery_type_by_clockid(skb, sockc.transmit_time, sk->sk_clockid);
 
@@ -3712,15 +3712,15 @@ static int packet_dev_mc(struct net_device *dev, struct packet_mclist *i,
 }
 
 static void packet_dev_mclist_delete(struct net_device *dev,
-				     struct packet_mclist **mlp,
-				     struct list_head *list)
+				     struct packet_mclist **mlp)
 {
 	struct packet_mclist *ml;
 
 	while ((ml = *mlp) != NULL) {
 		if (ml->ifindex == dev->ifindex) {
-			list_add(&ml->remove_list, list);
+			packet_dev_mc(dev, ml, -1);
 			*mlp = ml->next;
+			kfree(ml);
 		} else
 			mlp = &ml->next;
 	}
@@ -3768,7 +3768,6 @@ static int packet_mc_add(struct sock *sk, struct packet_mreq_max *mreq)
 	memcpy(i->addr, mreq->mr_address, i->alen);
 	memset(i->addr + i->alen, 0, sizeof(i->addr) - i->alen);
 	i->count = 1;
-	INIT_LIST_HEAD(&i->remove_list);
 	i->next = po->mclist;
 	po->mclist = i;
 	err = packet_dev_mc(dev, i, 1);
@@ -4233,11 +4232,9 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
 static int packet_notifier(struct notifier_block *this,
 			   unsigned long msg, void *ptr)
 {
+	struct sock *sk;
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 	struct net *net = dev_net(dev);
-	struct packet_mclist *ml, *tmp;
-	LIST_HEAD(mclist);
-	struct sock *sk;
 
 	rcu_read_lock();
 	sk_for_each_rcu(sk, &net->packet.sklist) {
@@ -4246,8 +4243,7 @@ static int packet_notifier(struct notifier_block *this,
 		switch (msg) {
 		case NETDEV_UNREGISTER:
 			if (po->mclist)
-				packet_dev_mclist_delete(dev, &po->mclist,
-							 &mclist);
+				packet_dev_mclist_delete(dev, &po->mclist);
 			fallthrough;
 
 		case NETDEV_DOWN:
@@ -4280,13 +4276,6 @@ static int packet_notifier(struct notifier_block *this,
 		}
 	}
 	rcu_read_unlock();
-
-	/* packet_dev_mc might grab instance locks so can't run under rcu */
-	list_for_each_entry_safe(ml, tmp, &mclist, remove_list) {
-		packet_dev_mc(dev, ml, -1);
-		kfree(ml);
-	}
-
 	return NOTIFY_DONE;
 }
 
@@ -4782,7 +4771,7 @@ static int packet_seq_show(struct seq_file *seq, void *v)
 			   READ_ONCE(po->ifindex),
 			   packet_sock_flag(po, PACKET_SOCK_RUNNING),
 			   atomic_read(&s->sk_rmem_alloc),
-			   from_kuid_munged(seq_user_ns(seq), sk_uid(s)),
+			   from_kuid_munged(seq_user_ns(seq), sock_i_uid(s)),
 			   sock_i_ino(s));
 	}
 

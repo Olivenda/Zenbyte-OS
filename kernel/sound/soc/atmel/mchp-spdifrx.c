@@ -577,6 +577,7 @@ static int mchp_spdifrx_cs_get(struct mchp_spdifrx_dev *dev,
 	       sizeof(ch_stat->data));
 
 pm_runtime_put:
+	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
 unlock:
 	mutex_unlock(&dev->mlock);
@@ -659,6 +660,7 @@ static int mchp_spdifrx_subcode_ch_get(struct mchp_spdifrx_dev *dev,
 	       sizeof(user_data->data));
 
 pm_runtime_put:
+	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
 unlock:
 	mutex_unlock(&dev->mlock);
@@ -724,6 +726,7 @@ static int mchp_spdifrx_ulock_get(struct snd_kcontrol *kcontrol,
 
 	uvalue->value.integer.value[0] = ctrl->ulock;
 
+	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
 unlock:
 	mutex_unlock(&dev->mlock);
@@ -759,6 +762,7 @@ static int mchp_spdifrx_badf_get(struct snd_kcontrol *kcontrol,
 		ctrl->badf = 0;
 	}
 
+	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
 unlock:
 	mutex_unlock(&dev->mlock);
@@ -807,6 +811,7 @@ static int mchp_spdifrx_signal_get(struct snd_kcontrol *kcontrol,
 		regmap_read(dev->regmap, SPDIFRX_RSR, &val);
 	}
 
+	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
 
 unlock:
@@ -870,6 +875,7 @@ static int mchp_spdifrx_rate_get(struct snd_kcontrol *kcontrol,
 	ucontrol->value.integer.value[0] = rate / (32 * SPDIFRX_RSR_IFS(val));
 
 pm_runtime_put:
+	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
 unlock:
 	mutex_unlock(&dev->mlock);
@@ -1008,7 +1014,7 @@ static const struct snd_soc_dai_ops mchp_spdifrx_dai_ops = {
 static struct snd_soc_dai_driver mchp_spdifrx_dai = {
 	.name = "mchp-spdifrx",
 	.capture = {
-		.stream_name = "Capture",
+		.stream_name = "S/PDIF Capture",
 		.channels_min = SPDIFRX_CHANNELS,
 		.channels_max = SPDIFRX_CHANNELS,
 		.rates = MCHP_SPDIF_RATES,

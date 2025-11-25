@@ -23,7 +23,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <assert.h>
-#include <sys/epoll.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
@@ -35,8 +34,6 @@ struct thread_data {
 	int			nr;
 	int			pipe_read;
 	int			pipe_write;
-	struct epoll_event      epoll_ev;
-	int			epoll_fd;
 	bool			cgroup_failed;
 	pthread_t		pthread;
 };
@@ -47,7 +44,6 @@ static	int			loops = LOOPS_DEFAULT;
 /* Use processes by default: */
 static bool			threaded;
 
-static bool			nonblocking;
 static char			*cgrp_names[2];
 static struct cgroup		*cgrps[2];
 
@@ -85,7 +81,6 @@ out:
 }
 
 static const struct option options[] = {
-	OPT_BOOLEAN('n', "nonblocking",	&nonblocking,	"Use non-blocking operations"),
 	OPT_INTEGER('l', "loop",	&loops,		"Specify number of loops"),
 	OPT_BOOLEAN('T', "threaded",	&threaded,	"Specify threads/process based task setup"),
 	OPT_CALLBACK('G', "cgroups", NULL, "SEND,RECV",
@@ -170,25 +165,11 @@ static void exit_cgroup(int nr)
 	free(cgrp_names[nr]);
 }
 
-static inline int read_pipe(struct thread_data *td)
-{
-	int ret, m;
-retry:
-	if (nonblocking) {
-		ret = epoll_wait(td->epoll_fd, &td->epoll_ev, 1, -1);
-		if (ret < 0)
-			return ret;
-	}
-	ret = read(td->pipe_read, &m, sizeof(int));
-	if (nonblocking && ret < 0 && errno == EWOULDBLOCK)
-		goto retry;
-	return ret;
-}
-
 static void *worker_thread(void *__tdata)
 {
 	struct thread_data *td = __tdata;
-	int i, ret, m = 0;
+	int m = 0, i;
+	int ret;
 
 	ret = enter_cgroup(td->nr);
 	if (ret < 0) {
@@ -196,18 +177,18 @@ static void *worker_thread(void *__tdata)
 		return NULL;
 	}
 
-	if (nonblocking) {
-		td->epoll_ev.events = EPOLLIN;
-		td->epoll_fd = epoll_create(1);
-		BUG_ON(td->epoll_fd < 0);
-		BUG_ON(epoll_ctl(td->epoll_fd, EPOLL_CTL_ADD, td->pipe_read, &td->epoll_ev) < 0);
-	}
-
 	for (i = 0; i < loops; i++) {
-		ret = write(td->pipe_write, &m, sizeof(int));
-		BUG_ON(ret != sizeof(int));
-		ret = read_pipe(td);
-		BUG_ON(ret != sizeof(int));
+		if (!td->nr) {
+			ret = read(td->pipe_read, &m, sizeof(int));
+			BUG_ON(ret != sizeof(int));
+			ret = write(td->pipe_write, &m, sizeof(int));
+			BUG_ON(ret != sizeof(int));
+		} else {
+			ret = write(td->pipe_write, &m, sizeof(int));
+			BUG_ON(ret != sizeof(int));
+			ret = read(td->pipe_read, &m, sizeof(int));
+			BUG_ON(ret != sizeof(int));
+		}
 	}
 
 	return NULL;
@@ -228,16 +209,13 @@ int bench_sched_pipe(int argc, const char **argv)
 	 * discarding returned value of read(), write()
 	 * causes error in building environment for perf
 	 */
-	int __maybe_unused ret, wait_stat, flags = 0;
+	int __maybe_unused ret, wait_stat;
 	pid_t pid, retpid __maybe_unused;
 
 	argc = parse_options(argc, argv, options, bench_sched_pipe_usage, 0);
 
-	if (nonblocking)
-		flags |= O_NONBLOCK;
-
-	BUG_ON(pipe2(pipe_1, flags));
-	BUG_ON(pipe2(pipe_2, flags));
+	BUG_ON(pipe(pipe_1));
+	BUG_ON(pipe(pipe_2));
 
 	gettimeofday(&start, NULL);
 

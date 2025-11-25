@@ -677,6 +677,8 @@ static const struct vb2_ops emmaprp_qops = {
 	.queue_setup	 = emmaprp_queue_setup,
 	.buf_prepare	 = emmaprp_buf_prepare,
 	.buf_queue	 = emmaprp_buf_queue,
+	.wait_prepare	 = vb2_ops_wait_prepare,
+	.wait_finish	 = vb2_ops_wait_finish,
 };
 
 static int queue_init(void *priv, struct vb2_queue *src_vq,
@@ -900,7 +902,7 @@ static void emmaprp_remove(struct platform_device *pdev)
 
 static struct platform_driver emmaprp_pdrv = {
 	.probe		= emmaprp_probe,
-	.remove		= emmaprp_remove,
+	.remove_new	= emmaprp_remove,
 	.driver		= {
 		.name	= MEM2MEM_NAME,
 	},

@@ -5,7 +5,12 @@
 /*
  * This version of the "BD86801 scalable PMIC"'s driver supports only very
  * basic set of the PMIC features. Most notably, there is no support for
- * the configurations which should be done when the PMIC is in STBY mode.
+ * the ERRB interrupt and the configurations which should be done when the
+ * PMIC is in STBY mode.
+ *
+ * Supporting the ERRB interrupt would require dropping the regmap-IRQ
+ * usage or working around (or accepting a presense of) a naming conflict
+ * in debugFS IRQs.
  *
  * Being able to reliably do the configurations like changing the
  * regulator safety limits (like limits for the over/under -voltages, over
@@ -17,14 +22,16 @@
  * be the need to configure these safety limits. Hence it's not simple to
  * come up with a generic solution.
  *
- * Users who require the STBY state configurations can have a look at the
- * original RFC:
+ * Users who require the ERRB handling and STBY state configurations can
+ * have a look at the original RFC:
  * https://lore.kernel.org/all/cover.1712920132.git.mazziesaccount@gmail.com/
- * which implements some of the safety limit configurations - but leaves the
- * state change handling and synchronization to be implemented.
+ * which implements a workaround to debugFS naming conflict and some of
+ * the safety limit configurations - but leaves the state change handling
+ * and synchronization to be implemented.
  *
  * It would be great to hear (and receive a patch!) if you implement the
- * STBY configuration support in your downstream driver ;)
+ * STBY configuration support or a proper fix to the debugFS naming
+ * conflict in your downstream driver ;)
  */
 
 #include <linux/cleanup.h>
@@ -83,7 +90,6 @@ enum {
 #define BD96801_LDO6_VSEL_REG		0x26
 #define BD96801_LDO7_VSEL_REG		0x27
 #define BD96801_BUCK_VSEL_MASK		0x1F
-#define BD96805_BUCK_VSEL_MASK		0x3f
 #define BD96801_LDO_VSEL_MASK		0xff
 
 #define BD96801_MASK_RAMP_DELAY		0xc0
@@ -91,7 +97,6 @@ enum {
 #define BD96801_BUCK_INT_VOUT_MASK	0xff
 
 #define BD96801_BUCK_VOLTS		256
-#define BD96805_BUCK_VOLTS		64
 #define BD96801_LDO_VOLTS		256
 
 #define BD96801_OVP_MASK		0x03
@@ -162,30 +167,6 @@ static const struct linear_range bd96801_buck_init_volts[] = {
 	REGULATOR_LINEAR_RANGE(3300000 - 150000, 0xed, 0xff, 0),
 };
 
-/* BD96802 uses same voltage ranges for bucks as BD96801 */
-#define bd96802_tune_volts bd96801_tune_volts
-#define bd96802_buck_init_volts bd96801_buck_init_volts
-
-/*
- * On BD96805 we have similar "negative tuning range" as on BD96801, except
- * that the max tuning is -310 ... +310 mV (instead of the 150mV). We use same
- * approach as with the BD96801 ranges.
- */
-static const struct linear_range bd96805_tune_volts[] = {
-	REGULATOR_LINEAR_RANGE(310000, 0x00, 0x1F, 10000),
-	REGULATOR_LINEAR_RANGE(0, 0x20, 0x3F, 10000),
-};
-
-static const struct linear_range bd96805_buck_init_volts[] = {
-	REGULATOR_LINEAR_RANGE(500000 - 310000, 0x00, 0xc8, 5000),
-	REGULATOR_LINEAR_RANGE(1550000 - 310000, 0xc9, 0xec, 50000),
-	REGULATOR_LINEAR_RANGE(3300000 - 310000, 0xed, 0xff, 0),
-};
-
-/* BD96806 uses same voltage ranges for bucks as BD96805 */
-#define bd96806_tune_volts bd96805_tune_volts
-#define bd96806_buck_init_volts bd96805_buck_init_volts
-
 static const struct linear_range bd96801_ldo_int_volts[] = {
 	REGULATOR_LINEAR_RANGE(300000, 0x00, 0x78, 25000),
 	REGULATOR_LINEAR_RANGE(3300000, 0x79, 0xff, 0),
@@ -224,89 +205,89 @@ struct bd96801_irqinfo {
 
 static const struct bd96801_irqinfo buck1_irqinfo[] = {
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck1-over-curr-h", 500,
-			"buck1-overcurr-h"),
+			"bd96801-buck1-overcurr-h"),
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck1-over-curr-l", 500,
-			"buck1-overcurr-l"),
+			"bd96801-buck1-overcurr-l"),
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck1-over-curr-n", 500,
-			"buck1-overcurr-n"),
+			"bd96801-buck1-overcurr-n"),
 	BD96801_IRQINFO(BD96801_PROT_OVP, "buck1-over-voltage", 500,
-			"buck1-overvolt"),
+			"bd96801-buck1-overvolt"),
 	BD96801_IRQINFO(BD96801_PROT_UVP, "buck1-under-voltage", 500,
-			"buck1-undervolt"),
+			"bd96801-buck1-undervolt"),
 	BD96801_IRQINFO(BD96801_PROT_TEMP, "buck1-over-temp", 500,
-			"buck1-thermal")
+			"bd96801-buck1-thermal")
 };
 
 static const struct bd96801_irqinfo buck2_irqinfo[] = {
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck2-over-curr-h", 500,
-			"buck2-overcurr-h"),
+			"bd96801-buck2-overcurr-h"),
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck2-over-curr-l", 500,
-			"buck2-overcurr-l"),
+			"bd96801-buck2-overcurr-l"),
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck2-over-curr-n", 500,
-			"buck2-overcurr-n"),
+			"bd96801-buck2-overcurr-n"),
 	BD96801_IRQINFO(BD96801_PROT_OVP, "buck2-over-voltage", 500,
-			"buck2-overvolt"),
+			"bd96801-buck2-overvolt"),
 	BD96801_IRQINFO(BD96801_PROT_UVP, "buck2-under-voltage", 500,
-			"buck2-undervolt"),
+			"bd96801-buck2-undervolt"),
 	BD96801_IRQINFO(BD96801_PROT_TEMP, "buck2-over-temp", 500,
-			"buck2-thermal")
+			"bd96801-buck2-thermal")
 };
 
 static const struct bd96801_irqinfo buck3_irqinfo[] = {
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck3-over-curr-h", 500,
-			"buck3-overcurr-h"),
+			"bd96801-buck3-overcurr-h"),
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck3-over-curr-l", 500,
-			"buck3-overcurr-l"),
+			"bd96801-buck3-overcurr-l"),
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck3-over-curr-n", 500,
-			"buck3-overcurr-n"),
+			"bd96801-buck3-overcurr-n"),
 	BD96801_IRQINFO(BD96801_PROT_OVP, "buck3-over-voltage", 500,
-			"buck3-overvolt"),
+			"bd96801-buck3-overvolt"),
 	BD96801_IRQINFO(BD96801_PROT_UVP, "buck3-under-voltage", 500,
-			"buck3-undervolt"),
+			"bd96801-buck3-undervolt"),
 	BD96801_IRQINFO(BD96801_PROT_TEMP, "buck3-over-temp", 500,
-			"buck3-thermal")
+			"bd96801-buck3-thermal")
 };
 
 static const struct bd96801_irqinfo buck4_irqinfo[] = {
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck4-over-curr-h", 500,
-			"buck4-overcurr-h"),
+			"bd96801-buck4-overcurr-h"),
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck4-over-curr-l", 500,
-			"buck4-overcurr-l"),
+			"bd96801-buck4-overcurr-l"),
 	BD96801_IRQINFO(BD96801_PROT_OCP, "buck4-over-curr-n", 500,
-			"buck4-overcurr-n"),
+			"bd96801-buck4-overcurr-n"),
 	BD96801_IRQINFO(BD96801_PROT_OVP, "buck4-over-voltage", 500,
-			"buck4-overvolt"),
+			"bd96801-buck4-overvolt"),
 	BD96801_IRQINFO(BD96801_PROT_UVP, "buck4-under-voltage", 500,
-			"buck4-undervolt"),
+			"bd96801-buck4-undervolt"),
 	BD96801_IRQINFO(BD96801_PROT_TEMP, "buck4-over-temp", 500,
-			"buck4-thermal")
+			"bd96801-buck4-thermal")
 };
 
 static const struct bd96801_irqinfo ldo5_irqinfo[] = {
 	BD96801_IRQINFO(BD96801_PROT_OCP, "ldo5-overcurr", 500,
-			"ldo5-overcurr"),
+			"bd96801-ldo5-overcurr"),
 	BD96801_IRQINFO(BD96801_PROT_OVP, "ldo5-over-voltage", 500,
-			"ldo5-overvolt"),
+			"bd96801-ldo5-overvolt"),
 	BD96801_IRQINFO(BD96801_PROT_UVP, "ldo5-under-voltage", 500,
-			"ldo5-undervolt"),
+			"bd96801-ldo5-undervolt"),
 };
 
 static const struct bd96801_irqinfo ldo6_irqinfo[] = {
 	BD96801_IRQINFO(BD96801_PROT_OCP, "ldo6-overcurr", 500,
-			"ldo6-overcurr"),
+			"bd96801-ldo6-overcurr"),
 	BD96801_IRQINFO(BD96801_PROT_OVP, "ldo6-over-voltage", 500,
-			"ldo6-overvolt"),
+			"bd96801-ldo6-overvolt"),
 	BD96801_IRQINFO(BD96801_PROT_UVP, "ldo6-under-voltage", 500,
-			"ldo6-undervolt"),
+			"bd96801-ldo6-undervolt"),
 };
 
 static const struct bd96801_irqinfo ldo7_irqinfo[] = {
 	BD96801_IRQINFO(BD96801_PROT_OCP, "ldo7-overcurr", 500,
-			"ldo7-overcurr"),
+			"bd96801-ldo7-overcurr"),
 	BD96801_IRQINFO(BD96801_PROT_OVP, "ldo7-over-voltage", 500,
-			"ldo7-overvolt"),
+			"bd96801-ldo7-overvolt"),
 	BD96801_IRQINFO(BD96801_PROT_UVP, "ldo7-under-voltage", 500,
-			"ldo7-undervolt"),
+			"bd96801-ldo7-undervolt"),
 };
 
 struct bd96801_irq_desc {
@@ -328,7 +309,6 @@ struct bd96801_pmic_data {
 	struct bd96801_regulator_data regulator_data[BD96801_NUM_REGULATORS];
 	struct regmap *regmap;
 	int fatal_ind;
-	int num_regulators;
 };
 
 static int ldo_map_notif(int irq, struct regulator_irq_data *rid,
@@ -530,70 +510,6 @@ static int bd96801_walk_regulator_dt(struct device *dev, struct regmap *regmap,
  * case later. What we can easly do for preparing is to not use static global
  * data for regulators though.
  */
-static const struct bd96801_pmic_data bd96802_data = {
-	.regulator_data = {
-	{
-		.desc = {
-			.name = "buck1",
-			.of_match = of_match_ptr("buck1"),
-			.regulators_node = of_match_ptr("regulators"),
-			.id = BD96801_BUCK1,
-			.ops = &bd96801_buck_ops,
-			.type = REGULATOR_VOLTAGE,
-			.linear_ranges = bd96802_tune_volts,
-			.n_linear_ranges = ARRAY_SIZE(bd96802_tune_volts),
-			.n_voltages = BD96801_BUCK_VOLTS,
-			.enable_reg = BD96801_REG_ENABLE,
-			.enable_mask = BD96801_BUCK1_EN_MASK,
-			.enable_is_inverted = true,
-			.vsel_reg = BD96801_BUCK1_VSEL_REG,
-			.vsel_mask = BD96801_BUCK_VSEL_MASK,
-			.ramp_reg = BD96801_BUCK1_VSEL_REG,
-			.ramp_mask = BD96801_MASK_RAMP_DELAY,
-			.ramp_delay_table = &buck_ramp_table[0],
-			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
-			.owner = THIS_MODULE,
-		},
-		.init_ranges = bd96802_buck_init_volts,
-		.num_ranges = ARRAY_SIZE(bd96802_buck_init_volts),
-		.irq_desc = {
-			.irqinfo = (struct bd96801_irqinfo *)&buck1_irqinfo[0],
-			.num_irqs = ARRAY_SIZE(buck1_irqinfo),
-		},
-	},
-	{
-		.desc = {
-			.name = "buck2",
-			.of_match = of_match_ptr("buck2"),
-			.regulators_node = of_match_ptr("regulators"),
-			.id = BD96801_BUCK2,
-			.ops = &bd96801_buck_ops,
-			.type = REGULATOR_VOLTAGE,
-			.linear_ranges = bd96802_tune_volts,
-			.n_linear_ranges = ARRAY_SIZE(bd96802_tune_volts),
-			.n_voltages = BD96801_BUCK_VOLTS,
-			.enable_reg = BD96801_REG_ENABLE,
-			.enable_mask = BD96801_BUCK2_EN_MASK,
-			.enable_is_inverted = true,
-			.vsel_reg = BD96801_BUCK2_VSEL_REG,
-			.vsel_mask = BD96801_BUCK_VSEL_MASK,
-			.ramp_reg = BD96801_BUCK2_VSEL_REG,
-			.ramp_mask = BD96801_MASK_RAMP_DELAY,
-			.ramp_delay_table = &buck_ramp_table[0],
-			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
-			.owner = THIS_MODULE,
-		},
-		.irq_desc = {
-			.irqinfo = (struct bd96801_irqinfo *)&buck2_irqinfo[0],
-			.num_irqs = ARRAY_SIZE(buck2_irqinfo),
-		},
-		.init_ranges = bd96802_buck_init_volts,
-		.num_ranges = ARRAY_SIZE(bd96802_buck_init_volts),
-	},
-	},
-	.num_regulators = 2,
-};
-
 static const struct bd96801_pmic_data bd96801_data = {
 	.regulator_data = {
 	{
@@ -779,265 +695,11 @@ static const struct bd96801_pmic_data bd96801_data = {
 		.ldo_vol_lvl = BD96801_LDO7_VOL_LVL_REG,
 	},
 	},
-	.num_regulators = 7,
 };
 
-static const struct bd96801_pmic_data bd96805_data = {
-	.regulator_data = {
-	{
-		.desc = {
-			.name = "buck1",
-			.of_match = of_match_ptr("buck1"),
-			.regulators_node = of_match_ptr("regulators"),
-			.id = BD96801_BUCK1,
-			.ops = &bd96801_buck_ops,
-			.type = REGULATOR_VOLTAGE,
-			.linear_ranges = bd96805_tune_volts,
-			.n_linear_ranges = ARRAY_SIZE(bd96805_tune_volts),
-			.n_voltages = BD96805_BUCK_VOLTS,
-			.enable_reg = BD96801_REG_ENABLE,
-			.enable_mask = BD96801_BUCK1_EN_MASK,
-			.enable_is_inverted = true,
-			.vsel_reg = BD96801_BUCK1_VSEL_REG,
-			.vsel_mask = BD96805_BUCK_VSEL_MASK,
-			.ramp_reg = BD96801_BUCK1_VSEL_REG,
-			.ramp_mask = BD96801_MASK_RAMP_DELAY,
-			.ramp_delay_table = &buck_ramp_table[0],
-			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
-			.owner = THIS_MODULE,
-		},
-		.init_ranges = bd96805_buck_init_volts,
-		.num_ranges = ARRAY_SIZE(bd96805_buck_init_volts),
-		.irq_desc = {
-			.irqinfo = (struct bd96801_irqinfo *)&buck1_irqinfo[0],
-			.num_irqs = ARRAY_SIZE(buck1_irqinfo),
-		},
-	}, {
-		.desc = {
-			.name = "buck2",
-			.of_match = of_match_ptr("buck2"),
-			.regulators_node = of_match_ptr("regulators"),
-			.id = BD96801_BUCK2,
-			.ops = &bd96801_buck_ops,
-			.type = REGULATOR_VOLTAGE,
-			.linear_ranges = bd96805_tune_volts,
-			.n_linear_ranges = ARRAY_SIZE(bd96805_tune_volts),
-			.n_voltages = BD96805_BUCK_VOLTS,
-			.enable_reg = BD96801_REG_ENABLE,
-			.enable_mask = BD96801_BUCK2_EN_MASK,
-			.enable_is_inverted = true,
-			.vsel_reg = BD96801_BUCK2_VSEL_REG,
-			.vsel_mask = BD96805_BUCK_VSEL_MASK,
-			.ramp_reg = BD96801_BUCK2_VSEL_REG,
-			.ramp_mask = BD96801_MASK_RAMP_DELAY,
-			.ramp_delay_table = &buck_ramp_table[0],
-			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
-			.owner = THIS_MODULE,
-		},
-		.irq_desc = {
-			.irqinfo = (struct bd96801_irqinfo *)&buck2_irqinfo[0],
-			.num_irqs = ARRAY_SIZE(buck2_irqinfo),
-		},
-		.init_ranges = bd96805_buck_init_volts,
-		.num_ranges = ARRAY_SIZE(bd96805_buck_init_volts),
-	}, {
-		.desc = {
-			.name = "buck3",
-			.of_match = of_match_ptr("buck3"),
-			.regulators_node = of_match_ptr("regulators"),
-			.id = BD96801_BUCK3,
-			.ops = &bd96801_buck_ops,
-			.type = REGULATOR_VOLTAGE,
-			.linear_ranges = bd96805_tune_volts,
-			.n_linear_ranges = ARRAY_SIZE(bd96805_tune_volts),
-			.n_voltages = BD96805_BUCK_VOLTS,
-			.enable_reg = BD96801_REG_ENABLE,
-			.enable_mask = BD96801_BUCK3_EN_MASK,
-			.enable_is_inverted = true,
-			.vsel_reg = BD96801_BUCK3_VSEL_REG,
-			.vsel_mask = BD96805_BUCK_VSEL_MASK,
-			.ramp_reg = BD96801_BUCK3_VSEL_REG,
-			.ramp_mask = BD96801_MASK_RAMP_DELAY,
-			.ramp_delay_table = &buck_ramp_table[0],
-			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
-			.owner = THIS_MODULE,
-		},
-		.irq_desc = {
-			.irqinfo = (struct bd96801_irqinfo *)&buck3_irqinfo[0],
-			.num_irqs = ARRAY_SIZE(buck3_irqinfo),
-		},
-		.init_ranges = bd96805_buck_init_volts,
-		.num_ranges = ARRAY_SIZE(bd96805_buck_init_volts),
-	}, {
-		.desc = {
-			.name = "buck4",
-			.of_match = of_match_ptr("buck4"),
-			.regulators_node = of_match_ptr("regulators"),
-			.id = BD96801_BUCK4,
-			.ops = &bd96801_buck_ops,
-			.type = REGULATOR_VOLTAGE,
-			.linear_ranges = bd96805_tune_volts,
-			.n_linear_ranges = ARRAY_SIZE(bd96805_tune_volts),
-			.n_voltages = BD96805_BUCK_VOLTS,
-			.enable_reg = BD96801_REG_ENABLE,
-			.enable_mask = BD96801_BUCK4_EN_MASK,
-			.enable_is_inverted = true,
-			.vsel_reg = BD96801_BUCK4_VSEL_REG,
-			.vsel_mask = BD96805_BUCK_VSEL_MASK,
-			.ramp_reg = BD96801_BUCK4_VSEL_REG,
-			.ramp_mask = BD96801_MASK_RAMP_DELAY,
-			.ramp_delay_table = &buck_ramp_table[0],
-			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
-			.owner = THIS_MODULE,
-		},
-		.irq_desc = {
-			.irqinfo = (struct bd96801_irqinfo *)&buck4_irqinfo[0],
-			.num_irqs = ARRAY_SIZE(buck4_irqinfo),
-		},
-		.init_ranges = bd96805_buck_init_volts,
-		.num_ranges = ARRAY_SIZE(bd96805_buck_init_volts),
-	}, {
-		.desc = {
-			.name = "ldo5",
-			.of_match = of_match_ptr("ldo5"),
-			.regulators_node = of_match_ptr("regulators"),
-			.id = BD96801_LDO5,
-			.ops = &bd96801_ldo_ops,
-			.type = REGULATOR_VOLTAGE,
-			.linear_ranges = bd96801_ldo_int_volts,
-			.n_linear_ranges = ARRAY_SIZE(bd96801_ldo_int_volts),
-			.n_voltages = BD96801_LDO_VOLTS,
-			.enable_reg = BD96801_REG_ENABLE,
-			.enable_mask = BD96801_LDO5_EN_MASK,
-			.enable_is_inverted = true,
-			.vsel_reg = BD96801_LDO5_VSEL_REG,
-			.vsel_mask = BD96801_LDO_VSEL_MASK,
-			.owner = THIS_MODULE,
-		},
-		.irq_desc = {
-			.irqinfo = (struct bd96801_irqinfo *)&ldo5_irqinfo[0],
-			.num_irqs = ARRAY_SIZE(ldo5_irqinfo),
-		},
-		.ldo_vol_lvl = BD96801_LDO5_VOL_LVL_REG,
-	}, {
-		.desc = {
-			.name = "ldo6",
-			.of_match = of_match_ptr("ldo6"),
-			.regulators_node = of_match_ptr("regulators"),
-			.id = BD96801_LDO6,
-			.ops = &bd96801_ldo_ops,
-			.type = REGULATOR_VOLTAGE,
-			.linear_ranges = bd96801_ldo_int_volts,
-			.n_linear_ranges = ARRAY_SIZE(bd96801_ldo_int_volts),
-			.n_voltages = BD96801_LDO_VOLTS,
-			.enable_reg = BD96801_REG_ENABLE,
-			.enable_mask = BD96801_LDO6_EN_MASK,
-			.enable_is_inverted = true,
-			.vsel_reg = BD96801_LDO6_VSEL_REG,
-			.vsel_mask = BD96801_LDO_VSEL_MASK,
-			.owner = THIS_MODULE,
-		},
-		.irq_desc = {
-			.irqinfo = (struct bd96801_irqinfo *)&ldo6_irqinfo[0],
-			.num_irqs = ARRAY_SIZE(ldo6_irqinfo),
-		},
-		.ldo_vol_lvl = BD96801_LDO6_VOL_LVL_REG,
-	}, {
-		.desc = {
-			.name = "ldo7",
-			.of_match = of_match_ptr("ldo7"),
-			.regulators_node = of_match_ptr("regulators"),
-			.id = BD96801_LDO7,
-			.ops = &bd96801_ldo_ops,
-			.type = REGULATOR_VOLTAGE,
-			.linear_ranges = bd96801_ldo_int_volts,
-			.n_linear_ranges = ARRAY_SIZE(bd96801_ldo_int_volts),
-			.n_voltages = BD96801_LDO_VOLTS,
-			.enable_reg = BD96801_REG_ENABLE,
-			.enable_mask = BD96801_LDO7_EN_MASK,
-			.enable_is_inverted = true,
-			.vsel_reg = BD96801_LDO7_VSEL_REG,
-			.vsel_mask = BD96801_LDO_VSEL_MASK,
-			.owner = THIS_MODULE,
-		},
-		.irq_desc = {
-			.irqinfo = (struct bd96801_irqinfo *)&ldo7_irqinfo[0],
-			.num_irqs = ARRAY_SIZE(ldo7_irqinfo),
-		},
-		.ldo_vol_lvl = BD96801_LDO7_VOL_LVL_REG,
-	},
-	},
-	.num_regulators = 7,
-};
-
-static const struct bd96801_pmic_data bd96806_data = {
-	.regulator_data = {
-	{
-		.desc = {
-			.name = "buck1",
-			.of_match = of_match_ptr("buck1"),
-			.regulators_node = of_match_ptr("regulators"),
-			.id = BD96801_BUCK1,
-			.ops = &bd96801_buck_ops,
-			.type = REGULATOR_VOLTAGE,
-			.linear_ranges = bd96806_tune_volts,
-			.n_linear_ranges = ARRAY_SIZE(bd96806_tune_volts),
-			.n_voltages = BD96805_BUCK_VOLTS,
-			.enable_reg = BD96801_REG_ENABLE,
-			.enable_mask = BD96801_BUCK1_EN_MASK,
-			.enable_is_inverted = true,
-			.vsel_reg = BD96801_BUCK1_VSEL_REG,
-			.vsel_mask = BD96805_BUCK_VSEL_MASK,
-			.ramp_reg = BD96801_BUCK1_VSEL_REG,
-			.ramp_mask = BD96801_MASK_RAMP_DELAY,
-			.ramp_delay_table = &buck_ramp_table[0],
-			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
-			.owner = THIS_MODULE,
-		},
-		.init_ranges = bd96806_buck_init_volts,
-		.num_ranges = ARRAY_SIZE(bd96806_buck_init_volts),
-		.irq_desc = {
-			.irqinfo = (struct bd96801_irqinfo *)&buck1_irqinfo[0],
-			.num_irqs = ARRAY_SIZE(buck1_irqinfo),
-		},
-	},
-	{
-		.desc = {
-			.name = "buck2",
-			.of_match = of_match_ptr("buck2"),
-			.regulators_node = of_match_ptr("regulators"),
-			.id = BD96801_BUCK2,
-			.ops = &bd96801_buck_ops,
-			.type = REGULATOR_VOLTAGE,
-			.linear_ranges = bd96806_tune_volts,
-			.n_linear_ranges = ARRAY_SIZE(bd96806_tune_volts),
-			.n_voltages = BD96805_BUCK_VOLTS,
-			.enable_reg = BD96801_REG_ENABLE,
-			.enable_mask = BD96801_BUCK2_EN_MASK,
-			.enable_is_inverted = true,
-			.vsel_reg = BD96801_BUCK2_VSEL_REG,
-			.vsel_mask = BD96805_BUCK_VSEL_MASK,
-			.ramp_reg = BD96801_BUCK2_VSEL_REG,
-			.ramp_mask = BD96801_MASK_RAMP_DELAY,
-			.ramp_delay_table = &buck_ramp_table[0],
-			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
-			.owner = THIS_MODULE,
-		},
-		.irq_desc = {
-			.irqinfo = (struct bd96801_irqinfo *)&buck2_irqinfo[0],
-			.num_irqs = ARRAY_SIZE(buck2_irqinfo),
-		},
-		.init_ranges = bd96806_buck_init_volts,
-		.num_ranges = ARRAY_SIZE(bd96806_buck_init_volts),
-	},
-	},
-	.num_regulators = 2,
-};
-
-static int initialize_pmic_data(struct platform_device *pdev,
+static int initialize_pmic_data(struct device *dev,
 				struct bd96801_pmic_data *pdata)
 {
-	struct device *dev = &pdev->dev;
 	int r, i;
 
 	/*
@@ -1045,7 +707,7 @@ static int initialize_pmic_data(struct platform_device *pdev,
 	 * wish to modify IRQ information independently for each driver
 	 * instance.
 	 */
-	for (r = 0; r < pdata->num_regulators; r++) {
+	for (r = 0; r < BD96801_NUM_REGULATORS; r++) {
 		const struct bd96801_irqinfo *template;
 		struct bd96801_irqinfo *new;
 		int num_infos;
@@ -1061,92 +723,6 @@ static int initialize_pmic_data(struct platform_device *pdev,
 
 		for (i = 0; i < num_infos; i++)
 			new[i] = template[i];
-	}
-
-	return 0;
-}
-
-static int bd96801_map_event_all(int irq, struct regulator_irq_data *rid,
-			  unsigned long *dev_mask)
-{
-	int i;
-
-	for (i = 0; i < rid->num_states; i++) {
-		rid->states[i].notifs = REGULATOR_EVENT_FAIL;
-		rid->states[i].errors = REGULATOR_ERROR_FAIL;
-		*dev_mask |= BIT(i);
-	}
-
-	return 0;
-}
-
-static int bd96801_rdev_errb_irqs(struct platform_device *pdev,
-				  struct regulator_dev *rdev)
-{
-	int i;
-	void *retp;
-	static const char * const single_out_errb_irqs[] = {
-		"%s-pvin-err", "%s-ovp-err", "%s-uvp-err", "%s-shdn-err",
-	};
-
-	for (i = 0; i < ARRAY_SIZE(single_out_errb_irqs); i++) {
-		struct regulator_irq_desc id = {
-			.map_event = bd96801_map_event_all,
-			.irq_off_ms = 1000,
-		};
-		struct regulator_dev *rdev_arr[1];
-		char tmp[255];
-		int irq;
-
-		snprintf(tmp, 255, single_out_errb_irqs[i], rdev->desc->name);
-		tmp[254] = 0;
-		id.name = tmp;
-
-		irq = platform_get_irq_byname(pdev, tmp);
-		if (irq < 0)
-			continue;
-
-		rdev_arr[0] = rdev;
-		retp = devm_regulator_irq_helper(&pdev->dev, &id, irq, 0,
-						 REGULATOR_ERROR_FAIL, NULL,
-						 rdev_arr, 1);
-		if (IS_ERR(retp))
-			return PTR_ERR(retp);
-
-	}
-	return 0;
-}
-
-static int bd96801_global_errb_irqs(struct platform_device *pdev,
-				    struct regulator_dev **rdev, int num_rdev)
-{
-	int i, num_irqs;
-	void *retp;
-	static const char * const global_errb_irqs[] = {
-		"otp-err", "dbist-err", "eep-err", "abist-err", "prstb-err",
-		"drmoserr1", "drmoserr2", "slave-err", "vref-err", "tsd",
-		"uvlo-err", "ovlo-err", "osc-err", "pon-err", "poff-err",
-		"cmd-shdn-err", "int-shdn-err"
-	};
-
-	num_irqs = ARRAY_SIZE(global_errb_irqs);
-	for (i = 0; i < num_irqs; i++) {
-		int irq;
-		struct regulator_irq_desc id = {
-			.name = global_errb_irqs[i],
-			.map_event = bd96801_map_event_all,
-			.irq_off_ms = 1000,
-		};
-
-		irq = platform_get_irq_byname(pdev, global_errb_irqs[i]);
-		if (irq < 0)
-			continue;
-
-		retp = devm_regulator_irq_helper(&pdev->dev, &id, irq, 0,
-						 REGULATOR_ERROR_FAIL, NULL,
-						  rdev, num_rdev);
-		if (IS_ERR(retp))
-			return PTR_ERR(retp);
 	}
 
 	return 0;
@@ -1207,11 +783,11 @@ static int bd96801_rdev_intb_irqs(struct platform_device *pdev,
 	return 0;
 }
 
+
+
 static int bd96801_probe(struct platform_device *pdev)
 {
 	struct regulator_dev *ldo_errs_rdev_arr[BD96801_NUM_LDOS];
-	struct regulator_dev *all_rdevs[BD96801_NUM_REGULATORS];
-	struct bd96801_pmic_data *pdata_template;
 	struct bd96801_regulator_data *rdesc;
 	struct regulator_config config = {};
 	int ldo_errs_arr[BD96801_NUM_LDOS];
@@ -1219,21 +795,16 @@ static int bd96801_probe(struct platform_device *pdev)
 	int temp_notif_ldos = 0;
 	struct device *parent;
 	int i, ret;
-	bool use_errb;
 	void *retp;
 
 	parent = pdev->dev.parent;
 
-	pdata_template = (struct bd96801_pmic_data *)platform_get_device_id(pdev)->driver_data;
-	if (!pdata_template)
-		return -ENODEV;
-
-	pdata = devm_kmemdup(&pdev->dev, pdata_template, sizeof(bd96801_data),
+	pdata = devm_kmemdup(&pdev->dev, &bd96801_data, sizeof(bd96801_data),
 			     GFP_KERNEL);
 	if (!pdata)
 		return -ENOMEM;
 
-	if (initialize_pmic_data(pdev, pdata))
+	if (initialize_pmic_data(&pdev->dev, pdata))
 		return -ENOMEM;
 
 	pdata->regmap = dev_get_regmap(parent, NULL);
@@ -1248,19 +819,12 @@ static int bd96801_probe(struct platform_device *pdev)
 	config.regmap = pdata->regmap;
 	config.dev = parent;
 
-	ret = of_property_match_string(pdev->dev.parent->of_node,
-				       "interrupt-names", "errb");
-	if (ret < 0)
-		use_errb = false;
-	else
-		use_errb = true;
-
 	ret = bd96801_walk_regulator_dt(&pdev->dev, pdata->regmap, rdesc,
-					pdata->num_regulators);
+					BD96801_NUM_REGULATORS);
 	if (ret)
 		return ret;
 
-	for (i = 0; i < pdata->num_regulators; i++) {
+	for (i = 0; i < ARRAY_SIZE(pdata->regulator_data); i++) {
 		struct regulator_dev *rdev;
 		struct bd96801_irq_desc *idesc = &rdesc[i].irq_desc;
 		int j;
@@ -1273,8 +837,6 @@ static int bd96801_probe(struct platform_device *pdev)
 				rdesc[i].desc.name);
 			return PTR_ERR(rdev);
 		}
-
-		all_rdevs[i] = rdev;
 		/*
 		 * LDOs don't have own temperature monitoring. If temperature
 		 * notification was requested for this LDO from DT then we will
@@ -1294,22 +856,16 @@ static int bd96801_probe(struct platform_device *pdev)
 			if (ret)
 				return ret;
 		}
-		/* Register per regulator ERRB notifiers */
-		if (use_errb) {
-			ret = bd96801_rdev_errb_irqs(pdev, rdev);
-			if (ret)
-				return ret;
-		}
 	}
 	if (temp_notif_ldos) {
 		int irq;
 		struct regulator_irq_desc tw_desc = {
-			.name = "core-thermal",
+			.name = "bd96801-core-thermal",
 			.irq_off_ms = 500,
 			.map_event = ldo_map_notif,
 		};
 
-		irq = platform_get_irq_byname(pdev, "core-thermal");
+		irq = platform_get_irq_byname(pdev, "bd96801-core-thermal");
 		if (irq < 0)
 			return irq;
 
@@ -1321,19 +877,12 @@ static int bd96801_probe(struct platform_device *pdev)
 			return PTR_ERR(retp);
 	}
 
-	if (use_errb)
-		return bd96801_global_errb_irqs(pdev, all_rdevs,
-						pdata->num_regulators);
-
 	return 0;
 }
 
 static const struct platform_device_id bd96801_pmic_id[] = {
-	{ "bd96801-regulator", (kernel_ulong_t)&bd96801_data },
-	{ "bd96802-regulator", (kernel_ulong_t)&bd96802_data },
-	{ "bd96805-regulator", (kernel_ulong_t)&bd96805_data },
-	{ "bd96806-regulator", (kernel_ulong_t)&bd96806_data },
-	{ },
+	{ "bd96801-regulator", },
+	{ }
 };
 MODULE_DEVICE_TABLE(platform, bd96801_pmic_id);
 

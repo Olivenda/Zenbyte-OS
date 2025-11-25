@@ -175,6 +175,7 @@ static int kvm_vfio_file_add(struct kvm_device *dev, unsigned int fd)
 	kvf->file = get_file(filp);
 	list_add_tail(&kvf->node, &kv->file_list);
 
+	kvm_arch_start_assignment(dev->kvm);
 	kvm_vfio_file_set_kvm(kvf->file, dev->kvm);
 	kvm_vfio_update_coherency(dev);
 
@@ -189,10 +190,11 @@ static int kvm_vfio_file_del(struct kvm_device *dev, unsigned int fd)
 {
 	struct kvm_vfio *kv = dev->private;
 	struct kvm_vfio_file *kvf;
-	CLASS(fd, f)(fd);
+	struct fd f;
 	int ret;
 
-	if (fd_empty(f))
+	f = fdget(fd);
+	if (!fd_file(f))
 		return -EBADF;
 
 	ret = -ENOENT;
@@ -204,6 +206,7 @@ static int kvm_vfio_file_del(struct kvm_device *dev, unsigned int fd)
 			continue;
 
 		list_del(&kvf->node);
+		kvm_arch_end_assignment(dev->kvm);
 #ifdef CONFIG_SPAPR_TCE_IOMMU
 		kvm_spapr_tce_release_vfio_group(dev->kvm, kvf);
 #endif
@@ -217,6 +220,9 @@ static int kvm_vfio_file_del(struct kvm_device *dev, unsigned int fd)
 	kvm_vfio_update_coherency(dev);
 
 	mutex_unlock(&kv->lock);
+
+	fdput(f);
+
 	return ret;
 }
 
@@ -227,13 +233,14 @@ static int kvm_vfio_file_set_spapr_tce(struct kvm_device *dev,
 	struct kvm_vfio_spapr_tce param;
 	struct kvm_vfio *kv = dev->private;
 	struct kvm_vfio_file *kvf;
+	struct fd f;
 	int ret;
 
 	if (copy_from_user(&param, arg, sizeof(struct kvm_vfio_spapr_tce)))
 		return -EFAULT;
 
-	CLASS(fd, f)(param.groupfd);
-	if (fd_empty(f))
+	f = fdget(param.groupfd);
+	if (!fd_file(f))
 		return -EBADF;
 
 	ret = -ENOENT;
@@ -259,6 +266,7 @@ static int kvm_vfio_file_set_spapr_tce(struct kvm_device *dev,
 
 err_fdput:
 	mutex_unlock(&kv->lock);
+	fdput(f);
 	return ret;
 }
 #endif
@@ -334,6 +342,7 @@ static void kvm_vfio_release(struct kvm_device *dev)
 		fput(kvf->file);
 		list_del(&kvf->node);
 		kfree(kvf);
+		kvm_arch_end_assignment(dev->kvm);
 	}
 
 	kvm_vfio_update_coherency(dev);
@@ -344,7 +353,7 @@ static void kvm_vfio_release(struct kvm_device *dev)
 
 static int kvm_vfio_create(struct kvm_device *dev, u32 type);
 
-static const struct kvm_device_ops kvm_vfio_ops = {
+static struct kvm_device_ops kvm_vfio_ops = {
 	.name = "kvm-vfio",
 	.create = kvm_vfio_create,
 	.release = kvm_vfio_release,

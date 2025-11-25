@@ -69,6 +69,7 @@
 
 /* Ethernet */
 &fec1 {
+	fsl,magic-packet;
 	phy-mode = "rgmii-id";
 	phy-handle = <&ethphy0>;
 	pinctrl-names = "default";
@@ -160,13 +161,11 @@
 				regulator-always-on;
 				regulator-boot-on;
 				regulator-max-microvolt = <2500000>;
-				regulator-min-microvolt = <2500000>;
+				regulator-min-microvolt = <1500000>;
 				regulator-name = "VCC_ENET_2V5 (LDO3)";
 
 				regulator-state-mem {
-					regulator-on-in-suspend;
-					regulator-suspend-max-microvolt = <2500000>;
-					regulator-suspend-min-microvolt = <2500000>;
+					regulator-off-in-suspend;
 				};
 			};
 
@@ -286,11 +285,9 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_sn65dsi83>;
 		reg = <0x2d>;
-		vcc-supply = <&reg_vdd_1v8>;
 		status = "disabled";
 	};
 
-	/* EEPROM */
 	eeprom@51 {
 		compatible = "atmel,24c32";
 		pagesize = <32>;
@@ -298,14 +295,17 @@
 		vcc-supply = <&reg_vdd_3v3_s>;
 	};
 
-	/* RTC */
 	rv3028: rtc@52 {
 		compatible = "microcrystal,rv3028";
+		interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
+		interrupt-parent = <&gpio1>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_rtc>;
 		reg = <0x52>;
 	};
 };
 
-/* eMMC */
+/* EMMC */
 &usdhc3 {
 	assigned-clocks = <&clk IMX8MM_CLK_USDHC3_ROOT>;
 	assigned-clock-rates = <400000000>;
@@ -370,6 +370,12 @@
 		fsl,pins = <
 			MX8MM_IOMUXC_I2C1_SDA_GPIO5_IO15		0x1e0
 			MX8MM_IOMUXC_I2C1_SCL_GPIO5_IO14		0x1e0
+		>;
+	};
+
+	pinctrl_rtc: rtcgrp {
+		fsl,pins = <
+			MX8MM_IOMUXC_GPIO1_IO03_GPIO1_IO3		0x1c0
 		>;
 	};
 

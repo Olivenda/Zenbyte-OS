@@ -2718,7 +2718,8 @@ retry_lock:
 	 * All waiters are on iocg->waitq and the wait states are
 	 * synchronized using waitq.lock.
 	 */
-	init_wait_func(&wait.wait, iocg_wake_fn);
+	init_waitqueue_func_entry(&wait.wait, iocg_wake_fn);
+	wait.wait.private = current;
 	wait.bio = bio;
 	wait.abs_cost = abs_cost;
 	wait.committed = false;	/* will be set true by waker */
@@ -3003,7 +3004,8 @@ static void ioc_pd_init(struct blkg_policy_data *pd)
 	iocg->hweight_inuse = WEIGHT_ONE;
 
 	init_waitqueue_head(&iocg->waitq);
-	hrtimer_setup(&iocg->waitq_timer, iocg_waitq_timer_fn, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+	hrtimer_init(&iocg->waitq_timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
+	iocg->waitq_timer.function = iocg_waitq_timer_fn;
 
 	iocg->level = blkg->blkcg->css.cgroup->level;
 
@@ -3222,16 +3224,13 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 	u32 qos[NR_QOS_PARAMS];
 	bool enable, user;
 	char *body, *p;
-	unsigned long memflags;
 	int ret;
 
 	blkg_conf_init(&ctx, input);
 
-	memflags = blkg_conf_open_bdev_frozen(&ctx);
-	if (IS_ERR_VALUE(memflags)) {
-		ret = memflags;
+	ret = blkg_conf_open_bdev(&ctx);
+	if (ret)
 		goto err;
-	}
 
 	body = ctx.body;
 	disk = ctx.bdev->bd_disk;
@@ -3248,6 +3247,7 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 		ioc = q_to_ioc(disk->queue);
 	}
 
+	blk_mq_freeze_queue(disk->queue);
 	blk_mq_quiesce_queue(disk->queue);
 
 	spin_lock_irq(&ioc->lock);
@@ -3347,15 +3347,19 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 		wbt_enable_default(disk);
 
 	blk_mq_unquiesce_queue(disk->queue);
+	blk_mq_unfreeze_queue(disk->queue);
 
-	blkg_conf_exit_frozen(&ctx, memflags);
+	blkg_conf_exit(&ctx);
 	return nbytes;
 einval:
 	spin_unlock_irq(&ioc->lock);
+
 	blk_mq_unquiesce_queue(disk->queue);
+	blk_mq_unfreeze_queue(disk->queue);
+
 	ret = -EINVAL;
 err:
-	blkg_conf_exit_frozen(&ctx, memflags);
+	blkg_conf_exit(&ctx);
 	return ret;
 }
 
@@ -3410,7 +3414,6 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 {
 	struct blkg_conf_ctx ctx;
 	struct request_queue *q;
-	unsigned int memflags;
 	struct ioc *ioc;
 	u64 u[NR_I_LCOEFS];
 	bool user;
@@ -3438,7 +3441,7 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 		ioc = q_to_ioc(q);
 	}
 
-	memflags = blk_mq_freeze_queue(q);
+	blk_mq_freeze_queue(q);
 	blk_mq_quiesce_queue(q);
 
 	spin_lock_irq(&ioc->lock);
@@ -3490,7 +3493,7 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 	spin_unlock_irq(&ioc->lock);
 
 	blk_mq_unquiesce_queue(q);
-	blk_mq_unfreeze_queue(q, memflags);
+	blk_mq_unfreeze_queue(q);
 
 	blkg_conf_exit(&ctx);
 	return nbytes;
@@ -3499,7 +3502,7 @@ einval:
 	spin_unlock_irq(&ioc->lock);
 
 	blk_mq_unquiesce_queue(q);
-	blk_mq_unfreeze_queue(q, memflags);
+	blk_mq_unfreeze_queue(q);
 
 	ret = -EINVAL;
 err:

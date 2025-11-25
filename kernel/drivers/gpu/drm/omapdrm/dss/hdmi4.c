@@ -314,7 +314,6 @@ void hdmi4_core_disable(struct hdmi_core_data *core)
  */
 
 static int hdmi4_bridge_attach(struct drm_bridge *bridge,
-			       struct drm_encoder *encoder,
 			       enum drm_bridge_attach_flags flags)
 {
 	struct omap_hdmi *hdmi = drm_bridge_to_hdmi(bridge);
@@ -322,7 +321,7 @@ static int hdmi4_bridge_attach(struct drm_bridge *bridge,
 	if (!(flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR))
 		return -EINVAL;
 
-	return drm_bridge_attach(encoder, hdmi->output.next_bridge,
+	return drm_bridge_attach(bridge->encoder, hdmi->output.next_bridge,
 				 bridge, flags);
 }
 
@@ -342,9 +341,10 @@ static void hdmi4_bridge_mode_set(struct drm_bridge *bridge,
 }
 
 static void hdmi4_bridge_enable(struct drm_bridge *bridge,
-				struct drm_atomic_state *state)
+				struct drm_bridge_state *bridge_state)
 {
 	struct omap_hdmi *hdmi = drm_bridge_to_hdmi(bridge);
+	struct drm_atomic_state *state = bridge_state->base.state;
 	struct drm_connector_state *conn_state;
 	struct drm_connector *connector;
 	struct drm_crtc_state *crtc_state;
@@ -410,7 +410,7 @@ done:
 }
 
 static void hdmi4_bridge_disable(struct drm_bridge *bridge,
-				 struct drm_atomic_state *state)
+				 struct drm_bridge_state *bridge_state)
 {
 	struct omap_hdmi *hdmi = drm_bridge_to_hdmi(bridge);
 	unsigned long flags;
@@ -505,6 +505,7 @@ static const struct drm_bridge_funcs hdmi4_bridge_funcs = {
 
 static void hdmi4_bridge_init(struct omap_hdmi *hdmi)
 {
+	hdmi->bridge.funcs = &hdmi4_bridge_funcs;
 	hdmi->bridge.of_node = hdmi->pdev->dev.of_node;
 	hdmi->bridge.ops = DRM_BRIDGE_OP_EDID;
 	hdmi->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
@@ -760,9 +761,9 @@ static int hdmi4_probe(struct platform_device *pdev)
 	int irq;
 	int r;
 
-	hdmi = devm_drm_bridge_alloc(&pdev->dev, struct omap_hdmi, bridge, &hdmi4_bridge_funcs);
-	if (IS_ERR(hdmi))
-		return PTR_ERR(hdmi);
+	hdmi = kzalloc(sizeof(*hdmi), GFP_KERNEL);
+	if (!hdmi)
+		return -ENOMEM;
 
 	hdmi->pdev = pdev;
 
@@ -773,24 +774,25 @@ static int hdmi4_probe(struct platform_device *pdev)
 
 	r = hdmi4_probe_of(hdmi);
 	if (r)
-		return r;
+		goto err_free;
 
 	r = hdmi_wp_init(pdev, &hdmi->wp, 4);
 	if (r)
-		return r;
+		goto err_free;
 
 	r = hdmi_phy_init(pdev, &hdmi->phy, 4);
 	if (r)
-		return r;
+		goto err_free;
 
 	r = hdmi4_core_init(pdev, &hdmi->core);
 	if (r)
-		return r;
+		goto err_free;
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
 		DSSERR("platform_get_irq failed\n");
-		return -ENODEV;
+		r = -ENODEV;
+		goto err_free;
 	}
 
 	r = devm_request_threaded_irq(&pdev->dev, irq,
@@ -798,7 +800,7 @@ static int hdmi4_probe(struct platform_device *pdev)
 			IRQF_ONESHOT, "OMAP HDMI", hdmi);
 	if (r) {
 		DSSERR("HDMI IRQ request failed\n");
-		return r;
+		goto err_free;
 	}
 
 	hdmi->vdda_reg = devm_regulator_get(&pdev->dev, "vdda");
@@ -806,7 +808,7 @@ static int hdmi4_probe(struct platform_device *pdev)
 		r = PTR_ERR(hdmi->vdda_reg);
 		if (r != -EPROBE_DEFER)
 			DSSERR("can't get VDDA regulator\n");
-		return r;
+		goto err_free;
 	}
 
 	pm_runtime_enable(&pdev->dev);
@@ -825,6 +827,8 @@ err_uninit_output:
 	hdmi4_uninit_output(hdmi);
 err_pm_disable:
 	pm_runtime_disable(&pdev->dev);
+err_free:
+	kfree(hdmi);
 	return r;
 }
 
@@ -837,6 +841,8 @@ static void hdmi4_remove(struct platform_device *pdev)
 	hdmi4_uninit_output(hdmi);
 
 	pm_runtime_disable(&pdev->dev);
+
+	kfree(hdmi);
 }
 
 static const struct of_device_id hdmi_of_match[] = {
@@ -846,7 +852,7 @@ static const struct of_device_id hdmi_of_match[] = {
 
 struct platform_driver omapdss_hdmi4hw_driver = {
 	.probe		= hdmi4_probe,
-	.remove		= hdmi4_remove,
+	.remove_new	= hdmi4_remove,
 	.driver         = {
 		.name   = "omapdss_hdmi",
 		.of_match_table = hdmi_of_match,

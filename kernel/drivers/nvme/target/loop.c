@@ -33,12 +33,10 @@ struct nvme_loop_ctrl {
 
 	struct list_head	list;
 	struct blk_mq_tag_set	tag_set;
+	struct nvme_loop_iod	async_event_iod;
 	struct nvme_ctrl	ctrl;
 
 	struct nvmet_port	*port;
-
-	/* Must be last --ends in a flexible-array member. */
-	struct nvme_loop_iod	async_event_iod;
 };
 
 static inline struct nvme_loop_ctrl *to_loop_ctrl(struct nvme_ctrl *ctrl)
@@ -150,7 +148,8 @@ static blk_status_t nvme_loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 	nvme_start_request(req);
 	iod->cmd.common.flags |= NVME_CMD_SGL_METABUF;
 	iod->req.port = queue->ctrl->port;
-	if (!nvmet_req_init(&iod->req, &queue->nvme_sq, &nvme_loop_ops))
+	if (!nvmet_req_init(&iod->req, &queue->nvme_cq,
+			&queue->nvme_sq, &nvme_loop_ops))
 		return BLK_STS_OK;
 
 	if (blk_rq_nr_phys_segments(req)) {
@@ -163,7 +162,7 @@ static blk_status_t nvme_loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 		}
 
 		iod->req.sg = iod->sg_table.sgl;
-		iod->req.sg_cnt = blk_rq_map_sg(req, iod->sg_table.sgl);
+		iod->req.sg_cnt = blk_rq_map_sg(req->q, req, iod->sg_table.sgl);
 		iod->req.transfer_len = blk_rq_payload_bytes(req);
 	}
 
@@ -182,7 +181,8 @@ static void nvme_loop_submit_async_event(struct nvme_ctrl *arg)
 	iod->cmd.common.command_id = NVME_AQ_BLK_MQ_DEPTH;
 	iod->cmd.common.flags |= NVME_CMD_SGL_METABUF;
 
-	if (!nvmet_req_init(&iod->req, &queue->nvme_sq, &nvme_loop_ops)) {
+	if (!nvmet_req_init(&iod->req, &queue->nvme_cq, &queue->nvme_sq,
+			&nvme_loop_ops)) {
 		dev_err(ctrl->ctrl.device, "failed async event work\n");
 		return;
 	}
@@ -273,7 +273,6 @@ static void nvme_loop_destroy_admin_queue(struct nvme_loop_ctrl *ctrl)
 	nvme_unquiesce_admin_queue(&ctrl->ctrl);
 
 	nvmet_sq_destroy(&ctrl->queues[0].nvme_sq);
-	nvmet_cq_put(&ctrl->queues[0].nvme_cq);
 	nvme_remove_admin_tag_set(&ctrl->ctrl);
 }
 
@@ -303,7 +302,6 @@ static void nvme_loop_destroy_io_queues(struct nvme_loop_ctrl *ctrl)
 	for (i = 1; i < ctrl->ctrl.queue_count; i++) {
 		clear_bit(NVME_LOOP_Q_LIVE, &ctrl->queues[i].flags);
 		nvmet_sq_destroy(&ctrl->queues[i].nvme_sq);
-		nvmet_cq_put(&ctrl->queues[i].nvme_cq);
 	}
 	ctrl->ctrl.queue_count = 1;
 	/*
@@ -329,13 +327,9 @@ static int nvme_loop_init_io_queues(struct nvme_loop_ctrl *ctrl)
 
 	for (i = 1; i <= nr_io_queues; i++) {
 		ctrl->queues[i].ctrl = ctrl;
-		nvmet_cq_init(&ctrl->queues[i].nvme_cq);
-		ret = nvmet_sq_init(&ctrl->queues[i].nvme_sq,
-				&ctrl->queues[i].nvme_cq);
-		if (ret) {
-			nvmet_cq_put(&ctrl->queues[i].nvme_cq);
+		ret = nvmet_sq_init(&ctrl->queues[i].nvme_sq);
+		if (ret)
 			goto out_destroy_queues;
-		}
 
 		ctrl->ctrl.queue_count++;
 	}
@@ -366,13 +360,9 @@ static int nvme_loop_configure_admin_queue(struct nvme_loop_ctrl *ctrl)
 	int error;
 
 	ctrl->queues[0].ctrl = ctrl;
-	nvmet_cq_init(&ctrl->queues[0].nvme_cq);
-	error = nvmet_sq_init(&ctrl->queues[0].nvme_sq,
-			&ctrl->queues[0].nvme_cq);
-	if (error) {
-		nvmet_cq_put(&ctrl->queues[0].nvme_cq);
+	error = nvmet_sq_init(&ctrl->queues[0].nvme_sq);
+	if (error)
 		return error;
-	}
 	ctrl->ctrl.queue_count = 1;
 
 	error = nvme_alloc_admin_tag_set(&ctrl->ctrl, &ctrl->admin_tag_set,
@@ -411,7 +401,6 @@ out_cleanup_tagset:
 	nvme_remove_admin_tag_set(&ctrl->ctrl);
 out_free_sq:
 	nvmet_sq_destroy(&ctrl->queues[0].nvme_sq);
-	nvmet_cq_put(&ctrl->queues[0].nvme_cq);
 	return error;
 }
 

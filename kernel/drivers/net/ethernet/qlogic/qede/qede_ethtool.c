@@ -272,14 +272,16 @@ static void qede_get_strings_stats_txq(struct qede_dev *edev,
 {
 	int i;
 
-	for (i = 0; i < QEDE_NUM_TQSTATS; i++)
+	for (i = 0; i < QEDE_NUM_TQSTATS; i++) {
 		if (txq->is_xdp)
-			ethtool_sprintf(buf, "%d [XDP]: %s",
-					QEDE_TXQ_XDP_TO_IDX(edev, txq),
-					qede_tqstats_arr[i].string);
+			sprintf(*buf, "%d [XDP]: %s",
+				QEDE_TXQ_XDP_TO_IDX(edev, txq),
+				qede_tqstats_arr[i].string);
 		else
-			ethtool_sprintf(buf, "%d_%d: %s", txq->index, txq->cos,
-					qede_tqstats_arr[i].string);
+			sprintf(*buf, "%d_%d: %s", txq->index, txq->cos,
+				qede_tqstats_arr[i].string);
+		*buf += ETH_GSTRING_LEN;
+	}
 }
 
 static void qede_get_strings_stats_rxq(struct qede_dev *edev,
@@ -287,9 +289,11 @@ static void qede_get_strings_stats_rxq(struct qede_dev *edev,
 {
 	int i;
 
-	for (i = 0; i < QEDE_NUM_RQSTATS; i++)
-		ethtool_sprintf(buf, "%d: %s", rxq->rxq_id,
-				qede_rqstats_arr[i].string);
+	for (i = 0; i < QEDE_NUM_RQSTATS; i++) {
+		sprintf(*buf, "%d: %s", rxq->rxq_id,
+			qede_rqstats_arr[i].string);
+		*buf += ETH_GSTRING_LEN;
+	}
 }
 
 static bool qede_is_irrelevant_stat(struct qede_dev *edev, int stat_index)
@@ -327,26 +331,26 @@ static void qede_get_strings_stats(struct qede_dev *edev, u8 *buf)
 	for (i = 0; i < QEDE_NUM_STATS; i++) {
 		if (qede_is_irrelevant_stat(edev, i))
 			continue;
-		ethtool_puts(&buf, qede_stats_arr[i].string);
+		strcpy(buf, qede_stats_arr[i].string);
+		buf += ETH_GSTRING_LEN;
 	}
 }
 
 static void qede_get_strings(struct net_device *dev, u32 stringset, u8 *buf)
 {
 	struct qede_dev *edev = netdev_priv(dev);
-	int i;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
 		qede_get_strings_stats(edev, buf);
 		break;
 	case ETH_SS_PRIV_FLAGS:
-		for (i = 0; i < QEDE_PRI_FLAG_LEN; i++)
-			ethtool_puts(&buf, qede_private_arr[i]);
+		memcpy(buf, qede_private_arr,
+		       ETH_GSTRING_LEN * QEDE_PRI_FLAG_LEN);
 		break;
 	case ETH_SS_TEST:
-		for (i = 0; i < QEDE_ETHTOOL_TEST_MAX; i++)
-			ethtool_puts(&buf, qede_tests_str_arr[i]);
+		memcpy(buf, qede_tests_str_arr,
+		       ETH_GSTRING_LEN * QEDE_ETHTOOL_TEST_MAX);
 		break;
 	default:
 		DP_VERBOSE(edev, QED_MSG_DEBUG,
@@ -1168,11 +1172,8 @@ static int qede_set_phys_id(struct net_device *dev,
 	return 0;
 }
 
-static int qede_get_rxfh_fields(struct net_device *dev,
-				struct ethtool_rxfh_fields *info)
+static int qede_get_rss_flags(struct qede_dev *edev, struct ethtool_rxnfc *info)
 {
-	struct qede_dev *edev = netdev_priv(dev);
-
 	info->data = RXH_IP_SRC | RXH_IP_DST;
 
 	switch (info->flow_type) {
@@ -1209,6 +1210,9 @@ static int qede_get_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info,
 	case ETHTOOL_GRXRINGS:
 		info->data = QEDE_RSS_COUNT(edev);
 		break;
+	case ETHTOOL_GRXFH:
+		rc = qede_get_rss_flags(edev, info);
+		break;
 	case ETHTOOL_GRXCLSRLCNT:
 		info->rule_cnt = qede_get_arfs_filter_count(edev);
 		info->data = QEDE_RFS_MAX_FLTR;
@@ -1227,17 +1231,14 @@ static int qede_get_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info,
 	return rc;
 }
 
-static int qede_set_rxfh_fields(struct net_device *dev,
-				const struct ethtool_rxfh_fields *info,
-				struct netlink_ext_ack *extack)
+static int qede_set_rss_flags(struct qede_dev *edev, struct ethtool_rxnfc *info)
 {
 	struct qed_update_vport_params *vport_update_params;
-	struct qede_dev *edev = netdev_priv(dev);
 	u8 set_caps = 0, clr_caps = 0;
 	int rc = 0;
 
 	DP_VERBOSE(edev, QED_MSG_DEBUG,
-		   "Set rss flags command parameters: flow type = %d, data = %u\n",
+		   "Set rss flags command parameters: flow type = %d, data = %llu\n",
 		   info->flow_type, info->data);
 
 	switch (info->flow_type) {
@@ -1340,6 +1341,9 @@ static int qede_set_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info)
 	int rc;
 
 	switch (info->cmd) {
+	case ETHTOOL_SRXFH:
+		rc = qede_set_rss_flags(edev, info);
+		break;
 	case ETHTOOL_SRXCLSRLINS:
 		rc = qede_add_cls_rule(edev, info);
 		break;
@@ -2293,8 +2297,6 @@ static const struct ethtool_ops qede_ethtool_ops = {
 	.get_rxfh_key_size		= qede_get_rxfh_key_size,
 	.get_rxfh			= qede_get_rxfh,
 	.set_rxfh			= qede_set_rxfh,
-	.get_rxfh_fields		= qede_get_rxfh_fields,
-	.set_rxfh_fields		= qede_set_rxfh_fields,
 	.get_ts_info			= qede_get_ts_info,
 	.get_channels			= qede_get_channels,
 	.set_channels			= qede_set_channels,
@@ -2337,8 +2339,6 @@ static const struct ethtool_ops qede_vf_ethtool_ops = {
 	.get_rxfh_key_size		= qede_get_rxfh_key_size,
 	.get_rxfh			= qede_get_rxfh,
 	.set_rxfh			= qede_set_rxfh,
-	.get_rxfh_fields		= qede_get_rxfh_fields,
-	.set_rxfh_fields		= qede_set_rxfh_fields,
 	.get_channels			= qede_get_channels,
 	.set_channels			= qede_set_channels,
 	.get_per_queue_coalesce		= qede_get_per_coalesce,

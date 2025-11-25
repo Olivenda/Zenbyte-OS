@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #include <linux/linkage.h>
-#include <asm/opcodes.h>
 #include <asm/visasm.h>
+
+#include "opcodes.h"
 
 ENTRY(md5_sparc64_transform)
 	/* %o0 = digest, %o1 = data, %o2 = rounds */

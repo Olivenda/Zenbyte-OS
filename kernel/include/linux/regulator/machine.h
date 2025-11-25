@@ -113,7 +113,6 @@ struct notification_limit {
  * @min_uA: Smallest current consumers may set.
  * @max_uA: Largest current consumers may set.
  * @ilim_uA: Maximum input current.
- * @pw_budget_mW: Power budget for the regulator in mW.
  * @system_load: Load that isn't captured by any consumer requests.
  *
  * @over_curr_limits:		Limits for acting on over current.
@@ -186,7 +185,6 @@ struct regulation_constraints {
 	int max_uA;
 	int ilim_uA;
 
-	int pw_budget_mW;
 	int system_load;
 
 	/* used for coupled regulators */
@@ -275,6 +273,8 @@ struct regulator_consumer_supply {
  *               be usable.
  * @num_consumer_supplies: Number of consumer device supplies.
  * @consumer_supplies: Consumer device supply configuration.
+ *
+ * @regulator_init: Callback invoked when the regulator has been registered.
  * @driver_data: Data passed to regulator_init.
  */
 struct regulator_init_data {
@@ -285,7 +285,8 @@ struct regulator_init_data {
 	int num_consumer_supplies;
 	struct regulator_consumer_supply *consumer_supplies;
 
-	/* optional regulator machine specific data */
+	/* optional regulator machine specific init */
+	int (*regulator_init)(void *driver_data);
 	void *driver_data;	/* core does not touch this */
 };
 

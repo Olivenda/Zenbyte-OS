@@ -425,22 +425,23 @@ static vm_fault_t vas_mmap_fault(struct vm_fault *vmf)
 		return VM_FAULT_SIGBUS;
 	}
 
+	mutex_lock(&txwin->task_ref.mmap_mutex);
 	/*
 	 * The window may be inactive due to lost credit (Ex: core
 	 * removal with DLPAR). If the window is active again when
 	 * the credit is available, map the new paste address at the
 	 * window virtual address.
 	 */
-	scoped_guard(mutex, &txwin->task_ref.mmap_mutex) {
-		if (txwin->status == VAS_WIN_ACTIVE) {
-			paste_addr = cp_inst->coproc->vops->paste_addr(txwin);
-			if (paste_addr) {
-				fault = vmf_insert_pfn(vma, vma->vm_start,
-						(paste_addr >> PAGE_SHIFT));
-				return fault;
-			}
+	if (txwin->status == VAS_WIN_ACTIVE) {
+		paste_addr = cp_inst->coproc->vops->paste_addr(txwin);
+		if (paste_addr) {
+			fault = vmf_insert_pfn(vma, vma->vm_start,
+					(paste_addr >> PAGE_SHIFT));
+			mutex_unlock(&txwin->task_ref.mmap_mutex);
+			return fault;
 		}
 	}
+	mutex_unlock(&txwin->task_ref.mmap_mutex);
 
 	/*
 	 * Received this fault due to closing the actual window.
@@ -493,8 +494,9 @@ static void vas_mmap_close(struct vm_area_struct *vma)
 		return;
 	}
 
-	scoped_guard(mutex, &txwin->task_ref.mmap_mutex)
-		txwin->task_ref.vma = NULL;
+	mutex_lock(&txwin->task_ref.mmap_mutex);
+	txwin->task_ref.vma = NULL;
+	mutex_unlock(&txwin->task_ref.mmap_mutex);
 }
 
 static const struct vm_operations_struct vas_vm_ops = {
@@ -550,16 +552,18 @@ static int coproc_mmap(struct file *fp, struct vm_area_struct *vma)
 	 * close/open event and allows mmap() only when the window is
 	 * active.
 	 */
-	guard(mutex)(&txwin->task_ref.mmap_mutex);
+	mutex_lock(&txwin->task_ref.mmap_mutex);
 	if (txwin->status != VAS_WIN_ACTIVE) {
 		pr_err("Window is not active\n");
-		return -EACCES;
+		rc = -EACCES;
+		goto out;
 	}
 
 	paste_addr = cp_inst->coproc->vops->paste_addr(txwin);
 	if (!paste_addr) {
 		pr_err("Window paste address failed\n");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto out;
 	}
 
 	pfn = paste_addr >> PAGE_SHIFT;
@@ -579,6 +583,8 @@ static int coproc_mmap(struct file *fp, struct vm_area_struct *vma)
 	txwin->task_ref.vma = vma;
 	vma->vm_ops = &vas_vm_ops;
 
+out:
+	mutex_unlock(&txwin->task_ref.mmap_mutex);
 	return rc;
 }
 

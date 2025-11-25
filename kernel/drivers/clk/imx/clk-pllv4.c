@@ -95,11 +95,11 @@ static unsigned long clk_pllv4_recalc_rate(struct clk_hw *hw,
 	return (parent_rate * mult) + (u32)temp64;
 }
 
-static int clk_pllv4_determine_rate(struct clk_hw *hw,
-				    struct clk_rate_request *req)
+static long clk_pllv4_round_rate(struct clk_hw *hw, unsigned long rate,
+				 unsigned long *prate)
 {
 	struct clk_pllv4 *pll = to_clk_pllv4(hw);
-	unsigned long parent_rate = req->best_parent_rate;
+	unsigned long parent_rate = *prate;
 	unsigned long round_rate, i;
 	u32 mfn, mfd = DEFAULT_MFD;
 	bool found = false;
@@ -107,7 +107,7 @@ static int clk_pllv4_determine_rate(struct clk_hw *hw,
 	u32 mult;
 
 	if (pll->use_mult_range) {
-		temp64 = (u64) req->rate;
+		temp64 = (u64)rate;
 		do_div(temp64, parent_rate);
 		mult = temp64;
 		if (mult >= pllv4_mult_range[1] &&
@@ -118,7 +118,7 @@ static int clk_pllv4_determine_rate(struct clk_hw *hw,
 	} else {
 		for (i = 0; i < ARRAY_SIZE(pllv4_mult_table); i++) {
 			round_rate = parent_rate * pllv4_mult_table[i];
-			if (req->rate >= round_rate) {
+			if (rate >= round_rate) {
 				found = true;
 				break;
 			}
@@ -127,16 +127,14 @@ static int clk_pllv4_determine_rate(struct clk_hw *hw,
 
 	if (!found) {
 		pr_warn("%s: unable to round rate %lu, parent rate %lu\n",
-			clk_hw_get_name(hw), req->rate, parent_rate);
-		req->rate = 0;
-
+			clk_hw_get_name(hw), rate, parent_rate);
 		return 0;
 	}
 
 	if (parent_rate <= MAX_MFD)
 		mfd = parent_rate;
 
-	temp64 = (u64)(req->rate - round_rate);
+	temp64 = (u64)(rate - round_rate);
 	temp64 *= mfd;
 	do_div(temp64, parent_rate);
 	mfn = temp64;
@@ -147,19 +145,14 @@ static int clk_pllv4_determine_rate(struct clk_hw *hw,
 	 * pair of mfn/mfd, we simply return the round_rate without using
 	 * the frac part.
 	 */
-	if (mfn >= mfd) {
-		req->rate = round_rate;
-
-		return 0;
-	}
+	if (mfn >= mfd)
+		return round_rate;
 
 	temp64 = (u64)parent_rate;
 	temp64 *= mfn;
 	do_div(temp64, mfd);
 
-	req->rate = round_rate + (u32)temp64;
-
-	return 0;
+	return round_rate + (u32)temp64;
 }
 
 static bool clk_pllv4_is_valid_mult(struct clk_pllv4 *pll, unsigned int mult)
@@ -236,7 +229,7 @@ static void clk_pllv4_unprepare(struct clk_hw *hw)
 
 static const struct clk_ops clk_pllv4_ops = {
 	.recalc_rate	= clk_pllv4_recalc_rate,
-	.determine_rate = clk_pllv4_determine_rate,
+	.round_rate	= clk_pllv4_round_rate,
 	.set_rate	= clk_pllv4_set_rate,
 	.prepare	= clk_pllv4_prepare,
 	.unprepare	= clk_pllv4_unprepare,

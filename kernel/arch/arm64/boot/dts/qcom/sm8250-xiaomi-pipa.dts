@@ -554,11 +554,6 @@
 	};
 };
 
-&pon {
-	mode-bootloader = <0x2>;
-	mode-recovery = <0x1>;
-};
-
 &pon_pwrkey {
 	status = "okay";
 };

@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
----
+
 name: tc
 protocol: netlink-raw
-uapi-header: linux/pkt_cls.h
 protonum: 0
 
 doc:
@@ -13,7 +12,6 @@ definitions:
   -
     name: tcmsg
     type: struct
-    header: linux/rtnetlink.h
     members:
       -
         name: family
@@ -35,8 +33,7 @@ definitions:
         name: info
         type: u32
   -
-    name: cls-flags
-    enum-name:
+    name: tc-cls-flags
     type: flags
     entries:
       - skip-hw
@@ -45,9 +42,7 @@ definitions:
       - not-in-nw
       - verbose
   -
-    name: flower-key-ctrl-flags
-    name-prefix: tca-flower-key-flags-
-    enum-name:
+    name: tc-flower-key-ctrl-flags
     type: flags
     entries:
       - frag
@@ -56,23 +51,6 @@ definitions:
       - tundf
       - tunoam
       - tuncrit
-  -
-    name: dualpi2-drop-overload
-    type: enum
-    entries: [overflow, drop]
-  -
-    name: dualpi2-drop-early
-    type: enum
-    entries: [drop-dequeue, drop-enqueue]
-  -
-    name: dualpi2-ecn-mask
-    type: enum
-    value-start: 1
-    entries: [l4s-ect, cla-ect, any-ect]
-  -
-    name: dualpi2-split-gso
-    type: enum
-    entries: [no-split-gso, split-gso]
   -
     name: tc-stats
     type: struct
@@ -93,8 +71,7 @@ definitions:
         name: overlimits
         type: u32
         doc: |
-          Number of throttle events when this flow goes out of allocated
-          bandwidth
+          Number of throttle events when this flow goes out of allocated bandwidth
       -
         name: bps
         type: u32
@@ -645,7 +622,7 @@ definitions:
       -
         name: max-P
         type: u32
-        doc: probability, high resolution
+        doc: probabilty, high resolution
       -
         name: stats
         type: binary
@@ -653,7 +630,6 @@ definitions:
   -
     name: tc-ratespec
     type: struct
-    header: linux/pkt_sched.h
     members:
       -
         name: cell-log
@@ -769,9 +745,7 @@ definitions:
       -
         name: count
         type: u32
-        doc: |
-          How many drops we've done since the last time we entered dropping
-          state
+        doc: How many drops we've done since the last time we entered dropping state
       -
         name: lastcount
         type: u32
@@ -843,58 +817,6 @@ definitions:
         name: drop-overmemory
         type: u32
   -
-    name: tc-dualpi2-xstats
-    type: struct
-    members:
-      -
-        name: prob
-        type: u32
-        doc: Current base PI probability
-      -
-        name: delay-c
-        type: u32
-        doc: Current C-queue delay in microseconds
-      -
-        name: delay-l
-        type: u32
-        doc: Current L-queue delay in microseconds
-      -
-        name: pkts-in-c
-        type: u32
-        doc: Number of packets enqueued in the C-queue
-      -
-        name: pkts-in-l
-        type: u32
-        doc: Number of packets enqueued in the L-queue
-      -
-        name: maxq
-        type: u32
-        doc: Maximum number of packets seen by the DualPI2
-      -
-        name: ecn-mark
-        type: u32
-        doc: All packets marked with ECN
-      -
-        name: step-mark
-        type: u32
-        doc: Only packets marked with ECN due to L-queue step AQM
-      -
-        name: credit
-        type: s32
-        doc: Current credit value for WRR
-      -
-        name: memory-used
-        type: u32
-        doc: Memory used in bytes by the DualPI2
-      -
-        name: max-memory-used
-        type: u32
-        doc: Maximum memory used in bytes by the DualPI2
-      -
-        name: memory-limit
-        type: u32
-        doc: Memory limit in bytes
-  -
     name: tc-fq-pie-xstats
     type: struct
     members:
@@ -917,7 +839,7 @@ definitions:
       -
         name: ecn-mark
         type: u32
-        doc: Packets marked with ECN
+        doc: Packets marked with ecn
       -
         name: new-flow-count
         type: u32
@@ -1060,7 +982,7 @@ definitions:
       -
         name: ecn-mark
         type: u32
-        doc: Packets marked with ECN
+        doc: Packets marked with ecn
   -
     name: tc-red-xstats
     type: struct
@@ -1233,7 +1155,7 @@ definitions:
       -
         name: keys
         type: binary
-        struct: tc-u32-key  # TODO: array
+        struct: tc-u32-key # TODO: array
   -
     name: tc-u32-pcnt
     type: struct
@@ -1246,7 +1168,7 @@ definitions:
         type: u64
       -
         name: kcnts
-        type: u64  # TODO: array
+        type: u64 # TODO: array
   -
     name: tcf-t
     type: struct
@@ -1264,7 +1186,7 @@ definitions:
         name: firstuse
         type: u64
   -
-    name: tc-gact
+    name: tc-gen
     type: struct
     members:
       -
@@ -1408,7 +1330,7 @@ definitions:
       -
         name: keys
         type: binary
-        struct: tc-pedit-key  # TODO: array
+        struct: tc-pedit-key # TODO: array
   -
     name: tc-pedit-key
     type: struct
@@ -1455,8 +1377,7 @@ definitions:
         type: s32
 attribute-sets:
   -
-    name: attrs
-    name-prefix: tca-
+    name: tc-attrs
     attributes:
       -
         name: kind
@@ -1464,7 +1385,7 @@ attribute-sets:
       -
         name: options
         type: sub-message
-        sub-message: options-msg
+        sub-message: tc-options-msg
         selector: kind
       -
         name: stats
@@ -1515,8 +1436,7 @@ attribute-sets:
         name: ext-warn-msg
         type: string
   -
-    name: act-attrs
-    name-prefix: tca-act-
+    name: tc-act-attrs
     attributes:
       -
         name: kind
@@ -1524,7 +1444,7 @@ attribute-sets:
       -
         name: options
         type: sub-message
-        sub-message: act-options-msg
+        sub-message: tc-act-options-msg
         selector: kind
       -
         name: index
@@ -1532,7 +1452,7 @@ attribute-sets:
       -
         name: stats
         type: nest
-        nested-attributes: tca-stats-attrs
+        nested-attributes: tc-act-stats-attrs
       -
         name: pad
         type: pad
@@ -1552,9 +1472,39 @@ attribute-sets:
         name: in-hw-count
         type: u32
   -
-    name: act-bpf-attrs
-    name-prefix: tca-act-bpf-
-    header: linux/tc_act/tc_bpf.h
+    name: tc-act-stats-attrs
+    attributes:
+      -
+        name: basic
+        type: binary
+        struct: gnet-stats-basic
+      -
+        name: rate-est
+        type: binary
+        struct: gnet-stats-rate-est
+      -
+        name: queue
+        type: binary
+        struct: gnet-stats-queue
+      -
+        name: app
+        type: binary
+      -
+        name: rate-est64
+        type: binary
+        struct: gnet-stats-rate-est64
+      -
+        name: pad
+        type: pad
+      -
+        name: basic-hw
+        type: binary
+        struct: gnet-stats-basic
+      -
+        name: pkt64
+        type: u64
+  -
+    name: tc-act-bpf-attrs
     attributes:
       -
         name: tm
@@ -1585,9 +1535,7 @@ attribute-sets:
         name: id
         type: binary
   -
-    name: act-connmark-attrs
-    name-prefix: tca-connmark-
-    header: linux/tc_act/tc_connmark.h
+    name: tc-act-connmark-attrs
     attributes:
       -
         name: parms
@@ -1600,9 +1548,7 @@ attribute-sets:
         name: pad
         type: pad
   -
-    name: act-csum-attrs
-    name-prefix: tca-csum-
-    header: linux/tc_act/tc_csum.h
+    name: tc-act-csum-attrs
     attributes:
       -
         name: parms
@@ -1615,9 +1561,7 @@ attribute-sets:
         name: pad
         type: pad
   -
-    name: act-ct-attrs
-    name-prefix: tca-ct-
-    header: linux/tc_act/tc_ct.h
+    name: tc-act-ct-attrs
     attributes:
       -
         name: parms
@@ -1679,9 +1623,7 @@ attribute-sets:
         name: helper-proto
         type: u8
   -
-    name: act-ctinfo-attrs
-    name-prefix: tca-ctinfo-
-    header: linux/tc_act/tc_ctinfo.h
+    name: tc-act-ctinfo-attrs
     attributes:
       -
         name: pad
@@ -1715,9 +1657,7 @@ attribute-sets:
         name: stats-cpmark-set
         type: u64
   -
-    name: act-gate-attrs
-    name-prefix: tca-gate-
-    header: linux/tc_act/tc_gate.h
+    name: tc-act-gate-attrs
     attributes:
       -
         name: tm
@@ -1751,9 +1691,7 @@ attribute-sets:
         name: clockid
         type: s32
   -
-    name: act-ife-attrs
-    name-prefix: tca-ife-
-    header: linux/tc_act/tc_ife.h
+    name: tc-act-ife-attrs
     attributes:
       -
         name: parms
@@ -1778,9 +1716,7 @@ attribute-sets:
         name: pad
         type: pad
   -
-    name: act-mirred-attrs
-    name-prefix: tca-mirred-
-    header: linux/tc_act/tc_mirred.h
+    name: tc-act-mirred-attrs
     attributes:
       -
         name: tm
@@ -1796,9 +1732,7 @@ attribute-sets:
         name: blockid
         type: binary
   -
-    name: act-mpls-attrs
-    name-prefix: tca-mpls-
-    header: linux/tc_act/tc_mpls.h
+    name: tc-act-mpls-attrs
     attributes:
       -
         name: tm
@@ -1828,9 +1762,7 @@ attribute-sets:
         name: bos
         type: u8
   -
-    name: act-nat-attrs
-    name-prefix: tca-nat-
-    header: linux/tc_act/tc_nat.h
+    name: tc-act-nat-attrs
     attributes:
       -
         name: parms
@@ -1843,9 +1775,7 @@ attribute-sets:
         name: pad
         type: pad
   -
-    name: act-pedit-attrs
-    name-prefix: tca-pedit-
-    header: linux/tc_act/tc_pedit.h
+    name: tc-act-pedit-attrs
     attributes:
       -
         name: tm
@@ -1868,9 +1798,45 @@ attribute-sets:
         name: key-ex
         type: binary
   -
-    name: act-simple-attrs
-    name-prefix: tca-def-
-    header: linux/tc_act/tc_defact.h
+    name: tc-act-police-attrs
+    attributes:
+      -
+        name: tbf
+        type: binary
+        struct: tc-police
+      -
+        name: rate
+        type: binary # TODO
+      -
+        name: peakrate
+        type: binary # TODO
+      -
+        name: avrate
+        type: u32
+      -
+        name: result
+        type: u32
+      -
+        name: tm
+        type: binary
+        struct: tcf-t
+      -
+        name: pad
+        type: pad
+      -
+        name: rate64
+        type: u64
+      -
+        name: peakrate64
+        type: u64
+      -
+        name: pktrate64
+        type: u64
+      -
+        name: pktburst64
+        type: u64
+  -
+    name: tc-act-simple-attrs
     attributes:
       -
         name: tm
@@ -1886,9 +1852,7 @@ attribute-sets:
         name: pad
         type: pad
   -
-    name: act-skbedit-attrs
-    name-prefix: tca-skbedit-
-    header: linux/tc_act/tc_skbedit.h
+    name: tc-act-skbedit-attrs
     attributes:
       -
         name: tm
@@ -1922,9 +1886,7 @@ attribute-sets:
         name: queue-mapping-max
         type: u16
   -
-    name: act-skbmod-attrs
-    name-prefix: tca-skbmod-
-    header: linux/tc_act/tc_skbmod.h
+    name: tc-act-skbmod-attrs
     attributes:
       -
         name: tm
@@ -1946,9 +1908,7 @@ attribute-sets:
         name: pad
         type: pad
   -
-    name: act-tunnel-key-attrs
-    name-prefix: tca-tunnel-key-
-    header: linux/tc_act/tc_tunnel_key.h
+    name: tc-act-tunnel-key-attrs
     attributes:
       -
         name: tm
@@ -1998,9 +1958,7 @@ attribute-sets:
         name: no-frag
         type: flag
   -
-    name: act-vlan-attrs
-    name-prefix: tca-vlan-
-    header: linux/tc_act/tc_vlan.h
+    name: tc-act-vlan-attrs
     attributes:
       -
         name: tm
@@ -2029,8 +1987,7 @@ attribute-sets:
         name: push-eth-src
         type: binary
   -
-    name: basic-attrs
-    name-prefix: tca-basic-
+    name: tc-basic-attrs
     attributes:
       -
         name: classid
@@ -2038,16 +1995,16 @@ attribute-sets:
       -
         name: ematches
         type: nest
-        nested-attributes: ematch-attrs
+        nested-attributes: tc-ematch-attrs
       -
         name: act
         type: indexed-array
         sub-type: nest
-        nested-attributes: act-attrs
+        nested-attributes: tc-act-attrs
       -
         name: police
         type: nest
-        nested-attributes: police-attrs
+        nested-attributes: tc-police-attrs
       -
         name: pcnt
         type: binary
@@ -2056,18 +2013,17 @@ attribute-sets:
         name: pad
         type: pad
   -
-    name: bpf-attrs
-    name-prefix: tca-bpf-
+    name: tc-bpf-attrs
     attributes:
       -
         name: act
         type: indexed-array
         sub-type: nest
-        nested-attributes: act-attrs
+        nested-attributes: tc-act-attrs
       -
         name: police
         type: nest
-        nested-attributes: police-attrs
+        nested-attributes: tc-police-attrs
       -
         name: classid
         type: u32
@@ -2096,8 +2052,7 @@ attribute-sets:
         name: id
         type: u32
   -
-    name: cake-attrs
-    name-prefix: tca-cake-
+    name: tc-cake-attrs
     attributes:
       -
         name: pad
@@ -2154,8 +2109,7 @@ attribute-sets:
         name: fwmark
         type: u32
   -
-    name: cake-stats-attrs
-    name-prefix: tca-cake-stats-
+    name: tc-cake-stats-attrs
     attributes:
       -
         name: pad
@@ -2188,7 +2142,7 @@ attribute-sets:
         name: tin-stats
         type: indexed-array
         sub-type: nest
-        nested-attributes: cake-tin-stats-attrs
+        nested-attributes: tc-cake-tin-stats-attrs
       -
         name: deficit
         type: s32
@@ -2208,8 +2162,7 @@ attribute-sets:
         name: blue-timer-us
         type: s32
   -
-    name: cake-tin-stats-attrs
-    name-prefix: tca-cake-tin-stats-
+    name: tc-cake-tin-stats-attrs
     attributes:
       -
         name: pad
@@ -2287,32 +2240,29 @@ attribute-sets:
         name: flow-quantum
         type: u32
   -
-    name: cbs-attrs
-    name-prefix: tca-cbs-
+    name: tc-cbs-attrs
     attributes:
       -
         name: parms
         type: binary
         struct: tc-cbs-qopt
   -
-    name: cgroup-attrs
-    name-prefix: tca-cgroup-
+    name: tc-cgroup-attrs
     attributes:
       -
         name: act
         type: indexed-array
         sub-type: nest
-        nested-attributes: act-attrs
+        nested-attributes: tc-act-attrs
       -
         name: police
         type: nest
-        nested-attributes: police-attrs
+        nested-attributes: tc-police-attrs
       -
         name: ematches
         type: binary
   -
-    name: choke-attrs
-    name-prefix: tca-choke-
+    name: tc-choke-attrs
     attributes:
       -
         name: parms
@@ -2328,8 +2278,7 @@ attribute-sets:
         name: max-p
         type: u32
   -
-    name: codel-attrs
-    name-prefix: tca-codel-
+    name: tc-codel-attrs
     attributes:
       -
         name: target
@@ -2347,88 +2296,13 @@ attribute-sets:
         name: ce-threshold
         type: u32
   -
-    name: drr-attrs
-    name-prefix: tca-drr-
+    name: tc-drr-attrs
     attributes:
       -
         name: quantum
         type: u32
   -
-    name: dualpi2-attrs
-    name-prefix: tca-dualpi2-
-    attributes:
-      -
-        name: limit
-        type: u32
-        doc: Limit of total number of packets in queue
-      -
-        name: memory-limit
-        type: u32
-        doc: Memory limit of total number of packets in queue
-      -
-        name: target
-        type: u32
-        doc: Classic target delay in microseconds
-      -
-        name: tupdate
-        type: u32
-        doc: Drop probability update interval time in microseconds
-      -
-        name: alpha
-        type: u32
-        doc: Integral gain factor in Hz for PI controller
-      -
-        name: beta
-        type: u32
-        doc: Proportional gain factor in Hz for PI controller
-      -
-        name: step-thresh-pkts
-        type: u32
-        doc: L4S step marking threshold in packets
-      -
-        name: step-thresh-us
-        type: u32
-        doc: L4S Step marking threshold in microseconds
-      -
-        name: min-qlen-step
-        type: u32
-        doc: Packets enqueued to the L-queue can apply the step threshold
-             when the queue length of L-queue is larger than this value.
-             (0 is recommended)
-      -
-        name: coupling
-        type: u8
-        doc: Probability coupling factor between Classic and L4S
-             (2 is recommended)
-      -
-        name: drop-overload
-        type: u8
-        doc: Control the overload strategy (drop to preserve latency or
-             let the queue overflow)
-        enum: dualpi2-drop-overload
-      -
-        name: drop-early
-        type: u8
-        doc: Decide where the Classic packets are PI-based dropped or marked
-        enum: dualpi2-drop-early
-      -
-        name: c-protection
-        type: u8
-        doc: Classic WRR weight in percentage (from 0 to 100)
-      -
-        name: ecn-mask
-        type: u8
-        doc: Configure the L-queue ECN classifier
-        enum: dualpi2-ecn-mask
-      -
-        name: split-gso
-        type: u8
-        doc: Split aggregated skb or not
-        enum: dualpi2-split-gso
-  -
-    name: ematch-attrs
-    name-prefix: tca-ematch-
-    attr-max-name: tca-ematch-tree-max
+    name: tc-ematch-attrs
     attributes:
       -
         name: tree-hdr
@@ -2438,8 +2312,7 @@ attribute-sets:
         name: tree-list
         type: binary
   -
-    name: flow-attrs
-    name-prefix: tca-flow-
+    name: tc-flow-attrs
     attributes:
       -
         name: keys
@@ -2471,7 +2344,7 @@ attribute-sets:
       -
         name: police
         type: nest
-        nested-attributes: police-attrs
+        nested-attributes: tc-police-attrs
       -
         name: ematches
         type: binary
@@ -2479,8 +2352,7 @@ attribute-sets:
         name: perturb
         type: u32
   -
-    name: flower-attrs
-    name-prefix: tca-flower-
+    name: tc-flower-attrs
     attributes:
       -
         name: classid
@@ -2492,7 +2364,7 @@ attribute-sets:
         name: act
         type: indexed-array
         sub-type: nest
-        nested-attributes: act-attrs
+        nested-attributes: tc-act-attrs
       -
         name: key-eth-dst
         type: binary
@@ -2571,7 +2443,7 @@ attribute-sets:
       -
         name: flags
         type: u32
-        enum: cls-flags
+        enum: tc-cls-flags
         enum-as-flags: true
       -
         name: key-vlan-id
@@ -2676,13 +2548,13 @@ attribute-sets:
         name: key-flags
         type: u32
         byte-order: big-endian
-        enum: flower-key-ctrl-flags
+        enum: tc-flower-key-ctrl-flags
         enum-as-flags: true
       -
         name: key-flags-mask
         type: u32
         byte-order: big-endian
-        enum: flower-key-ctrl-flags
+        enum: tc-flower-key-ctrl-flags
         enum-as-flags: true
       -
         name: key-icmpv4-code
@@ -2805,11 +2677,11 @@ attribute-sets:
       -
         name: key-enc-opts
         type: nest
-        nested-attributes: flower-key-enc-opts-attrs
+        nested-attributes: tc-flower-key-enc-opts-attrs
       -
         name: key-enc-opts-mask
         type: nest
-        nested-attributes: flower-key-enc-opts-attrs
+        nested-attributes: tc-flower-key-enc-opts-attrs
       -
         name: in-hw-count
         type: u32
@@ -2856,7 +2728,7 @@ attribute-sets:
       -
         name: key-mpls-opts
         type: nest
-        nested-attributes: flower-key-mpls-opt-attrs
+        nested-attributes: tc-flower-key-mpls-opt-attrs
       -
         name: key-hash
         type: u32
@@ -2884,7 +2756,7 @@ attribute-sets:
       -
         name: key-cfm
         type: nest
-        nested-attributes: flower-key-cfm-attrs
+        nested-attributes: tc-flower-key-cfm-attrs
       -
         name: key-spi
         type: u32
@@ -2897,37 +2769,35 @@ attribute-sets:
         name: key-enc-flags
         type: u32
         byte-order: big-endian
-        enum: flower-key-ctrl-flags
+        enum: tc-flower-key-ctrl-flags
         enum-as-flags: true
       -
         name: key-enc-flags-mask
         type: u32
         byte-order: big-endian
-        enum: flower-key-ctrl-flags
+        enum: tc-flower-key-ctrl-flags
         enum-as-flags: true
   -
-    name: flower-key-enc-opts-attrs
-    name-prefix: tca-flower-key-enc-opts-
+    name: tc-flower-key-enc-opts-attrs
     attributes:
       -
         name: geneve
         type: nest
-        nested-attributes: flower-key-enc-opt-geneve-attrs
+        nested-attributes: tc-flower-key-enc-opt-geneve-attrs
       -
         name: vxlan
         type: nest
-        nested-attributes: flower-key-enc-opt-vxlan-attrs
+        nested-attributes: tc-flower-key-enc-opt-vxlan-attrs
       -
         name: erspan
         type: nest
-        nested-attributes: flower-key-enc-opt-erspan-attrs
+        nested-attributes: tc-flower-key-enc-opt-erspan-attrs
       -
         name: gtp
         type: nest
-        nested-attributes: flower-key-enc-opt-gtp-attrs
+        nested-attributes: tc-flower-key-enc-opt-gtp-attrs
   -
-    name: flower-key-enc-opt-geneve-attrs
-    name-prefix: tca-flower-key-enc-opt-geneve-
+    name: tc-flower-key-enc-opt-geneve-attrs
     attributes:
       -
         name: class
@@ -2939,15 +2809,13 @@ attribute-sets:
         name: data
         type: binary
   -
-    name: flower-key-enc-opt-vxlan-attrs
-    name-prefix: tca-flower-key-enc-opt-vxlan-
+    name: tc-flower-key-enc-opt-vxlan-attrs
     attributes:
       -
         name: gbp
         type: u32
   -
-    name: flower-key-enc-opt-erspan-attrs
-    name-prefix: tca-flower-key-enc-opt-erspan-
+    name: tc-flower-key-enc-opt-erspan-attrs
     attributes:
       -
         name: ver
@@ -2962,8 +2830,7 @@ attribute-sets:
         name: hwid
         type: u8
   -
-    name: flower-key-enc-opt-gtp-attrs
-    name-prefix: tca-flower-key-enc-opt-gtp-
+    name: tc-flower-key-enc-opt-gtp-attrs
     attributes:
       -
         name: pdu-type
@@ -2972,9 +2839,7 @@ attribute-sets:
         name: qfi
         type: u8
   -
-    name: flower-key-mpls-opt-attrs
-    name-prefix: tca-flower-key-mpls-opt-
-    attr-max-name: tca-flower-key-mpls-opt-lse-max
+    name: tc-flower-key-mpls-opt-attrs
     attributes:
       -
         name: lse-depth
@@ -2992,8 +2857,7 @@ attribute-sets:
         name: lse-label
         type: u32
   -
-    name: flower-key-cfm-attrs
-    name-prefix: tca-flower-key-cfm-
+    name: tc-flower-key-cfm-attrs
     attributes:
       -
         name: md-level
@@ -3002,8 +2866,7 @@ attribute-sets:
         name: opcode
         type: u8
   -
-    name: fw-attrs
-    name-prefix: tca-fw-
+    name: tc-fw-attrs
     attributes:
       -
         name: classid
@@ -3011,7 +2874,7 @@ attribute-sets:
       -
         name: police
         type: nest
-        nested-attributes: police-attrs
+        nested-attributes: tc-police-attrs
       -
         name: indev
         type: string
@@ -3019,17 +2882,16 @@ attribute-sets:
         name: act
         type: indexed-array
         sub-type: nest
-        nested-attributes: act-attrs
+        nested-attributes: tc-act-attrs
       -
         name: mask
         type: u32
   -
-    name: gred-attrs
-    name-prefix: tca-gred-
+    name: tc-gred-attrs
     attributes:
       -
         name: parms
-        type: binary  # array of struct: tc-gred-qopt
+        type: binary # array of struct: tc-gred-qopt
       -
         name: stab
         type: binary
@@ -3051,7 +2913,6 @@ attribute-sets:
         nested-attributes: tca-gred-vq-list-attrs
   -
     name: tca-gred-vq-list-attrs
-    name-prefix: tca-gred-vq-
     attributes:
       -
         name: entry
@@ -3060,7 +2921,6 @@ attribute-sets:
         multi-attr: true
   -
     name: tca-gred-vq-entry-attrs
-    name-prefix: tca-gred-vq-
     attributes:
       -
         name: pad
@@ -3099,7 +2959,7 @@ attribute-sets:
         name: flags
         type: u32
   -
-    name: hfsc-attrs
+    name: tc-hfsc-attrs
     attributes:
       -
         name: rsc
@@ -3111,8 +2971,7 @@ attribute-sets:
         name: usc
         type: binary
   -
-    name: hhf-attrs
-    name-prefix: tca-hhf-
+    name: tc-hhf-attrs
     attributes:
       -
         name: backlog-limit
@@ -3136,8 +2995,7 @@ attribute-sets:
         name: non-hh-weight
         type: u32
   -
-    name: htb-attrs
-    name-prefix: tca-htb-
+    name: tc-htb-attrs
     attributes:
       -
         name: parms
@@ -3169,8 +3027,7 @@ attribute-sets:
         name: offload
         type: flag
   -
-    name: matchall-attrs
-    name-prefix: tca-matchall-
+    name: tc-matchall-attrs
     attributes:
       -
         name: classid
@@ -3179,7 +3036,7 @@ attribute-sets:
         name: act
         type: indexed-array
         sub-type: nest
-        nested-attributes: act-attrs
+        nested-attributes: tc-act-attrs
       -
         name: flags
         type: u32
@@ -3191,16 +3048,14 @@ attribute-sets:
         name: pad
         type: pad
   -
-    name: etf-attrs
-    name-prefix: tca-etf-
+    name: tc-etf-attrs
     attributes:
       -
         name: parms
         type: binary
         struct: tc-etf-qopt
   -
-    name: ets-attrs
-    name-prefix: tca-ets-
+    name: tc-ets-attrs
     attributes:
       -
         name: nbands
@@ -3211,7 +3066,7 @@ attribute-sets:
       -
         name: quanta
         type: nest
-        nested-attributes: ets-attrs
+        nested-attributes: tc-ets-attrs
       -
         name: quanta-band
         type: u32
@@ -3219,14 +3074,13 @@ attribute-sets:
       -
         name: priomap
         type: nest
-        nested-attributes: ets-attrs
+        nested-attributes: tc-ets-attrs
       -
         name: priomap-band
         type: u8
         multi-attr: true
   -
-    name: fq-attrs
-    name-prefix: tca-fq-
+    name: tc-fq-attrs
     attributes:
       -
         name: plimit
@@ -3297,8 +3151,7 @@ attribute-sets:
         sub-type: s32
         doc: Weights for each band
   -
-    name: fq-codel-attrs
-    name-prefix: tca-fq-codel-
+    name: tc-fq-codel-attrs
     attributes:
       -
         name: target
@@ -3334,8 +3187,7 @@ attribute-sets:
         name: ce-threshold-mask
         type: u8
   -
-    name: fq-pie-attrs
-    name-prefix: tca-fq-pie-
+    name: tc-fq-pie-attrs
     attributes:
       -
         name: limit
@@ -3374,8 +3226,7 @@ attribute-sets:
         name: dq-rate-estimator
         type: u32
   -
-    name: netem-attrs
-    name-prefix: tca-netem-
+    name: tc-netem-attrs
     attributes:
       -
         name: corr
@@ -3396,7 +3247,7 @@ attribute-sets:
       -
         name: loss
         type: nest
-        nested-attributes: netem-loss-attrs
+        nested-attributes: tc-netem-loss-attrs
       -
         name: rate
         type: binary
@@ -3428,8 +3279,7 @@ attribute-sets:
         name: prng-seed
         type: u64
   -
-    name: netem-loss-attrs
-    name-prefix: netem-loss-
+    name: tc-netem-loss-attrs
     attributes:
       -
         name: gi
@@ -3442,8 +3292,7 @@ attribute-sets:
         doc: Gilbert Elliot models
         struct: tc-netem-gemodel
   -
-    name: pie-attrs
-    name-prefix: tca-pie-
+    name: tc-pie-attrs
     attributes:
       -
         name: target
@@ -3470,8 +3319,7 @@ attribute-sets:
         name: dq-rate-estimator
         type: u32
   -
-    name: police-attrs
-    name-prefix: tca-police-
+    name: tc-police-attrs
     attributes:
       -
         name: tbf
@@ -3479,10 +3327,10 @@ attribute-sets:
         struct: tc-police
       -
         name: rate
-        type: binary  # TODO
+        type: binary
       -
         name: peakrate
-        type: binary  # TODO
+        type: binary
       -
         name: avrate
         type: u32
@@ -3509,8 +3357,7 @@ attribute-sets:
         name: pktburst64
         type: u64
   -
-    name: qfq-attrs
-    name-prefix: tca-qfq-
+    name: tc-qfq-attrs
     attributes:
       -
         name: weight
@@ -3519,8 +3366,7 @@ attribute-sets:
         name: lmax
         type: u32
   -
-    name: red-attrs
-    name-prefix: tca-red-
+    name: tc-red-attrs
     attributes:
       -
         name: parms
@@ -3542,8 +3388,7 @@ attribute-sets:
         name: mark-block
         type: u32
   -
-    name: route-attrs
-    name-prefix: tca-route4-
+    name: tc-route-attrs
     attributes:
       -
         name: classid
@@ -3560,15 +3405,14 @@ attribute-sets:
       -
         name: police
         type: nest
-        nested-attributes: police-attrs
+        nested-attributes: tc-police-attrs
       -
         name: act
         type: indexed-array
         sub-type: nest
-        nested-attributes: act-attrs
+        nested-attributes: tc-act-attrs
   -
-    name: taprio-attrs
-    name-prefix: tca-taprio-attr-
+    name: tc-taprio-attrs
     attributes:
       -
         name: priomap
@@ -3577,14 +3421,14 @@ attribute-sets:
       -
         name: sched-entry-list
         type: nest
-        nested-attributes: taprio-sched-entry-list
+        nested-attributes: tc-taprio-sched-entry-list
       -
         name: sched-base-time
         type: s64
       -
         name: sched-single-entry
         type: nest
-        nested-attributes: taprio-sched-entry
+        nested-attributes: tc-taprio-sched-entry
       -
         name: sched-clockid
         type: s32
@@ -3609,19 +3453,17 @@ attribute-sets:
       -
         name: tc-entry
         type: nest
-        nested-attributes: taprio-tc-entry-attrs
+        nested-attributes: tc-taprio-tc-entry-attrs
   -
-    name: taprio-sched-entry-list
-    name-prefix: tca-taprio-sched-
+    name: tc-taprio-sched-entry-list
     attributes:
       -
         name: entry
         type: nest
-        nested-attributes: taprio-sched-entry
+        nested-attributes: tc-taprio-sched-entry
         multi-attr: true
   -
-    name: taprio-sched-entry
-    name-prefix: tca-taprio-sched-entry-
+    name: tc-taprio-sched-entry
     attributes:
       -
         name: index
@@ -3636,8 +3478,7 @@ attribute-sets:
         name: interval
         type: u32
   -
-    name: taprio-tc-entry-attrs
-    name-prefix: tca-taprio-tc-entry-
+    name: tc-taprio-tc-entry-attrs
     attributes:
       -
         name: index
@@ -3649,8 +3490,7 @@ attribute-sets:
         name: fp
         type: u32
   -
-    name: tbf-attrs
-    name-prefix: tca-tbf-
+    name: tc-tbf-attrs
     attributes:
       -
         name: parms
@@ -3678,9 +3518,7 @@ attribute-sets:
         name: pad
         type: pad
   -
-    name: act-sample-attrs
-    name-prefix: tca-sample-
-    header: linux/tc_act/tc_sample.h
+    name: tc-act-sample-attrs
     attributes:
       -
         name: tm
@@ -3689,7 +3527,7 @@ attribute-sets:
       -
         name: parms
         type: binary
-        struct: tc-gact
+        struct: tc-gen
       -
         name: rate
         type: u32
@@ -3703,9 +3541,7 @@ attribute-sets:
         name: pad
         type: pad
   -
-    name: act-gact-attrs
-    name-prefix: tca-gact-
-    header: linux/tc_act/tc_gact.h
+    name: tc-act-gact-attrs
     attributes:
       -
         name: tm
@@ -3714,7 +3550,7 @@ attribute-sets:
       -
         name: parms
         type: binary
-        struct: tc-gact
+        struct: tc-gen
       -
         name: prob
         type: binary
@@ -3724,7 +3560,6 @@ attribute-sets:
         type: pad
   -
     name: tca-stab-attrs
-    name-prefix: tca-stab-
     attributes:
       -
         name: base
@@ -3735,8 +3570,6 @@ attribute-sets:
         type: binary
   -
     name: tca-stats-attrs
-    name-prefix: tca-stats-
-    header: linux/gen_stats.h
     attributes:
       -
         name: basic
@@ -3770,8 +3603,7 @@ attribute-sets:
         name: pkt64
         type: u64
   -
-    name: u32-attrs
-    name-prefix: tca-u32-
+    name: tc-u32-attrs
     attributes:
       -
         name: classid
@@ -3792,12 +3624,12 @@ attribute-sets:
       -
         name: police
         type: nest
-        nested-attributes: police-attrs
+        nested-attributes: tc-police-attrs
       -
         name: act
         type: indexed-array
         sub-type: nest
-        nested-attributes: act-attrs
+        nested-attributes: tc-act-attrs
       -
         name: indev
         type: string
@@ -3818,83 +3650,80 @@ attribute-sets:
 
 sub-messages:
   -
-    name: options-msg
+    name: tc-options-msg
     formats:
       -
         value: basic
-        attribute-set: basic-attrs
+        attribute-set: tc-basic-attrs
       -
         value: bpf
-        attribute-set: bpf-attrs
+        attribute-set: tc-bpf-attrs
       -
         value: bfifo
         fixed-header: tc-fifo-qopt
       -
         value: cake
-        attribute-set: cake-attrs
+        attribute-set: tc-cake-attrs
       -
         value: cbs
-        attribute-set: cbs-attrs
+        attribute-set: tc-cbs-attrs
       -
         value: cgroup
-        attribute-set: cgroup-attrs
+        attribute-set: tc-cgroup-attrs
       -
         value: choke
-        attribute-set: choke-attrs
+        attribute-set: tc-choke-attrs
       -
-        value: clsact  # no content
+        value: clsact # no content
       -
         value: codel
-        attribute-set: codel-attrs
+        attribute-set: tc-codel-attrs
       -
         value: drr
-        attribute-set: drr-attrs
-      -
-        value: dualpi2
-        attribute-set: dualpi2-attrs
+        attribute-set: tc-drr-attrs
       -
         value: etf
-        attribute-set: etf-attrs
+        attribute-set: tc-etf-attrs
       -
         value: ets
-        attribute-set: ets-attrs
+        attribute-set: tc-ets-attrs
       -
         value: flow
-        attribute-set: flow-attrs
+        attribute-set: tc-flow-attrs
       -
         value: flower
-        attribute-set: flower-attrs
+        attribute-set: tc-flower-attrs
       -
         value: fq
-        attribute-set: fq-attrs
+        attribute-set: tc-fq-attrs
       -
         value: fq_codel
-        attribute-set: fq-codel-attrs
+        attribute-set: tc-fq-codel-attrs
       -
         value: fq_pie
-        attribute-set: fq-pie-attrs
+        attribute-set: tc-fq-pie-attrs
       -
         value: fw
-        attribute-set: fw-attrs
+        attribute-set: tc-fw-attrs
       -
         value: gred
-        attribute-set: gred-attrs
+        attribute-set: tc-gred-attrs
       -
         value: hfsc
         fixed-header: tc-hfsc-qopt
       -
         value: hhf
-        attribute-set: hhf-attrs
+        attribute-set: tc-hhf-attrs
       -
         value: htb
-        attribute-set: htb-attrs
+        attribute-set: tc-htb-attrs
       -
-        value: ingress  # no content
+        value: ingress # no content
       -
         value: matchall
-        attribute-set: matchall-attrs
+        attribute-set: tc-matchall-attrs
       -
-        value: mq  # no content
+        value: mq # no content
       -
         value: mqprio
         fixed-header: tc-mqprio-qopt
@@ -3904,7 +3733,7 @@ sub-messages:
       -
         value: netem
         fixed-header: tc-netem-qopt
-        attribute-set: netem-attrs
+        attribute-set: tc-netem-attrs
       -
         value: pfifo
         fixed-header: tc-fifo-qopt
@@ -3916,7 +3745,7 @@ sub-messages:
         fixed-header: tc-fifo-qopt
       -
         value: pie
-        attribute-set: pie-attrs
+        attribute-set: tc-pie-attrs
       -
         value: plug
         fixed-header: tc-plug-qopt
@@ -3925,13 +3754,13 @@ sub-messages:
         fixed-header: tc-prio-qopt
       -
         value: qfq
-        attribute-set: qfq-attrs
+        attribute-set: tc-qfq-attrs
       -
         value: red
-        attribute-set: red-attrs
+        attribute-set: tc-red-attrs
       -
         value: route
-        attribute-set: route-attrs
+        attribute-set: tc-route-attrs
       -
         value: sfb
         fixed-header: tc-sfb-qopt
@@ -3940,88 +3769,85 @@ sub-messages:
         fixed-header: tc-sfq-qopt-v1
       -
         value: taprio
-        attribute-set: taprio-attrs
+        attribute-set: tc-taprio-attrs
       -
         value: tbf
-        attribute-set: tbf-attrs
+        attribute-set: tc-tbf-attrs
       -
         value: u32
-        attribute-set: u32-attrs
+        attribute-set: tc-u32-attrs
   -
-    name: act-options-msg
+    name: tc-act-options-msg
     formats:
       -
         value: bpf
-        attribute-set: act-bpf-attrs
+        attribute-set: tc-act-bpf-attrs
       -
         value: connmark
-        attribute-set: act-connmark-attrs
+        attribute-set: tc-act-connmark-attrs
       -
         value: csum
-        attribute-set: act-csum-attrs
+        attribute-set: tc-act-csum-attrs
       -
         value: ct
-        attribute-set: act-ct-attrs
+        attribute-set: tc-act-ct-attrs
       -
         value: ctinfo
-        attribute-set: act-ctinfo-attrs
+        attribute-set: tc-act-ctinfo-attrs
       -
         value: gact
-        attribute-set: act-gact-attrs
+        attribute-set: tc-act-gact-attrs
       -
         value: gate
-        attribute-set: act-gate-attrs
+        attribute-set: tc-act-gate-attrs
       -
         value: ife
-        attribute-set: act-ife-attrs
+        attribute-set: tc-act-ife-attrs
       -
         value: mirred
-        attribute-set: act-mirred-attrs
+        attribute-set: tc-act-mirred-attrs
       -
         value: mpls
-        attribute-set: act-mpls-attrs
+        attribute-set: tc-act-mpls-attrs
       -
         value: nat
-        attribute-set: act-nat-attrs
+        attribute-set: tc-act-nat-attrs
       -
         value: pedit
-        attribute-set: act-pedit-attrs
+        attribute-set: tc-act-pedit-attrs
       -
         value: police
-        attribute-set: police-attrs
+        attribute-set: tc-act-police-attrs
       -
         value: sample
-        attribute-set: act-sample-attrs
+        attribute-set: tc-act-sample-attrs
       -
         value: simple
-        attribute-set: act-simple-attrs
+        attribute-set: tc-act-simple-attrs
       -
         value: skbedit
-        attribute-set: act-skbedit-attrs
+        attribute-set: tc-act-skbedit-attrs
       -
         value: skbmod
-        attribute-set: act-skbmod-attrs
+        attribute-set: tc-act-skbmod-attrs
       -
         value: tunnel_key
-        attribute-set: act-tunnel-key-attrs
+        attribute-set: tc-act-tunnel-key-attrs
       -
         value: vlan
-        attribute-set: act-vlan-attrs
+        attribute-set: tc-act-vlan-attrs
   -
     name: tca-stats-app-msg
     formats:
       -
         value: cake
-        attribute-set: cake-stats-attrs
+        attribute-set: tc-cake-stats-attrs
       -
         value: choke
         fixed-header: tc-choke-xstats
       -
         value: codel
         fixed-header: tc-codel-xstats
-      -
-        value: dualpi2
-        fixed-header: tc-dualpi2-xstats
       -
         value: fq
         fixed-header: tc-fq-qd-stats
@@ -4049,12 +3875,11 @@ sub-messages:
 
 operations:
   enum-model: directional
-  name-prefix: rtm-
   list:
     -
       name: newqdisc
       doc: Create new tc qdisc.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
       do:
         request:
@@ -4069,7 +3894,7 @@ operations:
     -
       name: delqdisc
       doc: Delete existing tc qdisc.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
       do:
         request:
@@ -4077,9 +3902,9 @@ operations:
     -
       name: getqdisc
       doc: Get / dump tc qdisc information.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
-      do: &getqdisc-do
+      do:
         request:
           value: 38
           attributes:
@@ -4098,11 +3923,10 @@ operations:
             - chain
             - ingress-block
             - egress-block
-      dump: *getqdisc-do
     -
       name: newtclass
       doc: Get / dump tc traffic class information.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
       do:
         request:
@@ -4111,7 +3935,7 @@ operations:
     -
       name: deltclass
       doc: Get / dump tc traffic class information.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
       do:
         request:
@@ -4119,7 +3943,7 @@ operations:
     -
       name: gettclass
       doc: Get / dump tc traffic class information.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
       do:
         request:
@@ -4130,7 +3954,7 @@ operations:
     -
       name: newtfilter
       doc: Get / dump tc filter information.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
       do:
         request:
@@ -4139,7 +3963,7 @@ operations:
     -
       name: deltfilter
       doc: Get / dump tc filter information.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
       do:
         request:
@@ -4150,7 +3974,7 @@ operations:
     -
       name: gettfilter
       doc: Get / dump tc filter information.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
       do:
         request:
@@ -4173,7 +3997,7 @@ operations:
     -
       name: newchain
       doc: Get / dump tc chain information.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
       do:
         request:
@@ -4182,7 +4006,7 @@ operations:
     -
       name: delchain
       doc: Get / dump tc chain information.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
       do:
         request:
@@ -4192,7 +4016,7 @@ operations:
     -
       name: getchain
       doc: Get / dump tc chain information.
-      attribute-set: attrs
+      attribute-set: tc-attrs
       fixed-header: tcmsg
       do:
         request:

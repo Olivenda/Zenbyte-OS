@@ -54,10 +54,6 @@ properties:
               - fsl,imx8qm-mu
               - fsl,imx8qxp-mu
           - const: fsl,imx6sx-mu
-      - items:
-          - enum:
-              - fsl,imx94-mu
-          - const: fsl,imx95-mu
 
   reg:
     maxItems: 1
@@ -146,8 +142,7 @@ allOf:
       not:
         properties:
           compatible:
-            contains:
-              const: fsl,imx95-mu
+            const: fsl,imx95-mu
     then:
       patternProperties:
         "^sram@[a-f0-9]+": false

@@ -74,19 +74,24 @@ int dyn_event_release(const char *raw_command, struct dyn_event_operations *type
 	struct dyn_event *pos, *n;
 	char *system = NULL, *event, *p;
 	int argc, ret = -ENOENT;
-	char **argv __free(argv_free) = argv_split(GFP_KERNEL, raw_command, &argc);
+	char **argv;
 
+	argv = argv_split(GFP_KERNEL, raw_command, &argc);
 	if (!argv)
 		return -ENOMEM;
 
 	if (argv[0][0] == '-') {
-		if (argv[0][1] != ':')
-			return -EINVAL;
+		if (argv[0][1] != ':') {
+			ret = -EINVAL;
+			goto out;
+		}
 		event = &argv[0][2];
 	} else {
 		event = strchr(argv[0], ':');
-		if (!event)
-			return -EINVAL;
+		if (!event) {
+			ret = -EINVAL;
+			goto out;
+		}
 		event++;
 	}
 
@@ -96,8 +101,10 @@ int dyn_event_release(const char *raw_command, struct dyn_event_operations *type
 		event = p + 1;
 		*p = '\0';
 	}
-	if (!system && event[0] == '\0')
-		return -EINVAL;
+	if (!system && event[0] == '\0') {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	mutex_lock(&event_mutex);
 	for_each_dyn_event_safe(pos, n) {
@@ -113,6 +120,8 @@ int dyn_event_release(const char *raw_command, struct dyn_event_operations *type
 	}
 	tracing_reset_all_online_cpus();
 	mutex_unlock(&event_mutex);
+out:
+	argv_free(argv);
 	return ret;
 }
 

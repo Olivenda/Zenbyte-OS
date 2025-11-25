@@ -47,8 +47,6 @@ properties:
       - const: core
       - const: reg
 
-  dma-coherent: true
-
 required:
   - reg
   - interrupts

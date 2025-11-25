@@ -58,7 +58,7 @@ struct hsc_data {
 	s32 p_offset_dec;
 	struct {
 		__be16 chan[2];
-		aligned_s64 timestamp;
+		s64 timestamp __aligned(8);
 	} scan;
 	u8 buffer[HSC_REG_MEASUREMENT_RD_SIZE] __aligned(IIO_DMA_MINALIGN);
 };

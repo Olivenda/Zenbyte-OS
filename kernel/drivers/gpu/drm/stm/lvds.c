@@ -934,27 +934,28 @@ static const struct drm_connector_funcs lvds_conn_funcs = {
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 };
 
-static int lvds_attach(struct drm_bridge *bridge, struct drm_encoder *encoder,
+static int lvds_attach(struct drm_bridge *bridge,
 		       enum drm_bridge_attach_flags flags)
 {
 	struct stm_lvds *lvds = bridge_to_stm_lvds(bridge);
 	struct drm_connector *connector = &lvds->connector;
+	struct drm_encoder *encoder = bridge->encoder;
 	int ret;
 
-	if (!encoder) {
+	if (!bridge->encoder) {
 		drm_err(bridge->dev, "Parent encoder object not found\n");
 		return -ENODEV;
 	}
 
 	/* Set the encoder type as caller does not know it */
-	encoder->encoder_type = DRM_MODE_ENCODER_LVDS;
+	bridge->encoder->encoder_type = DRM_MODE_ENCODER_LVDS;
 
 	/* No cloning support */
-	encoder->possible_clones = 0;
+	bridge->encoder->possible_clones = 0;
 
 	/* If we have a next bridge just attach it. */
 	if (lvds->next_bridge)
-		return drm_bridge_attach(encoder, lvds->next_bridge,
+		return drm_bridge_attach(bridge->encoder, lvds->next_bridge,
 					 bridge, flags);
 
 	if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR) {
@@ -979,8 +980,9 @@ static int lvds_attach(struct drm_bridge *bridge, struct drm_encoder *encoder,
 }
 
 static void lvds_atomic_enable(struct drm_bridge *bridge,
-			       struct drm_atomic_state *state)
+			       struct drm_bridge_state *old_bridge_state)
 {
+	struct drm_atomic_state *state = old_bridge_state->base.state;
 	struct stm_lvds *lvds = bridge_to_stm_lvds(bridge);
 	struct drm_connector_state *conn_state;
 	struct drm_connector *connector;
@@ -1015,7 +1017,7 @@ static void lvds_atomic_enable(struct drm_bridge *bridge,
 }
 
 static void lvds_atomic_disable(struct drm_bridge *bridge,
-				struct drm_atomic_state *state)
+				struct drm_bridge_state *old_bridge_state)
 {
 	struct stm_lvds *lvds = bridge_to_stm_lvds(bridge);
 
@@ -1049,9 +1051,9 @@ static int lvds_probe(struct platform_device *pdev)
 
 	dev_dbg(dev, "Probing LVDS driver...\n");
 
-	lvds = devm_drm_bridge_alloc(dev, struct stm_lvds, lvds_bridge, &lvds_bridge_funcs);
-	if (IS_ERR(lvds))
-		return PTR_ERR(lvds);
+	lvds = devm_kzalloc(dev, sizeof(*lvds), GFP_KERNEL);
+	if (!lvds)
+		return -ENOMEM;
 
 	lvds->dev = dev;
 
@@ -1164,6 +1166,7 @@ static int lvds_probe(struct platform_device *pdev)
 		goto err_lvds_probe;
 	}
 
+	lvds->lvds_bridge.funcs = &lvds_bridge_funcs;
 	lvds->lvds_bridge.of_node = dev->of_node;
 	lvds->hw_version = lvds_read(lvds, LVDS_VERR);
 

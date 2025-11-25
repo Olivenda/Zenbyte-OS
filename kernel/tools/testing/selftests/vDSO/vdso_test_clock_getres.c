@@ -13,6 +13,7 @@
 
 #define _GNU_SOURCE
 #include <elf.h>
+#include <err.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>

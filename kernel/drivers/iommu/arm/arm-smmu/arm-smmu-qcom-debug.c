@@ -73,7 +73,7 @@ void qcom_smmu_tlb_sync_debug(struct arm_smmu_device *smmu)
 	if (__ratelimit(&rs)) {
 		dev_err(smmu->dev, "TLB sync timed out -- SMMU may be deadlocked\n");
 
-		cfg = qsmmu->data->cfg;
+		cfg = qsmmu->cfg;
 		if (!cfg)
 			return;
 
@@ -406,12 +406,6 @@ irqreturn_t qcom_smmu_context_fault(int irq, void *dev)
 			arm_smmu_print_context_fault_info(smmu, idx, &cfi);
 
 		arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_FSR, cfi.fsr);
-
-		if (cfi.fsr & ARM_SMMU_CB_FSR_SS) {
-			arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_RESUME,
-					  ret == -EAGAIN ? 0 : ARM_SMMU_RESUME_TERMINATE);
-		}
-
 		return IRQ_HANDLED;
 	}
 
@@ -422,9 +416,6 @@ irqreturn_t qcom_smmu_context_fault(int irq, void *dev)
 	if (!tmp || tmp == -EBUSY) {
 		ret = IRQ_HANDLED;
 		resume = ARM_SMMU_RESUME_TERMINATE;
-	} else if (tmp == -EAGAIN) {
-		ret = IRQ_HANDLED;
-		resume = 0;
 	} else {
 		phys_addr_t phys_atos = qcom_smmu_verify_fault(smmu_domain, cfi.iova, cfi.fsr);
 

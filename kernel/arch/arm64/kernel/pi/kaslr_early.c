@@ -18,6 +18,8 @@
 
 #include "pi.h"
 
+extern u16 memstart_offset_seed;
+
 static u64 __init get_kaslr_seed(void *fdt, int node)
 {
 	static char const seed_str[] __initconst = "kaslr-seed";
@@ -50,6 +52,8 @@ u64 __init kaslr_early_init(void *fdt, int chosen)
 		    !__arm64_rndr((unsigned long *)&seed))
 			return 0;
 	}
+
+	memstart_offset_seed = seed & U16_MAX;
 
 	/*
 	 * OK, so we are proceeding with KASLR enabled. Calculate a suitable

@@ -26,6 +26,7 @@
 
 #define DRIVER_NAME "gma500"
 #define DRIVER_DESC "DRM driver for the Intel GMA500, GMA600, GMA3600, GMA3650"
+#define DRIVER_DATE "20140314"
 
 #define DRIVER_MAJOR 1
 #define DRIVER_MINOR 0
@@ -182,9 +183,6 @@
 #define KSEL_BYPASS_19 5
 #define KSEL_BYPASS_25 6
 #define KSEL_BYPASS_83_100 7
-
-struct drm_fb_helper;
-struct drm_fb_helper_surface_size;
 
 struct opregion_header;
 struct opregion_acpi;
@@ -594,19 +592,15 @@ extern void psb_modeset_cleanup(struct drm_device *dev);
 
 /* framebuffer */
 struct drm_framebuffer *psb_framebuffer_create(struct drm_device *dev,
-					       const struct drm_format_info *info,
 					       const struct drm_mode_fb_cmd2 *mode_cmd,
 					       struct drm_gem_object *obj);
 
 /* fbdev */
 #if defined(CONFIG_DRM_FBDEV_EMULATION)
-int psb_fbdev_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
-				 struct drm_fb_helper_surface_size *sizes);
-#define PSB_FBDEV_DRIVER_OPS \
-	.fbdev_probe = psb_fbdev_driver_fbdev_probe
+void psb_fbdev_setup(struct drm_psb_private *dev_priv);
 #else
-#define PSB_FBDEV_DRIVER_OPS \
-	.fbdev_probe = NULL
+static inline void psb_fbdev_setup(struct drm_psb_private *dev_priv)
+{ }
 #endif
 
 /* backlight.c */

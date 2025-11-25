@@ -13,7 +13,7 @@
 
 #include <asm/thread_info.h>
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/thread_info.h>
 

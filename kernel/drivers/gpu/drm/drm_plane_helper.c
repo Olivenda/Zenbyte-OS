@@ -23,7 +23,6 @@
  * SOFTWARE.
  */
 
-#include <linux/export.h>
 #include <linux/list.h>
 
 #include <drm/drm_atomic.h>

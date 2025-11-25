@@ -37,7 +37,6 @@ declare -A NETIFS=(
 : "${TEAMD:=teamd}"
 : "${MCD:=smcrouted}"
 : "${MC_CLI:=smcroutectl}"
-: "${MCD_TABLE_NAME:=selftests}"
 
 # Constants for netdevice bring-up:
 # Default time in seconds to wait for an interface to come up before giving up
@@ -69,7 +68,6 @@ declare -A NETIFS=(
 : "${REQUIRE_JQ:=yes}"
 : "${REQUIRE_MZ:=yes}"
 : "${REQUIRE_MTOOLS:=no}"
-: "${REQUIRE_TEAMD:=no}"
 
 # Whether to override MAC addresses on interfaces participating in the test.
 : "${STABLE_MAC_ADDRS:=no}"
@@ -140,20 +138,6 @@ check_tc_version()
 		echo "SKIP: iproute2 too old; tc is missing JSON support"
 		exit $ksft_skip
 	fi
-}
-
-check_tc_erspan_support()
-{
-	local dev=$1; shift
-
-	tc filter add dev $dev ingress pref 1 handle 1 flower \
-		erspan_opts 1:0:0:0 &> /dev/null
-	if [[ $? -ne 0 ]]; then
-		echo "SKIP: iproute2 too old; tc is missing erspan support"
-		return $ksft_skip
-	fi
-	tc filter del dev $dev ingress pref 1 handle 1 flower \
-		erspan_opts 1:0:0:0 &> /dev/null
 }
 
 # Old versions of tc don't understand "mpls_uc"
@@ -306,6 +290,16 @@ if [[ "$CHECK_TC" = "yes" ]]; then
 	check_tc_version
 fi
 
+require_command()
+{
+	local cmd=$1; shift
+
+	if [[ ! -x "$(command -v "$cmd")" ]]; then
+		echo "SKIP: $cmd not installed"
+		exit $ksft_skip
+	fi
+}
+
 # IPv6 support was added in v3.0
 check_mtools_version()
 {
@@ -326,9 +320,6 @@ if [[ "$REQUIRE_JQ" = "yes" ]]; then
 fi
 if [[ "$REQUIRE_MZ" = "yes" ]]; then
 	require_command $MZ
-fi
-if [[ "$REQUIRE_TEAMD" = "yes" ]]; then
-	require_command $TEAMD
 fi
 if [[ "$REQUIRE_MTOOLS" = "yes" ]]; then
 	# https://github.com/troglobit/mtools
@@ -454,6 +445,79 @@ done
 ##############################################################################
 # Helpers
 
+# Whether FAILs should be interpreted as XFAILs. Internal.
+FAIL_TO_XFAIL=
+
+check_err()
+{
+	local err=$1
+	local msg=$2
+
+	if ((err)); then
+		if [[ $FAIL_TO_XFAIL = yes ]]; then
+			ret_set_ksft_status $ksft_xfail "$msg"
+		else
+			ret_set_ksft_status $ksft_fail "$msg"
+		fi
+	fi
+}
+
+check_fail()
+{
+	local err=$1
+	local msg=$2
+
+	check_err $((!err)) "$msg"
+}
+
+check_err_fail()
+{
+	local should_fail=$1; shift
+	local err=$1; shift
+	local what=$1; shift
+
+	if ((should_fail)); then
+		check_fail $err "$what succeeded, but should have failed"
+	else
+		check_err $err "$what failed"
+	fi
+}
+
+xfail()
+{
+	FAIL_TO_XFAIL=yes "$@"
+}
+
+xfail_on_slow()
+{
+	if [[ $KSFT_MACHINE_SLOW = yes ]]; then
+		FAIL_TO_XFAIL=yes "$@"
+	else
+		"$@"
+	fi
+}
+
+omit_on_slow()
+{
+	if [[ $KSFT_MACHINE_SLOW != yes ]]; then
+		"$@"
+	fi
+}
+
+xfail_on_veth()
+{
+	local dev=$1; shift
+	local kind
+
+	kind=$(ip -j -d link show dev $dev |
+			jq -r '.[].linkinfo.info_kind')
+	if [[ $kind = veth ]]; then
+		FAIL_TO_XFAIL=yes "$@"
+	else
+		"$@"
+	fi
+}
+
 not()
 {
 	"$@"
@@ -540,9 +604,9 @@ setup_wait_dev_with_timeout()
 	return 1
 }
 
-setup_wait_n()
+setup_wait()
 {
-	local num_netifs=$1; shift
+	local num_netifs=${1:-$NUM_NETIFS}
 	local i
 
 	for ((i = 1; i <= num_netifs; ++i)); do
@@ -551,11 +615,6 @@ setup_wait_n()
 
 	# Make sure links are ready.
 	sleep $WAIT_TIME
-}
-
-setup_wait()
-{
-	setup_wait_n "$NUM_NETIFS"
 }
 
 wait_for_dev()
@@ -946,6 +1005,13 @@ packets_rate()
 	echo $(((t1 - t0) / interval))
 }
 
+mac_get()
+{
+	local if_name=$1
+
+	ip -j link show dev $if_name | jq -r '.[]["address"]'
+}
+
 ether_addr_to_u64()
 {
 	local addr="$1"
@@ -1219,10 +1285,13 @@ matchall_sink_create()
 	   action drop
 }
 
-cleanup()
+tests_run()
 {
-	pre_cleanup
-	defer_scopes_cleanup
+	local current_test
+
+	for current_test in ${TESTS:-$ALL_TESTS}; do
+		$current_test
+	done
 }
 
 multipath_eval()
@@ -1579,9 +1648,8 @@ start_tcp_traffic()
 
 stop_traffic()
 {
-	local pid=${1-%%}; shift
-
-	kill_process "$pid"
+	# Suppress noise from killing mausezahn.
+	{ kill %% && wait %%; } 2>/dev/null
 }
 
 declare -A cappid
@@ -1775,51 +1843,6 @@ mc_send()
 
 	ip vrf exec $vrf_name \
 		msend -g $groups -I $if_name -c 1 > /dev/null 2>&1
-}
-
-adf_mcd_start()
-{
-	local ifs=("$@")
-
-	local table_name="$MCD_TABLE_NAME"
-	local smcroutedir
-	local pid
-	local if
-	local i
-
-	check_command "$MCD" || return 1
-	check_command "$MC_CLI" || return 1
-
-	smcroutedir=$(mktemp -d)
-	defer rm -rf "$smcroutedir"
-
-	for ((i = 1; i <= NUM_NETIFS; ++i)); do
-		echo "phyint ${NETIFS[p$i]} enable" >> \
-			"$smcroutedir/$table_name.conf"
-	done
-
-	for if in "${ifs[@]}"; do
-		if ! ip_link_has_flag "$if" MULTICAST; then
-			ip link set dev "$if" multicast on
-			defer ip link set dev "$if" multicast off
-		fi
-
-		echo "phyint $if enable" >> \
-			"$smcroutedir/$table_name.conf"
-	done
-
-	"$MCD" -N -I "$table_name" -f "$smcroutedir/$table_name.conf" \
-		-P "$smcroutedir/$table_name.pid"
-	busywait "$BUSYWAIT_TIMEOUT" test -e "$smcroutedir/$table_name.pid"
-	pid=$(cat "$smcroutedir/$table_name.pid")
-	defer kill_process "$pid"
-}
-
-mc_cli()
-{
-	local table_name="$MCD_TABLE_NAME"
-
-        "$MC_CLI" -I "$table_name" "$@"
 }
 
 start_ip_monitor()

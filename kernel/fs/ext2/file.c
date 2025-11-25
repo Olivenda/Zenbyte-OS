@@ -122,19 +122,17 @@ static const struct vm_operations_struct ext2_dax_vm_ops = {
 	.pfn_mkwrite	= ext2_dax_fault,
 };
 
-static int ext2_file_mmap_prepare(struct vm_area_desc *desc)
+static int ext2_file_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	struct file *file = desc->file;
-
 	if (!IS_DAX(file_inode(file)))
-		return generic_file_mmap_prepare(desc);
+		return generic_file_mmap(file, vma);
 
 	file_accessed(file);
-	desc->vm_ops = &ext2_dax_vm_ops;
+	vma->vm_ops = &ext2_dax_vm_ops;
 	return 0;
 }
 #else
-#define ext2_file_mmap_prepare	generic_file_mmap_prepare
+#define ext2_file_mmap	generic_file_mmap
 #endif
 
 /*
@@ -318,7 +316,7 @@ const struct file_operations ext2_file_operations = {
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= ext2_compat_ioctl,
 #endif
-	.mmap_prepare	= ext2_file_mmap_prepare,
+	.mmap		= ext2_file_mmap,
 	.open		= ext2_file_open,
 	.release	= ext2_release_file,
 	.fsync		= ext2_fsync,

@@ -41,7 +41,7 @@ struct xe_hw_fence_irq {
  * to a xe_hw_fence_irq, maintains serial seqno.
  */
 struct xe_hw_fence_ctx {
-	/** @gt: GT structure of hardware fence context */
+	/** @gt: graphics tile of hardware fence context */
 	struct xe_gt *gt;
 	/** @irq: fence irq handler */
 	struct xe_hw_fence_irq *irq;

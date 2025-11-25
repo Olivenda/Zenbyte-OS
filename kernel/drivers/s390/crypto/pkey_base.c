@@ -9,7 +9,6 @@
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/cpufeature.h>
-#include <linux/export.h>
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/module.h>
@@ -151,8 +150,7 @@ EXPORT_SYMBOL(pkey_handler_put);
 
 int pkey_handler_key_to_protkey(const struct pkey_apqn *apqns, size_t nr_apqns,
 				const u8 *key, u32 keylen,
-				u8 *protkey, u32 *protkeylen, u32 *protkeytype,
-				u32 xflags)
+				u8 *protkey, u32 *protkeylen, u32 *protkeytype)
 {
 	const struct pkey_handler *h;
 	int rc = -ENODEV;
@@ -161,7 +159,7 @@ int pkey_handler_key_to_protkey(const struct pkey_apqn *apqns, size_t nr_apqns,
 	if (h && h->key_to_protkey) {
 		rc = h->key_to_protkey(apqns, nr_apqns, key, keylen,
 				       protkey, protkeylen,
-				       protkeytype, xflags);
+				       protkeytype);
 	}
 	pkey_handler_put(h);
 
@@ -179,7 +177,7 @@ int pkey_handler_slowpath_key_to_protkey(const struct pkey_apqn *apqns,
 					 size_t nr_apqns,
 					 const u8 *key, u32 keylen,
 					 u8 *protkey, u32 *protkeylen,
-					 u32 *protkeytype, u32 xflags)
+					 u32 *protkeytype)
 {
 	const struct pkey_handler *h, *htmp[10];
 	int i, n = 0, rc = -ENODEV;
@@ -201,7 +199,7 @@ int pkey_handler_slowpath_key_to_protkey(const struct pkey_apqn *apqns,
 			rc = h->slowpath_key_to_protkey(apqns, nr_apqns,
 							key, keylen,
 							protkey, protkeylen,
-							protkeytype, xflags);
+							protkeytype);
 		module_put(h->module);
 	}
 
@@ -212,7 +210,7 @@ EXPORT_SYMBOL(pkey_handler_slowpath_key_to_protkey);
 int pkey_handler_gen_key(const struct pkey_apqn *apqns, size_t nr_apqns,
 			 u32 keytype, u32 keysubtype,
 			 u32 keybitsize, u32 flags,
-			 u8 *keybuf, u32 *keybuflen, u32 *keyinfo, u32 xflags)
+			 u8 *keybuf, u32 *keybuflen, u32 *keyinfo)
 {
 	const struct pkey_handler *h;
 	int rc = -ENODEV;
@@ -221,7 +219,7 @@ int pkey_handler_gen_key(const struct pkey_apqn *apqns, size_t nr_apqns,
 	if (h && h->gen_key) {
 		rc = h->gen_key(apqns, nr_apqns, keytype, keysubtype,
 				keybitsize, flags,
-				keybuf, keybuflen, keyinfo, xflags);
+				keybuf, keybuflen, keyinfo);
 	}
 	pkey_handler_put(h);
 
@@ -233,8 +231,7 @@ int pkey_handler_clr_to_key(const struct pkey_apqn *apqns, size_t nr_apqns,
 			    u32 keytype, u32 keysubtype,
 			    u32 keybitsize, u32 flags,
 			    const u8 *clrkey, u32 clrkeylen,
-			    u8 *keybuf, u32 *keybuflen, u32 *keyinfo,
-			    u32 xflags)
+			    u8 *keybuf, u32 *keybuflen, u32 *keyinfo)
 {
 	const struct pkey_handler *h;
 	int rc = -ENODEV;
@@ -243,7 +240,7 @@ int pkey_handler_clr_to_key(const struct pkey_apqn *apqns, size_t nr_apqns,
 	if (h && h->clr_to_key) {
 		rc = h->clr_to_key(apqns, nr_apqns, keytype, keysubtype,
 				   keybitsize, flags, clrkey, clrkeylen,
-				   keybuf, keybuflen, keyinfo, xflags);
+				   keybuf, keybuflen, keyinfo);
 	}
 	pkey_handler_put(h);
 
@@ -253,8 +250,7 @@ EXPORT_SYMBOL(pkey_handler_clr_to_key);
 
 int pkey_handler_verify_key(const u8 *key, u32 keylen,
 			    u16 *card, u16 *dom,
-			    u32 *keytype, u32 *keybitsize, u32 *flags,
-			    u32 xflags)
+			    u32 *keytype, u32 *keybitsize, u32 *flags)
 {
 	const struct pkey_handler *h;
 	int rc = -ENODEV;
@@ -262,7 +258,7 @@ int pkey_handler_verify_key(const u8 *key, u32 keylen,
 	h = pkey_handler_get_keybased(key, keylen);
 	if (h && h->verify_key) {
 		rc = h->verify_key(key, keylen, card, dom,
-				   keytype, keybitsize, flags, xflags);
+				   keytype, keybitsize, flags);
 	}
 	pkey_handler_put(h);
 
@@ -271,16 +267,14 @@ int pkey_handler_verify_key(const u8 *key, u32 keylen,
 EXPORT_SYMBOL(pkey_handler_verify_key);
 
 int pkey_handler_apqns_for_key(const u8 *key, u32 keylen, u32 flags,
-			       struct pkey_apqn *apqns, size_t *nr_apqns,
-			       u32 xflags)
+			       struct pkey_apqn *apqns, size_t *nr_apqns)
 {
 	const struct pkey_handler *h;
 	int rc = -ENODEV;
 
 	h = pkey_handler_get_keybased(key, keylen);
 	if (h && h->apqns_for_key)
-		rc = h->apqns_for_key(key, keylen, flags, apqns, nr_apqns,
-				      xflags);
+		rc = h->apqns_for_key(key, keylen, flags, apqns, nr_apqns);
 	pkey_handler_put(h);
 
 	return rc;
@@ -289,8 +283,7 @@ EXPORT_SYMBOL(pkey_handler_apqns_for_key);
 
 int pkey_handler_apqns_for_keytype(enum pkey_key_type keysubtype,
 				   u8 cur_mkvp[32], u8 alt_mkvp[32], u32 flags,
-				   struct pkey_apqn *apqns, size_t *nr_apqns,
-				   u32 xflags)
+				   struct pkey_apqn *apqns, size_t *nr_apqns)
 {
 	const struct pkey_handler *h;
 	int rc = -ENODEV;
@@ -299,7 +292,7 @@ int pkey_handler_apqns_for_keytype(enum pkey_key_type keysubtype,
 	if (h && h->apqns_for_keytype) {
 		rc = h->apqns_for_keytype(keysubtype,
 					  cur_mkvp, alt_mkvp, flags,
-					  apqns, nr_apqns, xflags);
+					  apqns, nr_apqns);
 	}
 	pkey_handler_put(h);
 
@@ -311,19 +304,7 @@ void pkey_handler_request_modules(void)
 {
 #ifdef CONFIG_MODULES
 	static const char * const pkey_handler_modules[] = {
-#if IS_MODULE(CONFIG_PKEY_CCA)
-		"pkey_cca",
-#endif
-#if IS_MODULE(CONFIG_PKEY_EP11)
-		"pkey_ep11",
-#endif
-#if IS_MODULE(CONFIG_PKEY_PCKMO)
-		"pkey_pckmo",
-#endif
-#if IS_MODULE(CONFIG_PKEY_UV)
-		"pkey_uv",
-#endif
-	};
+		"pkey_cca", "pkey_ep11", "pkey_pckmo" };
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(pkey_handler_modules); i++) {

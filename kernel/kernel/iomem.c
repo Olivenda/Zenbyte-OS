@@ -6,8 +6,7 @@
 #include <linux/ioremap.h>
 
 #ifndef arch_memremap_wb
-static void *arch_memremap_wb(resource_size_t offset, unsigned long size,
-			      unsigned long flags)
+static void *arch_memremap_wb(resource_size_t offset, unsigned long size)
 {
 #ifdef ioremap_cache
 	return (__force void *)ioremap_cache(offset, size);
@@ -92,7 +91,7 @@ void *memremap(resource_size_t offset, size_t size, unsigned long flags)
 		if (is_ram == REGION_INTERSECTS)
 			addr = try_ram_remap(offset, size, flags);
 		if (!addr)
-			addr = arch_memremap_wb(offset, size, flags);
+			addr = arch_memremap_wb(offset, size);
 	}
 
 	/*

@@ -122,8 +122,9 @@ void mips_mt_set_cpuoptions(void)
 		unsigned long ectlval;
 		unsigned long itcblkgrn;
 
-		ectlval = read_c0_errctl();
-		write_c0_errctl(ectlval | (0x1 << 26));
+		/* ErrCtl register is known as "ecc" to Linux */
+		ectlval = read_c0_ecc();
+		write_c0_ecc(ectlval | (0x1 << 26));
 		ehb();
 #define INDEX_0 (0x80000000)
 #define INDEX_8 (0x80000008)
@@ -144,7 +145,7 @@ void mips_mt_set_cpuoptions(void)
 		ehb();
 		/* Write out to ITU with CACHE op */
 		cache_op(Index_Store_Tag_D, INDEX_0);
-		write_c0_errctl(ectlval);
+		write_c0_ecc(ectlval);
 		ehb();
 		printk("Mapped %ld ITC cells starting at 0x%08x\n",
 			((itcblkgrn & 0x7fe00000) >> 20), itc_base);

@@ -4,6 +4,8 @@
  *
  *  Written by Jacob Shin - AMD, Inc.
  *  Maintained by: Borislav Petkov <bp@alien8.de>
+ *
+ *  All MC4_MISCi registers are shared between cores on a node.
  */
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
@@ -18,6 +20,7 @@
 #include <linux/smp.h>
 #include <linux/string.h>
 
+#include <asm/amd_nb.h>
 #include <asm/traps.h>
 #include <asm/apic.h>
 #include <asm/mce.h>
@@ -218,32 +221,6 @@ static const struct smca_hwid smca_hwid_mcatypes[] = {
 #define MAX_MCATYPE_NAME_LEN	30
 static char buf_mcatype[MAX_MCATYPE_NAME_LEN];
 
-struct threshold_block {
-	/* This block's number within its bank. */
-	unsigned int		block;
-	/* MCA bank number that contains this block. */
-	unsigned int		bank;
-	/* CPU which controls this block's MCA bank. */
-	unsigned int		cpu;
-	/* MCA_MISC MSR address for this block. */
-	u32			address;
-	/* Enable/Disable APIC interrupt. */
-	bool			interrupt_enable;
-	/* Bank can generate an interrupt. */
-	bool			interrupt_capable;
-	/* Value upon which threshold interrupt is generated. */
-	u16			threshold_limit;
-	/* sysfs object */
-	struct kobject		kobj;
-	/* List of threshold blocks within this block's MCA bank. */
-	struct list_head	miscj;
-};
-
-struct threshold_bank {
-	struct kobject		*kobj;
-	struct threshold_block	*blocks;
-};
-
 static DEFINE_PER_CPU(struct threshold_bank **, threshold_banks);
 
 /*
@@ -355,6 +332,19 @@ struct thresh_restart {
 	u16			old_limit;
 };
 
+static inline bool is_shared_bank(int bank)
+{
+	/*
+	 * Scalable MCA provides for only one core to have access to the MSRs of
+	 * a shared bank.
+	 */
+	if (mce_flags.smca)
+		return false;
+
+	/* Bank 4 is for northbridge reporting and is thus shared */
+	return (bank == 4);
+}
+
 static const char *bank4_names(const struct threshold_block *b)
 {
 	switch (b->address) {
@@ -390,7 +380,7 @@ static bool lvt_interrupt_supported(unsigned int bank, u32 msr_high_bits)
 	return msr_high_bits & BIT(28);
 }
 
-static bool lvt_off_valid(struct threshold_block *b, int apic, u32 lo, u32 hi)
+static int lvt_off_valid(struct threshold_block *b, int apic, u32 lo, u32 hi)
 {
 	int msr = (hi & MASK_LVTOFF_HI) >> 20;
 
@@ -398,7 +388,7 @@ static bool lvt_off_valid(struct threshold_block *b, int apic, u32 lo, u32 hi)
 		pr_err(FW_BUG "cpu %d, failed to setup threshold interrupt "
 		       "for bank %d, block %d (MSR%08X=0x%x%08x)\n", b->cpu,
 		       b->bank, b->block, b->address, hi, lo);
-		return false;
+		return 0;
 	}
 
 	if (apic != msr) {
@@ -408,15 +398,15 @@ static bool lvt_off_valid(struct threshold_block *b, int apic, u32 lo, u32 hi)
 		 * was set is reserved. Return early here:
 		 */
 		if (mce_flags.smca)
-			return false;
+			return 0;
 
 		pr_err(FW_BUG "cpu %d, invalid threshold interrupt offset %d "
 		       "for bank %d, block %d (MSR%08X=0x%x%08x)\n",
 		       b->cpu, apic, b->bank, b->block, b->address, hi, lo);
-		return false;
+		return 0;
 	}
 
-	return true;
+	return 1;
 };
 
 /* Reprogram MCx_MISC MSR behind this threshold bank. */
@@ -661,12 +651,12 @@ static void disable_err_thresholding(struct cpuinfo_x86 *c, unsigned int bank)
 		return;
 	}
 
-	rdmsrq(MSR_K7_HWCR, hwcr);
+	rdmsrl(MSR_K7_HWCR, hwcr);
 
 	/* McStatusWrEn has to be set */
 	need_toggle = !(hwcr & BIT(18));
 	if (need_toggle)
-		wrmsrq(MSR_K7_HWCR, hwcr | BIT(18));
+		wrmsrl(MSR_K7_HWCR, hwcr | BIT(18));
 
 	/* Clear CntP bit safely */
 	for (i = 0; i < num_msrs; i++)
@@ -674,7 +664,7 @@ static void disable_err_thresholding(struct cpuinfo_x86 *c, unsigned int bank)
 
 	/* restore old settings */
 	if (need_toggle)
-		wrmsrq(MSR_K7_HWCR, hwcr);
+		wrmsrl(MSR_K7_HWCR, hwcr);
 }
 
 /* cpu init entry point, called from mce.c with preempt off */
@@ -787,33 +777,29 @@ bool amd_mce_usable_address(struct mce *m)
 
 static void __log_error(unsigned int bank, u64 status, u64 addr, u64 misc)
 {
-	struct mce_hw_err err;
-	struct mce *m = &err.m;
+	struct mce m;
 
-	mce_prep_record(&err);
+	mce_prep_record(&m);
 
-	m->status = status;
-	m->misc   = misc;
-	m->bank   = bank;
-	m->tsc	 = rdtsc();
+	m.status = status;
+	m.misc   = misc;
+	m.bank   = bank;
+	m.tsc	 = rdtsc();
 
-	if (m->status & MCI_STATUS_ADDRV) {
-		m->addr = addr;
+	if (m.status & MCI_STATUS_ADDRV) {
+		m.addr = addr;
 
-		smca_extract_err_addr(m);
+		smca_extract_err_addr(&m);
 	}
 
 	if (mce_flags.smca) {
-		rdmsrq(MSR_AMD64_SMCA_MCx_IPID(bank), m->ipid);
+		rdmsrl(MSR_AMD64_SMCA_MCx_IPID(bank), m.ipid);
 
-		if (m->status & MCI_STATUS_SYNDV) {
-			rdmsrq(MSR_AMD64_SMCA_MCx_SYND(bank), m->synd);
-			rdmsrq(MSR_AMD64_SMCA_MCx_SYND1(bank), err.vendor.amd.synd1);
-			rdmsrq(MSR_AMD64_SMCA_MCx_SYND2(bank), err.vendor.amd.synd2);
-		}
+		if (m.status & MCI_STATUS_SYNDV)
+			rdmsrl(MSR_AMD64_SMCA_MCx_SYND(bank), m.synd);
 	}
 
-	mce_log(&err);
+	mce_log(&m);
 }
 
 DEFINE_IDTENTRY_SYSVEC(sysvec_deferred_error)
@@ -833,16 +819,16 @@ _log_error_bank(unsigned int bank, u32 msr_stat, u32 msr_addr, u64 misc)
 {
 	u64 status, addr = 0;
 
-	rdmsrq(msr_stat, status);
+	rdmsrl(msr_stat, status);
 	if (!(status & MCI_STATUS_VAL))
 		return false;
 
 	if (status & MCI_STATUS_ADDRV)
-		rdmsrq(msr_addr, addr);
+		rdmsrl(msr_addr, addr);
 
 	__log_error(bank, status, addr, misc);
 
-	wrmsrq(msr_stat, 0);
+	wrmsrl(msr_stat, 0);
 
 	return status & MCI_STATUS_DEFERRED;
 }
@@ -861,7 +847,7 @@ static bool _log_error_deferred(unsigned int bank, u32 misc)
 		return true;
 
 	/* Clear MCA_DESTAT if the deferred error was logged from MCA_STATUS. */
-	wrmsrq(MSR_AMD64_SMCA_MCx_DESTAT(bank), 0);
+	wrmsrl(MSR_AMD64_SMCA_MCx_DESTAT(bank), 0);
 	return true;
 }
 
@@ -1214,16 +1200,61 @@ out_free:
 	return err;
 }
 
+static int __threshold_add_blocks(struct threshold_bank *b)
+{
+	struct list_head *head = &b->blocks->miscj;
+	struct threshold_block *pos = NULL;
+	struct threshold_block *tmp = NULL;
+	int err = 0;
+
+	err = kobject_add(&b->blocks->kobj, b->kobj, b->blocks->kobj.name);
+	if (err)
+		return err;
+
+	list_for_each_entry_safe(pos, tmp, head, miscj) {
+
+		err = kobject_add(&pos->kobj, b->kobj, pos->kobj.name);
+		if (err) {
+			list_for_each_entry_safe_reverse(pos, tmp, head, miscj)
+				kobject_del(&pos->kobj);
+
+			return err;
+		}
+	}
+	return err;
+}
+
 static int threshold_create_bank(struct threshold_bank **bp, unsigned int cpu,
 				 unsigned int bank)
 {
 	struct device *dev = this_cpu_read(mce_device);
+	struct amd_northbridge *nb = NULL;
 	struct threshold_bank *b = NULL;
 	const char *name = get_name(cpu, bank, NULL);
 	int err = 0;
 
 	if (!dev)
 		return -ENODEV;
+
+	if (is_shared_bank(bank)) {
+		nb = node_to_amd_nb(topology_amd_node_id(cpu));
+
+		/* threshold descriptor already initialized on this node? */
+		if (nb && nb->bank4) {
+			/* yes, use it */
+			b = nb->bank4;
+			err = kobject_add(b->kobj, &dev->kobj, name);
+			if (err)
+				goto out;
+
+			bp[bank] = b;
+			refcount_inc(&b->cpus);
+
+			err = __threshold_add_blocks(b);
+
+			goto out;
+		}
+	}
 
 	b = kzalloc(sizeof(struct threshold_bank), GFP_KERNEL);
 	if (!b) {
@@ -1236,6 +1267,17 @@ static int threshold_create_bank(struct threshold_bank **bp, unsigned int cpu,
 	if (!b->kobj) {
 		err = -EINVAL;
 		goto out_free;
+	}
+
+	if (is_shared_bank(bank)) {
+		b->shared = 1;
+		refcount_set(&b->cpus, 1);
+
+		/* nb is already initialized, see above */
+		if (nb) {
+			WARN_ON(nb->bank4);
+			nb->bank4 = b;
+		}
 	}
 
 	err = allocate_threshold_blocks(cpu, b, bank, 0, mca_msr_reg(bank, MCA_MISC));
@@ -1270,11 +1312,40 @@ static void deallocate_threshold_blocks(struct threshold_bank *bank)
 	kobject_put(&bank->blocks->kobj);
 }
 
+static void __threshold_remove_blocks(struct threshold_bank *b)
+{
+	struct threshold_block *pos = NULL;
+	struct threshold_block *tmp = NULL;
+
+	kobject_put(b->kobj);
+
+	list_for_each_entry_safe(pos, tmp, &b->blocks->miscj, miscj)
+		kobject_put(b->kobj);
+}
+
 static void threshold_remove_bank(struct threshold_bank *bank)
 {
+	struct amd_northbridge *nb;
+
 	if (!bank->blocks)
 		goto out_free;
 
+	if (!bank->shared)
+		goto out_dealloc;
+
+	if (!refcount_dec_and_test(&bank->cpus)) {
+		__threshold_remove_blocks(bank);
+		return;
+	} else {
+		/*
+		 * The last CPU on this node using the shared bank is going
+		 * away, remove that bank now.
+		 */
+		nb = node_to_amd_nb(topology_amd_node_id(smp_processor_id()));
+		nb->bank4 = NULL;
+	}
+
+out_dealloc:
 	deallocate_threshold_blocks(bank);
 
 out_free:

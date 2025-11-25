@@ -22,9 +22,9 @@ struct resource_pool *dcn401_create_resource_pool(
 
 enum dc_status dcn401_patch_unknown_plane_state(struct dc_plane_state *plane_state);
 
-enum dc_status dcn401_validate_bandwidth(struct dc *dc,
+bool dcn401_validate_bandwidth(struct dc *dc,
 		struct dc_state *context,
-		enum dc_validate_mode validate_mode);
+		bool fast_validate);
 
 void dcn401_prepare_mcache_programming(struct dc *dc, struct dc_state *context);
 
@@ -536,10 +536,8 @@ void dcn401_prepare_mcache_programming(struct dc *dc, struct dc_state *context);
 	SRI_ARR(OPTC_WIDTH_CONTROL, ODM, inst),                                  \
 	SRI_ARR(OPTC_WIDTH_CONTROL2, ODM, inst),                                 \
 	SRI_ARR(OPTC_MEMORY_CONFIG, ODM, inst),                                  \
-	SRI_ARR(OTG_DRR_CONTROL, OTG, inst),                                     \
-	SRI_ARR(OTG_PSTATE_REGISTER, OTG, inst),                                 \
-	SRI_ARR(OTG_PIPE_UPDATE_STATUS, OTG, inst),                              \
-	SRI_ARR(INTERRUPT_DEST, OTG, inst)
+	SRI_ARR(OTG_DRR_CONTROL, OTG, inst),										 \
+	SRI_ARR(OTG_PSTATE_REGISTER, OTG, inst)
 
 /* HUBBUB */
 #define HUBBUB_REG_LIST_DCN4_01_RI(id)                                       \
@@ -611,10 +609,7 @@ void dcn401_prepare_mcache_programming(struct dc *dc, struct dc_state *context);
 	SR(DCHUBBUB_CLOCK_CNTL),                                                 \
 	SR(DCHUBBUB_SDPIF_CFG0),                                                 \
 	SR(DCHUBBUB_SDPIF_CFG1),                                                 \
-	SR(DCHUBBUB_MEM_PWR_MODE_CTRL),                                          \
-	SR(DCHUBBUB_TIMEOUT_DETECTION_CTRL1),                                    \
-	SR(DCHUBBUB_TIMEOUT_DETECTION_CTRL2),									 \
-	SR(DCHUBBUB_CTRL_STATUS)
+	SR(DCHUBBUB_MEM_PWR_MODE_CTRL)
 
 /* DCCG */
 

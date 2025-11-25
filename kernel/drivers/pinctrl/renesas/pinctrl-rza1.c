@@ -19,7 +19,6 @@
 #include <linux/ioport.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/pinctrl/consumer.h>
 #include <linux/pinctrl/pinconf-generic.h>
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/pinctrl/pinmux.h>
@@ -751,11 +750,6 @@ static int rza1_pin_mux_single(struct rza1_pinctrl *rza1_pctl,
 static int rza1_gpio_request(struct gpio_chip *chip, unsigned int gpio)
 {
 	struct rza1_port *port = gpiochip_get_data(chip);
-	int ret;
-
-	ret = pinctrl_gpio_request(chip, gpio);
-	if (ret)
-		return ret;
 
 	rza1_pin_reset(port, gpio);
 
@@ -777,7 +771,6 @@ static void rza1_gpio_free(struct gpio_chip *chip, unsigned int gpio)
 	struct rza1_port *port = gpiochip_get_data(chip);
 
 	rza1_pin_reset(port, gpio);
-	pinctrl_gpio_free(chip, gpio);
 }
 
 static int rza1_gpio_get_direction(struct gpio_chip *chip, unsigned int gpio)
@@ -830,13 +823,12 @@ static int rza1_gpio_get(struct gpio_chip *chip, unsigned int gpio)
 	return rza1_pin_get(port, gpio);
 }
 
-static int rza1_gpio_set(struct gpio_chip *chip, unsigned int gpio, int value)
+static void rza1_gpio_set(struct gpio_chip *chip, unsigned int gpio,
+			  int value)
 {
 	struct rza1_port *port = gpiochip_get_data(chip);
 
 	rza1_pin_set(port, gpio, value);
-
-	return 0;
 }
 
 static const struct gpio_chip rza1_gpiochip_template = {

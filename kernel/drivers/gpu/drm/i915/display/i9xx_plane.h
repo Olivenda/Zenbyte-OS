@@ -9,9 +9,8 @@
 #include <linux/types.h>
 
 enum pipe;
-struct drm_framebuffer;
+struct drm_i915_private;
 struct intel_crtc;
-struct intel_display;
 struct intel_initial_plane_config;
 struct intel_plane;
 struct intel_plane_state;
@@ -20,13 +19,10 @@ struct intel_plane_state;
 unsigned int i965_plane_max_stride(struct intel_plane *plane,
 				   u32 pixel_format, u64 modifier,
 				   unsigned int rotation);
-unsigned int vlv_plane_min_alignment(struct intel_plane *plane,
-				     const struct drm_framebuffer *fb,
-				     int colot_plane);
 int i9xx_check_plane_surface(struct intel_plane_state *plane_state);
 
 struct intel_plane *
-intel_primary_plane_create(struct intel_display *display, enum pipe pipe);
+intel_primary_plane_create(struct drm_i915_private *dev_priv, enum pipe pipe);
 
 void i9xx_get_initial_plane_config(struct intel_crtc *crtc,
 				   struct intel_initial_plane_config *plane_config);
@@ -44,7 +40,7 @@ static inline int i9xx_check_plane_surface(struct intel_plane_state *plane_state
 	return 0;
 }
 static inline struct intel_plane *
-intel_primary_plane_create(struct intel_display *display, int pipe)
+intel_primary_plane_create(struct drm_i915_private *dev_priv, int pipe)
 {
 	return NULL;
 }

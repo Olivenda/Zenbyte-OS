@@ -96,13 +96,10 @@ void *kmem_cache_alloc_lru(struct kmem_cache *cachep, struct list_lru *lru,
 		p = node;
 	} else {
 		pthread_mutex_unlock(&cachep->lock);
-		if (cachep->align) {
-			if (posix_memalign(&p, cachep->align, cachep->size) < 0)
-				return NULL;
-		} else {
+		if (cachep->align)
+			posix_memalign(&p, cachep->align, cachep->size);
+		else
 			p = malloc(cachep->size);
-		}
-
 		if (cachep->ctor)
 			cachep->ctor(p);
 		else if (gfp & __GFP_ZERO)
@@ -198,9 +195,8 @@ int kmem_cache_alloc_bulk(struct kmem_cache *cachep, gfp_t gfp, size_t size,
 			}
 
 			if (cachep->align) {
-				if (posix_memalign(&p[i], cachep->align,
-					       cachep->size) < 0)
-					break;
+				posix_memalign(&p[i], cachep->align,
+					       cachep->size);
 			} else {
 				p[i] = malloc(cachep->size);
 				if (!p[i])

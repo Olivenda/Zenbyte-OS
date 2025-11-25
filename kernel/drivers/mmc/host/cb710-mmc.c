@@ -8,7 +8,6 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
-#include <linux/string_choices.h>
 #include "cb710-mmc.h"
 
 #define CB710_MMC_REQ_TIMEOUT_MS	2000
@@ -216,7 +215,7 @@ static void cb710_mmc_set_transfer_size(struct cb710_slot *slot,
 		((count - 1) << 16)|(blocksize - 1));
 
 	dev_vdbg(cb710_slot_dev(slot), "set up for %zu block%s of %zu bytes\n",
-		count, str_plural(count), blocksize);
+		count, count == 1 ? "" : "s", blocksize);
 }
 
 static void cb710_mmc_fifo_hack(struct cb710_slot *slot)
@@ -693,7 +692,7 @@ static int cb710_mmc_init(struct platform_device *pdev)
 	int err;
 	u32 val;
 
-	mmc = devm_mmc_alloc_host(cb710_slot_dev(slot), sizeof(*reader));
+	mmc = mmc_alloc_host(sizeof(*reader), cb710_slot_dev(slot));
 	if (!mmc)
 		return -ENOMEM;
 
@@ -742,6 +741,7 @@ err_free_mmc:
 	dev_dbg(cb710_slot_dev(slot), "mmc_add_host() failed: %d\n", err);
 
 	cb710_set_irq_handler(slot, NULL);
+	mmc_free_host(mmc);
 	return err;
 }
 
@@ -764,12 +764,14 @@ static void cb710_mmc_exit(struct platform_device *pdev)
 	cb710_write_port_16(slot, CB710_MMC_CONFIGB_PORT, 0);
 
 	cancel_work_sync(&reader->finish_req_bh_work);
+
+	mmc_free_host(mmc);
 }
 
 static struct platform_driver cb710_mmc_driver = {
 	.driver.name = "cb710-mmc",
 	.probe = cb710_mmc_init,
-	.remove = cb710_mmc_exit,
+	.remove_new = cb710_mmc_exit,
 #ifdef CONFIG_PM
 	.suspend = cb710_mmc_suspend,
 	.resume = cb710_mmc_resume,

@@ -44,13 +44,7 @@ static int gpio_poweroff_do_poweroff(struct sys_off_data *data)
 	/* give it some time */
 	mdelay(gpio_poweroff->timeout_ms);
 
-	/*
-	 * If code reaches this point, it means that gpio-poweroff has failed
-	 * to actually power off the system.
-	 * Warn the user that the attempt to poweroff via gpio-poweroff
-	 * has gone wrong.
-	 */
-	WARN(1, "Failed to poweroff via gpio-poweroff mechanism\n");
+	WARN_ON(1);
 
 	return NOTIFY_DONE;
 }

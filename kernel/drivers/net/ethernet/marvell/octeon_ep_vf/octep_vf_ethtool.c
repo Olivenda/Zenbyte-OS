@@ -25,7 +25,7 @@ static const char octep_vf_gstrings_global_stats[][ETH_GSTRING_LEN] = {
 	"rx_dropped_bytes_fifo_full",
 };
 
-#define OCTEP_VF_GLOBAL_STATS_CNT ARRAY_SIZE(octep_vf_gstrings_global_stats)
+#define OCTEP_VF_GLOBAL_STATS_CNT (sizeof(octep_vf_gstrings_global_stats) / ETH_GSTRING_LEN)
 
 static const char octep_vf_gstrings_tx_q_stats[][ETH_GSTRING_LEN] = {
 	"tx_packets_posted[Q-%u]",
@@ -34,7 +34,7 @@ static const char octep_vf_gstrings_tx_q_stats[][ETH_GSTRING_LEN] = {
 	"tx_busy[Q-%u]",
 };
 
-#define OCTEP_VF_TX_Q_STATS_CNT ARRAY_SIZE(octep_vf_gstrings_tx_q_stats)
+#define OCTEP_VF_TX_Q_STATS_CNT (sizeof(octep_vf_gstrings_tx_q_stats) / ETH_GSTRING_LEN)
 
 static const char octep_vf_gstrings_rx_q_stats[][ETH_GSTRING_LEN] = {
 	"rx_packets[Q-%u]",
@@ -42,7 +42,7 @@ static const char octep_vf_gstrings_rx_q_stats[][ETH_GSTRING_LEN] = {
 	"rx_alloc_errors[Q-%u]",
 };
 
-#define OCTEP_VF_RX_Q_STATS_CNT ARRAY_SIZE(octep_vf_gstrings_rx_q_stats)
+#define OCTEP_VF_RX_Q_STATS_CNT (sizeof(octep_vf_gstrings_rx_q_stats) / ETH_GSTRING_LEN)
 
 static void octep_vf_get_drvinfo(struct net_device *netdev,
 				 struct ethtool_drvinfo *info)
@@ -58,25 +58,32 @@ static void octep_vf_get_strings(struct net_device *netdev,
 {
 	struct octep_vf_device *oct = netdev_priv(netdev);
 	u16 num_queues = CFG_GET_PORTS_ACTIVE_IO_RINGS(oct->conf);
-	const char *str;
+	char *strings = (char *)data;
 	int i, j;
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		for (i = 0; i < OCTEP_VF_GLOBAL_STATS_CNT; i++)
-			ethtool_puts(&data, octep_vf_gstrings_global_stats[i]);
+		for (i = 0; i < OCTEP_VF_GLOBAL_STATS_CNT; i++) {
+			snprintf(strings, ETH_GSTRING_LEN,
+				 octep_vf_gstrings_global_stats[i]);
+			strings += ETH_GSTRING_LEN;
+		}
 
-		for (i = 0; i < num_queues; i++)
+		for (i = 0; i < num_queues; i++) {
 			for (j = 0; j < OCTEP_VF_TX_Q_STATS_CNT; j++) {
-				str = octep_vf_gstrings_tx_q_stats[j];
-				ethtool_sprintf(&data, str, i);
+				snprintf(strings, ETH_GSTRING_LEN,
+					 octep_vf_gstrings_tx_q_stats[j], i);
+				strings += ETH_GSTRING_LEN;
 			}
+		}
 
-		for (i = 0; i < num_queues; i++)
+		for (i = 0; i < num_queues; i++) {
 			for (j = 0; j < OCTEP_VF_RX_Q_STATS_CNT; j++) {
-				str = octep_vf_gstrings_rx_q_stats[j];
-				ethtool_sprintf(&data, str, i);
+				snprintf(strings, ETH_GSTRING_LEN,
+					 octep_vf_gstrings_rx_q_stats[j], i);
+				strings += ETH_GSTRING_LEN;
 			}
+		}
 		break;
 	default:
 		break;

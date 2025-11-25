@@ -139,30 +139,25 @@ static u16 get_max_amsdu_len(u32 bit_rate)
 struct rtw_fw_iter_ra_data {
 	struct rtw_dev *rtwdev;
 	u8 *payload;
-	u8 length;
 };
 
 static void rtw_fw_ra_report_iter(void *data, struct ieee80211_sta *sta)
 {
 	struct rtw_fw_iter_ra_data *ra_data = data;
-	struct rtw_c2h_ra_rpt *ra_rpt = (struct rtw_c2h_ra_rpt *)ra_data->payload;
 	struct rtw_sta_info *si = (struct rtw_sta_info *)sta->drv_priv;
 	u8 mac_id, rate, sgi, bw;
 	u8 mcs, nss;
 	u32 bit_rate;
 
-	mac_id = ra_rpt->mac_id;
+	mac_id = GET_RA_REPORT_MACID(ra_data->payload);
 	if (si->mac_id != mac_id)
 		return;
 
 	si->ra_report.txrate.flags = 0;
 
-	rate = u8_get_bits(ra_rpt->rate_sgi, RTW_C2H_RA_RPT_RATE);
-	sgi = u8_get_bits(ra_rpt->rate_sgi, RTW_C2H_RA_RPT_SGI);
-	if (ra_data->length >= offsetofend(typeof(*ra_rpt), bw))
-		bw = ra_rpt->bw;
-	else
-		bw = si->bw_mode;
+	rate = GET_RA_REPORT_RATE(ra_data->payload);
+	sgi = GET_RA_REPORT_SGI(ra_data->payload);
+	bw = GET_RA_REPORT_BW(ra_data->payload);
 
 	if (rate < DESC_RATEMCS0) {
 		si->ra_report.txrate.legacy = rtw_desc_to_bitrate(rate);
@@ -202,18 +197,14 @@ legacy:
 static void rtw_fw_ra_report_handle(struct rtw_dev *rtwdev, u8 *payload,
 				    u8 length)
 {
-	struct rtw_c2h_ra_rpt *ra_rpt = (struct rtw_c2h_ra_rpt *)payload;
 	struct rtw_fw_iter_ra_data ra_data;
 
-	if (WARN(length < rtwdev->chip->c2h_ra_report_size,
-		 "invalid ra report c2h length %d\n", length))
+	if (WARN(length < 7, "invalid ra report c2h length\n"))
 		return;
 
-	rtwdev->dm_info.tx_rate = u8_get_bits(ra_rpt->rate_sgi,
-					      RTW_C2H_RA_RPT_RATE);
+	rtwdev->dm_info.tx_rate = GET_RA_REPORT_RATE(payload);
 	ra_data.rtwdev = rtwdev;
 	ra_data.payload = payload;
-	ra_data.length = length;
 	rtw_iterate_stas_atomic(rtwdev, rtw_fw_ra_report_iter, &ra_data);
 }
 
@@ -276,7 +267,7 @@ static void rtw_fw_scan_result(struct rtw_dev *rtwdev, u8 *payload,
 static void rtw_fw_adaptivity_result(struct rtw_dev *rtwdev, u8 *payload,
 				     u8 length)
 {
-	const struct rtw_hw_reg_offset *edcca_th = rtwdev->chip->edcca_th;
+	struct rtw_hw_reg_offset *edcca_th = rtwdev->chip->edcca_th;
 	struct rtw_c2h_adaptivity *result = (struct rtw_c2h_adaptivity *)payload;
 
 	rtw_dbg(rtwdev, RTW_DBG_ADAPTIVITY,
@@ -332,9 +323,6 @@ void rtw_fw_c2h_cmd_handle(struct rtw_dev *rtwdev, struct sk_buff *skb)
 	case C2H_RA_RPT:
 		rtw_fw_ra_report_handle(rtwdev, c2h->payload, len);
 		break;
-	case C2H_ADAPTIVITY:
-		rtw_fw_adaptivity_result(rtwdev, c2h->payload, len);
-		break;
 	default:
 		rtw_dbg(rtwdev, RTW_DBG_FW, "C2H 0x%x isn't handled\n", c2h->id);
 		break;
@@ -368,6 +356,10 @@ void rtw_fw_c2h_cmd_rx_irqsafe(struct rtw_dev *rtwdev, u32 pkt_offset,
 	case C2H_SCAN_RESULT:
 		complete(&rtwdev->fw_scan_density);
 		rtw_fw_scan_result(rtwdev, c2h->payload, len);
+		dev_kfree_skb_any(skb);
+		break;
+	case C2H_ADAPTIVITY:
+		rtw_fw_adaptivity_result(rtwdev, c2h->payload, len);
 		dev_kfree_skb_any(skb);
 		break;
 	default:
@@ -521,7 +513,7 @@ rtw_fw_send_general_info(struct rtw_dev *rtwdev)
 	u8 h2c_pkt[H2C_PKT_SIZE] = {0};
 	u16 total_size = H2C_PKT_HDR_SIZE + 4;
 
-	if (rtw_chip_wcpu_8051(rtwdev))
+	if (rtw_chip_wcpu_11n(rtwdev))
 		return;
 
 	rtw_h2c_pkt_set_header(h2c_pkt, H2C_PKT_GENERAL_INFO);
@@ -544,7 +536,7 @@ rtw_fw_send_phydm_info(struct rtw_dev *rtwdev)
 	u16 total_size = H2C_PKT_HDR_SIZE + 8;
 	u8 fw_rf_type = 0;
 
-	if (rtw_chip_wcpu_8051(rtwdev))
+	if (rtw_chip_wcpu_11n(rtwdev))
 		return;
 
 	if (hal->rf_type == RF_1T1R)
@@ -735,7 +727,6 @@ void rtw_fw_send_ra_info(struct rtw_dev *rtwdev, struct rtw_sta_info *si,
 {
 	u8 h2c_pkt[H2C_PKT_SIZE] = {0};
 	bool disable_pt = true;
-	u32 mask_hi;
 
 	SET_H2C_CMD_ID_CLASS(h2c_pkt, H2C_CMD_RA_INFO);
 
@@ -754,20 +745,6 @@ void rtw_fw_send_ra_info(struct rtw_dev *rtwdev, struct rtw_sta_info *si,
 	SET_RA_INFO_RA_MASK3(h2c_pkt, (si->ra_mask & 0xff000000) >> 24);
 
 	si->init_ra_lv = 0;
-
-	rtw_fw_send_h2c_command(rtwdev, h2c_pkt);
-
-	if (rtwdev->chip->id != RTW_CHIP_TYPE_8814A)
-		return;
-
-	SET_H2C_CMD_ID_CLASS(h2c_pkt, H2C_CMD_RA_INFO_HI);
-
-	mask_hi = si->ra_mask >> 32;
-
-	SET_RA_INFO_RA_MASK0(h2c_pkt, (mask_hi & 0xff));
-	SET_RA_INFO_RA_MASK1(h2c_pkt, (mask_hi & 0xff00) >> 8);
-	SET_RA_INFO_RA_MASK2(h2c_pkt, (mask_hi & 0xff0000) >> 16);
-	SET_RA_INFO_RA_MASK3(h2c_pkt, (mask_hi & 0xff000000) >> 24);
 
 	rtw_fw_send_h2c_command(rtwdev, h2c_pkt);
 }
@@ -1304,16 +1281,16 @@ static void rtw_fill_rsvd_page_desc(struct rtw_dev *rtwdev, struct sk_buff *skb,
 	rtw_tx_rsvd_page_pkt_info_update(rtwdev, &pkt_info, skb, type);
 	pkt_desc = skb_push(skb, chip->tx_pkt_desc_sz);
 	memset(pkt_desc, 0, chip->tx_pkt_desc_sz);
-	rtw_tx_fill_tx_desc(rtwdev, &pkt_info, skb);
+	rtw_tx_fill_tx_desc(&pkt_info, skb);
 }
 
-static inline u8 rtw_len_to_page(unsigned int len, u16 page_size)
+static inline u8 rtw_len_to_page(unsigned int len, u8 page_size)
 {
 	return DIV_ROUND_UP(len, page_size);
 }
 
-static void rtw_rsvd_page_list_to_buf(struct rtw_dev *rtwdev, u16 page_size,
-				      u16 page_margin, u32 page, u8 *buf,
+static void rtw_rsvd_page_list_to_buf(struct rtw_dev *rtwdev, u8 page_size,
+				      u8 page_margin, u32 page, u8 *buf,
 				      struct rtw_rsvd_page *rsvd_pkt)
 {
 	struct sk_buff *skb = rsvd_pkt->skb;
@@ -1466,7 +1443,7 @@ void rtw_add_rsvd_page_sta(struct rtw_dev *rtwdev,
 int rtw_fw_write_data_rsvd_page(struct rtw_dev *rtwdev, u16 pg_addr,
 				u8 *buf, u32 size)
 {
-	u8 bckp[3];
+	u8 bckp[2];
 	u8 val;
 	u16 rsvd_pg_head;
 	u32 bcn_valid_addr;
@@ -1478,9 +1455,7 @@ int rtw_fw_write_data_rsvd_page(struct rtw_dev *rtwdev, u16 pg_addr,
 	if (!size)
 		return -EINVAL;
 
-	bckp[2] = rtw_read8(rtwdev, REG_BCN_CTRL);
-
-	if (rtw_chip_wcpu_8051(rtwdev)) {
+	if (rtw_chip_wcpu_11n(rtwdev)) {
 		rtw_write32_set(rtwdev, REG_DWBCN0_CTRL, BIT_BCN_VALID);
 	} else {
 		pg_addr &= BIT_MASK_BCN_HEAD_1_V1;
@@ -1492,9 +1467,6 @@ int rtw_fw_write_data_rsvd_page(struct rtw_dev *rtwdev, u16 pg_addr,
 	bckp[0] = val;
 	val |= BIT_ENSWBCN >> 8;
 	rtw_write8(rtwdev, REG_CR + 1, val);
-
-	rtw_write8(rtwdev, REG_BCN_CTRL,
-		   (bckp[2] & ~BIT_EN_BCN_FUNCTION) | BIT_DIS_TSF_UDT);
 
 	if (rtw_hci_type(rtwdev) == RTW_HCI_TYPE_PCIE) {
 		val = rtw_read8(rtwdev, REG_FWHW_TXQ_CTRL + 2);
@@ -1509,7 +1481,7 @@ int rtw_fw_write_data_rsvd_page(struct rtw_dev *rtwdev, u16 pg_addr,
 		goto restore;
 	}
 
-	if (rtw_chip_wcpu_8051(rtwdev)) {
+	if (rtw_chip_wcpu_11n(rtwdev)) {
 		bcn_valid_addr = REG_DWBCN0_CTRL;
 		bcn_valid_mask = BIT_BCN_VALID;
 	} else {
@@ -1526,7 +1498,6 @@ restore:
 	rsvd_pg_head = rtwdev->fifo.rsvd_boundary;
 	rtw_write16(rtwdev, REG_FIFOPAGE_CTRL_2,
 		    rsvd_pg_head | BIT_BCN_VALID_V1);
-	rtw_write8(rtwdev, REG_BCN_CTRL, bckp[2]);
 	if (rtw_hci_type(rtwdev) == RTW_HCI_TYPE_PCIE)
 		rtw_write8(rtwdev, REG_FWHW_TXQ_CTRL + 2, bckp[1]);
 	rtw_write8(rtwdev, REG_CR + 1, bckp[0]);
@@ -1621,13 +1592,13 @@ static int  __rtw_build_rsvd_page_from_vifs(struct rtw_dev *rtwdev)
 
 static u8 *rtw_build_rsvd_page(struct rtw_dev *rtwdev, u32 *size)
 {
-	const struct rtw_chip_info *chip = rtwdev->chip;
 	struct ieee80211_hw *hw = rtwdev->hw;
-	struct rtw_rsvd_page *rsvd_pkt;
+	const struct rtw_chip_info *chip = rtwdev->chip;
 	struct sk_buff *iter;
-	u16 page_size, page_margin, tx_desc_sz;
-	u8 total_page = 0;
+	struct rtw_rsvd_page *rsvd_pkt;
 	u32 page = 0;
+	u8 total_page = 0;
+	u8 page_size, page_margin, tx_desc_sz;
 	u8 *buf;
 	int ret;
 
@@ -2033,13 +2004,12 @@ static int _rtw_hw_scan_update_probe_req(struct rtw_dev *rtwdev, u8 num_probes,
 {
 	const struct rtw_chip_info *chip = rtwdev->chip;
 	struct sk_buff *skb, *tmp;
+	u8 page_offset = 1, *buf, page_size = chip->page_size;
 	u16 pg_addr = rtwdev->fifo.rsvd_h2c_info_addr, loc;
-	u8 tx_desc_sz = chip->tx_pkt_desc_sz;
-	u16 page_size = chip->page_size;
-	u8 page_offset = 1, *buf;
 	u16 buf_offset = page_size * page_offset;
-	unsigned int pkt_len;
+	u8 tx_desc_sz = chip->tx_pkt_desc_sz;
 	u8 page_cnt, pages;
+	unsigned int pkt_len;
 	int ret;
 
 	if (rtw_fw_feature_ext_check(&rtwdev->fw, FW_FEATURE_EXT_OLD_PAGE_NUM))

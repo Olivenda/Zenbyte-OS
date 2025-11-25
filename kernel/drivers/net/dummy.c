@@ -38,7 +38,6 @@
 #include <linux/moduleparam.h>
 #include <linux/rtnetlink.h>
 #include <linux/net_tstamp.h>
-#include <net/netdev_lock.h>
 #include <net/rtnetlink.h>
 #include <linux/u64_stats_sync.h>
 
@@ -105,7 +104,6 @@ static void dummy_setup(struct net_device *dev)
 	dev->netdev_ops = &dummy_netdev_ops;
 	dev->ethtool_ops = &dummy_ethtool_ops;
 	dev->needs_free_netdev = true;
-	dev->request_ops_lock = true;
 
 	/* Fill in device structure with ethernet-generic values. */
 	dev->flags |= IFF_NOARP;
@@ -170,21 +168,22 @@ static int __init dummy_init_module(void)
 {
 	int i, err = 0;
 
-	err = rtnl_link_register(&dummy_link_ops);
+	down_write(&pernet_ops_rwsem);
+	rtnl_lock();
+	err = __rtnl_link_register(&dummy_link_ops);
 	if (err < 0)
-		return err;
-
-	rtnl_net_lock(&init_net);
+		goto out;
 
 	for (i = 0; i < numdummies && !err; i++) {
 		err = dummy_init_one();
 		cond_resched();
 	}
-
-	rtnl_net_unlock(&init_net);
-
 	if (err < 0)
-		rtnl_link_unregister(&dummy_link_ops);
+		__rtnl_link_unregister(&dummy_link_ops);
+
+out:
+	rtnl_unlock();
+	up_write(&pernet_ops_rwsem);
 
 	return err;
 }

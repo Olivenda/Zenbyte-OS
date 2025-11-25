@@ -266,20 +266,20 @@ static void bdw_dump(struct snd_sof_dev *sdev, u32 flags)
 	imrd = snd_sof_dsp_read(sdev, BDW_DSP_BAR, SHIM_IMRD);
 	dev_err(sdev->dev,
 		"error: ipc host -> DSP: pending %s complete %s raw 0x%8.8x\n",
-		str_yes_no(panic & SHIM_IPCX_BUSY),
-		str_yes_no(panic & SHIM_IPCX_DONE), panic);
+		(panic & SHIM_IPCX_BUSY) ? "yes" : "no",
+		(panic & SHIM_IPCX_DONE) ? "yes" : "no", panic);
 	dev_err(sdev->dev,
 		"error: mask host: pending %s complete %s raw 0x%8.8x\n",
-		str_yes_no(imrx & SHIM_IMRX_BUSY),
-		str_yes_no(imrx & SHIM_IMRX_DONE), imrx);
+		(imrx & SHIM_IMRX_BUSY) ? "yes" : "no",
+		(imrx & SHIM_IMRX_DONE) ? "yes" : "no", imrx);
 	dev_err(sdev->dev,
 		"error: ipc DSP -> host: pending %s complete %s raw 0x%8.8x\n",
-		str_yes_no(status & SHIM_IPCD_BUSY),
-		str_yes_no(status & SHIM_IPCD_DONE), status);
+		(status & SHIM_IPCD_BUSY) ? "yes" : "no",
+		(status & SHIM_IPCD_DONE) ? "yes" : "no", status);
 	dev_err(sdev->dev,
 		"error: mask DSP: pending %s complete %s raw 0x%8.8x\n",
-		str_yes_no(imrd & SHIM_IMRD_BUSY),
-		str_yes_no(imrd & SHIM_IMRD_DONE), imrd);
+		(imrd & SHIM_IMRD_BUSY) ? "yes" : "no",
+		(imrd & SHIM_IMRD_DONE) ? "yes" : "no", imrd);
 }
 
 /*
@@ -410,7 +410,8 @@ static int bdw_probe(struct snd_sof_dev *sdev)
 {
 	struct snd_sof_pdata *pdata = sdev->pdata;
 	const struct sof_dev_desc *desc = pdata->desc;
-	struct platform_device *pdev = to_platform_device(sdev->dev);
+	struct platform_device *pdev =
+		container_of(sdev->dev, struct platform_device, dev);
 	const struct sof_intel_dsp_desc *chip;
 	struct resource *mmio;
 	u32 base, size;
@@ -686,7 +687,7 @@ static struct platform_driver snd_sof_acpi_intel_bdw_driver = {
 	.remove = sof_acpi_remove,
 	.driver = {
 		.name = "sof-audio-acpi-intel-bdw",
-		.pm = pm_ptr(&sof_acpi_pm),
+		.pm = &sof_acpi_pm,
 		.acpi_match_table = sof_broadwell_match,
 	},
 };
@@ -694,5 +695,6 @@ module_platform_driver(snd_sof_acpi_intel_bdw_driver);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("SOF support for Broadwell platforms");
-MODULE_IMPORT_NS("SND_SOC_SOF_XTENSA");
-MODULE_IMPORT_NS("SND_SOC_SOF_ACPI_DEV");
+MODULE_IMPORT_NS(SND_SOC_SOF_INTEL_HIFI_EP_IPC);
+MODULE_IMPORT_NS(SND_SOC_SOF_XTENSA);
+MODULE_IMPORT_NS(SND_SOC_SOF_ACPI_DEV);

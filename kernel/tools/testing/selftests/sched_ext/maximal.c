@@ -14,11 +14,8 @@ static enum scx_test_status setup(void **ctx)
 {
 	struct maximal *skel;
 
-	skel = maximal__open();
-	SCX_FAIL_IF(!skel, "Failed to open");
-	SCX_ENUM_INIT(skel);
-	SCX_FAIL_IF(maximal__load(skel), "Failed to load skel");
-
+	skel = maximal__open_and_load();
+	SCX_FAIL_IF(!skel, "Failed to open and load skel");
 	*ctx = skel;
 
 	return SCX_TEST_PASS;

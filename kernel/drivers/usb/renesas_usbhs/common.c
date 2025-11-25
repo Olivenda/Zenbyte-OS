@@ -634,7 +634,7 @@ static int usbhs_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->base))
 		return PTR_ERR(priv->base);
 
-	if (of_property_present(dev_of_node(dev), "extcon")) {
+	if (of_property_read_bool(dev_of_node(dev), "extcon")) {
 		priv->edev = extcon_get_edev_by_phandle(dev, 0);
 		if (IS_ERR(priv->edev))
 			return PTR_ERR(priv->edev);
@@ -717,7 +717,7 @@ static int usbhs_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto probe_end_fifo_exit;
 
-	/* platform_set_drvdata() should be called after usbhs_mod_probe() */
+	/* dev_set_drvdata should be called after usbhs_mod_init */
 	platform_set_drvdata(pdev, priv);
 
 	ret = reset_control_deassert(priv->rsts);
@@ -725,7 +725,7 @@ static int usbhs_probe(struct platform_device *pdev)
 		goto probe_fail_rst;
 
 	/*
-	 * device reset here because
+	 * deviece reset here because
 	 * USB device might be used in boot loader.
 	 */
 	usbhs_sys_clock_ctrl(priv, 0);
@@ -823,7 +823,7 @@ static void usbhs_remove(struct platform_device *pdev)
 	usbhs_pipe_remove(priv);
 }
 
-static int usbhsc_suspend(struct device *dev)
+static __maybe_unused int usbhsc_suspend(struct device *dev)
 {
 	struct usbhs_priv *priv = dev_get_drvdata(dev);
 	struct usbhs_mod *mod = usbhs_mod_get_current(priv);
@@ -839,7 +839,7 @@ static int usbhsc_suspend(struct device *dev)
 	return 0;
 }
 
-static int usbhsc_resume(struct device *dev)
+static __maybe_unused int usbhsc_resume(struct device *dev)
 {
 	struct usbhs_priv *priv = dev_get_drvdata(dev);
 	struct platform_device *pdev = usbhs_priv_to_pdev(priv);
@@ -856,16 +856,16 @@ static int usbhsc_resume(struct device *dev)
 	return 0;
 }
 
-static DEFINE_SIMPLE_DEV_PM_OPS(usbhsc_pm_ops, usbhsc_suspend, usbhsc_resume);
+static SIMPLE_DEV_PM_OPS(usbhsc_pm_ops, usbhsc_suspend, usbhsc_resume);
 
 static struct platform_driver renesas_usbhs_driver = {
 	.driver		= {
 		.name	= "renesas_usbhs",
-		.pm	= pm_sleep_ptr(&usbhsc_pm_ops),
+		.pm	= &usbhsc_pm_ops,
 		.of_match_table = usbhs_of_match,
 	},
 	.probe		= usbhs_probe,
-	.remove		= usbhs_remove,
+	.remove_new	= usbhs_remove,
 };
 
 module_platform_driver(renesas_usbhs_driver);

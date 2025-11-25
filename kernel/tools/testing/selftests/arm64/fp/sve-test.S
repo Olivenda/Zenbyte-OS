@@ -291,7 +291,8 @@ function check_ffr
 #endif
 endfunction
 
-// Modify live register state, the signal return will undo our changes
+// Any SVE register modified here can cause corruption in the main
+// thread -- but *only* the registers modified here.
 function irritator_handler
 	// Increment the irritation signal count (x23):
 	ldr	x0, [x2, #ucontext_regs + 8 * 23]
@@ -299,12 +300,13 @@ function irritator_handler
 	str	x0, [x2, #ucontext_regs + 8 * 23]
 
 	// Corrupt some random Z-regs
+	adr	x0, .text + (irritator_handler - .text) / 16 * 16
 	movi	v0.8b, #1
 	movi	v9.16b, #2
 	movi	v31.8b, #3
-	// And P0
-	ptrue	p0.d
 #ifndef SSVE
+	// And P0
+	rdffr	p0.b
 	// And FFR
 	wrffr	p15.b
 #endif
@@ -376,8 +378,6 @@ endfunction
 // Main program entry point
 .globl _start
 function _start
-	enable_gcs
-
 	mov	x23, #0		// Irritation signal count
 
 	mov	w0, #SIGINT

@@ -337,9 +337,8 @@ static void a5psw_port_rx_block_set(struct a5psw *a5psw, int port, bool block)
 static void a5psw_flooding_set_resolution(struct a5psw *a5psw, int port,
 					  bool set)
 {
-	static const u8 offsets[] = {
-		A5PSW_UCAST_DEF_MASK, A5PSW_BCAST_DEF_MASK, A5PSW_MCAST_DEF_MASK
-	};
+	u8 offsets[] = {A5PSW_UCAST_DEF_MASK, A5PSW_BCAST_DEF_MASK,
+			A5PSW_MCAST_DEF_MASK};
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(offsets); i++)
@@ -803,8 +802,10 @@ static void a5psw_get_strings(struct dsa_switch *ds, int port, u32 stringset,
 	if (stringset != ETH_SS_STATS)
 		return;
 
-	for (u = 0; u < ARRAY_SIZE(a5psw_stats); u++)
-		ethtool_puts(&data, a5psw_stats[u].name);
+	for (u = 0; u < ARRAY_SIZE(a5psw_stats); u++) {
+		memcpy(data + u * ETH_GSTRING_LEN, a5psw_stats[u].name,
+		       ETH_GSTRING_LEN);
+	}
 }
 
 static void a5psw_get_ethtool_stats(struct dsa_switch *ds, int port,
@@ -1227,29 +1228,39 @@ static int a5psw_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	a5psw->hclk = devm_clk_get_enabled(dev, "hclk");
+	a5psw->hclk = devm_clk_get(dev, "hclk");
 	if (IS_ERR(a5psw->hclk)) {
 		dev_err(dev, "failed get hclk clock\n");
 		ret = PTR_ERR(a5psw->hclk);
 		goto free_pcs;
 	}
 
-	a5psw->clk = devm_clk_get_enabled(dev, "clk");
+	a5psw->clk = devm_clk_get(dev, "clk");
 	if (IS_ERR(a5psw->clk)) {
 		dev_err(dev, "failed get clk_switch clock\n");
 		ret = PTR_ERR(a5psw->clk);
 		goto free_pcs;
 	}
 
-	mdio = of_get_available_child_by_name(dev->of_node, "mdio");
-	if (mdio) {
+	ret = clk_prepare_enable(a5psw->clk);
+	if (ret)
+		goto free_pcs;
+
+	ret = clk_prepare_enable(a5psw->hclk);
+	if (ret)
+		goto clk_disable;
+
+	mdio = of_get_child_by_name(dev->of_node, "mdio");
+	if (of_device_is_available(mdio)) {
 		ret = a5psw_probe_mdio(a5psw, mdio);
-		of_node_put(mdio);
 		if (ret) {
+			of_node_put(mdio);
 			dev_err(dev, "Failed to register MDIO: %d\n", ret);
-			goto free_pcs;
+			goto hclk_disable;
 		}
 	}
+
+	of_node_put(mdio);
 
 	ds = &a5psw->ds;
 	ds->dev = dev;
@@ -1261,11 +1272,15 @@ static int a5psw_probe(struct platform_device *pdev)
 	ret = dsa_register_switch(ds);
 	if (ret) {
 		dev_err(dev, "Failed to register DSA switch: %d\n", ret);
-		goto free_pcs;
+		goto hclk_disable;
 	}
 
 	return 0;
 
+hclk_disable:
+	clk_disable_unprepare(a5psw->hclk);
+clk_disable:
+	clk_disable_unprepare(a5psw->clk);
 free_pcs:
 	a5psw_pcs_free(a5psw);
 
@@ -1281,6 +1296,8 @@ static void a5psw_remove(struct platform_device *pdev)
 
 	dsa_unregister_switch(&a5psw->ds);
 	a5psw_pcs_free(a5psw);
+	clk_disable_unprepare(a5psw->hclk);
+	clk_disable_unprepare(a5psw->clk);
 }
 
 static void a5psw_shutdown(struct platform_device *pdev)
@@ -1307,7 +1324,7 @@ static struct platform_driver a5psw_driver = {
 		.of_match_table = a5psw_of_mtable,
 	},
 	.probe = a5psw_probe,
-	.remove = a5psw_remove,
+	.remove_new = a5psw_remove,
 	.shutdown = a5psw_shutdown,
 };
 module_platform_driver(a5psw_driver);

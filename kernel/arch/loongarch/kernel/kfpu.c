@@ -4,7 +4,6 @@
  */
 
 #include <linux/cpu.h>
-#include <linux/export.h>
 #include <linux/init.h>
 #include <asm/fpu.h>
 #include <asm/smp.h>

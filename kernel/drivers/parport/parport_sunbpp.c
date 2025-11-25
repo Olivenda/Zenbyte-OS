@@ -368,7 +368,7 @@ static struct platform_driver bpp_sbus_driver = {
 		.of_match_table = bpp_match,
 	},
 	.probe		= bpp_probe,
-	.remove		= bpp_remove,
+	.remove_new	= bpp_remove,
 };
 
 module_platform_driver(bpp_sbus_driver);

@@ -11,7 +11,6 @@
 #include "xfs_log_format.h"
 #include "xfs_trans_resv.h"
 #include "xfs_mount.h"
-#include "xfs_group.h"
 #include "xfs_defer.h"
 #include "xfs_da_format.h"
 #include "xfs_inode.h"
@@ -33,7 +32,6 @@
 #include "xfs_fsmap.h"
 #include "xfs_btree_staging.h"
 #include "xfs_icache.h"
-#include "xfs_iunlink_item.h"
 #include "xfs_ag.h"
 #include "xfs_ag_resv.h"
 #include "xfs_error.h"
@@ -46,11 +44,6 @@
 #include "xfs_parent.h"
 #include "xfs_rmap.h"
 #include "xfs_refcount.h"
-#include "xfs_metafile.h"
-#include "xfs_metadir.h"
-#include "xfs_rtgroup.h"
-#include "xfs_zone_alloc.h"
-#include "xfs_zone_priv.h"
 
 /*
  * We include this last to have the helpers above available for the trace

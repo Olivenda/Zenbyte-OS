@@ -12,6 +12,36 @@
 #include <linux/kvm_host.h>
 #include <linux/uaccess.h>
 
+static void unlock_vcpus(struct kvm *kvm, int vcpu_lock_idx)
+{
+	struct kvm_vcpu *tmp_vcpu;
+
+	for (; vcpu_lock_idx >= 0; vcpu_lock_idx--) {
+		tmp_vcpu = kvm_get_vcpu(kvm, vcpu_lock_idx);
+		mutex_unlock(&tmp_vcpu->mutex);
+	}
+}
+
+static void unlock_all_vcpus(struct kvm *kvm)
+{
+	unlock_vcpus(kvm, atomic_read(&kvm->online_vcpus) - 1);
+}
+
+static bool lock_all_vcpus(struct kvm *kvm)
+{
+	struct kvm_vcpu *tmp_vcpu;
+	unsigned long c;
+
+	kvm_for_each_vcpu(c, tmp_vcpu, kvm) {
+		if (!mutex_trylock(&tmp_vcpu->mutex)) {
+			unlock_vcpus(kvm, c - 1);
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static int aia_create(struct kvm_device *dev, u32 type)
 {
 	int ret;
@@ -23,7 +53,7 @@ static int aia_create(struct kvm_device *dev, u32 type)
 		return -EEXIST;
 
 	ret = -EBUSY;
-	if (kvm_trylock_all_vcpus(kvm))
+	if (!lock_all_vcpus(kvm))
 		return ret;
 
 	kvm_for_each_vcpu(i, vcpu, kvm) {
@@ -35,7 +65,7 @@ static int aia_create(struct kvm_device *dev, u32 type)
 	kvm->arch.aia.in_kernel = true;
 
 out_unlock:
-	kvm_unlock_all_vcpus(kvm);
+	unlock_all_vcpus(kvm);
 	return ret;
 }
 
@@ -496,10 +526,12 @@ int kvm_riscv_vcpu_aia_update(struct kvm_vcpu *vcpu)
 void kvm_riscv_vcpu_aia_reset(struct kvm_vcpu *vcpu)
 {
 	struct kvm_vcpu_aia_csr *csr = &vcpu->arch.aia_context.guest_csr;
+	struct kvm_vcpu_aia_csr *reset_csr =
+				&vcpu->arch.aia_context.guest_reset_csr;
 
 	if (!kvm_riscv_aia_available())
 		return;
-	memset(csr, 0, sizeof(*csr));
+	memcpy(csr, reset_csr, sizeof(*csr));
 
 	/* Proceed only if AIA was initialized successfully */
 	if (!kvm_riscv_aia_initialized(vcpu->kvm))
@@ -509,12 +541,12 @@ void kvm_riscv_vcpu_aia_reset(struct kvm_vcpu *vcpu)
 	kvm_riscv_vcpu_aia_imsic_reset(vcpu);
 }
 
-void kvm_riscv_vcpu_aia_init(struct kvm_vcpu *vcpu)
+int kvm_riscv_vcpu_aia_init(struct kvm_vcpu *vcpu)
 {
 	struct kvm_vcpu_aia *vaia = &vcpu->arch.aia_context;
 
 	if (!kvm_riscv_aia_available())
-		return;
+		return 0;
 
 	/*
 	 * We don't do any memory allocations over here because these
@@ -526,6 +558,8 @@ void kvm_riscv_vcpu_aia_init(struct kvm_vcpu *vcpu)
 	/* Initialize default values in AIA vcpu context */
 	vaia->imsic_addr = KVM_RISCV_AIA_UNDEF_ADDR;
 	vaia->hart_index = vcpu->vcpu_idx;
+
+	return 0;
 }
 
 void kvm_riscv_vcpu_aia_deinit(struct kvm_vcpu *vcpu)

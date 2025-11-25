@@ -257,9 +257,10 @@ static void pmu_irq_handler(struct irq_desc *desc)
 	 * So, let's structure the code so that the window is as small as
 	 * possible.
 	 */
-	guard(raw_spinlock)(&gc->lock);
+	irq_gc_lock(gc);
 	done &= readl_relaxed(base + PMC_IRQ_CAUSE);
 	writel_relaxed(done, base + PMC_IRQ_CAUSE);
+	irq_gc_unlock(gc);
 }
 
 static int __init dove_init_pmu_irq(struct pmu_data *pmu, int irq)
@@ -273,8 +274,8 @@ static int __init dove_init_pmu_irq(struct pmu_data *pmu, int irq)
 	writel(0, pmu->pmc_base + PMC_IRQ_MASK);
 	writel(0, pmu->pmc_base + PMC_IRQ_CAUSE);
 
-	domain = irq_domain_create_linear(of_fwnode_handle(pmu->of_node), NR_PMU_IRQS,
-					  &irq_generic_chip_ops, NULL);
+	domain = irq_domain_add_linear(pmu->of_node, NR_PMU_IRQS,
+				       &irq_generic_chip_ops, NULL);
 	if (!domain) {
 		pr_err("%s: unable to add irq domain\n", name);
 		return -ENOMEM;

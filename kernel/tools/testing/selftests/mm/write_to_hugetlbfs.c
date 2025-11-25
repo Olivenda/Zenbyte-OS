@@ -89,7 +89,7 @@ int main(int argc, char **argv)
 			size = atoi(optarg);
 			break;
 		case 'p':
-			strncpy(path, optarg, sizeof(path) - 1);
+			strncpy(path, optarg, sizeof(path));
 			break;
 		case 'm':
 			if (atoi(optarg) >= MAX_METHOD) {

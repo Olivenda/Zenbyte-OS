@@ -4,7 +4,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "builtin.h"
-#include "perf.h"
 
 #include <subcmd/parse-options.h>
 #include "util/auxtrace.h"
@@ -74,7 +73,6 @@ static int __cmd_record(int argc, const char **argv, struct perf_mem *mem,
 	int rec_argc, i = 0, j;
 	int start, end;
 	const char **rec_argv;
-	char *event_name_storage = NULL;
 	int ret;
 	struct perf_mem_event *e;
 	struct perf_pmu *pmu;
@@ -141,7 +139,7 @@ static int __cmd_record(int argc, const char **argv, struct perf_mem *mem,
 		rec_argv[i++] = "--data-page-size";
 
 	start = i;
-	ret = perf_mem_events__record_args(rec_argv, &i, &event_name_storage);
+	ret = perf_mem_events__record_args(rec_argv, &i);
 	if (ret)
 		goto out;
 	end = i;
@@ -171,7 +169,6 @@ static int __cmd_record(int argc, const char **argv, struct perf_mem *mem,
 
 	ret = cmd_record(i, rec_argv);
 out:
-	free(event_name_storage);
 	free(rec_argv);
 	return ret;
 }
@@ -304,7 +301,7 @@ static int report_raw_events(struct perf_mem *mem)
 			goto out_delete;
 	}
 
-	ret = symbol__init(perf_session__env(session));
+	ret = symbol__init(&session->header.env);
 	if (ret < 0)
 		goto out_delete;
 
@@ -523,7 +520,6 @@ int cmd_mem(int argc, const char **argv)
 		NULL,
 		NULL
 	};
-	int ret;
 
 	argc = parse_options_subcommand(argc, argv, mem_options, mem_subcommands,
 					mem_usage, PARSE_OPT_STOP_AT_NON_OPTION);
@@ -539,15 +535,14 @@ int cmd_mem(int argc, const char **argv)
 	}
 
 	if (strlen(argv[0]) > 2 && strstarts("record", argv[0]))
-		ret = __cmd_record(argc, argv, &mem, record_options);
+		return __cmd_record(argc, argv, &mem, record_options);
 	else if (strlen(argv[0]) > 2 && strstarts("report", argv[0]))
-		ret = __cmd_report(argc, argv, &mem, report_options);
+		return __cmd_report(argc, argv, &mem, report_options);
 	else
 		usage_with_options(mem_usage, mem_options);
 
 	/* free usage string allocated by parse_options_subcommand */
 	free((void *)mem_usage[0]);
-	free(sort_order_help);
 
-	return ret;
+	return 0;
 }

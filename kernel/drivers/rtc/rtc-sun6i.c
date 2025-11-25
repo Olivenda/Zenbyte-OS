@@ -826,7 +826,7 @@ static int sun6i_rtc_probe(struct platform_device *pdev)
 
 	clk_prepare_enable(chip->losc);
 
-	device_init_wakeup(&pdev->dev, true);
+	device_init_wakeup(&pdev->dev, 1);
 
 	chip->rtc = devm_rtc_allocate_device(&pdev->dev);
 	if (IS_ERR(chip->rtc))

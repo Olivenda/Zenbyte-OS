@@ -9,7 +9,6 @@
  */
 
 #include <linux/bitmap.h>
-#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
@@ -349,18 +348,19 @@ static void sun8i_ths_reset_control_assert(void *data)
 
 static struct regmap *sun8i_ths_get_sram_regmap(struct device_node *node)
 {
+	struct device_node *sram_node;
 	struct platform_device *sram_pdev;
 	struct regmap *regmap = NULL;
 
-	struct device_node *sram_node __free(device_node) =
-		of_parse_phandle(node, "allwinner,sram", 0);
+	sram_node = of_parse_phandle(node, "allwinner,sram", 0);
 	if (!sram_node)
 		return ERR_PTR(-ENODEV);
 
 	sram_pdev = of_find_device_by_node(sram_node);
 	if (!sram_pdev) {
 		/* platform device might not be probed yet */
-		return ERR_PTR(-EPROBE_DEFER);
+		regmap = ERR_PTR(-EPROBE_DEFER);
+		goto out_put_node;
 	}
 
 	/* If no regmap is found then the other device driver is at fault */
@@ -369,7 +369,8 @@ static struct regmap *sun8i_ths_get_sram_regmap(struct device_node *node)
 		regmap = ERR_PTR(-EINVAL);
 
 	platform_device_put(sram_pdev);
-
+out_put_node:
+	of_node_put(sram_node);
 	return regmap;
 }
 

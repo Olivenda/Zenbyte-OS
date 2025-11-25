@@ -831,12 +831,18 @@ static void lcd_init(void)
 	struct charlcd *charlcd;
 	struct hd44780_common *hdc;
 
-	charlcd = hd44780_common_alloc();
-	if (!charlcd)
+	hdc = hd44780_common_alloc();
+	if (!hdc)
 		return;
 
-	hdc = charlcd->drvdata;
+	charlcd = charlcd_alloc(0);
+	if (!charlcd) {
+		kfree(hdc);
+		return;
+	}
+
 	hdc->hd44780 = &lcd;
+	charlcd->drvdata = hdc;
 
 	/*
 	 * Init lcd struct with load-time values to preserve exact
@@ -1654,11 +1660,11 @@ static void panel_attach(struct parport *port)
 
 err_lcd_unreg:
 	if (scan_timer.function)
-		timer_delete_sync(&scan_timer);
+		del_timer_sync(&scan_timer);
 	if (lcd.enabled)
 		charlcd_unregister(lcd.charlcd);
 err_unreg_device:
-	hd44780_common_free(lcd.charlcd);
+	charlcd_free(lcd.charlcd);
 	lcd.charlcd = NULL;
 	parport_unregister_device(pprt);
 	pprt = NULL;
@@ -1675,7 +1681,7 @@ static void panel_detach(struct parport *port)
 		return;
 	}
 	if (scan_timer.function)
-		timer_delete_sync(&scan_timer);
+		del_timer_sync(&scan_timer);
 
 	if (keypad.enabled) {
 		misc_deregister(&keypad_dev);
@@ -1685,7 +1691,8 @@ static void panel_detach(struct parport *port)
 	if (lcd.enabled) {
 		charlcd_unregister(lcd.charlcd);
 		lcd.initialized = false;
-		hd44780_common_free(lcd.charlcd);
+		kfree(lcd.charlcd->drvdata);
+		charlcd_free(lcd.charlcd);
 		lcd.charlcd = NULL;
 	}
 

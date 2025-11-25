@@ -21,7 +21,7 @@
 
 struct eisa_device_info {
 	struct eisa_device_id id;
-	char name[EISA_DEVICE_INFO_NAME_SIZE];
+	char name[50];
 };
 
 #ifdef CONFIG_EISA_NAMES

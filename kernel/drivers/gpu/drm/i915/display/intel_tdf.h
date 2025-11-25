@@ -14,12 +14,12 @@
  * the display flip, since display engine is never coherent with CPU/GPU caches.
  */
 
-struct intel_display;
+struct drm_i915_private;
 
 #ifdef I915
-static inline void intel_td_flush(struct intel_display *display) {}
+static inline void intel_td_flush(struct drm_i915_private *i915) {}
 #else
-void intel_td_flush(struct intel_display *display);
+void intel_td_flush(struct drm_i915_private *i915);
 #endif
 
 #endif

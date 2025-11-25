@@ -2278,7 +2278,7 @@ static void mac80211_hwsim_beacon_tx(void *arg, u8 *mac,
 {
 	struct mac80211_hwsim_link_data *link_data = arg;
 	u32 link_id = link_data->link_id;
-	struct ieee80211_bss_conf *link_conf, *tx_bss_conf;
+	struct ieee80211_bss_conf *link_conf;
 	struct mac80211_hwsim_data *data =
 		container_of(link_data, struct mac80211_hwsim_data,
 			     link_data[link_id]);
@@ -2297,11 +2297,10 @@ static void mac80211_hwsim_beacon_tx(void *arg, u8 *mac,
 	    vif->type != NL80211_IFTYPE_OCB)
 		return;
 
-	tx_bss_conf = rcu_access_pointer(link_conf->tx_bss_conf);
-	if (tx_bss_conf && tx_bss_conf != link_conf)
+	if (vif->mbssid_tx_vif && vif->mbssid_tx_vif != vif)
 		return;
 
-	if (link_conf->ema_ap) {
+	if (vif->bss_conf.ema_ap) {
 		struct ieee80211_ema_beacons *ema;
 		u8 i = 0;
 
@@ -2381,8 +2380,7 @@ static const char * const hwsim_chanwidths[] = {
 	[NL80211_CHAN_WIDTH_320] = "eht320",
 };
 
-static int mac80211_hwsim_config(struct ieee80211_hw *hw, int radio_idx,
-				 u32 changed)
+static int mac80211_hwsim_config(struct ieee80211_hw *hw, u32 changed)
 {
 	struct mac80211_hwsim_data *data = hw->priv;
 	struct ieee80211_conf *conf = &hw->conf;
@@ -2451,7 +2449,7 @@ static int mac80211_hwsim_config(struct ieee80211_hw *hw, int radio_idx,
 
 		if (!data->started || !link_data->beacon_int) {
 			hrtimer_cancel(&link_data->beacon_timer);
-		} else if (!hrtimer_active(&link_data->beacon_timer)) {
+		} else if (!hrtimer_is_queued(&link_data->beacon_timer)) {
 			u64 tsf = mac80211_hwsim_get_tsf(hw, NULL);
 			u32 bcn_int = link_data->beacon_int;
 			u64 until_tbtt = bcn_int - do_div(tsf, bcn_int);
@@ -2546,7 +2544,7 @@ static void mac80211_hwsim_link_info_changed(struct ieee80211_hw *hw,
 			  info->enable_beacon, info->beacon_int);
 		vp->bcn_en = info->enable_beacon;
 		if (data->started &&
-		    !hrtimer_active(&link_data->beacon_timer) &&
+		    !hrtimer_is_queued(&link_data->beacon_timer) &&
 		    info->enable_beacon) {
 			u64 tsf, until_tbtt;
 			u32 bcn_int;
@@ -2603,11 +2601,10 @@ static void mac80211_hwsim_link_info_changed(struct ieee80211_hw *hw,
 static void
 mac80211_hwsim_sta_rc_update(struct ieee80211_hw *hw,
 			     struct ieee80211_vif *vif,
-			     struct ieee80211_link_sta *link_sta,
+			     struct ieee80211_sta *sta,
 			     u32 changed)
 {
 	struct mac80211_hwsim_data *data = hw->priv;
-	struct ieee80211_sta *sta = link_sta->sta;
 	u32 bw = U32_MAX;
 	int link_id;
 
@@ -2617,6 +2614,7 @@ mac80211_hwsim_sta_rc_update(struct ieee80211_hw *hw,
 	     link_id++) {
 		enum nl80211_chan_width confbw = NL80211_CHAN_WIDTH_20_NOHT;
 		struct ieee80211_bss_conf *vif_conf;
+		struct ieee80211_link_sta *link_sta;
 
 		link_sta = rcu_dereference(sta->link[link_id]);
 
@@ -2668,7 +2666,7 @@ static int mac80211_hwsim_sta_add(struct ieee80211_hw *hw,
 
 	hwsim_check_magic(vif);
 	hwsim_set_sta_magic(sta);
-	mac80211_hwsim_sta_rc_update(hw, vif, &sta->deflink, 0);
+	mac80211_hwsim_sta_rc_update(hw, vif, sta, 0);
 
 	if (sta->valid_links) {
 		WARN(hweight16(sta->valid_links) > 1,
@@ -3339,8 +3337,7 @@ static int mac80211_hwsim_tx_last_beacon(struct ieee80211_hw *hw)
 	return 1;
 }
 
-static int mac80211_hwsim_set_rts_threshold(struct ieee80211_hw *hw,
-					    int radio_idx, u32 value)
+static int mac80211_hwsim_set_rts_threshold(struct ieee80211_hw *hw, u32 value)
 {
 	return -EOPNOTSUPP;
 }
@@ -3971,7 +3968,7 @@ out:
 	.link_info_changed = mac80211_hwsim_link_info_changed,  \
 	.tx_last_beacon = mac80211_hwsim_tx_last_beacon,	\
 	.sta_notify = mac80211_hwsim_sta_notify,		\
-	.link_sta_rc_update = mac80211_hwsim_sta_rc_update,	\
+	.sta_rc_update = mac80211_hwsim_sta_rc_update,		\
 	.conf_tx = mac80211_hwsim_conf_tx,			\
 	.get_survey = mac80211_hwsim_get_survey,		\
 	CFG80211_TESTMODE_CMD(mac80211_hwsim_testmode_cmd)	\
@@ -5058,45 +5055,6 @@ static const struct ieee80211_sband_iftype_data sband_capa_6ghz[] = {
 				.tx_mcs_80p80 = cpu_to_le16(0xfffa),
 			},
 		},
-		.eht_cap = {
-			.has_eht = true,
-			.eht_cap_elem = {
-				.mac_cap_info[0] = IEEE80211_EHT_MAC_CAP0_OM_CONTROL |
-						   IEEE80211_EHT_MAC_CAP0_TRIG_TXOP_SHARING_MODE1,
-				.phy_cap_info[0] = IEEE80211_EHT_PHY_CAP0_320MHZ_IN_6GHZ,
-				/* Leave all the other PHY capability bytes
-				 * unset, as DCM, beam forming, RU and PPE
-				 * threshold information are not supported
-				 */
-			},
-			/* For all MCS and bandwidth, set 8 NSS for both Tx and
-			 * Rx
-			 */
-			.eht_mcs_nss_supp = {
-				/* As B1 and B2 are set in the supported
-				 * channel width set field in the HE PHY
-				 * capabilities information field and 320MHz in
-				 * 6GHz is supported include all the following
-				 * MCS/NSS.
-				 */
-				.bw._80 = {
-					.rx_tx_mcs9_max_nss = 0x88,
-					.rx_tx_mcs11_max_nss = 0x88,
-					.rx_tx_mcs13_max_nss = 0x88,
-				},
-				.bw._160 = {
-					.rx_tx_mcs9_max_nss = 0x88,
-					.rx_tx_mcs11_max_nss = 0x88,
-					.rx_tx_mcs13_max_nss = 0x88,
-				},
-				.bw._320 = {
-					.rx_tx_mcs9_max_nss = 0x88,
-					.rx_tx_mcs11_max_nss = 0x88,
-					.rx_tx_mcs13_max_nss = 0x88,
-				},
-			},
-			/* PPE threshold information is not supported */
-		},
 	},
 #endif
 };
@@ -5355,7 +5313,6 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 	ieee80211_hw_set(hw, REPORTS_TX_ACK_STATUS);
 	ieee80211_hw_set(hw, TDLS_WIDER_BW);
 	ieee80211_hw_set(hw, SUPPORTS_MULTI_BSSID);
-	ieee80211_hw_set(hw, STRICT);
 
 	if (param->mlo) {
 		hw->wiphy->flags |= WIPHY_FLAG_SUPPORTS_MLO;
@@ -5384,8 +5341,7 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 			       NL80211_FEATURE_AP_MODE_CHAN_WIDTH_CHANGE |
 			       NL80211_FEATURE_STATIC_SMPS |
 			       NL80211_FEATURE_DYNAMIC_SMPS |
-			       NL80211_FEATURE_SCAN_RANDOM_MAC_ADDR |
-			       NL80211_FEATURE_AP_SCAN;
+			       NL80211_FEATURE_SCAN_RANDOM_MAC_ADDR;
 	wiphy_ext_feature_set(hw->wiphy, NL80211_EXT_FEATURE_VHT_IBSS);
 	wiphy_ext_feature_set(hw->wiphy, NL80211_EXT_FEATURE_BEACON_PROTECTION);
 	wiphy_ext_feature_set(hw->wiphy,
@@ -5560,8 +5516,10 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 	wiphy_ext_feature_set(hw->wiphy, NL80211_EXT_FEATURE_CQM_RSSI_LIST);
 
 	for (i = 0; i < ARRAY_SIZE(data->link_data); i++) {
-		hrtimer_setup(&data->link_data[i].beacon_timer, mac80211_hwsim_beacon,
-			      CLOCK_MONOTONIC, HRTIMER_MODE_ABS_SOFT);
+		hrtimer_init(&data->link_data[i].beacon_timer, CLOCK_MONOTONIC,
+			     HRTIMER_MODE_ABS_SOFT);
+		data->link_data[i].beacon_timer.function =
+			mac80211_hwsim_beacon;
 		data->link_data[i].link_id = i;
 	}
 

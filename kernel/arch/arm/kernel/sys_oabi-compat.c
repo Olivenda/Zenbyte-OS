@@ -235,12 +235,12 @@ asmlinkage long sys_oabi_fcntl64(unsigned int fd, unsigned int cmd,
 				 unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
-	CLASS(fd_raw, f)(fd);
+	struct fd f = fdget_raw(fd);
 	struct flock64 flock;
-	long err;
+	long err = -EBADF;
 
-	if (fd_empty(f))
-		return -EBADF;
+	if (!fd_file(f))
+		goto out;
 
 	switch (cmd) {
 	case F_GETLK64:
@@ -271,6 +271,8 @@ asmlinkage long sys_oabi_fcntl64(unsigned int fd, unsigned int cmd,
 		err = sys_fcntl64(fd, cmd, arg);
 		break;
 	}
+	fdput(f);
+out:
 	return err;
 }
 

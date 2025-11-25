@@ -7,8 +7,6 @@
 #include <linux/mutex.h>
 #include <linux/types.h>
 
-#include "adf_cfg_services.h"
-
 struct adf_accel_dev;
 
 #define RL_ROOT_MAX		4
@@ -24,6 +22,13 @@ enum rl_node_type {
 	RL_ROOT,
 	RL_CLUSTER,
 	RL_LEAF,
+};
+
+enum adf_base_services {
+	ADF_SVC_ASYM = 0,
+	ADF_SVC_SYM,
+	ADF_SVC_DC,
+	ADF_SVC_NONE,
 };
 
 /**
@@ -68,7 +73,6 @@ struct rl_slice_cnt {
 	u8 dcpr_cnt;
 	u8 pke_cnt;
 	u8 cph_cnt;
-	u8 cpr_cnt;
 };
 
 struct adf_rl_interface_data {
@@ -90,7 +94,6 @@ struct adf_rl_hw_data {
 	u32 pcie_scale_div;
 	u32 dcpr_correction;
 	u32 max_tp[RL_ROOT_MAX];
-	u32 svc_ae_mask[SVC_BASE_COUNT];
 	struct rl_slice_cnt slices;
 };
 

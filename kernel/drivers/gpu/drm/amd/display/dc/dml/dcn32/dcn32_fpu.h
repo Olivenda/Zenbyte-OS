@@ -49,7 +49,7 @@ bool dcn32_internal_validate_bw(struct dc *dc,
 				display_e2e_pipe_params_st *pipes,
 				int *pipe_cnt_out,
 				int *vlevel_out,
-				enum dc_validate_mode validate_mode);
+				bool fast_validate);
 
 void dcn32_calculate_wm_and_dlg_fpu(struct dc *dc, struct dc_state *context,
 				display_e2e_pipe_params_st *pipes,

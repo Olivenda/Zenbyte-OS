@@ -5,7 +5,6 @@
  */
 #include <linux/auxiliary_bus.h>
 #include <linux/bitfield.h>
-#include <linux/cleanup.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
@@ -115,7 +114,7 @@ static int pmic_glink_altmode_request(struct pmic_glink_altmode *altmode, u32 cm
 	 * The USBC_CMD_WRITE_REQ ack doesn't identify the request, so wait for
 	 * one ack at a time.
 	 */
-	guard(mutex)(&altmode->lock);
+	mutex_lock(&altmode->lock);
 
 	req.hdr.owner = cpu_to_le32(altmode->owner_id);
 	req.hdr.type = cpu_to_le32(PMIC_GLINK_REQ_RESP);
@@ -126,16 +125,18 @@ static int pmic_glink_altmode_request(struct pmic_glink_altmode *altmode, u32 cm
 	ret = pmic_glink_send(altmode->client, &req, sizeof(req));
 	if (ret) {
 		dev_err(altmode->dev, "failed to send altmode request: %#x (%d)\n", cmd, ret);
-		return ret;
+		goto out_unlock;
 	}
 
 	left = wait_for_completion_timeout(&altmode->pan_ack, 5 * HZ);
 	if (!left) {
 		dev_err(altmode->dev, "timeout waiting for altmode request ack for: %#x\n", cmd);
-		return -ETIMEDOUT;
+		ret = -ETIMEDOUT;
 	}
 
-	return 0;
+out_unlock:
+	mutex_unlock(&altmode->lock);
+	return ret;
 }
 
 static void pmic_glink_altmode_enable_dp(struct pmic_glink_altmode *altmode,

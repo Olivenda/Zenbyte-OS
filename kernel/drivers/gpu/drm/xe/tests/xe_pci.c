@@ -12,79 +12,49 @@
 #include <kunit/test-bug.h>
 #include <kunit/visibility.h>
 
-static void xe_ip_kunit_desc(const struct xe_ip *param, char *desc)
+/**
+ * xe_call_for_each_graphics_ip - Iterate over all recognized graphics IPs
+ * @xe_fn: Function to call for each device.
+ *
+ * This function iterates over the descriptors for all graphics IPs recognized
+ * by the driver and calls @xe_fn: for each one of them.
+ */
+void xe_call_for_each_graphics_ip(xe_graphics_fn xe_fn)
 {
-	snprintf(desc, KUNIT_PARAM_DESC_SIZE, "%u.%02u %s",
-		 param->verx100 / 100, param->verx100 % 100, param->name);
+	const struct xe_graphics_desc *ip, *last = NULL;
+
+	for (int i = 0; i < ARRAY_SIZE(graphics_ip_map); i++) {
+		ip = graphics_ip_map[i].ip;
+		if (ip == last)
+			continue;
+
+		xe_fn(ip);
+		last = ip;
+	}
 }
-
-KUNIT_ARRAY_PARAM(graphics_ip, graphics_ips, xe_ip_kunit_desc);
-KUNIT_ARRAY_PARAM(media_ip, media_ips, xe_ip_kunit_desc);
-
-static void xe_pci_id_kunit_desc(const struct pci_device_id *param, char *desc)
-{
-	const struct xe_device_desc *dev_desc =
-		(const struct xe_device_desc *)param->driver_data;
-
-	if (dev_desc)
-		snprintf(desc, KUNIT_PARAM_DESC_SIZE, "0x%X (%s)",
-			 param->device, dev_desc->platform_name);
-}
-
-KUNIT_ARRAY_PARAM(pci_id, pciidlist, xe_pci_id_kunit_desc);
+EXPORT_SYMBOL_IF_KUNIT(xe_call_for_each_graphics_ip);
 
 /**
- * xe_pci_graphics_ip_gen_param - Generate graphics struct xe_ip parameters
- * @prev: the pointer to the previous parameter to iterate from or NULL
- * @desc: output buffer with minimum size of KUNIT_PARAM_DESC_SIZE
+ * xe_call_for_each_media_ip - Iterate over all recognized media IPs
+ * @xe_fn: Function to call for each device.
  *
- * This function prepares struct xe_ip parameter.
- *
- * To be used only as a parameter generator function in &KUNIT_CASE_PARAM.
- *
- * Return: pointer to the next parameter or NULL if no more parameters
+ * This function iterates over the descriptors for all media IPs recognized
+ * by the driver and calls @xe_fn: for each one of them.
  */
-const void *xe_pci_graphics_ip_gen_param(const void *prev, char *desc)
+void xe_call_for_each_media_ip(xe_media_fn xe_fn)
 {
-	return graphics_ip_gen_params(prev, desc);
-}
-EXPORT_SYMBOL_IF_KUNIT(xe_pci_graphics_ip_gen_param);
+	const struct xe_media_desc *ip, *last = NULL;
 
-/**
- * xe_pci_media_ip_gen_param - Generate media struct xe_ip parameters
- * @prev: the pointer to the previous parameter to iterate from or NULL
- * @desc: output buffer with minimum size of KUNIT_PARAM_DESC_SIZE
- *
- * This function prepares struct xe_ip parameter.
- *
- * To be used only as a parameter generator function in &KUNIT_CASE_PARAM.
- *
- * Return: pointer to the next parameter or NULL if no more parameters
- */
-const void *xe_pci_media_ip_gen_param(const void *prev, char *desc)
-{
-	return media_ip_gen_params(prev, desc);
-}
-EXPORT_SYMBOL_IF_KUNIT(xe_pci_media_ip_gen_param);
+	for (int i = 0; i < ARRAY_SIZE(media_ip_map); i++) {
+		ip = media_ip_map[i].ip;
+		if (ip == last)
+			continue;
 
-/**
- * xe_pci_id_gen_param - Generate struct pci_device_id parameters
- * @prev: the pointer to the previous parameter to iterate from or NULL
- * @desc: output buffer with minimum size of KUNIT_PARAM_DESC_SIZE
- *
- * This function prepares struct pci_device_id parameter.
- *
- * To be used only as a parameter generator function in &KUNIT_CASE_PARAM.
- *
- * Return: pointer to the next parameter or NULL if no more parameters
- */
-const void *xe_pci_id_gen_param(const void *prev, char *desc)
-{
-	const struct pci_device_id *pci = pci_id_gen_params(prev, desc);
-
-	return pci->driver_data ? pci : NULL;
+		xe_fn(ip);
+		last = ip;
+	}
 }
-EXPORT_SYMBOL_IF_KUNIT(xe_pci_id_gen_param);
+EXPORT_SYMBOL_IF_KUNIT(xe_call_for_each_media_ip);
 
 static void fake_read_gmdid(struct xe_device *xe, enum xe_gmdid_type type,
 			    u32 *ver, u32 *revid)
@@ -140,7 +110,7 @@ done:
 	kunit_activate_static_stub(test, read_gmdid, fake_read_gmdid);
 
 	xe_info_init_early(xe, desc, subplatform_desc);
-	xe_info_init(xe, desc);
+	xe_info_init(xe, desc->graphics, desc->media);
 
 	return 0;
 }

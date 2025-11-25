@@ -26,6 +26,7 @@
 #include <drm/drm_bridge.h>
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_of.h>
+#include <drm/drm_panel.h>
 #include <drm/drm_probe_helper.h>
 
 #define FLD_VAL(val, start, end) FIELD_PREP(GENMASK(start, end), val)
@@ -286,8 +287,7 @@ static inline struct tc_data *bridge_to_tc(struct drm_bridge *b)
 	return container_of(b, struct tc_data, bridge);
 }
 
-static void tc_bridge_atomic_pre_enable(struct drm_bridge *bridge,
-					struct drm_atomic_state *state)
+static void tc_bridge_pre_enable(struct drm_bridge *bridge)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 	struct device *dev = &tc->dsi->dev;
@@ -310,8 +310,7 @@ static void tc_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	usleep_range(10, 20);
 }
 
-static void tc_bridge_atomic_post_disable(struct drm_bridge *bridge,
-					  struct drm_atomic_state *state)
+static void tc_bridge_post_disable(struct drm_bridge *bridge)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 	struct device *dev = &tc->dsi->dev;
@@ -370,21 +369,30 @@ static void d2l_write(struct i2c_client *i2c, u16 addr, u32 val)
 			ret, addr);
 }
 
-static void tc_bridge_atomic_enable(struct drm_bridge *bridge,
-				    struct drm_atomic_state *state)
+/* helper function to access bus_formats */
+static struct drm_connector *get_connector(struct drm_encoder *encoder)
+{
+	struct drm_device *dev = encoder->dev;
+	struct drm_connector *connector;
+
+	list_for_each_entry(connector, &dev->mode_config.connector_list, head)
+		if (connector->encoder == encoder)
+			return connector;
+
+	return NULL;
+}
+
+static void tc_bridge_enable(struct drm_bridge *bridge)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 	u32 hback_porch, hsync_len, hfront_porch, hactive, htime1, htime2;
 	u32 vback_porch, vsync_len, vfront_porch, vactive, vtime1, vtime2;
 	u32 val = 0;
 	u16 dsiclk, clkdiv, byteclk, t1, t2, t3, vsdelay;
-	struct drm_connector *connector =
-		drm_atomic_get_new_connector_for_encoder(state, bridge->encoder);
-	struct drm_connector_state *conn_state =
-		drm_atomic_get_new_connector_state(state, connector);
-	struct drm_crtc_state *crtc_state =
-		drm_atomic_get_new_crtc_state(state, conn_state->crtc);
-	struct drm_display_mode *mode = &crtc_state->adjusted_mode;
+	struct drm_display_mode *mode;
+	struct drm_connector *connector = get_connector(bridge->encoder);
+
+	mode = &bridge->encoder->crtc->state->adjusted_mode;
 
 	hback_porch = mode->htotal - mode->hsync_end;
 	hsync_len  = mode->hsync_end - mode->hsync_start;
@@ -582,25 +590,21 @@ static int tc358775_parse_dt(struct device_node *np, struct tc_data *tc)
 }
 
 static int tc_bridge_attach(struct drm_bridge *bridge,
-			    struct drm_encoder *encoder,
 			    enum drm_bridge_attach_flags flags)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 
 	/* Attach the panel-bridge to the dsi bridge */
-	return drm_bridge_attach(encoder, tc->panel_bridge,
+	return drm_bridge_attach(bridge->encoder, tc->panel_bridge,
 				 &tc->bridge, flags);
 }
 
 static const struct drm_bridge_funcs tc_bridge_funcs = {
 	.attach = tc_bridge_attach,
-	.atomic_pre_enable = tc_bridge_atomic_pre_enable,
-	.atomic_enable = tc_bridge_atomic_enable,
+	.pre_enable = tc_bridge_pre_enable,
+	.enable = tc_bridge_enable,
 	.mode_valid = tc_mode_valid,
-	.atomic_post_disable = tc_bridge_atomic_post_disable,
-	.atomic_reset = drm_atomic_helper_bridge_reset,
-	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.post_disable = tc_bridge_post_disable,
 };
 
 static int tc_attach_host(struct tc_data *tc)
@@ -659,10 +663,9 @@ static int tc_probe(struct i2c_client *client)
 	struct tc_data *tc;
 	int ret;
 
-	tc = devm_drm_bridge_alloc(dev, struct tc_data, bridge,
-				   &tc_bridge_funcs);
-	if (IS_ERR(tc))
-		return PTR_ERR(tc);
+	tc = devm_kzalloc(dev, sizeof(*tc), GFP_KERNEL);
+	if (!tc)
+		return -ENOMEM;
 
 	tc->dev = dev;
 	tc->i2c = client;
@@ -702,6 +705,7 @@ static int tc_probe(struct i2c_client *client)
 		return ret;
 	}
 
+	tc->bridge.funcs = &tc_bridge_funcs;
 	tc->bridge.of_node = dev->of_node;
 	tc->bridge.pre_enable_prev_first = true;
 	drm_bridge_add(&tc->bridge);

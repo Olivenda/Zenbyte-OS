@@ -31,7 +31,8 @@ static void mlx5e_tc_tun_route_attr_cleanup(struct mlx5e_tc_tun_route_attr *attr
 {
 	if (attr->n)
 		neigh_release(attr->n);
-	dev_put(attr->route_dev);
+	if (attr->route_dev)
+		dev_put(attr->route_dev);
 }
 
 struct mlx5e_tc_tunnel *mlx5e_get_tc_tun(struct net_device *tunnel_dev)
@@ -67,14 +68,16 @@ static int get_route_and_out_devs(struct mlx5e_priv *priv,
 	 * while holding rcu read lock. Take the net_device for correctness
 	 * sake.
 	 */
-	dev_hold(uplink_upper);
+	if (uplink_upper)
+		dev_hold(uplink_upper);
 	rcu_read_unlock();
 
 	dst_is_lag_dev = (uplink_upper &&
 			  netif_is_lag_master(uplink_upper) &&
 			  real_dev == uplink_upper &&
 			  mlx5_lag_is_sriov(priv->mdev));
-	dev_put(uplink_upper);
+	if (uplink_upper)
+		dev_put(uplink_upper);
 
 	/* if the egress device isn't on the same HW e-switch or
 	 * it's a LAG device, use the uplink

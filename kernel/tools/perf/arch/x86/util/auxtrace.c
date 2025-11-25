@@ -55,12 +55,11 @@ struct auxtrace_record *auxtrace_record__init(struct evlist *evlist,
 					      int *err)
 {
 	char buffer[64];
-	struct perf_cpu cpu = perf_cpu_map__min(evlist->core.all_cpus);
 	int ret;
 
 	*err = 0;
 
-	ret = get_cpuid(buffer, sizeof(buffer), cpu);
+	ret = get_cpuid(buffer, sizeof(buffer));
 	if (ret) {
 		*err = ret;
 		return NULL;

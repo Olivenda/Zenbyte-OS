@@ -335,16 +335,25 @@ static int keystone_rproc_of_get_dev_syscon(struct platform_device *pdev,
 {
 	struct device_node *np = pdev->dev.of_node;
 	struct device *dev = &pdev->dev;
+	int ret;
 
 	if (!of_property_read_bool(np, "ti,syscon-dev")) {
 		dev_err(dev, "ti,syscon-dev property is absent\n");
 		return -EINVAL;
 	}
 
-	ksproc->dev_ctrl = syscon_regmap_lookup_by_phandle_args(np, "ti,syscon-dev",
-								1, &ksproc->boot_offset);
-	if (IS_ERR(ksproc->dev_ctrl))
-		return PTR_ERR(ksproc->dev_ctrl);
+	ksproc->dev_ctrl =
+		syscon_regmap_lookup_by_phandle(np, "ti,syscon-dev");
+	if (IS_ERR(ksproc->dev_ctrl)) {
+		ret = PTR_ERR(ksproc->dev_ctrl);
+		return ret;
+	}
+
+	if (of_property_read_u32_index(np, "ti,syscon-dev", 1,
+				       &ksproc->boot_offset)) {
+		dev_err(dev, "couldn't read the boot register offset\n");
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -481,7 +490,7 @@ MODULE_DEVICE_TABLE(of, keystone_rproc_of_match);
 
 static struct platform_driver keystone_rproc_driver = {
 	.probe	= keystone_rproc_probe,
-	.remove = keystone_rproc_remove,
+	.remove_new = keystone_rproc_remove,
 	.driver	= {
 		.name = "keystone-rproc",
 		.of_match_table = keystone_rproc_of_match,

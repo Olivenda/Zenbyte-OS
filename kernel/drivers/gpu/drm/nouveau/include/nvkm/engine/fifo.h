@@ -78,6 +78,9 @@ struct nvkm_fifo {
 	struct {
 		struct nvkm_memory *mem;
 		struct nvkm_vma *bar1;
+
+		struct mutex mutex;
+		struct list_head list;
 	} userd;
 
 	struct {

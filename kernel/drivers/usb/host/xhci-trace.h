@@ -108,10 +108,9 @@ DEFINE_EVENT(xhci_log_ctx, xhci_address_ctx,
 );
 
 DECLARE_EVENT_CLASS(xhci_log_trb,
-	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb, dma_addr_t dma),
-	TP_ARGS(ring, trb, dma),
+	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb),
+	TP_ARGS(ring, trb),
 	TP_STRUCT__entry(
-		__field(dma_addr_t, dma)
 		__field(u32, type)
 		__field(u32, field0)
 		__field(u32, field1)
@@ -119,54 +118,51 @@ DECLARE_EVENT_CLASS(xhci_log_trb,
 		__field(u32, field3)
 	),
 	TP_fast_assign(
-		__entry->dma = dma;
 		__entry->type = ring->type;
 		__entry->field0 = le32_to_cpu(trb->field[0]);
 		__entry->field1 = le32_to_cpu(trb->field[1]);
 		__entry->field2 = le32_to_cpu(trb->field[2]);
 		__entry->field3 = le32_to_cpu(trb->field[3]);
 	),
-	TP_printk("%s: @%pad %s",
-		  xhci_ring_type_string(__entry->type), &__entry->dma,
+	TP_printk("%s: %s", xhci_ring_type_string(__entry->type),
 		  xhci_decode_trb(__get_buf(XHCI_MSG_MAX), XHCI_MSG_MAX, __entry->field0,
 				  __entry->field1, __entry->field2, __entry->field3)
 	)
 );
 
 DEFINE_EVENT(xhci_log_trb, xhci_handle_event,
-	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb, dma_addr_t dma),
-	TP_ARGS(ring, trb, dma)
+	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb),
+	TP_ARGS(ring, trb)
 );
 
 DEFINE_EVENT(xhci_log_trb, xhci_handle_command,
-	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb, dma_addr_t dma),
-	TP_ARGS(ring, trb, dma)
+	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb),
+	TP_ARGS(ring, trb)
 );
 
 DEFINE_EVENT(xhci_log_trb, xhci_handle_transfer,
-	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb, dma_addr_t dma),
-	TP_ARGS(ring, trb, dma)
+	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb),
+	TP_ARGS(ring, trb)
 );
 
 DEFINE_EVENT(xhci_log_trb, xhci_queue_trb,
-	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb, dma_addr_t dma),
-	TP_ARGS(ring, trb, dma)
-
+	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb),
+	TP_ARGS(ring, trb)
 );
 
 DEFINE_EVENT(xhci_log_trb, xhci_dbc_handle_event,
-	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb, dma_addr_t dma),
-	TP_ARGS(ring, trb, dma)
+	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb),
+	TP_ARGS(ring, trb)
 );
 
 DEFINE_EVENT(xhci_log_trb, xhci_dbc_handle_transfer,
-	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb, dma_addr_t dma),
-	TP_ARGS(ring, trb, dma)
+	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb),
+	TP_ARGS(ring, trb)
 );
 
 DEFINE_EVENT(xhci_log_trb, xhci_dbc_gadget_ep_queue,
-	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb, dma_addr_t dma),
-	TP_ARGS(ring, trb, dma)
+	TP_PROTO(struct xhci_ring *ring, struct xhci_generic_trb *trb),
+	TP_ARGS(ring, trb)
 );
 
 DECLARE_EVENT_CLASS(xhci_log_free_virt_dev,
@@ -314,37 +310,6 @@ DEFINE_EVENT(xhci_log_urb, xhci_urb_dequeue,
 	TP_ARGS(urb)
 );
 
-DECLARE_EVENT_CLASS(xhci_log_stream_ctx,
-	TP_PROTO(struct xhci_stream_info *info, unsigned int stream_id),
-	TP_ARGS(info, stream_id),
-	TP_STRUCT__entry(
-		__field(unsigned int, stream_id)
-		__field(u64, stream_ring)
-		__field(dma_addr_t, ctx_array_dma)
-
-	),
-	TP_fast_assign(
-		__entry->stream_id = stream_id;
-		__entry->stream_ring = le64_to_cpu(info->stream_ctx_array[stream_id].stream_ring);
-		__entry->ctx_array_dma = info->ctx_array_dma + stream_id * 16;
-
-	),
-	TP_printk("stream %u ctx @%pad: SCT %llu deq %llx", __entry->stream_id,
-		&__entry->ctx_array_dma, CTX_TO_SCT(__entry->stream_ring),
-		__entry->stream_ring
-	)
-);
-
-DEFINE_EVENT(xhci_log_stream_ctx, xhci_alloc_stream_info_ctx,
-	TP_PROTO(struct xhci_stream_info *info, unsigned int stream_id),
-	TP_ARGS(info, stream_id)
-);
-
-DEFINE_EVENT(xhci_log_stream_ctx, xhci_handle_cmd_set_deq_stream,
-	TP_PROTO(struct xhci_stream_info *info, unsigned int stream_id),
-	TP_ARGS(info, stream_id)
-);
-
 DECLARE_EVENT_CLASS(xhci_log_ep_ctx,
 	TP_PROTO(struct xhci_ep_ctx *ctx),
 	TP_ARGS(ctx),
@@ -489,6 +454,8 @@ DECLARE_EVENT_CLASS(xhci_log_ring,
 		__field(void *, ring)
 		__field(dma_addr_t, enq)
 		__field(dma_addr_t, deq)
+		__field(dma_addr_t, enq_seg)
+		__field(dma_addr_t, deq_seg)
 		__field(unsigned int, num_segs)
 		__field(unsigned int, stream_id)
 		__field(unsigned int, cycle_state)
@@ -499,15 +466,17 @@ DECLARE_EVENT_CLASS(xhci_log_ring,
 		__entry->type = ring->type;
 		__entry->num_segs = ring->num_segs;
 		__entry->stream_id = ring->stream_id;
+		__entry->enq_seg = ring->enq_seg->dma;
+		__entry->deq_seg = ring->deq_seg->dma;
 		__entry->cycle_state = ring->cycle_state;
 		__entry->bounce_buf_len = ring->bounce_buf_len;
 		__entry->enq = xhci_trb_virt_to_dma(ring->enq_seg, ring->enqueue);
 		__entry->deq = xhci_trb_virt_to_dma(ring->deq_seg, ring->dequeue);
 	),
-	TP_printk("%s %p: enq %pad deq %pad segs %d stream %d bounce %d cycle %d",
+	TP_printk("%s %p: enq %pad(%pad) deq %pad(%pad) segs %d stream %d bounce %d cycle %d",
 			xhci_ring_type_string(__entry->type), __entry->ring,
-			&__entry->enq,
-			&__entry->deq,
+			&__entry->enq, &__entry->enq_seg,
+			&__entry->deq, &__entry->deq_seg,
 			__entry->num_segs,
 			__entry->stream_id,
 			__entry->bounce_buf_len,

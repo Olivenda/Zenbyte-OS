@@ -9,7 +9,6 @@
 #include <asm/realmode.h>
 #include <asm/tlbflush.h>
 #include <asm/crash.h>
-#include <asm/msr.h>
 #include <asm/sev.h>
 
 struct real_mode_header *real_mode_header;
@@ -66,8 +65,6 @@ void __init reserve_real_mode(void)
 	 * setup_arch().
 	 */
 	memblock_reserve(0, SZ_1M);
-
-	memblock_clear_kho_scratch(0, SZ_1M);
 }
 
 static void __init sme_sev_setup_real_mode(struct trampoline_header *th)
@@ -148,7 +145,7 @@ static void __init setup_real_mode(void)
 	 * Some AMD processors will #GP(0) if EFER.LMA is set in WRMSR
 	 * so we need to mask it out.
 	 */
-	rdmsrq(MSR_EFER, efer);
+	rdmsrl(MSR_EFER, efer);
 	trampoline_header->efer = efer & ~EFER_LMA;
 
 	trampoline_header->start = (u64) secondary_startup_64;

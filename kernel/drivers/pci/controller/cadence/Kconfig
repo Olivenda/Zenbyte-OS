@@ -4,16 +4,16 @@ menu "Cadence-based PCIe controllers"
 	depends on PCI
 
 config PCIE_CADENCE
-	tristate
+	bool
 
 config PCIE_CADENCE_HOST
-	tristate
+	bool
 	depends on OF
 	select IRQ_DOMAIN
 	select PCIE_CADENCE
 
 config PCIE_CADENCE_EP
-	tristate
+	bool
 	depends on OF
 	depends on PCI_ENDPOINT
 	select PCIE_CADENCE
@@ -43,14 +43,13 @@ config PCIE_CADENCE_PLAT_EP
 	  different vendors SoCs.
 
 config PCI_J721E
-	tristate
-	select PCIE_CADENCE_HOST if PCI_J721E_HOST != n
-	select PCIE_CADENCE_EP if PCI_J721E_EP != n
+	bool
 
 config PCI_J721E_HOST
-	tristate "TI J721E PCIe controller (host mode)"
+	bool "TI J721E PCIe controller (host mode)"
 	depends on ARCH_K3 || COMPILE_TEST
 	depends on OF
+	select PCIE_CADENCE_HOST
 	select PCI_J721E
 	help
 	  Say Y here if you want to support the TI J721E PCIe platform
@@ -58,10 +57,11 @@ config PCI_J721E_HOST
 	  core.
 
 config PCI_J721E_EP
-	tristate "TI J721E PCIe controller (endpoint mode)"
+	bool "TI J721E PCIe controller (endpoint mode)"
 	depends on ARCH_K3 || COMPILE_TEST
 	depends on OF
 	depends on PCI_ENDPOINT
+	select PCIE_CADENCE_EP
 	select PCI_J721E
 	help
 	  Say Y here if you want to support the TI J721E PCIe platform

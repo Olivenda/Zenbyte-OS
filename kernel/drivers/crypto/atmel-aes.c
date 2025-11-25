@@ -1743,8 +1743,7 @@ static struct skcipher_alg aes_xts_alg = {
 	.base.cra_driver_name	= "atmel-xts-aes",
 	.base.cra_blocksize	= AES_BLOCK_SIZE,
 	.base.cra_ctxsize	= sizeof(struct atmel_aes_xts_ctx),
-	.base.cra_flags		= CRYPTO_ALG_NEED_FALLBACK |
-				  CRYPTO_ALG_KERN_DRIVER_ONLY,
+	.base.cra_flags		= CRYPTO_ALG_NEED_FALLBACK,
 
 	.min_keysize		= 2 * AES_MIN_KEY_SIZE,
 	.max_keysize		= 2 * AES_MAX_KEY_SIZE,
@@ -2221,7 +2220,7 @@ static void atmel_aes_unregister_algs(struct atmel_aes_dev *dd)
 
 static void atmel_aes_crypto_alg_init(struct crypto_alg *alg)
 {
-	alg->cra_flags |= CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY;
+	alg->cra_flags |= CRYPTO_ALG_ASYNC;
 	alg->cra_alignmask = 0xf;
 	alg->cra_priority = ATMEL_AES_PRIORITY;
 	alg->cra_module = THIS_MODULE;
@@ -2297,7 +2296,6 @@ static void atmel_aes_get_cap(struct atmel_aes_dev *dd)
 
 	/* keep only major version number */
 	switch (dd->hw_version & 0xff0) {
-	case 0x800:
 	case 0x700:
 	case 0x600:
 	case 0x500:
@@ -2455,7 +2453,7 @@ static void atmel_aes_remove(struct platform_device *pdev)
 
 static struct platform_driver atmel_aes_driver = {
 	.probe		= atmel_aes_probe,
-	.remove		= atmel_aes_remove,
+	.remove_new	= atmel_aes_remove,
 	.driver		= {
 		.name	= "atmel_aes",
 		.of_match_table = atmel_aes_dt_ids,

@@ -62,13 +62,6 @@ static inline int __of_overlay_apply_kunit(struct kunit *test,
 					  &unused);
 }
 
-#define of_overlay_begin(overlay_name) __dtbo_##overlay_name##_begin
-#define of_overlay_end(overlay_name) __dtbo_##overlay_name##_end
-
-#define OF_OVERLAY_DECLARE(overlay_name)			\
-	extern uint8_t of_overlay_begin(overlay_name)[];	\
-	extern uint8_t of_overlay_end(overlay_name)[]		\
-
 /**
  * of_overlay_apply_kunit() - Test managed of_overlay_fdt_apply() for built-in overlays
  * @test: test context
@@ -111,11 +104,12 @@ static inline int __of_overlay_apply_kunit(struct kunit *test,
  */
 #define of_overlay_apply_kunit(test, overlay_name)		\
 ({								\
-	OF_OVERLAY_DECLARE(overlay_name);			\
+	extern uint8_t __dtbo_##overlay_name##_begin[];		\
+	extern uint8_t __dtbo_##overlay_name##_end[];		\
 								\
 	__of_overlay_apply_kunit((test),			\
-			of_overlay_begin(overlay_name),		\
-			of_overlay_end(overlay_name));		\
+			__dtbo_##overlay_name##_begin,		\
+			__dtbo_##overlay_name##_end);		\
 })
 
 #endif

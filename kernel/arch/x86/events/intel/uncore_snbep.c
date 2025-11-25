@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* SandyBridge-EP/IvyTown uncore support */
 #include <asm/cpu_device_id.h>
-#include <asm/msr.h>
 #include "uncore.h"
 #include "uncore_discovery.h"
 
@@ -619,9 +618,9 @@ static void snbep_uncore_msr_disable_box(struct intel_uncore_box *box)
 
 	msr = uncore_msr_box_ctl(box);
 	if (msr) {
-		rdmsrq(msr, config);
+		rdmsrl(msr, config);
 		config |= SNBEP_PMON_BOX_CTL_FRZ;
-		wrmsrq(msr, config);
+		wrmsrl(msr, config);
 	}
 }
 
@@ -632,9 +631,9 @@ static void snbep_uncore_msr_enable_box(struct intel_uncore_box *box)
 
 	msr = uncore_msr_box_ctl(box);
 	if (msr) {
-		rdmsrq(msr, config);
+		rdmsrl(msr, config);
 		config &= ~SNBEP_PMON_BOX_CTL_FRZ;
-		wrmsrq(msr, config);
+		wrmsrl(msr, config);
 	}
 }
 
@@ -644,9 +643,9 @@ static void snbep_uncore_msr_enable_event(struct intel_uncore_box *box, struct p
 	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
 
 	if (reg1->idx != EXTRA_REG_NONE)
-		wrmsrq(reg1->reg, uncore_shared_reg_config(box, 0));
+		wrmsrl(reg1->reg, uncore_shared_reg_config(box, 0));
 
-	wrmsrq(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
+	wrmsrl(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
 }
 
 static void snbep_uncore_msr_disable_event(struct intel_uncore_box *box,
@@ -654,7 +653,7 @@ static void snbep_uncore_msr_disable_event(struct intel_uncore_box *box,
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	wrmsrq(hwc->config_base, hwc->config);
+	wrmsrl(hwc->config_base, hwc->config);
 }
 
 static void snbep_uncore_msr_init_box(struct intel_uncore_box *box)
@@ -662,7 +661,7 @@ static void snbep_uncore_msr_init_box(struct intel_uncore_box *box)
 	unsigned msr = uncore_msr_box_ctl(box);
 
 	if (msr)
-		wrmsrq(msr, SNBEP_PMON_BOX_CTL_INT);
+		wrmsrl(msr, SNBEP_PMON_BOX_CTL_INT);
 }
 
 static struct attribute *snbep_uncore_formats_attr[] = {
@@ -1533,7 +1532,7 @@ static void ivbep_uncore_msr_init_box(struct intel_uncore_box *box)
 {
 	unsigned msr = uncore_msr_box_ctl(box);
 	if (msr)
-		wrmsrq(msr, IVBEP_PMON_BOX_CTL_INT);
+		wrmsrl(msr, IVBEP_PMON_BOX_CTL_INT);
 }
 
 static void ivbep_uncore_pci_init_box(struct intel_uncore_box *box)
@@ -1784,11 +1783,11 @@ static void ivbep_cbox_enable_event(struct intel_uncore_box *box, struct perf_ev
 
 	if (reg1->idx != EXTRA_REG_NONE) {
 		u64 filter = uncore_shared_reg_config(box, 0);
-		wrmsrq(reg1->reg, filter & 0xffffffff);
-		wrmsrq(reg1->reg + 6, filter >> 32);
+		wrmsrl(reg1->reg, filter & 0xffffffff);
+		wrmsrl(reg1->reg + 6, filter >> 32);
 	}
 
-	wrmsrq(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
+	wrmsrl(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
 }
 
 static struct intel_uncore_ops ivbep_uncore_cbox_ops = {
@@ -2768,11 +2767,11 @@ static void hswep_cbox_enable_event(struct intel_uncore_box *box,
 
 	if (reg1->idx != EXTRA_REG_NONE) {
 		u64 filter = uncore_shared_reg_config(box, 0);
-		wrmsrq(reg1->reg, filter & 0xffffffff);
-		wrmsrq(reg1->reg + 1, filter >> 32);
+		wrmsrl(reg1->reg, filter & 0xffffffff);
+		wrmsrl(reg1->reg + 1, filter >> 32);
 	}
 
-	wrmsrq(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
+	wrmsrl(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
 }
 
 static struct intel_uncore_ops hswep_uncore_cbox_ops = {
@@ -2817,7 +2816,7 @@ static void hswep_uncore_sbox_msr_init_box(struct intel_uncore_box *box)
 
 		for_each_set_bit(i, (unsigned long *)&init, 64) {
 			flags |= (1ULL << i);
-			wrmsrq(msr, flags);
+			wrmsrl(msr, flags);
 		}
 	}
 }
@@ -3709,7 +3708,7 @@ static void skx_iio_enable_event(struct intel_uncore_box *box,
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	wrmsrq(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
+	wrmsrl(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
 }
 
 static struct intel_uncore_ops skx_uncore_iio_ops = {
@@ -3766,7 +3765,7 @@ static int skx_msr_cpu_bus_read(int cpu, u64 *topology)
 {
 	u64 msr_value;
 
-	if (rdmsrq_on_cpu(cpu, SKX_MSR_CPU_BUS_NUMBER, &msr_value) ||
+	if (rdmsrl_on_cpu(cpu, SKX_MSR_CPU_BUS_NUMBER, &msr_value) ||
 			!(msr_value & SKX_MSR_CPU_BUS_VALID_BIT))
 		return -ENXIO;
 
@@ -4656,9 +4655,9 @@ static void snr_cha_enable_event(struct intel_uncore_box *box,
 	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
 
 	if (reg1->idx != EXTRA_REG_NONE)
-		wrmsrq(reg1->reg, reg1->config);
+		wrmsrl(reg1->reg, reg1->config);
 
-	wrmsrq(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
+	wrmsrl(hwc->config_base, hwc->config | SNBEP_PMON_CTL_EN);
 }
 
 static struct intel_uncore_ops snr_uncore_chabox_ops = {
@@ -5883,9 +5882,9 @@ static void spr_uncore_msr_enable_event(struct intel_uncore_box *box,
 	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
 
 	if (reg1->idx != EXTRA_REG_NONE)
-		wrmsrq(reg1->reg, reg1->config);
+		wrmsrl(reg1->reg, reg1->config);
 
-	wrmsrq(hwc->config_base, hwc->config);
+	wrmsrl(hwc->config_base, hwc->config);
 }
 
 static void spr_uncore_msr_disable_event(struct intel_uncore_box *box,
@@ -5895,9 +5894,9 @@ static void spr_uncore_msr_disable_event(struct intel_uncore_box *box,
 	struct hw_perf_event_extra *reg1 = &hwc->extra_reg;
 
 	if (reg1->idx != EXTRA_REG_NONE)
-		wrmsrq(reg1->reg, 0);
+		wrmsrl(reg1->reg, 0);
 
-	wrmsrq(hwc->config_base, 0);
+	wrmsrl(hwc->config_base, 0);
 }
 
 static int spr_cha_hw_config(struct intel_uncore_box *box, struct perf_event *event)
@@ -6409,11 +6408,9 @@ static void uncore_type_customized_copy(struct intel_uncore_type *to_type,
 		to_type->get_topology = from_type->get_topology;
 	if (from_type->cleanup_mapping)
 		to_type->cleanup_mapping = from_type->cleanup_mapping;
-	if (from_type->mmio_map_size)
-		to_type->mmio_map_size = from_type->mmio_map_size;
 }
 
-struct intel_uncore_type **
+static struct intel_uncore_type **
 uncore_get_uncores(enum uncore_access_type type_id, int num_extra,
 		   struct intel_uncore_type **extra, int max_num_types,
 		   struct intel_uncore_type **uncores)
@@ -6488,7 +6485,7 @@ void spr_uncore_cpu_init(void)
 		 * of UNCORE_SPR_CHA) is incorrect on some SPR variants because of a
 		 * firmware bug. Using the value from SPR_MSR_UNC_CBO_CONFIG to replace it.
 		 */
-		rdmsrq(SPR_MSR_UNC_CBO_CONFIG, num_cbo);
+		rdmsrl(SPR_MSR_UNC_CBO_CONFIG, num_cbo);
 		/*
 		 * The MSR doesn't work on the EMR XCC, but the firmware bug doesn't impact
 		 * the EMR XCC. Don't let the value from the MSR replace the existing value.
@@ -6600,38 +6597,22 @@ void spr_uncore_mmio_init(void)
 /* GNR uncore support */
 
 #define UNCORE_GNR_NUM_UNCORE_TYPES	23
+#define UNCORE_GNR_TYPE_15		15
+#define UNCORE_GNR_B2UPI		18
+#define UNCORE_GNR_TYPE_21		21
+#define UNCORE_GNR_TYPE_22		22
 
 int gnr_uncore_units_ignore[] = {
+	UNCORE_SPR_UPI,
+	UNCORE_GNR_TYPE_15,
+	UNCORE_GNR_B2UPI,
+	UNCORE_GNR_TYPE_21,
+	UNCORE_GNR_TYPE_22,
 	UNCORE_IGNORE_END
 };
 
 static struct intel_uncore_type gnr_uncore_ubox = {
 	.name			= "ubox",
-	.attr_update		= uncore_alias_groups,
-};
-
-static struct intel_uncore_type gnr_uncore_pciex8 = {
-	SPR_UNCORE_PCI_COMMON_FORMAT(),
-	.name			= "pciex8",
-};
-
-static struct intel_uncore_type gnr_uncore_pciex16 = {
-	SPR_UNCORE_PCI_COMMON_FORMAT(),
-	.name			= "pciex16",
-};
-
-static struct intel_uncore_type gnr_uncore_upi = {
-	SPR_UNCORE_PCI_COMMON_FORMAT(),
-	.name			= "upi",
-};
-
-static struct intel_uncore_type gnr_uncore_b2upi = {
-	SPR_UNCORE_PCI_COMMON_FORMAT(),
-	.name			= "b2upi",
-};
-
-static struct intel_uncore_type gnr_uncore_b2hot = {
-	.name			= "b2hot",
 	.attr_update		= uncore_alias_groups,
 };
 
@@ -6659,21 +6640,21 @@ static struct intel_uncore_type *gnr_uncores[UNCORE_GNR_NUM_UNCORE_TYPES] = {
 	&gnr_uncore_ubox,
 	&spr_uncore_imc,
 	NULL,
-	&gnr_uncore_upi,
 	NULL,
 	NULL,
 	NULL,
-	&spr_uncore_cxlcm,
-	&spr_uncore_cxldp,
 	NULL,
-	&gnr_uncore_b2hot,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 	&gnr_uncore_b2cmi,
 	&gnr_uncore_b2cxl,
-	&gnr_uncore_b2upi,
+	NULL,
 	NULL,
 	&gnr_uncore_mdf_sbo,
-	&gnr_uncore_pciex16,
-	&gnr_uncore_pciex8,
+	NULL,
+	NULL,
 };
 
 static struct freerunning_counters gnr_iio_freerunning[] = {

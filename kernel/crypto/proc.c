@@ -47,10 +47,13 @@ static int c_show(struct seq_file *m, void *p)
 		   (alg->cra_flags & CRYPTO_ALG_TESTED) ?
 		   "passed" : "unknown");
 	seq_printf(m, "internal     : %s\n",
-		   str_yes_no(alg->cra_flags & CRYPTO_ALG_INTERNAL));
-	if (fips_enabled)
+		   (alg->cra_flags & CRYPTO_ALG_INTERNAL) ?
+		   "yes" : "no");
+	if (fips_enabled) {
 		seq_printf(m, "fips         : %s\n",
-			str_no_yes(alg->cra_flags & CRYPTO_ALG_FIPS_INTERNAL));
+			   (alg->cra_flags & CRYPTO_ALG_FIPS_INTERNAL) ?
+			   "no" : "yes");
+	}
 
 	if (alg->cra_flags & CRYPTO_ALG_LARVAL) {
 		seq_printf(m, "type         : larval\n");
@@ -71,6 +74,9 @@ static int c_show(struct seq_file *m, void *p)
 					alg->cra_cipher.cia_min_keysize);
 		seq_printf(m, "max keysize  : %u\n",
 					alg->cra_cipher.cia_max_keysize);
+		break;
+	case CRYPTO_ALG_TYPE_COMPRESS:
+		seq_printf(m, "type         : compression\n");
 		break;
 	default:
 		seq_printf(m, "type         : unknown\n");

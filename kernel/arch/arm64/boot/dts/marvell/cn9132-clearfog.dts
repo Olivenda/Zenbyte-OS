@@ -524,9 +524,10 @@
 	status = "okay";
 
 	/* only port 1 is available */
+	/delete-node/ sata-port@0;
+
 	sata-port@1 {
 		phys = <&cp1_comphy3 1>;
-		status = "okay";
 	};
 };
 
@@ -642,8 +643,9 @@
 	status = "okay";
 
 	/* only port 1 is available */
+	/delete-node/ sata-port@0;
+
 	sata-port@1 {
-		status = "okay";
 		phys = <&cp2_comphy3 1>;
 	};
 };

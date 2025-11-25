@@ -387,9 +387,12 @@ static int get_ohm_of_thermistor(struct ntc_data *data, unsigned int uv)
 	puo = data->pullup_ohm;
 	pdo = data->pulldown_ohm;
 
-	/* faulty adc value */
-	if (uv == 0 || uv >= puv)
-		return -ENODATA;
+	if (uv == 0)
+		return (data->connect == NTC_CONNECTED_POSITIVE) ?
+			INT_MAX : 0;
+	if (uv >= puv)
+		return (data->connect == NTC_CONNECTED_POSITIVE) ?
+			0 : INT_MAX;
 
 	if (data->connect == NTC_CONNECTED_POSITIVE && puo == 0)
 		n = div_u64(pdo * (puv - uv), uv);
@@ -401,10 +404,8 @@ static int get_ohm_of_thermistor(struct ntc_data *data, unsigned int uv)
 	else
 		n = div64_u64_safe(pdo * puo * uv, pdo * (puv - uv) - puo * uv);
 
-	/* sensor out of bounds */
-	if (n > data->comp[0].ohm || n < data->comp[data->n_comp - 1].ohm)
-		return -ENODATA;
-
+	if (n > INT_MAX)
+		n = INT_MAX;
 	return n;
 }
 

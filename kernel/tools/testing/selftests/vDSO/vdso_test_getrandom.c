@@ -21,6 +21,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <linux/random.h>
+#include <linux/compiler.h>
 #include <linux/ptrace.h>
 
 #include "../kselftest.h"
@@ -100,7 +101,6 @@ out:
 	return state;
 }
 
-__attribute__((unused)) /* Example for libc implementors */
 static void vgetrandom_put_state(void *state)
 {
 	if (!state)
@@ -266,7 +266,7 @@ static void kselftest(void)
 	}
 	for (;;) {
 		struct ptrace_syscall_info info = { 0 };
-		int status;
+		int status, ret;
 		ksft_assert(waitpid(child, &status, 0) >= 0);
 		if (WIFEXITED(status)) {
 			ksft_assert(WEXITSTATUS(status) == 0);

@@ -36,49 +36,60 @@ static inline struct sharp_nt_panel *to_sharp_nt_panel(struct drm_panel *panel)
 static int sharp_nt_panel_init(struct sharp_nt_panel *sharp_nt)
 {
 	struct mipi_dsi_device *dsi = sharp_nt->dsi;
-	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
+	int ret;
 
 	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
-	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
+	ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
+	if (ret < 0)
+		return ret;
 
-	mipi_dsi_msleep(&dsi_ctx, 120);
+	msleep(120);
 
 	/* Novatek two-lane operation */
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xae,  0x03);
+	ret = mipi_dsi_dcs_write(dsi, 0xae, (u8[]){ 0x03 }, 1);
+	if (ret < 0)
+		return ret;
 
 	/* Set both MCU and RGB I/F to 24bpp */
-	mipi_dsi_dcs_set_pixel_format_multi(&dsi_ctx,
-					    MIPI_DCS_PIXEL_FMT_24BIT |
-					    (MIPI_DCS_PIXEL_FMT_24BIT << 4));
+	ret = mipi_dsi_dcs_set_pixel_format(dsi, MIPI_DCS_PIXEL_FMT_24BIT |
+					(MIPI_DCS_PIXEL_FMT_24BIT << 4));
+	if (ret < 0)
+		return ret;
 
-	return dsi_ctx.accum_err;
+	return 0;
 }
 
 static int sharp_nt_panel_on(struct sharp_nt_panel *sharp_nt)
 {
 	struct mipi_dsi_device *dsi = sharp_nt->dsi;
-	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
+	int ret;
 
 	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
-	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
+	ret = mipi_dsi_dcs_set_display_on(dsi);
+	if (ret < 0)
+		return ret;
 
-	return dsi_ctx.accum_err;
+	return 0;
 }
 
 static int sharp_nt_panel_off(struct sharp_nt_panel *sharp_nt)
 {
 	struct mipi_dsi_device *dsi = sharp_nt->dsi;
-	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
+	int ret;
 
 	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
 
-	mipi_dsi_dcs_set_display_off_multi(&dsi_ctx);
+	ret = mipi_dsi_dcs_set_display_off(dsi);
+	if (ret < 0)
+		return ret;
 
-	mipi_dsi_dcs_enter_sleep_mode_multi(&dsi_ctx);
+	ret = mipi_dsi_dcs_enter_sleep_mode(dsi);
+	if (ret < 0)
+		return ret;
 
-	return dsi_ctx.accum_err;
+	return 0;
 }
 
 static int sharp_nt_panel_unprepare(struct drm_panel *panel)

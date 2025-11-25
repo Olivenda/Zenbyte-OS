@@ -930,11 +930,9 @@ repeat:
 	/* kick fsnotify */
 
 	down_read(&root->kernfs_supers_rwsem);
-	down_read(&root->kernfs_rwsem);
 	list_for_each_entry(info, &kernfs_root(kn)->supers, node) {
 		struct kernfs_node *parent;
 		struct inode *p_inode = NULL;
-		const char *kn_name;
 		struct inode *inode;
 		struct qstr name;
 
@@ -948,8 +946,7 @@ repeat:
 		if (!inode)
 			continue;
 
-		kn_name = kernfs_rcu_name(kn);
-		name = QSTR(kn_name);
+		name = QSTR(kn->name);
 		parent = kernfs_get_parent(kn);
 		if (parent) {
 			p_inode = ilookup(info->sb, kernfs_ino(parent));
@@ -969,7 +966,6 @@ repeat:
 		iput(inode);
 	}
 
-	up_read(&root->kernfs_rwsem);
 	up_read(&root->kernfs_supers_rwsem);
 	kernfs_put(kn);
 	goto repeat;

@@ -565,6 +565,13 @@ static const struct m10bmc_hwmon_board_data n6000bmc_hwmon_bdata = {
 	.hinfo = n6000bmc_hinfo,
 };
 
+static umode_t
+m10bmc_hwmon_is_visible(const void *data, enum hwmon_sensor_types type,
+			u32 attr, int channel)
+{
+	return 0444;
+}
+
 static const struct m10bmc_sdata *
 find_sensor_data(struct m10bmc_hwmon *hw, enum hwmon_sensor_types type,
 		 int channel)
@@ -722,7 +729,7 @@ static int m10bmc_hwmon_read_string(struct device *dev,
 }
 
 static const struct hwmon_ops m10bmc_hwmon_ops = {
-	.visible = 0444,
+	.is_visible = m10bmc_hwmon_is_visible,
 	.read = m10bmc_hwmon_read,
 	.read_string = m10bmc_hwmon_read_string,
 };
@@ -787,4 +794,4 @@ MODULE_DEVICE_TABLE(platform, intel_m10bmc_hwmon_ids);
 MODULE_AUTHOR("Intel Corporation");
 MODULE_DESCRIPTION("Intel MAX 10 BMC hardware monitor");
 MODULE_LICENSE("GPL");
-MODULE_IMPORT_NS("INTEL_M10_BMC_CORE");
+MODULE_IMPORT_NS(INTEL_M10_BMC_CORE);

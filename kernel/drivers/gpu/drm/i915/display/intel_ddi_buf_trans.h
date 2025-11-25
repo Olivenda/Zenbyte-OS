@@ -8,6 +8,7 @@
 
 #include <linux/types.h>
 
+struct drm_i915_private;
 struct intel_encoder;
 struct intel_crtc_state;
 

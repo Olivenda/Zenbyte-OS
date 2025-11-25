@@ -39,7 +39,6 @@
 #include "mixer_us16x08.h"
 #include "mixer_s1810c.h"
 #include "helper.h"
-#include "fcp.h"
 
 struct std_mono_table {
 	unsigned int unitid, control, cmask;
@@ -288,7 +287,7 @@ static int snd_usb_soundblaster_remote_init(struct usb_mixer_interface *mixer)
 	mixer->rc_setup_packet->wLength = cpu_to_le16(len);
 	usb_fill_control_urb(mixer->rc_urb, mixer->chip->dev,
 			     usb_rcvctrlpipe(mixer->chip->dev, 0),
-			     (u8 *)mixer->rc_setup_packet, mixer->rc_buffer, len,
+			     (u8*)mixer->rc_setup_packet, mixer->rc_buffer, len,
 			     snd_usb_soundblaster_remote_complete, mixer);
 	return 0;
 }
@@ -390,7 +389,7 @@ static int snd_audigy2nx_controls_create(struct usb_mixer_interface *mixer)
 			 mixer->chip->usb_id == USB_ID(0x041e, 0x3042) ||
 			 mixer->chip->usb_id == USB_ID(0x041e, 0x30df) ||
 			 mixer->chip->usb_id == USB_ID(0x041e, 0x3048)))
-			break;
+			break; 
 
 		knew = snd_audigy2nx_control;
 		knew.name = snd_audigy2nx_led_names[i];
@@ -1118,7 +1117,6 @@ static const struct snd_kcontrol_new snd_mbox1_src_switch = {
 static int snd_mbox1_controls_create(struct usb_mixer_interface *mixer)
 {
 	int err;
-
 	err = add_single_ctl_with_resume(mixer, 0,
 					 snd_mbox1_clk_switch_resume,
 					 &snd_mbox1_clk_switch, NULL);
@@ -1132,7 +1130,7 @@ static int snd_mbox1_controls_create(struct usb_mixer_interface *mixer)
 
 /* Native Instruments device quirks */
 
-#define _MAKE_NI_CONTROL(bRequest, wIndex) ((bRequest) << 16 | (wIndex))
+#define _MAKE_NI_CONTROL(bRequest,wIndex) ((bRequest) << 16 | (wIndex))
 
 static int snd_ni_control_init_val(struct usb_mixer_interface *mixer,
 				   struct snd_kcontrol *kctl)
@@ -2264,7 +2262,7 @@ static int realtek_hda_get(struct snd_usb_audio *chip, u32 cmd, u32 *value)
 static int realtek_ctl_connector_get(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_value *ucontrol)
 {
-	struct usb_mixer_elem_info *cval = snd_kcontrol_chip(kcontrol);
+	struct usb_mixer_elem_info *cval = kcontrol->private_data;
 	struct snd_usb_audio *chip = cval->head.mixer->chip;
 	u32 pv = kcontrol->private_value;
 	u32 node_id = pv & 0xff;
@@ -2445,7 +2443,6 @@ static const u32 snd_rme_rate_table[] = {
 	256000,	352800, 384000, 400000,
 	512000, 705600, 768000, 800000
 };
-
 /* maximum number of items for AES and S/PDIF rates for above table */
 #define SND_RME_RATE_IDX_AES_SPDIF_NUM		12
 
@@ -3534,6 +3531,7 @@ static int snd_rme_digiface_sync_state_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+
 static int snd_rme_digiface_format_info(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_info *uinfo)
 {
@@ -3544,6 +3542,7 @@ static int snd_rme_digiface_format_info(struct snd_kcontrol *kcontrol,
 	return snd_ctl_enum_info(uinfo, 1,
 				 ARRAY_SIZE(format), format);
 }
+
 
 static int snd_rme_digiface_sync_source_info(struct snd_kcontrol *kcontrol,
 					     struct snd_ctl_elem_info *uinfo)
@@ -3762,7 +3761,7 @@ static int snd_rme_digiface_controls_create(struct usb_mixer_interface *mixer)
 }
 
 /*
- * Pioneer DJ / AlphaTheta DJM Mixers
+ * Pioneer DJ DJM Mixers
  *
  * These devices generally have options for soft-switching the playback and
  * capture sources in addition to the recording level. Although different
@@ -3779,26 +3778,17 @@ static int snd_rme_digiface_controls_create(struct usb_mixer_interface *mixer)
 #define SND_DJM_CAP_CDLINE	0x01
 #define SND_DJM_CAP_DIGITAL	0x02
 #define SND_DJM_CAP_PHONO	0x03
-#define SND_DJM_CAP_PREFADER	0x05
 #define SND_DJM_CAP_PFADER	0x06
 #define SND_DJM_CAP_XFADERA	0x07
 #define SND_DJM_CAP_XFADERB	0x08
 #define SND_DJM_CAP_MIC		0x09
 #define SND_DJM_CAP_AUX		0x0d
 #define SND_DJM_CAP_RECOUT	0x0a
-#define SND_DJM_CAP_RECOUT_NOMIC	0x0e
 #define SND_DJM_CAP_NONE	0x0f
-#define SND_DJM_CAP_FXSEND	0x10
 #define SND_DJM_CAP_CH1PFADER	0x11
 #define SND_DJM_CAP_CH2PFADER	0x12
 #define SND_DJM_CAP_CH3PFADER	0x13
 #define SND_DJM_CAP_CH4PFADER	0x14
-#define SND_DJM_CAP_EXT1SEND	0x21
-#define SND_DJM_CAP_EXT2SEND	0x22
-#define SND_DJM_CAP_CH1PREFADER	0x31
-#define SND_DJM_CAP_CH2PREFADER	0x32
-#define SND_DJM_CAP_CH3PREFADER	0x33
-#define SND_DJM_CAP_CH4PREFADER	0x34
 
 // Playback types
 #define SND_DJM_PB_CH1		0x00
@@ -3824,8 +3814,7 @@ static int snd_rme_digiface_controls_create(struct usb_mixer_interface *mixer)
 #define SND_DJM_900NXS2_IDX	0x3
 #define SND_DJM_750MK2_IDX	0x4
 #define SND_DJM_450_IDX		0x5
-#define SND_DJM_A9_IDX		0x6
-#define SND_DJM_V10_IDX	0x7
+
 
 #define SND_DJM_CTL(_name, suffix, _default_value, _windex) { \
 	.name = _name, \
@@ -3837,6 +3826,7 @@ static int snd_rme_digiface_controls_create(struct usb_mixer_interface *mixer)
 #define SND_DJM_DEVICE(suffix) { \
 	.controls = snd_djm_ctls_##suffix, \
 	.ncontrols = ARRAY_SIZE(snd_djm_ctls_##suffix) }
+
 
 struct snd_djm_device {
 	const char *name;
@@ -3852,27 +3842,13 @@ struct snd_djm_ctl {
 	u16 wIndex;
 };
 
-static const char *snd_djm_get_label_caplevel_common(u16 wvalue)
+static const char *snd_djm_get_label_caplevel(u16 wvalue)
 {
 	switch (wvalue) {
 	case 0x0000:	return "-19dB";
 	case 0x0100:	return "-15dB";
 	case 0x0200:	return "-10dB";
 	case 0x0300:	return "-5dB";
-	default:	return NULL;
-	}
-};
-
-// Models like DJM-A9 or DJM-V10 have different capture levels than others
-static const char *snd_djm_get_label_caplevel_high(u16 wvalue)
-{
-	switch (wvalue) {
-	case 0x0000:	return "+15dB";
-	case 0x0100:	return "+12dB";
-	case 0x0200:	return "+9dB";
-	case 0x0300:	return "+6dB";
-	case 0x0400:	return "+3dB";
-	case 0x0500:	return "0dB";
 	default:	return NULL;
 	}
 };
@@ -3889,20 +3865,12 @@ static const char *snd_djm_get_label_cap_common(u16 wvalue)
 	case SND_DJM_CAP_XFADERB:	return "Cross Fader B";
 	case SND_DJM_CAP_MIC:		return "Mic";
 	case SND_DJM_CAP_RECOUT:	return "Rec Out";
-	case SND_DJM_CAP_RECOUT_NOMIC:	return "Rec Out without Mic";
 	case SND_DJM_CAP_AUX:		return "Aux";
 	case SND_DJM_CAP_NONE:		return "None";
-	case SND_DJM_CAP_FXSEND:	return "FX SEND";
-	case SND_DJM_CAP_CH1PREFADER:	return "Pre Fader Ch1";
-	case SND_DJM_CAP_CH2PREFADER:	return "Pre Fader Ch2";
-	case SND_DJM_CAP_CH3PREFADER:	return "Pre Fader Ch3";
-	case SND_DJM_CAP_CH4PREFADER:	return "Pre Fader Ch4";
 	case SND_DJM_CAP_CH1PFADER:	return "Post Fader Ch1";
 	case SND_DJM_CAP_CH2PFADER:	return "Post Fader Ch2";
 	case SND_DJM_CAP_CH3PFADER:	return "Post Fader Ch3";
 	case SND_DJM_CAP_CH4PFADER:	return "Post Fader Ch4";
-	case SND_DJM_CAP_EXT1SEND:	return "EXT1 SEND";
-	case SND_DJM_CAP_EXT2SEND:	return "EXT2 SEND";
 	default:			return NULL;
 	}
 };
@@ -3915,15 +3883,6 @@ static const char *snd_djm_get_label_cap_850(u16 wvalue)
 	case 0x00:		return "Control Tone CD/LINE";
 	case 0x01:		return "Control Tone LINE";
 	default:		return snd_djm_get_label_cap_common(wvalue);
-	}
-};
-
-static const char *snd_djm_get_label_caplevel(u8 device_idx, u16 wvalue)
-{
-	switch (device_idx) {
-	case SND_DJM_A9_IDX:		return snd_djm_get_label_caplevel_high(wvalue);
-	case SND_DJM_V10_IDX:		return snd_djm_get_label_caplevel_high(wvalue);
-	default:			return snd_djm_get_label_caplevel_common(wvalue);
 	}
 };
 
@@ -3948,7 +3907,7 @@ static const char *snd_djm_get_label_pb(u16 wvalue)
 static const char *snd_djm_get_label(u8 device_idx, u16 wvalue, u16 windex)
 {
 	switch (windex) {
-	case SND_DJM_WINDEX_CAPLVL:	return snd_djm_get_label_caplevel(device_idx, wvalue);
+	case SND_DJM_WINDEX_CAPLVL:	return snd_djm_get_label_caplevel(wvalue);
 	case SND_DJM_WINDEX_CAP:	return snd_djm_get_label_cap(device_idx, wvalue);
 	case SND_DJM_WINDEX_PB:		return snd_djm_get_label_pb(wvalue);
 	default:			return NULL;
@@ -3958,6 +3917,7 @@ static const char *snd_djm_get_label(u8 device_idx, u16 wvalue, u16 windex)
 // common DJM capture level option values
 static const u16 snd_djm_opts_cap_level[] = {
 	0x0000, 0x0100, 0x0200, 0x0300 };
+
 
 // DJM-250MK2
 static const u16 snd_djm_opts_250mk2_cap1[] = {
@@ -3974,14 +3934,15 @@ static const u16 snd_djm_opts_250mk2_pb2[] = { 0x0200, 0x0201, 0x0204 };
 static const u16 snd_djm_opts_250mk2_pb3[] = { 0x0300, 0x0301, 0x0304 };
 
 static const struct snd_djm_ctl snd_djm_ctls_250mk2[] = {
-	SND_DJM_CTL("Master Input Level Capture Switch", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
-	SND_DJM_CTL("Input 1 Capture Switch",  250mk2_cap1, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 2 Capture Switch",  250mk2_cap2, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 3 Capture Switch",  250mk2_cap3, 0, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Output 1 Playback Switch", 250mk2_pb1, 0, SND_DJM_WINDEX_PB),
-	SND_DJM_CTL("Output 2 Playback Switch", 250mk2_pb2, 1, SND_DJM_WINDEX_PB),
-	SND_DJM_CTL("Output 3 Playback Switch", 250mk2_pb3, 2, SND_DJM_WINDEX_PB)
+	SND_DJM_CTL("Capture Level", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
+	SND_DJM_CTL("Ch1 Input",   250mk2_cap1, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch2 Input",   250mk2_cap2, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch3 Input",   250mk2_cap3, 0, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch1 Output",   250mk2_pb1, 0, SND_DJM_WINDEX_PB),
+	SND_DJM_CTL("Ch2 Output",   250mk2_pb2, 1, SND_DJM_WINDEX_PB),
+	SND_DJM_CTL("Ch3 Output",   250mk2_pb3, 2, SND_DJM_WINDEX_PB)
 };
+
 
 // DJM-450
 static const u16 snd_djm_opts_450_cap1[] = {
@@ -3998,14 +3959,15 @@ static const u16 snd_djm_opts_450_pb2[] = { 0x0200, 0x0201, 0x0204 };
 static const u16 snd_djm_opts_450_pb3[] = { 0x0300, 0x0301, 0x0304 };
 
 static const struct snd_djm_ctl snd_djm_ctls_450[] = {
-	SND_DJM_CTL("Master Input Level Capture Switch", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
-	SND_DJM_CTL("Input 1 Capture Switch",  450_cap1, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 2 Capture Switch",  450_cap2, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 3 Capture Switch",  450_cap3, 0, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Output 1 Playback Switch", 450_pb1, 0, SND_DJM_WINDEX_PB),
-	SND_DJM_CTL("Output 2 Playback Switch", 450_pb2, 1, SND_DJM_WINDEX_PB),
-	SND_DJM_CTL("Output 3 Playback Switch", 450_pb3, 2, SND_DJM_WINDEX_PB)
+	SND_DJM_CTL("Capture Level", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
+	SND_DJM_CTL("Ch1 Input",   450_cap1, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch2 Input",   450_cap2, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch3 Input",   450_cap3, 0, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch1 Output",   450_pb1, 0, SND_DJM_WINDEX_PB),
+	SND_DJM_CTL("Ch2 Output",   450_pb2, 1, SND_DJM_WINDEX_PB),
+	SND_DJM_CTL("Ch3 Output",   450_pb3, 2, SND_DJM_WINDEX_PB)
 };
+
 
 // DJM-750
 static const u16 snd_djm_opts_750_cap1[] = {
@@ -4018,12 +3980,13 @@ static const u16 snd_djm_opts_750_cap4[] = {
 	0x0401, 0x0403, 0x0406, 0x0407, 0x0408, 0x0409, 0x040a, 0x040f };
 
 static const struct snd_djm_ctl snd_djm_ctls_750[] = {
-	SND_DJM_CTL("Master Input Level Capture Switch", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
-	SND_DJM_CTL("Input 1 Capture Switch", 750_cap1, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 2 Capture Switch", 750_cap2, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 3 Capture Switch", 750_cap3, 0, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 4 Capture Switch", 750_cap4, 0, SND_DJM_WINDEX_CAP)
+	SND_DJM_CTL("Capture Level", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
+	SND_DJM_CTL("Ch1 Input",   750_cap1, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch2 Input",   750_cap2, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch3 Input",   750_cap3, 0, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch4 Input",   750_cap4, 0, SND_DJM_WINDEX_CAP)
 };
+
 
 // DJM-850
 static const u16 snd_djm_opts_850_cap1[] = {
@@ -4036,12 +3999,13 @@ static const u16 snd_djm_opts_850_cap4[] = {
 	0x0400, 0x0403, 0x0406, 0x0407, 0x0408, 0x0409, 0x040a, 0x040f };
 
 static const struct snd_djm_ctl snd_djm_ctls_850[] = {
-	SND_DJM_CTL("Master Input Level Capture Switch", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
-	SND_DJM_CTL("Input 1 Capture Switch", 850_cap1, 1, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 2 Capture Switch", 850_cap2, 0, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 3 Capture Switch", 850_cap3, 0, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 4 Capture Switch", 850_cap4, 1, SND_DJM_WINDEX_CAP)
+	SND_DJM_CTL("Capture Level", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
+	SND_DJM_CTL("Ch1 Input",   850_cap1, 1, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch2 Input",   850_cap2, 0, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch3 Input",   850_cap3, 0, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch4 Input",   850_cap4, 1, SND_DJM_WINDEX_CAP)
 };
+
 
 // DJM-900NXS2
 static const u16 snd_djm_opts_900nxs2_cap1[] = {
@@ -4056,12 +4020,12 @@ static const u16 snd_djm_opts_900nxs2_cap5[] = {
 	0x0507, 0x0508, 0x0509, 0x050a, 0x0511, 0x0512, 0x0513, 0x0514 };
 
 static const struct snd_djm_ctl snd_djm_ctls_900nxs2[] = {
-	SND_DJM_CTL("Master Input Level Capture Switch", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
-	SND_DJM_CTL("Input 1 Capture Switch", 900nxs2_cap1, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 2 Capture Switch", 900nxs2_cap2, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 3 Capture Switch", 900nxs2_cap3, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 4 Capture Switch", 900nxs2_cap4, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 5 Capture Switch", 900nxs2_cap5, 3, SND_DJM_WINDEX_CAP)
+	SND_DJM_CTL("Capture Level", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
+	SND_DJM_CTL("Ch1 Input",   900nxs2_cap1, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch2 Input",   900nxs2_cap2, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch3 Input",   900nxs2_cap3, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch4 Input",   900nxs2_cap4, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch5 Input",   900nxs2_cap5, 3, SND_DJM_WINDEX_CAP)
 };
 
 // DJM-750MK2
@@ -4080,91 +4044,19 @@ static const u16 snd_djm_opts_750mk2_pb1[] = { 0x0100, 0x0101, 0x0104 };
 static const u16 snd_djm_opts_750mk2_pb2[] = { 0x0200, 0x0201, 0x0204 };
 static const u16 snd_djm_opts_750mk2_pb3[] = { 0x0300, 0x0301, 0x0304 };
 
+
 static const struct snd_djm_ctl snd_djm_ctls_750mk2[] = {
-	SND_DJM_CTL("Master Input Level Capture Switch", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
-	SND_DJM_CTL("Input 1 Capture Switch",   750mk2_cap1, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 2 Capture Switch",   750mk2_cap2, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 3 Capture Switch",   750mk2_cap3, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 4 Capture Switch",   750mk2_cap4, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 5 Capture Switch",   750mk2_cap5, 3, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Output 1 Playback Switch", 750mk2_pb1, 0, SND_DJM_WINDEX_PB),
-	SND_DJM_CTL("Output 2 Playback Switch", 750mk2_pb2, 1, SND_DJM_WINDEX_PB),
-	SND_DJM_CTL("Output 3 Playback Switch", 750mk2_pb3, 2, SND_DJM_WINDEX_PB)
+	SND_DJM_CTL("Capture Level", cap_level, 0, SND_DJM_WINDEX_CAPLVL),
+	SND_DJM_CTL("Ch1 Input",   750mk2_cap1, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch2 Input",   750mk2_cap2, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch3 Input",   750mk2_cap3, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch4 Input",   750mk2_cap4, 2, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch5 Input",   750mk2_cap5, 3, SND_DJM_WINDEX_CAP),
+	SND_DJM_CTL("Ch1 Output",   750mk2_pb1, 0, SND_DJM_WINDEX_PB),
+	SND_DJM_CTL("Ch2 Output",   750mk2_pb2, 1, SND_DJM_WINDEX_PB),
+	SND_DJM_CTL("Ch3 Output",   750mk2_pb3, 2, SND_DJM_WINDEX_PB)
 };
 
-// DJM-A9
-static const u16 snd_djm_opts_a9_cap_level[] = {
-	0x0000, 0x0100, 0x0200, 0x0300, 0x0400, 0x0500 };
-static const u16 snd_djm_opts_a9_cap1[] = {
-	0x0107, 0x0108, 0x0109, 0x010a, 0x010e,
-	0x111, 0x112, 0x113, 0x114, 0x0131, 0x132, 0x133, 0x134 };
-static const u16 snd_djm_opts_a9_cap2[] = {
-	0x0201, 0x0202, 0x0203, 0x0205, 0x0206, 0x0207, 0x0208, 0x0209, 0x020a, 0x020e };
-static const u16 snd_djm_opts_a9_cap3[] = {
-	0x0301, 0x0302, 0x0303, 0x0305, 0x0306, 0x0307, 0x0308, 0x0309, 0x030a, 0x030e };
-static const u16 snd_djm_opts_a9_cap4[] = {
-	0x0401, 0x0402, 0x0403, 0x0405, 0x0406, 0x0407, 0x0408, 0x0409, 0x040a, 0x040e };
-static const u16 snd_djm_opts_a9_cap5[] = {
-	0x0501, 0x0502, 0x0503, 0x0505, 0x0506, 0x0507, 0x0508, 0x0509, 0x050a, 0x050e };
-
-static const struct snd_djm_ctl snd_djm_ctls_a9[] = {
-	SND_DJM_CTL("Master Input Level Capture Switch", a9_cap_level, 0, SND_DJM_WINDEX_CAPLVL),
-	SND_DJM_CTL("Master Input Capture Switch", a9_cap1, 3, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 1 Capture Switch",  a9_cap2, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 2 Capture Switch",  a9_cap3, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 3 Capture Switch",  a9_cap4, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 4 Capture Switch",  a9_cap5, 2, SND_DJM_WINDEX_CAP)
-};
-
-// DJM-V10
-static const u16 snd_djm_opts_v10_cap_level[] = {
-	0x0000, 0x0100, 0x0200, 0x0300, 0x0400, 0x0500
-};
-
-static const u16 snd_djm_opts_v10_cap1[] = {
-	0x0103,
-	0x0100, 0x0102, 0x0106, 0x0110, 0x0107,
-	0x0108, 0x0109, 0x010a, 0x0121, 0x0122
-};
-
-static const u16 snd_djm_opts_v10_cap2[] = {
-	0x0200, 0x0202, 0x0206, 0x0210, 0x0207,
-	0x0208, 0x0209, 0x020a, 0x0221, 0x0222
-};
-
-static const u16 snd_djm_opts_v10_cap3[] = {
-	0x0303,
-	0x0300, 0x0302, 0x0306, 0x0310, 0x0307,
-	0x0308, 0x0309, 0x030a, 0x0321, 0x0322
-};
-
-static const u16 snd_djm_opts_v10_cap4[] = {
-	0x0403,
-	0x0400, 0x0402, 0x0406, 0x0410, 0x0407,
-	0x0408, 0x0409, 0x040a, 0x0421, 0x0422
-};
-
-static const u16 snd_djm_opts_v10_cap5[] = {
-	0x0500, 0x0502, 0x0506, 0x0510, 0x0507,
-	0x0508, 0x0509, 0x050a, 0x0521, 0x0522
-};
-
-static const u16 snd_djm_opts_v10_cap6[] = {
-	0x0603,
-	0x0600, 0x0602, 0x0606, 0x0610, 0x0607,
-	0x0608, 0x0609, 0x060a, 0x0621, 0x0622
-};
-
-static const struct snd_djm_ctl snd_djm_ctls_v10[] = {
-	SND_DJM_CTL("Master Input Level Capture Switch", v10_cap_level, 0, SND_DJM_WINDEX_CAPLVL),
-	SND_DJM_CTL("Input 1 Capture Switch", v10_cap1, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 2 Capture Switch", v10_cap2, 2, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 3 Capture Switch", v10_cap3, 0, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 4 Capture Switch", v10_cap4, 0, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 5 Capture Switch", v10_cap5, 0, SND_DJM_WINDEX_CAP),
-	SND_DJM_CTL("Input 6 Capture Switch", v10_cap6, 0, SND_DJM_WINDEX_CAP)
-	// playback channels are fixed and controlled by hardware knobs on the mixer
-};
 
 static const struct snd_djm_device snd_djm_devices[] = {
 	[SND_DJM_250MK2_IDX] = SND_DJM_DEVICE(250mk2),
@@ -4173,9 +4065,8 @@ static const struct snd_djm_device snd_djm_devices[] = {
 	[SND_DJM_900NXS2_IDX] = SND_DJM_DEVICE(900nxs2),
 	[SND_DJM_750MK2_IDX] = SND_DJM_DEVICE(750mk2),
 	[SND_DJM_450_IDX] = SND_DJM_DEVICE(450),
-	[SND_DJM_A9_IDX] = SND_DJM_DEVICE(a9),
-	[SND_DJM_V10_IDX] = SND_DJM_DEVICE(v10),
 };
+
 
 static int snd_djm_controls_info(struct snd_kcontrol *kctl,
 				 struct snd_ctl_elem_info *info)
@@ -4414,12 +4305,6 @@ int snd_usb_mixer_apply_create_quirk(struct usb_mixer_interface *mixer)
 		err = snd_scarlett2_init(mixer);
 		break;
 
-	case USB_ID(0x1235, 0x821b): /* Focusrite Scarlett 16i16 4th Gen */
-	case USB_ID(0x1235, 0x821c): /* Focusrite Scarlett 18i16 4th Gen */
-	case USB_ID(0x1235, 0x821d): /* Focusrite Scarlett 18i20 4th Gen */
-		err = snd_fcp_init(mixer);
-		break;
-
 	case USB_ID(0x041e, 0x323b): /* Creative Sound Blaster E1 */
 		err = snd_soundblaster_e1_switch_create(mixer);
 		break;
@@ -4440,9 +4325,6 @@ int snd_usb_mixer_apply_create_quirk(struct usb_mixer_interface *mixer)
 		break;
 
 	case USB_ID(0x194f, 0x010c): /* Presonus Studio 1810c */
-		err = snd_sc1810_init_mixer(mixer);
-		break;
-	case USB_ID(0x194f, 0x010d): /* Presonus Studio 1824c */
 		err = snd_sc1810_init_mixer(mixer);
 		break;
 	case USB_ID(0x2a39, 0x3fb0): /* RME Babyface Pro FS */
@@ -4469,12 +4351,6 @@ int snd_usb_mixer_apply_create_quirk(struct usb_mixer_interface *mixer)
 		break;
 	case USB_ID(0x2b73, 0x000a): /* Pioneer DJ DJM-900NXS2 */
 		err = snd_djm_controls_create(mixer, SND_DJM_900NXS2_IDX);
-		break;
-	case USB_ID(0x2b73, 0x003c): /* Pioneer DJ / AlphaTheta DJM-A9 */
-		err = snd_djm_controls_create(mixer, SND_DJM_A9_IDX);
-		break;
-	case USB_ID(0x2b73, 0x0034): /* Pioneer DJ DJM-V10 */
-		err = snd_djm_controls_create(mixer, SND_DJM_V10_IDX);
 		break;
 	}
 
@@ -4620,3 +4496,4 @@ void snd_usb_mixer_fu_apply_quirk(struct usb_mixer_interface *mixer,
 	    (cval->control == UAC_FU_MUTE || cval->control == UAC_FU_VOLUME))
 		snd_fix_plt_name(mixer->chip, &kctl->id);
 }
+

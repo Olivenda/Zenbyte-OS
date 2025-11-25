@@ -195,6 +195,16 @@ config NF_CONNTRACK_LABELS
 config NF_CONNTRACK_OVS
 	bool
 
+config NF_CT_PROTO_DCCP
+	bool 'DCCP protocol connection tracking support'
+	depends on NETFILTER_ADVANCED
+	default y
+	help
+	  With this option enabled, the layer 3 independent connection
+	  tracking code will be able to do state tracking on DCCP connections.
+
+	  If unsure, say Y.
+
 config NF_CT_PROTO_GRE
 	bool
 
@@ -202,7 +212,7 @@ config NF_CT_PROTO_SCTP
 	bool 'SCTP protocol connection tracking support'
 	depends on NETFILTER_ADVANCED
 	default y
-	select NET_CRC32C
+	select LIBCRC32C
 	help
 	  With this option enabled, the layer 3 independent connection
 	  tracking code will be able to do state tracking on SCTP connections.
@@ -465,7 +475,7 @@ endif # NF_CONNTRACK
 
 config NF_TABLES
 	select NETFILTER_NETLINK
-	select NET_CRC32C
+	select LIBCRC32C
 	tristate "Netfilter nf_tables support"
 	help
 	  nftables is the new packet classification framework that intends to
@@ -505,12 +515,6 @@ config NFT_CT
 	help
 	  This option adds the "ct" expression that you can use to match
 	  connection tracking information such as the flow state.
-
-config NFT_EXTHDR_DCCP
-	bool "Netfilter nf_tables exthdr DCCP support (DEPRECATED)"
-	default n
-	help
-	  This option adds support for matching on DCCP extension headers.
 
 config NFT_FLOW_OFFLOAD
 	depends on NF_CONNTRACK && NF_FLOW_TABLE
@@ -757,16 +761,6 @@ config NETFILTER_XTABLES_COMPAT
 	   binaries on 64bit kernels.
 
 	   If unsure, say N.
-
-config NETFILTER_XTABLES_LEGACY
-	bool "Netfilter legacy tables support"
-	depends on !PREEMPT_RT
-	help
-	  Say Y here if you still require support for legacy tables. This is
-	  required by the legacy tools (iptables-legacy) and is not needed if
-	  you use iptables over nftables (iptables-nft).
-	  Legacy support is not limited to IP, it also includes EBTABLES and
-	  ARPTABLES.
 
 comment "Xtables combined modules"
 
@@ -1186,7 +1180,7 @@ config NETFILTER_XT_MATCH_CGROUP
 	tristate '"control group" match support'
 	depends on NETFILTER_ADVANCED
 	depends on CGROUPS
-	select SOCK_CGROUP_DATA
+	select CGROUP_NET_CLASSID
 	help
 	Socket/process control group matching allows you to match locally
 	generated packets based on which net_cls control group processes
@@ -1284,9 +1278,9 @@ config NETFILTER_XT_MATCH_CPU
 	  To compile it as a module, choose M here.  If unsure, say N.
 
 config NETFILTER_XT_MATCH_DCCP
-	tristate '"dccp" protocol match support (DEPRECATED)'
+	tristate '"dccp" protocol match support'
 	depends on NETFILTER_ADVANCED
-	default n
+	default IP_DCCP
 	help
 	  With this option enabled, you will be able to use the iptables
 	  `dccp' match in order to match on DCCP source/destination ports

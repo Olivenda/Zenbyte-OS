@@ -190,12 +190,16 @@ EXPORT_SYMBOL(vfs_fadvise);
 
 int ksys_fadvise64_64(int fd, loff_t offset, loff_t len, int advice)
 {
-	CLASS(fd, f)(fd);
+	struct fd f = fdget(fd);
+	int ret;
 
-	if (fd_empty(f))
+	if (!fd_file(f))
 		return -EBADF;
 
-	return vfs_fadvise(fd_file(f), offset, len, advice);
+	ret = vfs_fadvise(fd_file(f), offset, len, advice);
+
+	fdput(f);
+	return ret;
 }
 
 SYSCALL_DEFINE4(fadvise64_64, int, fd, loff_t, offset, loff_t, len, int, advice)

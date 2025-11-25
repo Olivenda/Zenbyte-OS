@@ -70,10 +70,10 @@ static void process_recv(struct ishtp_cl *hid_ishtp_cl, void *recv_buf,
 	unsigned char *payload;
 	struct device_info *dev_info;
 	int i, j;
-	size_t	payload_len, total_len, cur_pos, raw_len, msg_len;
+	size_t	payload_len, total_len, cur_pos, raw_len;
 	int report_type;
 	struct report_list *reports_list;
-	struct report *report;
+	char *reports;
 	size_t report_len;
 	struct ishtp_cl_data *client_data = ishtp_get_client_data(hid_ishtp_cl);
 	int curr_hid_dev = client_data->cur_hid_dev;
@@ -280,13 +280,14 @@ do_get_report:
 		case HOSTIF_PUBLISH_INPUT_REPORT_LIST:
 			report_type = HID_INPUT_REPORT;
 			reports_list = (struct report_list *)payload;
-			report = reports_list->reports;
+			reports = (char *)reports_list->reports;
 
 			for (j = 0; j < reports_list->num_of_reports; j++) {
-				recv_msg = container_of(&report->msg,
-							struct hostif_msg, hdr);
-				report_len = report->size;
-				payload = recv_msg->payload;
+				recv_msg = (struct hostif_msg *)(reports +
+					sizeof(uint16_t));
+				report_len = *(uint16_t *)reports;
+				payload = reports + sizeof(uint16_t) +
+					sizeof(struct hostif_msg_hdr);
 				payload_len = report_len -
 					sizeof(struct hostif_msg_hdr);
 
@@ -303,7 +304,7 @@ do_get_report:
 						0);
 					}
 
-				report += sizeof(*report) + payload_len;
+				reports += sizeof(uint16_t) + report_len;
 			}
 			break;
 		default:
@@ -315,12 +316,12 @@ do_get_report:
 
 		}
 
-		msg_len = payload_len + sizeof(struct hostif_msg);
-		if (!cur_pos && cur_pos + msg_len < total_len)
+		if (!cur_pos && cur_pos + payload_len +
+				sizeof(struct hostif_msg) < total_len)
 			++client_data->multi_packet_cnt;
 
-		cur_pos += msg_len;
-		payload += msg_len;
+		cur_pos += payload_len + sizeof(struct hostif_msg);
+		payload += payload_len + sizeof(struct hostif_msg);
 
 	} while (cur_pos < total_len);
 }
@@ -759,9 +760,6 @@ static void hid_ishtp_cl_resume_handler(struct work_struct *work)
 	if (ishtp_wait_resume(ishtp_get_ishtp_device(hid_ishtp_cl))) {
 		client_data->suspended = false;
 		wake_up_interruptible(&client_data->ishtp_resume_wait);
-	} else {
-		hid_ishtp_trace(client_data, "hid client: wait for resume timed out");
-		dev_err(cl_data_to_dev(client_data), "wait for resume timed out");
 	}
 }
 

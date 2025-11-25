@@ -11,7 +11,6 @@
 
 #include <linux/debugfs.h>
 #include <linux/firmware.h>
-#include <linux/string_choices.h>
 #include <sound/sof/ipc4/header.h>
 #include <trace/events/sof_intel.h>
 #include "../ipc4-priv.h"
@@ -78,7 +77,7 @@ bool mtl_dsp_check_ipc_irq(struct snd_sof_dev *sdev)
 
 	return false;
 }
-EXPORT_SYMBOL_NS(mtl_dsp_check_ipc_irq, "SND_SOC_SOF_INTEL_MTL");
+EXPORT_SYMBOL_NS(mtl_dsp_check_ipc_irq, SND_SOC_SOF_INTEL_MTL);
 
 /* Check if an SDW IRQ occurred */
 static bool mtl_dsp_check_sdw_irq(struct snd_sof_dev *sdev)
@@ -96,7 +95,7 @@ static bool mtl_dsp_check_sdw_irq(struct snd_sof_dev *sdev)
 	return false;
 }
 
-static int mtl_ipc_send_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
+int mtl_ipc_send_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *msg)
 {
 	struct sof_intel_hda_dev *hdev = sdev->pdata->hw_pdata;
 	struct sof_ipc4_msg *msg_data = msg->msg_data;
@@ -122,6 +121,7 @@ static int mtl_ipc_send_msg(struct snd_sof_dev *sdev, struct snd_sof_ipc_msg *ms
 
 	return 0;
 }
+EXPORT_SYMBOL_NS(mtl_ipc_send_msg, SND_SOC_SOF_INTEL_MTL);
 
 void mtl_enable_ipc_interrupts(struct snd_sof_dev *sdev)
 {
@@ -149,7 +149,7 @@ void mtl_disable_ipc_interrupts(struct snd_sof_dev *sdev)
 	snd_sof_dsp_update_bits(sdev, HDA_DSP_BAR, chip->ipc_ctl,
 				MTL_DSP_REG_HFIPCXCTL_BUSY | MTL_DSP_REG_HFIPCXCTL_DONE, 0);
 }
-EXPORT_SYMBOL_NS(mtl_disable_ipc_interrupts, "SND_SOC_SOF_INTEL_MTL");
+EXPORT_SYMBOL_NS(mtl_disable_ipc_interrupts, SND_SOC_SOF_INTEL_MTL);
 
 static void mtl_enable_sdw_irq(struct snd_sof_dev *sdev, bool enable)
 {
@@ -176,7 +176,7 @@ static void mtl_enable_sdw_irq(struct snd_sof_dev *sdev, bool enable)
 					    HDA_DSP_REG_POLL_INTERVAL_US, HDA_DSP_RESET_TIMEOUT_US);
 	if (ret < 0)
 		dev_err(sdev->dev, "failed to set SoundWire IPC interrupt %s\n",
-			str_enable_disable(enable));
+			enable ? "enable" : "disable");
 }
 
 int mtl_enable_interrupts(struct snd_sof_dev *sdev, bool enable)
@@ -209,7 +209,7 @@ int mtl_enable_interrupts(struct snd_sof_dev *sdev, bool enable)
 					    HDA_DSP_REG_POLL_INTERVAL_US, HDA_DSP_RESET_TIMEOUT_US);
 	if (ret < 0) {
 		dev_err(sdev->dev, "failed to %s Host IPC and/or SOUNDWIRE\n",
-			str_enable_disable(enable));
+			enable ? "enable" : "disable");
 		return ret;
 	}
 
@@ -228,16 +228,16 @@ int mtl_enable_interrupts(struct snd_sof_dev *sdev, bool enable)
 					    HDA_DSP_REG_POLL_INTERVAL_US, HDA_DSP_RESET_TIMEOUT_US);
 	if (ret < 0) {
 		dev_err(sdev->dev, "failed to set Host IPC interrupt %s\n",
-			str_enable_disable(enable));
+			enable ? "enable" : "disable");
 		return ret;
 	}
 
 	return ret;
 }
-EXPORT_SYMBOL_NS(mtl_enable_interrupts, "SND_SOC_SOF_INTEL_MTL");
+EXPORT_SYMBOL_NS(mtl_enable_interrupts, SND_SOC_SOF_INTEL_MTL);
 
 /* pre fw run operations */
-static int mtl_dsp_pre_fw_run(struct snd_sof_dev *sdev)
+int mtl_dsp_pre_fw_run(struct snd_sof_dev *sdev)
 {
 	struct sof_intel_hda_dev *hdev = sdev->pdata->hw_pdata;
 	u32 dsphfpwrsts;
@@ -297,8 +297,9 @@ static int mtl_dsp_pre_fw_run(struct snd_sof_dev *sdev)
 
 	return ret;
 }
+EXPORT_SYMBOL_NS(mtl_dsp_pre_fw_run, SND_SOC_SOF_INTEL_MTL);
 
-static int mtl_dsp_post_fw_run(struct snd_sof_dev *sdev)
+int mtl_dsp_post_fw_run(struct snd_sof_dev *sdev)
 {
 	int ret;
 
@@ -323,8 +324,9 @@ static int mtl_dsp_post_fw_run(struct snd_sof_dev *sdev)
 	hda_sdw_int_enable(sdev, true);
 	return 0;
 }
+EXPORT_SYMBOL_NS(mtl_dsp_post_fw_run, SND_SOC_SOF_INTEL_MTL);
 
-static void mtl_dsp_dump(struct snd_sof_dev *sdev, u32 flags)
+void mtl_dsp_dump(struct snd_sof_dev *sdev, u32 flags)
 {
 	char *level = (flags & SOF_DBG_DUMP_OPTIONAL) ? KERN_DEBUG : KERN_ERR;
 	u32 fwsts;
@@ -340,6 +342,7 @@ static void mtl_dsp_dump(struct snd_sof_dev *sdev, u32 flags)
 
 	sof_ipc4_intel_dump_telemetry_state(sdev, flags);
 }
+EXPORT_SYMBOL_NS(mtl_dsp_dump, SND_SOC_SOF_INTEL_MTL);
 
 static bool mtl_dsp_primary_core_is_enabled(struct snd_sof_dev *sdev)
 {
@@ -450,7 +453,7 @@ int mtl_power_down_dsp(struct snd_sof_dev *sdev)
 					     (dsphfdsscs & cpa) == 0, HDA_DSP_REG_POLL_INTERVAL_US,
 					     HDA_DSP_RESET_TIMEOUT_US);
 }
-EXPORT_SYMBOL_NS(mtl_power_down_dsp, "SND_SOC_SOF_INTEL_MTL");
+EXPORT_SYMBOL_NS(mtl_power_down_dsp, SND_SOC_SOF_INTEL_MTL);
 
 int mtl_dsp_cl_init(struct snd_sof_dev *sdev, int stream_tag, bool imr_boot)
 {
@@ -553,9 +556,9 @@ err:
 	kfree(dump_msg);
 	return ret;
 }
-EXPORT_SYMBOL_NS(mtl_dsp_cl_init, "SND_SOC_SOF_INTEL_MTL");
+EXPORT_SYMBOL_NS(mtl_dsp_cl_init, SND_SOC_SOF_INTEL_MTL);
 
-static irqreturn_t mtl_ipc_irq_thread(int irq, void *context)
+irqreturn_t mtl_ipc_irq_thread(int irq, void *context)
 {
 	struct sof_ipc4_msg notification_data = {{ 0 }};
 	struct snd_sof_dev *sdev = context;
@@ -637,18 +640,21 @@ static irqreturn_t mtl_ipc_irq_thread(int irq, void *context)
 
 	return IRQ_HANDLED;
 }
+EXPORT_SYMBOL_NS(mtl_ipc_irq_thread, SND_SOC_SOF_INTEL_MTL);
 
-static int mtl_dsp_ipc_get_mailbox_offset(struct snd_sof_dev *sdev)
+int mtl_dsp_ipc_get_mailbox_offset(struct snd_sof_dev *sdev)
 {
 	return MTL_DSP_MBOX_UPLINK_OFFSET;
 }
+EXPORT_SYMBOL_NS(mtl_dsp_ipc_get_mailbox_offset, SND_SOC_SOF_INTEL_MTL);
 
-static int mtl_dsp_ipc_get_window_offset(struct snd_sof_dev *sdev, u32 id)
+int mtl_dsp_ipc_get_window_offset(struct snd_sof_dev *sdev, u32 id)
 {
 	return MTL_SRAM_WINDOW_OFFSET(id);
 }
+EXPORT_SYMBOL_NS(mtl_dsp_ipc_get_window_offset, SND_SOC_SOF_INTEL_MTL);
 
-static void mtl_ipc_dump(struct snd_sof_dev *sdev)
+void mtl_ipc_dump(struct snd_sof_dev *sdev)
 {
 	u32 hipcidr, hipcidd, hipcida, hipctdr, hipctdd, hipctda, hipcctl;
 
@@ -664,6 +670,7 @@ static void mtl_ipc_dump(struct snd_sof_dev *sdev)
 		"Host IPC initiator: %#x|%#x|%#x, target: %#x|%#x|%#x, ctl: %#x\n",
 		hipcidr, hipcidd, hipcida, hipctdr, hipctdd, hipctda, hipcctl);
 }
+EXPORT_SYMBOL_NS(mtl_ipc_dump, SND_SOC_SOF_INTEL_MTL);
 
 static int mtl_dsp_disable_interrupts(struct snd_sof_dev *sdev)
 {
@@ -672,7 +679,7 @@ static int mtl_dsp_disable_interrupts(struct snd_sof_dev *sdev)
 	return mtl_enable_interrupts(sdev, false);
 }
 
-static int mtl_dsp_core_get(struct snd_sof_dev *sdev, int core)
+int mtl_dsp_core_get(struct snd_sof_dev *sdev, int core)
 {
 	const struct sof_ipc_pm_ops *pm_ops = sdev->ipc->ops->pm;
 
@@ -684,8 +691,9 @@ static int mtl_dsp_core_get(struct snd_sof_dev *sdev, int core)
 
 	return 0;
 }
+EXPORT_SYMBOL_NS(mtl_dsp_core_get, SND_SOC_SOF_INTEL_MTL);
 
-static int mtl_dsp_core_put(struct snd_sof_dev *sdev, int core)
+int mtl_dsp_core_put(struct snd_sof_dev *sdev, int core)
 {
 	const struct sof_ipc_pm_ops *pm_ops = sdev->ipc->ops->pm;
 	int ret;
@@ -701,41 +709,45 @@ static int mtl_dsp_core_put(struct snd_sof_dev *sdev, int core)
 
 	return 0;
 }
+EXPORT_SYMBOL_NS(mtl_dsp_core_put, SND_SOC_SOF_INTEL_MTL);
 
-int sof_mtl_set_ops(struct snd_sof_dev *sdev, struct snd_sof_dsp_ops *dsp_ops)
+/* Meteorlake ops */
+struct snd_sof_dsp_ops sof_mtl_ops;
+
+int sof_mtl_ops_init(struct snd_sof_dev *sdev)
 {
 	struct sof_ipc4_fw_data *ipc4_data;
 
 	/* common defaults */
-	memcpy(dsp_ops, &sof_hda_common_ops, sizeof(struct snd_sof_dsp_ops));
+	memcpy(&sof_mtl_ops, &sof_hda_common_ops, sizeof(struct snd_sof_dsp_ops));
 
 	/* shutdown */
-	dsp_ops->shutdown = hda_dsp_shutdown;
+	sof_mtl_ops.shutdown = hda_dsp_shutdown;
 
 	/* doorbell */
-	dsp_ops->irq_thread = mtl_ipc_irq_thread;
+	sof_mtl_ops.irq_thread = mtl_ipc_irq_thread;
 
 	/* ipc */
-	dsp_ops->send_msg = mtl_ipc_send_msg;
-	dsp_ops->get_mailbox_offset = mtl_dsp_ipc_get_mailbox_offset;
-	dsp_ops->get_window_offset = mtl_dsp_ipc_get_window_offset;
+	sof_mtl_ops.send_msg = mtl_ipc_send_msg;
+	sof_mtl_ops.get_mailbox_offset = mtl_dsp_ipc_get_mailbox_offset;
+	sof_mtl_ops.get_window_offset = mtl_dsp_ipc_get_window_offset;
 
 	/* debug */
-	dsp_ops->debug_map = mtl_dsp_debugfs;
-	dsp_ops->debug_map_count = ARRAY_SIZE(mtl_dsp_debugfs);
-	dsp_ops->dbg_dump = mtl_dsp_dump;
-	dsp_ops->ipc_dump = mtl_ipc_dump;
+	sof_mtl_ops.debug_map = mtl_dsp_debugfs;
+	sof_mtl_ops.debug_map_count = ARRAY_SIZE(mtl_dsp_debugfs);
+	sof_mtl_ops.dbg_dump = mtl_dsp_dump;
+	sof_mtl_ops.ipc_dump = mtl_ipc_dump;
 
 	/* pre/post fw run */
-	dsp_ops->pre_fw_run = mtl_dsp_pre_fw_run;
-	dsp_ops->post_fw_run = mtl_dsp_post_fw_run;
+	sof_mtl_ops.pre_fw_run = mtl_dsp_pre_fw_run;
+	sof_mtl_ops.post_fw_run = mtl_dsp_post_fw_run;
 
 	/* parse platform specific extended manifest */
-	dsp_ops->parse_platform_ext_manifest = NULL;
+	sof_mtl_ops.parse_platform_ext_manifest = NULL;
 
 	/* dsp core get/put */
-	dsp_ops->core_get = mtl_dsp_core_get;
-	dsp_ops->core_put = mtl_dsp_core_put;
+	sof_mtl_ops.core_get = mtl_dsp_core_get;
+	sof_mtl_ops.core_put = mtl_dsp_core_put;
 
 	sdev->private = kzalloc(sizeof(struct sof_ipc4_fw_data), GFP_KERNEL);
 	if (!sdev->private)
@@ -751,14 +763,13 @@ int sof_mtl_set_ops(struct snd_sof_dev *sdev, struct snd_sof_dsp_ops *dsp_ops)
 	/* External library loading support */
 	ipc4_data->load_library = hda_dsp_ipc4_load_library;
 
-	dsp_ops->set_power_state = hda_dsp_set_power_state_ipc4;
-
 	/* set DAI ops */
-	hda_set_dai_drv_ops(sdev, dsp_ops);
+	hda_set_dai_drv_ops(sdev, &sof_mtl_ops);
+
+	sof_mtl_ops.set_power_state = hda_dsp_set_power_state_ipc4;
 
 	return 0;
-}
-EXPORT_SYMBOL_NS(sof_mtl_set_ops, "SND_SOC_SOF_INTEL_MTL");
+};
 
 const struct sof_intel_dsp_desc mtl_chip_info = {
 	.cores_num = 3,

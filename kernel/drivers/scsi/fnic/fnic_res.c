@@ -30,7 +30,9 @@ int fnic_get_vnic_config(struct fnic *fnic)
 				    offsetof(struct vnic_fc_config, m), \
 				    sizeof(c->m), &c->m); \
 		if (err) { \
-			dev_err(&fnic->pdev->dev, "Error getting %s, %d\n", #m, err); \
+			shost_printk(KERN_ERR, fnic->lport->host, \
+				     "Error getting %s, %d\n", #m, \
+				     err); \
 			return err; \
 		} \
 	} while (0);
@@ -57,11 +59,6 @@ int fnic_get_vnic_config(struct fnic *fnic)
 	GET_CONFIG(luns_per_tgt);
 	GET_CONFIG(intr_mode);
 	GET_CONFIG(wq_copy_count);
-
-	if ((c->flags & (VFCF_FC_INITIATOR)) == 0) {
-		dev_info(&fnic->pdev->dev, "vNIC role not defined (def role: FC Init)\n");
-		c->flags |= VFCF_FC_INITIATOR;
-	}
 
 	c->wq_enet_desc_count =
 		min_t(u32, VNIC_FNIC_WQ_DESCS_MAX,
@@ -142,28 +139,40 @@ int fnic_get_vnic_config(struct fnic *fnic)
 
 	c->wq_copy_count = min_t(u16, FNIC_WQ_COPY_MAX, c->wq_copy_count);
 
-	dev_info(&fnic->pdev->dev, "fNIC MAC addr %p wq/wq_copy/rq %d/%d/%d\n",
-			fnic->data_src_addr,
+	shost_printk(KERN_INFO, fnic->lport->host,
+		     "vNIC MAC addr %pM "
+		     "wq/wq_copy/rq %d/%d/%d\n",
+		     fnic->ctlr.ctl_src_addr,
 		     c->wq_enet_desc_count, c->wq_copy_desc_count,
 		     c->rq_desc_count);
-	dev_info(&fnic->pdev->dev, "fNIC node wwn 0x%llx port wwn 0x%llx\n",
+	shost_printk(KERN_INFO, fnic->lport->host,
+		     "vNIC node wwn %llx port wwn %llx\n",
 		     c->node_wwn, c->port_wwn);
-	dev_info(&fnic->pdev->dev, "fNIC ed_tov %d ra_tov %d\n",
+	shost_printk(KERN_INFO, fnic->lport->host,
+		     "vNIC ed_tov %d ra_tov %d\n",
 		     c->ed_tov, c->ra_tov);
-	dev_info(&fnic->pdev->dev, "fNIC mtu %d intr timer %d\n",
+	shost_printk(KERN_INFO, fnic->lport->host,
+		     "vNIC mtu %d intr timer %d\n",
 		     c->maxdatafieldsize, c->intr_timer);
-	dev_info(&fnic->pdev->dev, "fNIC flags 0x%x luns per tgt %d\n",
+	shost_printk(KERN_INFO, fnic->lport->host,
+		     "vNIC flags 0x%x luns per tgt %d\n",
 		     c->flags, c->luns_per_tgt);
-	dev_info(&fnic->pdev->dev, "fNIC flogi_retries %d flogi timeout %d\n",
+	shost_printk(KERN_INFO, fnic->lport->host,
+		     "vNIC flogi_retries %d flogi timeout %d\n",
 		     c->flogi_retries, c->flogi_timeout);
-	dev_info(&fnic->pdev->dev, "fNIC plogi retries %d plogi timeout %d\n",
+	shost_printk(KERN_INFO, fnic->lport->host,
+		     "vNIC plogi retries %d plogi timeout %d\n",
 		     c->plogi_retries, c->plogi_timeout);
-	dev_info(&fnic->pdev->dev, "fNIC io throttle count %d link dn timeout %d\n",
+	shost_printk(KERN_INFO, fnic->lport->host,
+		     "vNIC io throttle count %d link dn timeout %d\n",
 		     c->io_throttle_count, c->link_down_timeout);
-	dev_info(&fnic->pdev->dev, "fNIC port dn io retries %d port dn timeout %d\n",
+	shost_printk(KERN_INFO, fnic->lport->host,
+		     "vNIC port dn io retries %d port dn timeout %d\n",
 		     c->port_down_io_retries, c->port_down_timeout);
-	dev_info(&fnic->pdev->dev, "fNIC wq_copy_count: %d\n", c->wq_copy_count);
-	dev_info(&fnic->pdev->dev, "fNIC intr mode: %d\n", c->intr_mode);
+	shost_printk(KERN_INFO, fnic->lport->host,
+			"vNIC wq_copy_count: %d\n", c->wq_copy_count);
+	shost_printk(KERN_INFO, fnic->lport->host,
+			"vNIC intr mode: %d\n", c->intr_mode);
 
 	return 0;
 }
@@ -197,12 +206,18 @@ void fnic_get_res_counts(struct fnic *fnic)
 	fnic->intr_count = vnic_dev_get_res_count(fnic->vdev,
 		RES_TYPE_INTR_CTRL);
 
-	dev_info(&fnic->pdev->dev, "vNIC fw resources wq_count: %d\n", fnic->wq_count);
-	dev_info(&fnic->pdev->dev, "vNIC fw resources raw_wq_count: %d\n", fnic->raw_wq_count);
-	dev_info(&fnic->pdev->dev, "vNIC fw resources wq_copy_count: %d\n", fnic->wq_copy_count);
-	dev_info(&fnic->pdev->dev, "vNIC fw resources rq_count: %d\n", fnic->rq_count);
-	dev_info(&fnic->pdev->dev, "vNIC fw resources cq_count: %d\n", fnic->cq_count);
-	dev_info(&fnic->pdev->dev, "vNIC fw resources intr_count: %d\n", fnic->intr_count);
+	shost_printk(KERN_INFO, fnic->lport->host,
+		"vNIC fw resources wq_count: %d\n", fnic->wq_count);
+	shost_printk(KERN_INFO, fnic->lport->host,
+		"vNIC fw resources raw_wq_count: %d\n", fnic->raw_wq_count);
+	shost_printk(KERN_INFO, fnic->lport->host,
+		"vNIC fw resources wq_copy_count: %d\n", fnic->wq_copy_count);
+	shost_printk(KERN_INFO, fnic->lport->host,
+		"vNIC fw resources rq_count: %d\n", fnic->rq_count);
+	shost_printk(KERN_INFO, fnic->lport->host,
+		"vNIC fw resources cq_count: %d\n", fnic->cq_count);
+	shost_printk(KERN_INFO, fnic->lport->host,
+		"vNIC fw resources intr_count: %d\n", fnic->intr_count);
 }
 
 void fnic_free_vnic_resources(struct fnic *fnic)
@@ -238,17 +253,19 @@ int fnic_alloc_vnic_resources(struct fnic *fnic)
 
 	intr_mode = vnic_dev_get_intr_mode(fnic->vdev);
 
-	dev_info(&fnic->pdev->dev, "vNIC interrupt mode: %s\n",
+	shost_printk(KERN_INFO, fnic->lport->host, "vNIC interrupt mode: %s\n",
 		     intr_mode == VNIC_DEV_INTR_MODE_INTX ? "legacy PCI INTx" :
 		     intr_mode == VNIC_DEV_INTR_MODE_MSI ? "MSI" :
 		     intr_mode == VNIC_DEV_INTR_MODE_MSIX ?
 		     "MSI-X" : "unknown");
 
-	dev_info(&fnic->pdev->dev, "res avail: wq %d cp_wq %d raw_wq %d rq %d",
+	shost_printk(KERN_INFO, fnic->lport->host,
+			"vNIC resources avail: wq %d cp_wq %d raw_wq %d rq %d",
 			fnic->wq_count, fnic->wq_copy_count,
 			fnic->raw_wq_count, fnic->rq_count);
 
-	dev_info(&fnic->pdev->dev, "res avail: cq %d intr %d cpy-wq desc count %d\n",
+	shost_printk(KERN_INFO, fnic->lport->host,
+			"vNIC resources avail: cq %d intr %d cpy-wq desc count %d\n",
 			fnic->cq_count, fnic->intr_count,
 			fnic->config.wq_copy_desc_count);
 
@@ -323,7 +340,8 @@ int fnic_alloc_vnic_resources(struct fnic *fnic)
 				RES_TYPE_INTR_PBA_LEGACY, 0);
 
 	if (!fnic->legacy_pba && intr_mode == VNIC_DEV_INTR_MODE_INTX) {
-		dev_err(&fnic->pdev->dev, "Failed to hook legacy pba resource\n");
+		shost_printk(KERN_ERR, fnic->lport->host,
+			     "Failed to hook legacy pba resource\n");
 		err = -ENODEV;
 		goto err_out_cleanup;
 	}
@@ -426,7 +444,8 @@ int fnic_alloc_vnic_resources(struct fnic *fnic)
 	/* init the stats memory by making the first call here */
 	err = vnic_dev_stats_dump(fnic->vdev, &fnic->stats);
 	if (err) {
-		dev_err(&fnic->pdev->dev, "vnic_dev_stats_dump failed - x%x\n", err);
+		shost_printk(KERN_ERR, fnic->lport->host,
+			     "vnic_dev_stats_dump failed - x%x\n", err);
 		goto err_out_cleanup;
 	}
 

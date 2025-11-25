@@ -326,7 +326,7 @@ static int pm860x_rtc_probe(struct platform_device *pdev)
 	schedule_delayed_work(&info->calib_work, VRTC_CALIB_INTERVAL);
 #endif	/* VRTC_CALIBRATION */
 
-	device_init_wakeup(&pdev->dev, true);
+	device_init_wakeup(&pdev->dev, 1);
 
 	return 0;
 }
@@ -371,7 +371,7 @@ static struct platform_driver pm860x_rtc_driver = {
 		.pm	= &pm860x_rtc_pm_ops,
 	},
 	.probe		= pm860x_rtc_probe,
-	.remove		= pm860x_rtc_remove,
+	.remove_new	= pm860x_rtc_remove,
 };
 
 module_platform_driver(pm860x_rtc_driver);

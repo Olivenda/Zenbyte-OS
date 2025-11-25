@@ -661,7 +661,7 @@
 	clock-frequency = <100000>;
 	status = "okay";
 
-	eeprom@50 {
+	mb_fru@50 {
 		compatible = "atmel,24c64";
 		reg = <0x50>;
 	};
@@ -704,7 +704,7 @@
 				reg = <0x5d>;
 				status = "okay";
 			};
-			eeprom@51 {
+			fan_fru@51 {
 				compatible = "atmel,24c64";
 				reg = <0x51>;
 			};
@@ -714,7 +714,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <3>;
-			eeprom@52 {
+			hsbp_fru@52 {
 				compatible = "atmel,24c64";
 				reg = <0x52>;
 				status = "okay";
@@ -1050,19 +1050,19 @@
 		"","","","SIO_POWER_GOOD","","","","";
 	};
 	gpio2: gpio@f0012000 {
-		bmc-usb-mux-oe-n-hog {
+		bmc_usb_mux_oe_n {
 			gpio-hog;
 			gpios = <25 GPIO_ACTIVE_HIGH>;
 			output-low;
 			line-name = "bmc-usb-mux-oe-n";
 		};
-		bmc-usb-mux-sel-hog {
+		bmc_usb_mux_sel {
 			gpio-hog;
 			gpios = <26 GPIO_ACTIVE_HIGH>;
 			output-low;
 			line-name = "bmc-usb-mux-sel";
 		};
-		bmc-usb2517-reset-n-hog {
+		bmc_usb2517_reset_n {
 			gpio-hog;
 			gpios = <27 GPIO_ACTIVE_LOW>;
 			output-low;
@@ -1070,19 +1070,19 @@
 		};
 	};
 	gpio3: gpio@f0013000 {
-		assert-cpu0-reset-hog {
+		assert_cpu0_reset {
 			gpio-hog;
 			gpios = <14 GPIO_ACTIVE_HIGH>;
 			output-low;
 			line-name = "assert-cpu0-reset";
 		};
-		assert-pwrok-cpu0-n-hog {
+		assert_pwrok_cpu0_n {
 			gpio-hog;
 			gpios = <15 GPIO_ACTIVE_HIGH>;
 			output-low;
 			line-name = "assert-pwrok-cpu0-n";
 		};
-		assert-cpu0-prochot-hog {
+		assert_cpu0_prochot {
 			gpio-hog;
 			gpios = <16 GPIO_ACTIVE_HIGH>;
 			output-low;

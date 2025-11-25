@@ -4,8 +4,6 @@
  *
  * membarrier system call
  */
-#include <uapi/linux/membarrier.h>
-#include "sched.h"
 
 /*
  * For documentation purposes, here are some membarrier ordering

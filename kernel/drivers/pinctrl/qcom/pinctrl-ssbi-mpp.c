@@ -13,7 +13,6 @@
 #include <linux/regmap.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 
 #include <linux/pinctrl/pinconf-generic.h>
 #include <linux/pinctrl/pinconf.h>
@@ -511,15 +510,14 @@ static int pm8xxx_mpp_get(struct gpio_chip *chip, unsigned offset)
 	return ret;
 }
 
-static int pm8xxx_mpp_set(struct gpio_chip *chip, unsigned int offset,
-			  int value)
+static void pm8xxx_mpp_set(struct gpio_chip *chip, unsigned offset, int value)
 {
 	struct pm8xxx_mpp *pctrl = gpiochip_get_data(chip);
 	struct pm8xxx_pin_data *pin = pctrl->desc.pins[offset].drv_data;
 
 	pin->output_value = !!value;
 
-	return pm8xxx_mpp_update(pctrl, pin);
+	pm8xxx_mpp_update(pctrl, pin);
 }
 
 static int pm8xxx_mpp_of_xlate(struct gpio_chip *chip,
@@ -578,7 +576,8 @@ static void pm8xxx_mpp_dbg_show_one(struct seq_file *s,
 			seq_puts(s, "out ");
 
 			if (!pin->paired) {
-				seq_puts(s, str_high_low(pin->output_value));
+				seq_puts(s, pin->output_value ?
+					 "high" : "low");
 			} else {
 				seq_puts(s, pin->output_value ?
 					 "inverted" : "follow");
@@ -590,7 +589,8 @@ static void pm8xxx_mpp_dbg_show_one(struct seq_file *s,
 		if (pin->output) {
 			seq_printf(s, "out %s ", aout_lvls[pin->aout_level]);
 			if (!pin->paired) {
-				seq_puts(s, str_high_low(pin->output_value));
+				seq_puts(s, pin->output_value ?
+					 "high" : "low");
 			} else {
 				seq_puts(s, pin->output_value ?
 					 "inverted" : "follow");
@@ -605,7 +605,8 @@ static void pm8xxx_mpp_dbg_show_one(struct seq_file *s,
 			seq_printf(s, "dtest%d", pin->dtest);
 		} else {
 			if (!pin->paired) {
-				seq_puts(s, str_high_low(pin->output_value));
+				seq_puts(s, pin->output_value ?
+					 "high" : "low");
 			} else {
 				seq_puts(s, pin->output_value ?
 					 "inverted" : "follow");
@@ -948,7 +949,7 @@ static struct platform_driver pm8xxx_mpp_driver = {
 		.of_match_table = pm8xxx_mpp_of_match,
 	},
 	.probe = pm8xxx_mpp_probe,
-	.remove = pm8xxx_mpp_remove,
+	.remove_new = pm8xxx_mpp_remove,
 };
 
 module_platform_driver(pm8xxx_mpp_driver);

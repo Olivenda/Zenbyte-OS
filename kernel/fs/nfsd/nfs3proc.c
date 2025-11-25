@@ -14,7 +14,6 @@
 #include "xdr3.h"
 #include "vfs.h"
 #include "filecache.h"
-#include "trace.h"
 
 #define NFSDDBG_FACILITY		NFSDDBG_PROC
 
@@ -70,7 +69,8 @@ nfsd3_proc_getattr(struct svc_rqst *rqstp)
 	struct nfsd_fhandle *argp = rqstp->rq_argp;
 	struct nfsd3_attrstat *resp = rqstp->rq_resp;
 
-	trace_nfsd_vfs_getattr(rqstp, &argp->fh);
+	dprintk("nfsd: GETATTR(3)  %s\n",
+		SVCFH_fmt(&argp->fh));
 
 	fh_copy(&resp->fh, &argp->fh);
 	resp->status = fh_verify(rqstp, &resp->fh, 0,
@@ -220,6 +220,7 @@ nfsd3_proc_write(struct svc_rqst *rqstp)
 	struct nfsd3_writeargs *argp = rqstp->rq_argp;
 	struct nfsd3_writeres *resp = rqstp->rq_resp;
 	unsigned long cnt = argp->len;
+	unsigned int nvecs;
 
 	dprintk("nfsd: WRITE(3)    %s %d bytes at %Lu%s\n",
 				SVCFH_fmt(&argp->fh),
@@ -234,8 +235,10 @@ nfsd3_proc_write(struct svc_rqst *rqstp)
 
 	fh_copy(&resp->fh, &argp->fh);
 	resp->committed = argp->stable;
+	nvecs = svc_fill_write_vector(rqstp, &argp->payload);
+
 	resp->status = nfsd_write(rqstp, &resp->fh, argp->offset,
-				  &argp->payload, &cnt,
+				  rqstp->rq_vec, nvecs, &cnt,
 				  resp->committed, resp->verf);
 	resp->count = cnt;
 	resp->status = nfsd3_map_status(resp->status);
@@ -263,8 +266,6 @@ nfsd3_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	__be32 status;
 	int host_err;
 
-	trace_nfsd_vfs_create(rqstp, fhp, S_IFREG, argp->name, argp->len);
-
 	if (isdotent(argp->name, argp->len))
 		return nfserr_exist;
 	if (!(iap->ia_valid & ATTR_MODE))
@@ -283,9 +284,7 @@ nfsd3_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	inode_lock_nested(inode, I_MUTEX_PARENT);
 
-	child = lookup_one(&nop_mnt_idmap,
-			   &QSTR_LEN(argp->name, argp->len),
-			   parent);
+	child = lookup_one_len(argp->name, parent, argp->len);
 	if (IS_ERR(child)) {
 		status = nfserrno(PTR_ERR(child));
 		goto out;
@@ -381,6 +380,11 @@ nfsd3_proc_create(struct svc_rqst *rqstp)
 	struct nfsd3_diropres *resp = rqstp->rq_resp;
 	svc_fh *dirfhp, *newfhp;
 
+	dprintk("nfsd: CREATE(3)   %s %.*s\n",
+				SVCFH_fmt(&argp->fh),
+				argp->len,
+				argp->name);
+
 	dirfhp = fh_copy(&resp->dirfh, &argp->fh);
 	newfhp = fh_init(&resp->fh, NFS3_FHSIZE);
 
@@ -400,6 +404,11 @@ nfsd3_proc_mkdir(struct svc_rqst *rqstp)
 	struct nfsd_attrs attrs = {
 		.na_iattr	= &argp->attrs,
 	};
+
+	dprintk("nfsd: MKDIR(3)    %s %.*s\n",
+				SVCFH_fmt(&argp->fh),
+				argp->len,
+				argp->name);
 
 	argp->attrs.ia_valid &= ~ATTR_SIZE;
 	fh_copy(&resp->dirfh, &argp->fh);
@@ -436,6 +445,11 @@ nfsd3_proc_symlink(struct svc_rqst *rqstp)
 		goto out;
 	}
 
+	dprintk("nfsd: SYMLINK(3)  %s %.*s -> %.*s\n",
+				SVCFH_fmt(&argp->ffh),
+				argp->flen, argp->fname,
+				argp->tlen, argp->tname);
+
 	fh_copy(&resp->dirfh, &argp->ffh);
 	fh_init(&resp->fh, NFS3_FHSIZE);
 	resp->status = nfsd_symlink(rqstp, &resp->dirfh, argp->fname,
@@ -459,6 +473,11 @@ nfsd3_proc_mknod(struct svc_rqst *rqstp)
 	};
 	int type;
 	dev_t	rdev = 0;
+
+	dprintk("nfsd: MKNOD(3)    %s %.*s\n",
+				SVCFH_fmt(&argp->fh),
+				argp->len,
+				argp->name);
 
 	fh_copy(&resp->dirfh, &argp->fh);
 	fh_init(&resp->fh, NFS3_FHSIZE);
@@ -492,6 +511,11 @@ nfsd3_proc_remove(struct svc_rqst *rqstp)
 	struct nfsd3_diropargs *argp = rqstp->rq_argp;
 	struct nfsd3_attrstat *resp = rqstp->rq_resp;
 
+	dprintk("nfsd: REMOVE(3)   %s %.*s\n",
+				SVCFH_fmt(&argp->fh),
+				argp->len,
+				argp->name);
+
 	/* Unlink. -S_IFDIR means file must not be a directory */
 	fh_copy(&resp->fh, &argp->fh);
 	resp->status = nfsd_unlink(rqstp, &resp->fh, -S_IFDIR,
@@ -509,6 +533,11 @@ nfsd3_proc_rmdir(struct svc_rqst *rqstp)
 	struct nfsd3_diropargs *argp = rqstp->rq_argp;
 	struct nfsd3_attrstat *resp = rqstp->rq_resp;
 
+	dprintk("nfsd: RMDIR(3)    %s %.*s\n",
+				SVCFH_fmt(&argp->fh),
+				argp->len,
+				argp->name);
+
 	fh_copy(&resp->fh, &argp->fh);
 	resp->status = nfsd_unlink(rqstp, &resp->fh, S_IFDIR,
 				   argp->name, argp->len);
@@ -521,6 +550,15 @@ nfsd3_proc_rename(struct svc_rqst *rqstp)
 {
 	struct nfsd3_renameargs *argp = rqstp->rq_argp;
 	struct nfsd3_renameres *resp = rqstp->rq_resp;
+
+	dprintk("nfsd: RENAME(3)   %s %.*s ->\n",
+				SVCFH_fmt(&argp->ffh),
+				argp->flen,
+				argp->fname);
+	dprintk("nfsd: -> %s %.*s\n",
+				SVCFH_fmt(&argp->tfh),
+				argp->tlen,
+				argp->tname);
 
 	fh_copy(&resp->ffh, &argp->ffh);
 	fh_copy(&resp->tfh, &argp->tfh);
@@ -535,6 +573,13 @@ nfsd3_proc_link(struct svc_rqst *rqstp)
 {
 	struct nfsd3_linkargs *argp = rqstp->rq_argp;
 	struct nfsd3_linkres  *resp = rqstp->rq_resp;
+
+	dprintk("nfsd: LINK(3)     %s ->\n",
+				SVCFH_fmt(&argp->ffh));
+	dprintk("nfsd:   -> %s %.*s\n",
+				SVCFH_fmt(&argp->tfh),
+				argp->tlen,
+				argp->tname);
 
 	fh_copy(&resp->fh,  &argp->ffh);
 	fh_copy(&resp->tfh, &argp->tfh);
@@ -561,7 +606,7 @@ static void nfsd3_init_dirlist_pages(struct svc_rqst *rqstp,
 	buf->pages = rqstp->rq_next_page;
 	rqstp->rq_next_page += (buf->buflen + PAGE_SIZE - 1) >> PAGE_SHIFT;
 
-	xdr_init_encode_pages(xdr, buf);
+	xdr_init_encode_pages(xdr, buf, buf->pages,  NULL);
 }
 
 /*
@@ -574,7 +619,9 @@ nfsd3_proc_readdir(struct svc_rqst *rqstp)
 	struct nfsd3_readdirres  *resp = rqstp->rq_resp;
 	loff_t		offset;
 
-	trace_nfsd_vfs_readdir(rqstp, &argp->fh, argp->count, argp->cookie);
+	dprintk("nfsd: READDIR(3)  %s %d bytes at %d\n",
+				SVCFH_fmt(&argp->fh),
+				argp->count, (u32) argp->cookie);
 
 	nfsd3_init_dirlist_pages(rqstp, resp, argp->count);
 
@@ -606,7 +653,9 @@ nfsd3_proc_readdirplus(struct svc_rqst *rqstp)
 	struct nfsd3_readdirres  *resp = rqstp->rq_resp;
 	loff_t	offset;
 
-	trace_nfsd_vfs_readdir(rqstp, &argp->fh, argp->count, argp->cookie);
+	dprintk("nfsd: READDIR+(3) %s %d bytes at %d\n",
+				SVCFH_fmt(&argp->fh),
+				argp->count, (u32) argp->cookie);
 
 	nfsd3_init_dirlist_pages(rqstp, resp, argp->count);
 
@@ -646,6 +695,9 @@ nfsd3_proc_fsstat(struct svc_rqst *rqstp)
 {
 	struct nfsd_fhandle *argp = rqstp->rq_argp;
 	struct nfsd3_fsstatres *resp = rqstp->rq_resp;
+
+	dprintk("nfsd: FSSTAT(3)   %s\n",
+				SVCFH_fmt(&argp->fh));
 
 	resp->status = nfsd_statfs(rqstp, &argp->fh, &resp->stats, 0);
 	fh_put(&argp->fh);

@@ -64,9 +64,20 @@ static int bootlog_show(struct seq_file *s, void *unused)
 	return 0;
 }
 
-DEFINE_SHOW_ATTRIBUTE(bootlog);
+static int bootlog_fops_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, bootlog_show, inode->i_private);
+}
 
-static int fifo_size_show(struct seq_file *s, void *unused)
+static const struct file_operations bootlog_fops = {
+	.owner = THIS_MODULE,
+	.open = bootlog_fops_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int read_dbc_fifo_size(struct seq_file *s, void *unused)
 {
 	struct dma_bridge_chan *dbc = s->private;
 
@@ -74,9 +85,20 @@ static int fifo_size_show(struct seq_file *s, void *unused)
 	return 0;
 }
 
-DEFINE_SHOW_ATTRIBUTE(fifo_size);
+static int fifo_size_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, read_dbc_fifo_size, inode->i_private);
+}
 
-static int queued_show(struct seq_file *s, void *unused)
+static const struct file_operations fifo_size_fops = {
+	.owner = THIS_MODULE,
+	.open = fifo_size_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int read_dbc_queued(struct seq_file *s, void *unused)
 {
 	struct dma_bridge_chan *dbc = s->private;
 	u32 tail = 0, head = 0;
@@ -93,7 +115,18 @@ static int queued_show(struct seq_file *s, void *unused)
 	return 0;
 }
 
-DEFINE_SHOW_ATTRIBUTE(queued);
+static int queued_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, read_dbc_queued, inode->i_private);
+}
+
+static const struct file_operations queued_fops = {
+	.owner = THIS_MODULE,
+	.open = queued_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
 
 void qaic_debugfs_init(struct qaic_drm_device *qddev)
 {
@@ -241,6 +274,7 @@ static int qaic_bootlog_mhi_probe(struct mhi_device *mhi_dev, const struct mhi_d
 mhi_unprepare:
 	mhi_unprepare_from_transfer(mhi_dev);
 destroy_workqueue:
+	flush_workqueue(qdev->bootlog_wq);
 	destroy_workqueue(qdev->bootlog_wq);
 out:
 	return ret;
@@ -253,6 +287,7 @@ static void qaic_bootlog_mhi_remove(struct mhi_device *mhi_dev)
 	qdev = dev_get_drvdata(&mhi_dev->dev);
 
 	mhi_unprepare_from_transfer(qdev->bootlog_ch);
+	flush_workqueue(qdev->bootlog_wq);
 	destroy_workqueue(qdev->bootlog_wq);
 	qdev->bootlog_ch = NULL;
 }

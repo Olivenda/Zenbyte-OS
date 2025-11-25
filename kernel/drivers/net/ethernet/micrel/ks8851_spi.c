@@ -20,6 +20,8 @@
 #include <linux/regulator/consumer.h>
 
 #include <linux/spi/spi.h>
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
 #include <linux/of_net.h>
 
 #include "ks8851.h"

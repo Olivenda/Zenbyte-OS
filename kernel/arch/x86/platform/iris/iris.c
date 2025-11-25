@@ -73,7 +73,7 @@ static struct platform_driver iris_driver = {
 		.name   = "iris",
 	},
 	.probe          = iris_probe,
-	.remove         = iris_remove,
+	.remove_new     = iris_remove,
 };
 
 static struct resource iris_resources[] = {

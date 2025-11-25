@@ -482,12 +482,15 @@ static int fimc_md_parse_one_endpoint(struct fimc_md *fmd,
 static int fimc_md_parse_port_node(struct fimc_md *fmd,
 				   struct device_node *port)
 {
+	struct device_node *ep;
 	int ret;
 
-	for_each_child_of_node_scoped(port, ep) {
+	for_each_child_of_node(port, ep) {
 		ret = fimc_md_parse_one_endpoint(fmd, ep);
-		if (ret < 0)
+		if (ret < 0) {
+			of_node_put(ep);
 			return ret;
+		}
 	}
 
 	return 0;
@@ -498,6 +501,7 @@ static int fimc_md_register_sensor_entities(struct fimc_md *fmd)
 {
 	struct device_node *parent = fmd->pdev->dev.of_node;
 	struct device_node *ports = NULL;
+	struct device_node *node;
 	int ret;
 
 	/*
@@ -514,7 +518,7 @@ static int fimc_md_register_sensor_entities(struct fimc_md *fmd)
 	fmd->num_sensors = 0;
 
 	/* Attach sensors linked to MIPI CSI-2 receivers */
-	for_each_available_child_of_node_scoped(parent, node) {
+	for_each_available_child_of_node(parent, node) {
 		struct device_node *port;
 
 		if (!of_node_name_eq(node, "csis"))
@@ -526,8 +530,10 @@ static int fimc_md_register_sensor_entities(struct fimc_md *fmd)
 
 		ret = fimc_md_parse_port_node(fmd, port);
 		of_node_put(port);
-		if (ret < 0)
+		if (ret < 0) {
+			of_node_put(node);
 			goto cleanup;
+		}
 	}
 
 	/* Attach sensors listed in the parallel-ports node */
@@ -535,10 +541,12 @@ static int fimc_md_register_sensor_entities(struct fimc_md *fmd)
 	if (!ports)
 		goto rpm_put;
 
-	for_each_child_of_node_scoped(ports, node) {
+	for_each_child_of_node(ports, node) {
 		ret = fimc_md_parse_port_node(fmd, node);
-		if (ret < 0)
+		if (ret < 0) {
+			of_node_put(node);
 			goto cleanup;
+		}
 	}
 	of_node_put(ports);
 
@@ -728,9 +736,10 @@ dev_unlock:
 static int fimc_md_register_platform_entities(struct fimc_md *fmd,
 					      struct device_node *parent)
 {
+	struct device_node *node;
 	int ret = 0;
 
-	for_each_available_child_of_node_scoped(parent, node) {
+	for_each_available_child_of_node(parent, node) {
 		struct platform_device *pdev;
 		int plat_entity = -1;
 
@@ -753,8 +762,10 @@ static int fimc_md_register_platform_entities(struct fimc_md *fmd,
 			ret = fimc_md_register_platform_entity(fmd, pdev,
 							plat_entity);
 		put_device(&pdev->dev);
-		if (ret < 0)
+		if (ret < 0) {
+			of_node_put(node);
 			break;
+		}
 	}
 
 	return ret;
@@ -1553,7 +1564,7 @@ MODULE_DEVICE_TABLE(of, fimc_md_of_match);
 
 static struct platform_driver fimc_md_driver = {
 	.probe		= fimc_md_probe,
-	.remove		= fimc_md_remove,
+	.remove_new	= fimc_md_remove,
 	.driver = {
 		.of_match_table = of_match_ptr(fimc_md_of_match),
 		.name		= "s5p-fimc-md",

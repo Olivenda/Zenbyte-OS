@@ -105,7 +105,7 @@
 #error Unsupported xtensa ABI
 #endif
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #if defined(__XTENSA_WINDOWED_ABI__)
 
@@ -160,7 +160,9 @@ struct thread_struct {
 	struct perf_event *ptrace_bp[XCHAL_NUM_IBREAK];
 	struct perf_event *ptrace_wp[XCHAL_NUM_DBREAK];
 #endif
-} __aligned(16);
+	/* Make structure 16 bytes aligned. */
+	int align[0] __attribute__ ((aligned(16)));
+};
 
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
@@ -263,5 +265,5 @@ static inline unsigned long get_er(unsigned long addr)
 
 #endif /* XCHAL_HAVE_EXTERN_REGS */
 
-#endif	/* __ASSEMBLER__ */
+#endif	/* __ASSEMBLY__ */
 #endif	/* _XTENSA_PROCESSOR_H */

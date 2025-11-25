@@ -21,6 +21,7 @@
  *
  */
 #include "amdgpu.h"
+#include "amdgpu_atombios.h"
 #include "nbio_v7_11.h"
 
 #include "nbio/nbio_7_11_0_offset.h"

@@ -14,7 +14,6 @@
 #include <linux/property.h>
 #include <linux/spinlock_types.h>
 #include <linux/types.h>
-#include <linux/util_macros.h>
 
 #ifdef CONFIG_GENERIC_MSI_IRQ
 #include <asm/msi.h>
@@ -287,9 +286,8 @@ struct gpio_irq_chip {
 	/**
 	 * @first:
 	 *
-	 * Required for static IRQ allocation. If set,
-	 * irq_domain_create_simple() will allocate and map all IRQs
-	 * during initialization.
+	 * Required for static IRQ allocation. If set, irq_domain_add_simple()
+	 * will allocate and map all IRQs during initialization.
 	 */
 	unsigned int first;
 
@@ -330,8 +328,7 @@ struct gpio_irq_chip {
  * @fwnode: optional fwnode providing this controller's properties
  * @owner: helps prevent removal of modules exporting active GPIOs
  * @request: optional hook for chip-specific activation, such as
- *	enabling module power and clock; may sleep; must return 0 on success
- *	or negative error number on failure
+ *	enabling module power and clock; may sleep
  * @free: optional hook for chip-specific deactivation, such as
  *	disabling module power and clock; may sleep
  * @get_direction: returns direction for signal "offset", 0=out, 1=in,
@@ -347,13 +344,10 @@ struct gpio_irq_chip {
  * @get: returns value for signal "offset", 0=low, 1=high, or negative error
  * @get_multiple: reads values for multiple signals defined by "mask" and
  *	stores them in "bits", returns 0 on success or negative error
- * @set: assigns output value for signal "offset", returns 0 on success or
- *       negative error value
- * @set_multiple: assigns output values for multiple signals defined by
- *                "mask", returns 0 on success or negative error value
+ * @set: assigns output value for signal "offset"
+ * @set_multiple: assigns output values for multiple signals defined by "mask"
  * @set_config: optional hook for all kinds of settings. Uses the same
- *	packed config format as generic pinconf. Must return 0 on success and
- *	a negative error number on failure.
+ *	packed config format as generic pinconf.
  * @to_irq: optional hook supporting non-static gpiod_to_irq() mappings;
  *	implementation may not sleep
  * @dbg_show: optional routine to show contents in debugfs; default code
@@ -400,7 +394,6 @@ struct gpio_irq_chip {
  * @reg_dir_in: direction in setting register for generic GPIO
  * @bgpio_dir_unreadable: indicates that the direction register(s) cannot
  *	be read and we need to rely on out internal state tracking.
- * @bgpio_pinctrl: the generic GPIO uses a pin control backend.
  * @bgpio_bits: number of register bits used for a generic GPIO i.e.
  *	<register width> * 8
  * @bgpio_lock: used to lock chip->bgpio_data. Also, this is needed to keep
@@ -443,9 +436,9 @@ struct gpio_chip {
 	int			(*get_multiple)(struct gpio_chip *gc,
 						unsigned long *mask,
 						unsigned long *bits);
-	int			(*set)(struct gpio_chip *gc,
-				       unsigned int offset, int value);
-	int			(*set_multiple)(struct gpio_chip *gc,
+	void			(*set)(struct gpio_chip *gc,
+						unsigned int offset, int value);
+	void			(*set_multiple)(struct gpio_chip *gc,
 						unsigned long *mask,
 						unsigned long *bits);
 	int			(*set_config)(struct gpio_chip *gc,
@@ -485,7 +478,6 @@ struct gpio_chip {
 	void __iomem *reg_dir_out;
 	void __iomem *reg_dir_in;
 	bool bgpio_dir_unreadable;
-	bool bgpio_pinctrl;
 	int bgpio_bits;
 	raw_spinlock_t bgpio_lock;
 	unsigned long bgpio_data;
@@ -507,6 +499,14 @@ struct gpio_chip {
 	struct gpio_irq_chip irq;
 #endif /* CONFIG_GPIOLIB_IRQCHIP */
 
+	/**
+	 * @valid_mask:
+	 *
+	 * If not %NULL, holds bitmask of GPIOs which are valid to be used
+	 * from the chip.
+	 */
+	unsigned long *valid_mask;
+
 #if defined(CONFIG_OF_GPIO)
 	/*
 	 * If CONFIG_OF_GPIO is enabled, then all GPIO controllers described in
@@ -516,31 +516,9 @@ struct gpio_chip {
 	/**
 	 * @of_gpio_n_cells:
 	 *
-	 * Number of cells used to form the GPIO specifier. The standard is 2
-	 * cells:
-	 *
-	 * gpios = <&gpio offset flags>;
-	 *
-	 * some complex GPIO controllers instantiate more than one chip per
-	 * device tree node and have 3 cells:
-	 *
-	 * gpios = <&gpio instance offset flags>;
-	 *
-	 * Legacy GPIO controllers may even have 1 cell:
-	 *
-	 * gpios = <&gpio offset>;
+	 * Number of cells used to form the GPIO specifier.
 	 */
 	unsigned int of_gpio_n_cells;
-
-	/**
-	 * @of_node_instance_match:
-	 *
-	 * Determine if a chip is the right instance. Must be implemented by
-	 * any driver using more than one gpio_chip per device tree node.
-	 * Returns true if gc is the instance indicated by i (which is the
-	 * first cell in the phandles for GPIO lines and gpio-ranges).
-	 */
-	bool (*of_node_instance_match)(struct gpio_chip *gc, unsigned int i);
 
 	/**
 	 * @of_xlate:
@@ -572,29 +550,19 @@ DEFINE_CLASS(_gpiochip_for_each_data,
 	     const char **label, int *i)
 
 /**
- * for_each_hwgpio_in_range - Iterates over all GPIOs in a given range
- * @_chip: Chip to iterate over.
- * @_i: Loop counter.
- * @_base: First GPIO in the ranger.
- * @_size: Amount of GPIOs to check starting from @base.
- * @_label: Place to store the address of the label if the GPIO is requested.
- *          Set to NULL for unused GPIOs.
- */
-#define for_each_hwgpio_in_range(_chip, _i, _base, _size, _label)			\
-	for (CLASS(_gpiochip_for_each_data, _data)(&_label, &_i);			\
-	     _i < _size;								\
-	     _i++, kfree(_label), _label = NULL)					\
-		for_each_if(!IS_ERR(_label = gpiochip_dup_line_label(_chip, _base + _i)))
-
-/**
  * for_each_hwgpio - Iterates over all GPIOs for given chip.
  * @_chip: Chip to iterate over.
  * @_i: Loop counter.
  * @_label: Place to store the address of the label if the GPIO is requested.
  *          Set to NULL for unused GPIOs.
  */
-#define for_each_hwgpio(_chip, _i, _label)						\
-	for_each_hwgpio_in_range(_chip, _i, 0, _chip->ngpio, _label)
+#define for_each_hwgpio(_chip, _i, _label) \
+	for (CLASS(_gpiochip_for_each_data, _data)(&_label, &_i); \
+	     *_data.i < _chip->ngpio; \
+	     (*_data.i)++, kfree(*(_data.label)), *_data.label = NULL) \
+		if (IS_ERR(*_data.label = \
+			gpiochip_dup_line_label(_chip, *_data.i))) {} \
+		else
 
 /**
  * for_each_requested_gpio_in_range - iterates over requested GPIOs in a given range
@@ -605,8 +573,13 @@ DEFINE_CLASS(_gpiochip_for_each_data,
  * @_label:	label of current GPIO
  */
 #define for_each_requested_gpio_in_range(_chip, _i, _base, _size, _label)		\
-	for_each_hwgpio_in_range(_chip, _i, _base, _size, _label)			\
-		for_each_if(_label)
+	for (CLASS(_gpiochip_for_each_data, _data)(&_label, &_i);			\
+	     *_data.i < _size;								\
+	     (*_data.i)++, kfree(*(_data.label)), *_data.label = NULL)			\
+		if ((*_data.label =							\
+			gpiochip_dup_line_label(_chip, _base + *_data.i)) == NULL) {}	\
+		else if (IS_ERR(*_data.label)) {}					\
+		else
 
 /* Iterates over all requested GPIO of the given @chip */
 #define for_each_requested_gpio(chip, i, label)						\
@@ -705,10 +678,15 @@ bool gpiochip_line_is_open_source(struct gpio_chip *gc, unsigned int offset);
 /* Sleep persistence inquiry for drivers */
 bool gpiochip_line_is_persistent(struct gpio_chip *gc, unsigned int offset);
 bool gpiochip_line_is_valid(const struct gpio_chip *gc, unsigned int offset);
-const unsigned long *gpiochip_query_valid_mask(const struct gpio_chip *gc);
 
 /* get driver data */
 void *gpiochip_get_data(struct gpio_chip *gc);
+
+struct bgpio_pdata {
+	const char *label;
+	int base;
+	int ngpio;
+};
 
 #ifdef CONFIG_IRQ_DOMAIN_HIERARCHY
 
@@ -735,8 +713,6 @@ int bgpio_init(struct gpio_chip *gc, struct device *dev,
 #define BGPIOF_READ_OUTPUT_REG_SET	BIT(4) /* reg_set stores output value */
 #define BGPIOF_NO_OUTPUT		BIT(5) /* only input */
 #define BGPIOF_NO_SET_ON_INPUT		BIT(6)
-#define BGPIOF_PINCTRL_BACKEND		BIT(7) /* Call pinctrl direction setters */
-#define BGPIOF_NO_INPUT			BIT(8) /* only output */
 
 #ifdef CONFIG_GPIOLIB_IRQCHIP
 int gpiochip_irqchip_add_domain(struct gpio_chip *gc,
@@ -889,7 +865,7 @@ static inline void gpiochip_unlock_as_irq(struct gpio_chip *gc,
 
 #define for_each_gpiochip_node(dev, child)					\
 	device_for_each_child_node(dev, child)					\
-		for_each_if(fwnode_property_present(child, "gpio-controller"))
+		if (!fwnode_property_present(child, "gpio-controller")) {} else
 
 static inline unsigned int gpiochip_node_count(struct device *dev)
 {

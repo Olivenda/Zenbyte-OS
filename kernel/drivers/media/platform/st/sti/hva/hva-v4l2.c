@@ -1114,6 +1114,8 @@ static const struct vb2_ops hva_qops = {
 	.buf_queue		= hva_buf_queue,
 	.start_streaming	= hva_start_streaming,
 	.stop_streaming		= hva_stop_streaming,
+	.wait_prepare		= vb2_ops_wait_prepare,
+	.wait_finish		= vb2_ops_wait_finish,
 };
 
 /*
@@ -1454,7 +1456,7 @@ MODULE_DEVICE_TABLE(of, hva_match_types);
 
 static struct platform_driver hva_driver = {
 	.probe  = hva_probe,
-	.remove = hva_remove,
+	.remove_new = hva_remove,
 	.driver = {
 		.name		= HVA_NAME,
 		.of_match_table	= hva_match_types,

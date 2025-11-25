@@ -842,7 +842,7 @@ int rt2800mmio_probe_hw(struct rt2x00_dev *rt2x00dev)
 	/*
 	 * Set txstatus timer function.
 	 */
-	hrtimer_update_function(&rt2x00dev->txstatus_timer, rt2800mmio_tx_sta_fifo_timeout);
+	rt2x00dev->txstatus_timer.function = rt2800mmio_tx_sta_fifo_timeout;
 
 	/*
 	 * Overwrite TX done handler

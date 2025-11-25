@@ -5,7 +5,6 @@
  */
 
 #include <linux/ioport.h>
-#include <linux/errno.h>
 #include "mgb4_regs.h"
 
 int mgb4_regs_map(struct resource *res, struct mgb4_regs *regs)

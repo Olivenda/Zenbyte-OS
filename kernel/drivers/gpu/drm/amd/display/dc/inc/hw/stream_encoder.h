@@ -117,7 +117,6 @@ struct stream_encoder {
 	uint32_t stream_enc_inst;
 	struct vpg *vpg;
 	struct afmt *afmt;
-	struct apg *apg;
 };
 
 struct enc_state {

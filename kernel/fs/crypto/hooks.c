@@ -5,8 +5,6 @@
  * Encryption hooks for higher-level filesystem operations.
  */
 
-#include <linux/export.h>
-
 #include "fscrypt_private.h"
 
 /**

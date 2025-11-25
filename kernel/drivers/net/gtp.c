@@ -23,8 +23,6 @@
 
 #include <net/net_namespace.h>
 #include <net/protocol.h>
-#include <net/inet_dscp.h>
-#include <net/inet_sock.h>
 #include <net/ip.h>
 #include <net/ipv6.h>
 #include <net/udp.h>
@@ -352,7 +350,7 @@ static struct rtable *ip4_route_output_gtp(struct flowi4 *fl4,
 	fl4->flowi4_oif		= sk->sk_bound_dev_if;
 	fl4->daddr		= daddr;
 	fl4->saddr		= saddr;
-	fl4->flowi4_tos		= inet_dscp_to_dsfield(inet_sk_dscp(inet_sk(sk)));
+	fl4->flowi4_tos		= ip_sock_rt_tos(sk);
 	fl4->flowi4_scope	= ip_sock_rt_scope(sk);
 	fl4->flowi4_proto	= sk->sk_protocol;
 
@@ -446,8 +444,7 @@ static int gtp0_send_echo_resp_ip(struct gtp_dev *gtp, struct sk_buff *skb)
 			    htons(GTP0_PORT), htons(GTP0_PORT),
 			    !net_eq(sock_net(gtp->sk1u),
 				    dev_net(gtp->dev)),
-			    false,
-			    0);
+			    false);
 
 	return 0;
 }
@@ -705,8 +702,7 @@ static int gtp1u_send_echo_resp(struct gtp_dev *gtp, struct sk_buff *skb)
 			    htons(GTP1U_PORT), htons(GTP1U_PORT),
 			    !net_eq(sock_net(gtp->sk1u),
 				    dev_net(gtp->dev)),
-			    false,
-			    0);
+			    false);
 	return 0;
 }
 
@@ -1306,7 +1302,7 @@ static netdev_tx_t gtp_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 				    pktinfo.gtph_port, pktinfo.gtph_port,
 				    !net_eq(sock_net(pktinfo.pctx->sk),
 					    dev_net(dev)),
-				    false, 0);
+				    false);
 		break;
 	case AF_INET6:
 #if IS_ENABLED(CONFIG_IPV6)
@@ -1316,7 +1312,7 @@ static netdev_tx_t gtp_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 				     ip6_dst_hoplimit(&pktinfo.rt->dst),
 				     0,
 				     pktinfo.gtph_port, pktinfo.gtph_port,
-				     false, 0);
+				     false);
 #else
 		goto tx_err;
 #endif
@@ -1464,12 +1460,10 @@ static int gtp_create_sockets(struct gtp_dev *gtp, const struct nlattr *nla,
 #define GTP_TH_MAXLEN	(sizeof(struct udphdr) + sizeof(struct gtp0_header))
 #define GTP_IPV6_MAXLEN	(sizeof(struct ipv6hdr) + GTP_TH_MAXLEN)
 
-static int gtp_newlink(struct net_device *dev,
-		       struct rtnl_newlink_params *params,
+static int gtp_newlink(struct net *src_net, struct net_device *dev,
+		       struct nlattr *tb[], struct nlattr *data[],
 		       struct netlink_ext_ack *extack)
 {
-	struct net *link_net = rtnl_newlink_link_net(params);
-	struct nlattr **data = params->data;
 	unsigned int role = GTP_ROLE_GGSN;
 	struct gtp_dev *gtp;
 	struct gtp_net *gn;
@@ -1497,10 +1491,12 @@ static int gtp_newlink(struct net_device *dev,
 	}
 	gtp->role = role;
 
-	gtp->restart_count = nla_get_u8_default(data[IFLA_GTP_RESTART_COUNT],
-						0);
+	if (!data[IFLA_GTP_RESTART_COUNT])
+		gtp->restart_count = 0;
+	else
+		gtp->restart_count = nla_get_u8(data[IFLA_GTP_RESTART_COUNT]);
 
-	gtp->net = link_net;
+	gtp->net = src_net;
 
 	err = gtp_hashtable_new(gtp, hashsize);
 	if (err < 0)
@@ -1530,7 +1526,7 @@ static int gtp_newlink(struct net_device *dev,
 		goto out_encap;
 	}
 
-	gn = net_generic(link_net, gtp_net_id);
+	gn = net_generic(src_net, gtp_net_id);
 	list_add(&gtp->list, &gn->gtp_dev_list);
 	dev->priv_destructor = gtp_destructor;
 
@@ -1833,7 +1829,10 @@ static struct pdp_ctx *gtp_pdp_add(struct gtp_dev *gtp, struct sock *sk,
 
 	version = nla_get_u32(info->attrs[GTPA_VERSION]);
 
-	family = nla_get_u8_default(info->attrs[GTPA_FAMILY], AF_INET);
+	if (info->attrs[GTPA_FAMILY])
+		family = nla_get_u8(info->attrs[GTPA_FAMILY]);
+	else
+		family = AF_INET;
 
 #if !IS_ENABLED(CONFIG_IPV6)
 	if (family == AF_INET6)
@@ -2070,7 +2069,10 @@ static struct pdp_ctx *gtp_find_pdp_by_link(struct net *net,
 	struct gtp_dev *gtp;
 	int family;
 
-	family = nla_get_u8_default(nla[GTPA_FAMILY], AF_INET);
+	if (nla[GTPA_FAMILY])
+		family = nla_get_u8(nla[GTPA_FAMILY]);
+	else
+		family = AF_INET;
 
 	gtp = gtp_find_dev(net, nla);
 	if (!gtp)
@@ -2407,7 +2409,7 @@ static int gtp_genl_send_echo_req(struct sk_buff *skb, struct genl_info *info)
 			    port, port,
 			    !net_eq(sock_net(sk),
 				    dev_net(gtp->dev)),
-			    false, 0);
+			    false);
 	return 0;
 }
 
@@ -2477,19 +2479,23 @@ static int __net_init gtp_net_init(struct net *net)
 	return 0;
 }
 
-static void __net_exit gtp_net_exit_rtnl(struct net *net,
-					 struct list_head *dev_to_kill)
+static void __net_exit gtp_net_exit_batch_rtnl(struct list_head *net_list,
+					       struct list_head *dev_to_kill)
 {
-	struct gtp_net *gn = net_generic(net, gtp_net_id);
-	struct gtp_dev *gtp, *gtp_next;
+	struct net *net;
 
-	list_for_each_entry_safe(gtp, gtp_next, &gn->gtp_dev_list, list)
-		gtp_dellink(gtp->dev, dev_to_kill);
+	list_for_each_entry(net, net_list, exit_list) {
+		struct gtp_net *gn = net_generic(net, gtp_net_id);
+		struct gtp_dev *gtp, *gtp_next;
+
+		list_for_each_entry_safe(gtp, gtp_next, &gn->gtp_dev_list, list)
+			gtp_dellink(gtp->dev, dev_to_kill);
+	}
 }
 
 static struct pernet_operations gtp_net_ops = {
 	.init	= gtp_net_init,
-	.exit_rtnl = gtp_net_exit_rtnl,
+	.exit_batch_rtnl = gtp_net_exit_batch_rtnl,
 	.id	= &gtp_net_id,
 	.size	= sizeof(struct gtp_net),
 };

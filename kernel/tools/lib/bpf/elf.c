@@ -24,6 +24,7 @@
 
 int elf_open(const char *binary_path, struct elf_fd *elf_fd)
 {
+	char errmsg[STRERR_BUFSIZE];
 	int fd, ret;
 	Elf *elf;
 
@@ -37,7 +38,8 @@ int elf_open(const char *binary_path, struct elf_fd *elf_fd)
 	fd = open(binary_path, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
 		ret = -errno;
-		pr_warn("elf: failed to open %s: %s\n", binary_path, errstr(ret));
+		pr_warn("elf: failed to open %s: %s\n", binary_path,
+			libbpf_strerror_r(ret, errmsg, sizeof(errmsg)));
 		return ret;
 	}
 	elf = elf_begin(fd, ELF_C_READ_MMAP, NULL);

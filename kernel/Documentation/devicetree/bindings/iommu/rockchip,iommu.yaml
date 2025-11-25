@@ -25,7 +25,6 @@ properties:
           - rockchip,rk3568-iommu
       - items:
           - enum:
-              - rockchip,rk3576-iommu
               - rockchip,rk3588-iommu
           - const: rockchip,rk3568-iommu
 

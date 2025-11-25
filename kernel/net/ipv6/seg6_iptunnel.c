@@ -128,8 +128,7 @@ static int __seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh,
 			       int proto, struct dst_entry *cache_dst)
 {
 	struct dst_entry *dst = skb_dst(skb);
-	struct net_device *dev = dst_dev(dst);
-	struct net *net = dev_net(dev);
+	struct net *net = dev_net(dst->dev);
 	struct ipv6hdr *hdr, *inner_hdr;
 	struct ipv6_sr_hdr *isrh;
 	int hdrlen, tot_len, err;
@@ -182,7 +181,7 @@ static int __seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh,
 	isrh->nexthdr = proto;
 
 	hdr->daddr = isrh->segments[isrh->first_segment];
-	set_tun_src(net, dev, &hdr->daddr, &hdr->saddr);
+	set_tun_src(net, dst->dev, &hdr->daddr, &hdr->saddr);
 
 #ifdef CONFIG_IPV6_SEG6_HMAC
 	if (sr_has_hmac(isrh)) {
@@ -213,8 +212,7 @@ static int seg6_do_srh_encap_red(struct sk_buff *skb,
 {
 	__u8 first_seg = osrh->first_segment;
 	struct dst_entry *dst = skb_dst(skb);
-	struct net_device *dev = dst_dev(dst);
-	struct net *net = dev_net(dev);
+	struct net *net = dev_net(dst->dev);
 	struct ipv6hdr *hdr, *inner_hdr;
 	int hdrlen = ipv6_optlen(osrh);
 	int red_tlv_offset, tlv_offset;
@@ -272,7 +270,7 @@ static int seg6_do_srh_encap_red(struct sk_buff *skb,
 	if (skip_srh) {
 		hdr->nexthdr = proto;
 
-		set_tun_src(net, dev, &hdr->daddr, &hdr->saddr);
+		set_tun_src(net, dst->dev, &hdr->daddr, &hdr->saddr);
 		goto out;
 	}
 
@@ -308,7 +306,7 @@ static int seg6_do_srh_encap_red(struct sk_buff *skb,
 
 srcaddr:
 	isrh->nexthdr = proto;
-	set_tun_src(net, dev, &hdr->daddr, &hdr->saddr);
+	set_tun_src(net, dst->dev, &hdr->daddr, &hdr->saddr);
 
 #ifdef CONFIG_IPV6_SEG6_HMAC
 	if (unlikely(!skip_srh && sr_has_hmac(isrh))) {
@@ -364,7 +362,7 @@ static int __seg6_do_srh_inline(struct sk_buff *skb, struct ipv6_sr_hdr *osrh,
 
 #ifdef CONFIG_IPV6_SEG6_HMAC
 	if (sr_has_hmac(isrh)) {
-		struct net *net = skb_dst_dev_net(skb);
+		struct net *net = dev_net(skb_dst(skb)->dev);
 
 		err = seg6_push_hmac(net, &hdr->saddr, isrh);
 		if (unlikely(err))
@@ -509,7 +507,7 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 			local_bh_enable();
 		}
 
-		err = skb_cow_head(skb, LL_RESERVED_SPACE(dst_dev(dst)));
+		err = skb_cow_head(skb, LL_RESERVED_SPACE(dst->dev));
 		if (unlikely(err))
 			goto drop;
 	} else {
@@ -520,7 +518,7 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
 		return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_OUT,
 			       dev_net(skb->dev), NULL, skb, NULL,
-			       skb_dst_dev(skb), seg6_input_finish);
+			       skb_dst(skb)->dev, seg6_input_finish);
 
 	return seg6_input_finish(dev_net(skb->dev), NULL, skb);
 drop:
@@ -530,7 +528,7 @@ drop:
 
 static int seg6_input_nf(struct sk_buff *skb)
 {
-	struct net_device *dev = skb_dst_dev(skb);
+	struct net_device *dev = skb_dst(skb)->dev;
 	struct net *net = dev_net(skb->dev);
 
 	switch (skb->protocol) {
@@ -595,7 +593,7 @@ static int seg6_output_core(struct net *net, struct sock *sk,
 			local_bh_enable();
 		}
 
-		err = skb_cow_head(skb, LL_RESERVED_SPACE(dst_dev(dst)));
+		err = skb_cow_head(skb, LL_RESERVED_SPACE(dst->dev));
 		if (unlikely(err))
 			goto drop;
 	}
@@ -605,7 +603,7 @@ static int seg6_output_core(struct net *net, struct sock *sk,
 
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
 		return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_OUT, net, sk, skb,
-			       NULL, dst_dev(dst), dst_output);
+			       NULL, skb_dst(skb)->dev, dst_output);
 
 	return dst_output(net, sk, skb);
 drop:
@@ -616,7 +614,7 @@ drop:
 
 static int seg6_output_nf(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
-	struct net_device *dev = skb_dst_dev(skb);
+	struct net_device *dev = skb_dst(skb)->dev;
 
 	switch (skb->protocol) {
 	case htons(ETH_P_IP):

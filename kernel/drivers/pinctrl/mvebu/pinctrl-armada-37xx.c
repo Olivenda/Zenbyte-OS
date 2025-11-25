@@ -433,7 +433,9 @@ static int armada_37xx_gpio_direction_output(struct gpio_chip *chip,
 	reg = OUTPUT_EN;
 	armada_37xx_update_reg(&reg, &en_offset);
 
-	return regmap_update_bits(info->regmap, reg, mask, mask);
+	regmap_update_bits(info->regmap, reg, mask, mask);
+
+	return 0;
 }
 
 static int armada_37xx_gpio_get(struct gpio_chip *chip, unsigned int offset)
@@ -453,8 +455,8 @@ static int armada_37xx_gpio_get(struct gpio_chip *chip, unsigned int offset)
 	return (val & mask) != 0;
 }
 
-static int armada_37xx_gpio_set(struct gpio_chip *chip, unsigned int offset,
-				int value)
+static void armada_37xx_gpio_set(struct gpio_chip *chip, unsigned int offset,
+				 int value)
 {
 	struct armada_37xx_pinctrl *info = gpiochip_get_data(chip);
 	unsigned int reg = OUTPUT_VAL;
@@ -464,7 +466,7 @@ static int armada_37xx_gpio_set(struct gpio_chip *chip, unsigned int offset,
 	mask = BIT(offset);
 	val = value ? mask : 0;
 
-	return regmap_update_bits(info->regmap, reg, mask, val);
+	regmap_update_bits(info->regmap, reg, mask, val);
 }
 
 static int armada_37xx_pmx_gpio_set_direction(struct pinctrl_dev *pctldev,
@@ -739,7 +741,7 @@ static void armada_37xx_irq_print_chip(struct irq_data *d, struct seq_file *p)
 	struct gpio_chip *chip = irq_data_get_irq_chip_data(d);
 	struct armada_37xx_pinctrl *info = gpiochip_get_data(chip);
 
-	seq_puts(p, info->data->name);
+	seq_printf(p, info->data->name);
 }
 
 static const struct irq_chip armada_37xx_irqchip = {

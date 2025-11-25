@@ -31,7 +31,6 @@ description: |
 properties:
   compatible:
     enum:
-      - renesas,5l35023
       - renesas,5p35023
 
   reg:

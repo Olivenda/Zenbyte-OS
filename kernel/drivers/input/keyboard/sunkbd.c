@@ -241,8 +241,9 @@ static void sunkbd_reinit(struct work_struct *work)
 
 static void sunkbd_enable(struct sunkbd *sunkbd, bool enable)
 {
-	scoped_guard(serio_pause_rx, sunkbd->serio)
-		sunkbd->enabled = enable;
+	serio_pause_rx(sunkbd->serio);
+	sunkbd->enabled = enable;
+	serio_continue_rx(sunkbd->serio);
 
 	if (!enable) {
 		wake_up_interruptible(&sunkbd->wait);

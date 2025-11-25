@@ -40,7 +40,7 @@ struct file *shmem_create_from_object(struct drm_i915_gem_object *obj)
 
 	if (i915_gem_object_is_shmem(obj)) {
 		file = obj->base.filp;
-		get_file(file);
+		atomic_long_inc(&file->f_count);
 		return file;
 	}
 
@@ -108,7 +108,7 @@ static int __shmem_rw(struct file *file, loff_t off,
 		if (IS_ERR(page))
 			return PTR_ERR(page);
 
-		vaddr = kmap_local_page(page);
+		vaddr = kmap(page);
 		if (write) {
 			memcpy(vaddr + offset_in_page(off), ptr, this);
 			set_page_dirty(page);
@@ -116,7 +116,7 @@ static int __shmem_rw(struct file *file, loff_t off,
 			memcpy(ptr, vaddr + offset_in_page(off), this);
 		}
 		mark_page_accessed(page);
-		kunmap_local(vaddr);
+		kunmap(page);
 		put_page(page);
 
 		len -= this;
@@ -143,11 +143,11 @@ int shmem_read_to_iosys_map(struct file *file, loff_t off,
 		if (IS_ERR(page))
 			return PTR_ERR(page);
 
-		vaddr = kmap_local_page(page);
+		vaddr = kmap(page);
 		iosys_map_memcpy_to(map, map_off, vaddr + offset_in_page(off),
 				    this);
 		mark_page_accessed(page);
-		kunmap_local(vaddr);
+		kunmap(page);
 		put_page(page);
 
 		len -= this;

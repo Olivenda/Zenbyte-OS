@@ -141,7 +141,7 @@ static struct platform_driver pm80x_onkey_driver = {
 		   .pm = &pm80x_onkey_pm_ops,
 		   },
 	.probe = pm80x_onkey_probe,
-	.remove = pm80x_onkey_remove,
+	.remove_new = pm80x_onkey_remove,
 };
 
 module_platform_driver(pm80x_onkey_driver);

@@ -101,9 +101,10 @@ static void hugetlb_cgroup_init(struct hugetlb_cgroup *h_cgroup,
 	int idx;
 
 	for (idx = 0; idx < HUGE_MAX_HSTATE; idx++) {
-		struct page_counter *fault, *fault_parent = NULL;
-		struct page_counter *rsvd, *rsvd_parent = NULL;
+		struct page_counter *fault_parent = NULL;
+		struct page_counter *rsvd_parent = NULL;
 		unsigned long limit;
+		int ret;
 
 		if (parent_h_cgroup) {
 			fault_parent = hugetlb_cgroup_counter_from_cgroup(
@@ -111,22 +112,24 @@ static void hugetlb_cgroup_init(struct hugetlb_cgroup *h_cgroup,
 			rsvd_parent = hugetlb_cgroup_counter_from_cgroup_rsvd(
 				parent_h_cgroup, idx);
 		}
-		fault = hugetlb_cgroup_counter_from_cgroup(h_cgroup, idx);
-		rsvd = hugetlb_cgroup_counter_from_cgroup_rsvd(h_cgroup, idx);
-
-		page_counter_init(fault, fault_parent, false);
-		page_counter_init(rsvd, rsvd_parent, false);
-
-		if (!cgroup_subsys_on_dfl(hugetlb_cgrp_subsys)) {
-			fault->track_failcnt = true;
-			rsvd->track_failcnt = true;
-		}
+		page_counter_init(hugetlb_cgroup_counter_from_cgroup(h_cgroup,
+								     idx),
+				  fault_parent, false);
+		page_counter_init(
+			hugetlb_cgroup_counter_from_cgroup_rsvd(h_cgroup, idx),
+			rsvd_parent, false);
 
 		limit = round_down(PAGE_COUNTER_MAX,
 				   pages_per_huge_page(&hstates[idx]));
 
-		VM_BUG_ON(page_counter_set_max(fault, limit));
-		VM_BUG_ON(page_counter_set_max(rsvd, limit));
+		ret = page_counter_set_max(
+			hugetlb_cgroup_counter_from_cgroup(h_cgroup, idx),
+			limit);
+		VM_BUG_ON(ret);
+		ret = page_counter_set_max(
+			hugetlb_cgroup_counter_from_cgroup_rsvd(h_cgroup, idx),
+			limit);
+		VM_BUG_ON(ret);
 	}
 }
 
@@ -192,23 +195,24 @@ static void hugetlb_cgroup_css_free(struct cgroup_subsys_state *css)
  * cannot fail.
  */
 static void hugetlb_cgroup_move_parent(int idx, struct hugetlb_cgroup *h_cg,
-				       struct folio *folio)
+				       struct page *page)
 {
 	unsigned int nr_pages;
 	struct page_counter *counter;
-	struct hugetlb_cgroup *hcg;
+	struct hugetlb_cgroup *page_hcg;
 	struct hugetlb_cgroup *parent = parent_hugetlb_cgroup(h_cg);
+	struct folio *folio = page_folio(page);
 
-	hcg = hugetlb_cgroup_from_folio(folio);
+	page_hcg = hugetlb_cgroup_from_folio(folio);
 	/*
 	 * We can have pages in active list without any cgroup
 	 * ie, hugepage with less than 3 pages. We can safely
 	 * ignore those pages.
 	 */
-	if (!hcg || hcg != h_cg)
+	if (!page_hcg || page_hcg != h_cg)
 		goto out;
 
-	nr_pages = folio_nr_pages(folio);
+	nr_pages = compound_nr(page);
 	if (!parent) {
 		parent = root_h_cgroup;
 		/* root has no limit */
@@ -231,13 +235,13 @@ static void hugetlb_cgroup_css_offline(struct cgroup_subsys_state *css)
 {
 	struct hugetlb_cgroup *h_cg = hugetlb_cgroup_from_css(css);
 	struct hstate *h;
-	struct folio *folio;
+	struct page *page;
 
 	do {
 		for_each_hstate(h) {
 			spin_lock_irq(&hugetlb_lock);
-			list_for_each_entry(folio, &h->hugepage_activelist, lru)
-				hugetlb_cgroup_move_parent(hstate_index(h), h_cg, folio);
+			list_for_each_entry(page, &h->hugepage_activelist, lru)
+				hugetlb_cgroup_move_parent(hstate_index(h), h_cg, page);
 
 			spin_unlock_irq(&hugetlb_lock);
 		}
@@ -913,6 +917,7 @@ void hugetlb_cgroup_migrate(struct folio *old_folio, struct folio *new_folio)
 	set_hugetlb_cgroup_rsvd(new_folio, h_cg_rsvd);
 	list_move(&new_folio->lru, &h->hugepage_activelist);
 	spin_unlock_irq(&hugetlb_lock);
+	return;
 }
 
 static struct cftype hugetlb_files[] = {

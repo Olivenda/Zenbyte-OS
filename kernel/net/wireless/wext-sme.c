@@ -302,8 +302,8 @@ int cfg80211_wext_siwgenie(struct net_device *dev,
 	struct iw_point *data = &wrqu->data;
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wdev->wiphy);
-	int ie_len = data->length;
 	u8 *ie = extra;
+	int ie_len = data->length, err;
 
 	if (wdev->iftype != NL80211_IFTYPE_STATION)
 		return -EOPNOTSUPP;
@@ -311,31 +311,39 @@ int cfg80211_wext_siwgenie(struct net_device *dev,
 	if (!ie_len)
 		ie = NULL;
 
-	guard(wiphy)(wdev->wiphy);
+	wiphy_lock(wdev->wiphy);
 
 	/* no change */
+	err = 0;
 	if (wdev->wext.ie_len == ie_len &&
 	    memcmp(wdev->wext.ie, ie, ie_len) == 0)
-		return 0;
+		goto out;
 
 	if (ie_len) {
 		ie = kmemdup(extra, ie_len, GFP_KERNEL);
-		if (!ie)
-			return -ENOMEM;
-	} else {
+		if (!ie) {
+			err = -ENOMEM;
+			goto out;
+		}
+	} else
 		ie = NULL;
-	}
 
 	kfree(wdev->wext.ie);
 	wdev->wext.ie = ie;
 	wdev->wext.ie_len = ie_len;
 
-	if (wdev->conn)
-		return cfg80211_disconnect(rdev, dev,
-					   WLAN_REASON_DEAUTH_LEAVING, false);
+	if (wdev->conn) {
+		err = cfg80211_disconnect(rdev, dev,
+					  WLAN_REASON_DEAUTH_LEAVING, false);
+		if (err)
+			goto out;
+	}
 
 	/* userspace better not think we'll reconnect */
-	return 0;
+	err = 0;
+ out:
+	wiphy_unlock(wdev->wiphy);
+	return err;
 }
 
 int cfg80211_wext_siwmlme(struct net_device *dev,
@@ -345,6 +353,7 @@ int cfg80211_wext_siwmlme(struct net_device *dev,
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct iw_mlme *mlme = (struct iw_mlme *)extra;
 	struct cfg80211_registered_device *rdev;
+	int err;
 
 	if (!wdev)
 		return -EOPNOTSUPP;
@@ -357,13 +366,17 @@ int cfg80211_wext_siwmlme(struct net_device *dev,
 	if (mlme->addr.sa_family != ARPHRD_ETHER)
 		return -EINVAL;
 
-	guard(wiphy)(&rdev->wiphy);
-
+	wiphy_lock(&rdev->wiphy);
 	switch (mlme->cmd) {
 	case IW_MLME_DEAUTH:
 	case IW_MLME_DISASSOC:
-		return cfg80211_disconnect(rdev, dev, mlme->reason_code, true);
+		err = cfg80211_disconnect(rdev, dev, mlme->reason_code, true);
+		break;
 	default:
-		return -EOPNOTSUPP;
+		err = -EOPNOTSUPP;
+		break;
 	}
+	wiphy_unlock(&rdev->wiphy);
+
+	return err;
 }

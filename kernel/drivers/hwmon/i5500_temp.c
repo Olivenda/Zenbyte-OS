@@ -29,6 +29,12 @@
 #define REG_CTCTRL	0xF7
 #define REG_TSTIMER	0xF8
 
+static umode_t i5500_is_visible(const void *drvdata, enum hwmon_sensor_types type, u32 attr,
+				int channel)
+{
+	return 0444;
+}
+
 static int i5500_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
 		      long *val)
 {
@@ -78,7 +84,7 @@ static int i5500_read(struct device *dev, enum hwmon_sensor_types type, u32 attr
 }
 
 static const struct hwmon_ops i5500_ops = {
-	.visible = 0444,
+	.is_visible = i5500_is_visible,
 	.read = i5500_read,
 };
 

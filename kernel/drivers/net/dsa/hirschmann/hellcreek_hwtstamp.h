@@ -38,10 +38,9 @@
 #define TX_TSTAMP_TIMEOUT	msecs_to_jiffies(40)
 
 int hellcreek_port_hwtstamp_set(struct dsa_switch *ds, int port,
-				struct kernel_hwtstamp_config *config,
-				struct netlink_ext_ack *extack);
+				struct ifreq *ifr);
 int hellcreek_port_hwtstamp_get(struct dsa_switch *ds, int port,
-				struct kernel_hwtstamp_config *config);
+				struct ifreq *ifr);
 
 bool hellcreek_port_rxtstamp(struct dsa_switch *ds, int port,
 			     struct sk_buff *clone, unsigned int type);

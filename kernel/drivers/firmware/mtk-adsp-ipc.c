@@ -95,9 +95,10 @@ static int mtk_adsp_ipc_probe(struct platform_device *pdev)
 		adsp_chan->idx = i;
 		adsp_chan->ch = mbox_request_channel_byname(cl, adsp_mbox_ch_names[i]);
 		if (IS_ERR(adsp_chan->ch)) {
-			ret = dev_err_probe(dev, PTR_ERR(adsp_chan->ch),
-					    "Failed to request mbox channel %s\n",
-					    adsp_mbox_ch_names[i]);
+			ret = PTR_ERR(adsp_chan->ch);
+			if (ret != -EPROBE_DEFER)
+				dev_err(dev, "Failed to request mbox chan %s ret %d\n",
+					adsp_mbox_ch_names[i], ret);
 
 			for (j = 0; j < i; j++) {
 				adsp_chan = &adsp_ipc->chans[j];
@@ -132,7 +133,7 @@ static struct platform_driver mtk_adsp_ipc_driver = {
 		.name = "mtk-adsp-ipc",
 	},
 	.probe = mtk_adsp_ipc_probe,
-	.remove = mtk_adsp_ipc_remove,
+	.remove_new = mtk_adsp_ipc_remove,
 };
 builtin_platform_driver(mtk_adsp_ipc_driver);
 

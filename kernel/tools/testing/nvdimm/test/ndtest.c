@@ -894,7 +894,7 @@ static const struct platform_device_id ndtest_id[] = {
 
 static struct platform_driver ndtest_driver = {
 	.probe = ndtest_probe,
-	.remove = ndtest_remove,
+	.remove_new = ndtest_remove,
 	.driver = {
 		.name = KBUILD_MODNAME,
 	},

@@ -381,6 +381,10 @@
 				<GCC_LPASS_SWAY_CLK>;
 };
 
+&gmu {
+	status = "okay";
+};
+
 &gpi_dma0 {
 	status = "okay";
 };
@@ -543,15 +547,15 @@
 
 &q6asmdai {
 	dai@0 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
+		reg = <0>;
 	};
 
 	dai@1 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA2>;
+		reg = <1>;
 	};
 
 	dai@2 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
+		reg = <2>;
 	};
 };
 

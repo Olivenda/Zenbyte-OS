@@ -4,8 +4,6 @@
  * Copyright (c) 2016, Intel Corporation.
  */
 
-#include <linux/bitfield.h>
-
 #include <acpi/cppc_acpi.h>
 #include <asm/msr.h>
 #include <asm/processor.h>
@@ -49,7 +47,7 @@ int cpc_read_ffh(int cpunum, struct cpc_reg *reg, u64 *val)
 {
 	int err;
 
-	err = rdmsrq_safe_on_cpu(cpunum, reg->address, val);
+	err = rdmsrl_safe_on_cpu(cpunum, reg->address, val);
 	if (!err) {
 		u64 mask = GENMASK_ULL(reg->bit_offset + reg->bit_width - 1,
 				       reg->bit_offset);
@@ -65,7 +63,7 @@ int cpc_write_ffh(int cpunum, struct cpc_reg *reg, u64 val)
 	u64 rd_val;
 	int err;
 
-	err = rdmsrq_safe_on_cpu(cpunum, reg->address, &rd_val);
+	err = rdmsrl_safe_on_cpu(cpunum, reg->address, &rd_val);
 	if (!err) {
 		u64 mask = GENMASK_ULL(reg->bit_offset + reg->bit_width - 1,
 				       reg->bit_offset);
@@ -74,7 +72,7 @@ int cpc_write_ffh(int cpunum, struct cpc_reg *reg, u64 val)
 		val &= mask;
 		rd_val &= ~mask;
 		rd_val |= val;
-		err = wrmsrq_safe_on_cpu(cpunum, reg->address, rd_val);
+		err = wrmsrl_safe_on_cpu(cpunum, reg->address, rd_val);
 	}
 	return err;
 }
@@ -147,11 +145,11 @@ int amd_get_highest_perf(unsigned int cpu, u32 *highest_perf)
 	int ret;
 
 	if (cpu_feature_enabled(X86_FEATURE_CPPC)) {
-		ret = rdmsrq_safe_on_cpu(cpu, MSR_AMD_CPPC_CAP1, &val);
+		ret = rdmsrl_safe_on_cpu(cpu, MSR_AMD_CPPC_CAP1, &val);
 		if (ret)
 			goto out;
 
-		val = FIELD_GET(AMD_CPPC_HIGHEST_PERF_MASK, val);
+		val = AMD_CPPC_HIGHEST_PERF(val);
 	} else {
 		ret = cppc_get_highest_perf(cpu, &val);
 		if (ret)
@@ -241,10 +239,8 @@ EXPORT_SYMBOL_GPL(amd_detect_prefcore);
  */
 int amd_get_boost_ratio_numerator(unsigned int cpu, u64 *numerator)
 {
-	enum x86_topology_cpu_type core_type = get_topology_cpu_type(&cpu_data(cpu));
 	bool prefcore;
 	int ret;
-	u32 tmp;
 
 	ret = amd_detect_prefcore(&prefcore);
 	if (ret)
@@ -270,27 +266,6 @@ int amd_get_boost_ratio_numerator(unsigned int cpu, u64 *numerator)
 			break;
 		}
 	}
-
-	/* detect if running on heterogeneous design */
-	if (cpu_feature_enabled(X86_FEATURE_AMD_HTR_CORES)) {
-		switch (core_type) {
-		case TOPO_CPU_TYPE_UNKNOWN:
-			pr_warn("Undefined core type found for cpu %d\n", cpu);
-			break;
-		case TOPO_CPU_TYPE_PERFORMANCE:
-			/* use the max scale for performance cores */
-			*numerator = CPPC_HIGHEST_PERF_PERFORMANCE;
-			return 0;
-		case TOPO_CPU_TYPE_EFFICIENCY:
-			/* use the highest perf value for efficiency cores */
-			ret = amd_get_highest_perf(cpu, &tmp);
-			if (ret)
-				return ret;
-			*numerator = tmp;
-			return 0;
-		}
-	}
-
 	*numerator = CPPC_HIGHEST_PERF_PREFCORE;
 
 	return 0;

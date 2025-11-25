@@ -262,7 +262,7 @@ static int amd_pmf_invoke_cmd_init(struct amd_pmf_dev *dev)
 		return -ENODEV;
 	}
 
-	dev_dbg(dev->dev, "Policy Binary size: %llu bytes\n", (unsigned long long)dev->policy_sz);
+	dev_dbg(dev->dev, "Policy Binary size: %u bytes\n", dev->policy_sz);
 	memset(dev->shbuf, 0, dev->policy_sz);
 	ta_sm = dev->shbuf;
 	in = &ta_sm->pmf_input.init_table;
@@ -358,28 +358,30 @@ static ssize_t amd_pmf_get_pb_data(struct file *filp, const char __user *buf,
 		return -EINVAL;
 
 	/* re-alloc to the new buffer length of the policy binary */
-	new_policy_buf = devm_kzalloc(dev->dev, length, GFP_KERNEL);
-	if (!new_policy_buf)
-		return -ENOMEM;
+	new_policy_buf = memdup_user(buf, length);
+	if (IS_ERR(new_policy_buf))
+		return PTR_ERR(new_policy_buf);
 
-	if (copy_from_user(new_policy_buf, buf, length)) {
-		devm_kfree(dev->dev, new_policy_buf);
-		return -EFAULT;
-	}
-
-	devm_kfree(dev->dev, dev->policy_buf);
+	kfree(dev->policy_buf);
 	dev->policy_buf = new_policy_buf;
 	dev->policy_sz = length;
 
-	if (!amd_pmf_pb_valid(dev))
-		return -EINVAL;
+	if (!amd_pmf_pb_valid(dev)) {
+		ret = -EINVAL;
+		goto cleanup;
+	}
 
 	amd_pmf_hex_dump_pb(dev);
 	ret = amd_pmf_start_policy_engine(dev);
 	if (ret < 0)
-		return ret;
+		goto cleanup;
 
 	return length;
+
+cleanup:
+	kfree(dev->policy_buf);
+	dev->policy_buf = NULL;
+	return ret;
 }
 
 static const struct file_operations pb_fops = {
@@ -530,45 +532,64 @@ int amd_pmf_init_smart_pc(struct amd_pmf_dev *dev)
 
 	ret = amd_pmf_set_dram_addr(dev, true);
 	if (ret)
-		return ret;
+		goto err_cancel_work;
 
-	dev->policy_base = devm_ioremap_resource(dev->dev, dev->res);
-	if (IS_ERR(dev->policy_base))
-		return PTR_ERR(dev->policy_base);
+	dev->policy_base = devm_ioremap(dev->dev, dev->policy_addr, dev->policy_sz);
+	if (!dev->policy_base) {
+		ret = -ENOMEM;
+		goto err_free_dram_buf;
+	}
 
-	dev->policy_buf = devm_kzalloc(dev->dev, dev->policy_sz, GFP_KERNEL);
-	if (!dev->policy_buf)
-		return -ENOMEM;
+	dev->policy_buf = kzalloc(dev->policy_sz, GFP_KERNEL);
+	if (!dev->policy_buf) {
+		ret = -ENOMEM;
+		goto err_free_dram_buf;
+	}
 
 	memcpy_fromio(dev->policy_buf, dev->policy_base, dev->policy_sz);
 
 	if (!amd_pmf_pb_valid(dev)) {
 		dev_info(dev->dev, "No Smart PC policy present\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_free_policy;
 	}
 
 	amd_pmf_hex_dump_pb(dev);
 
-	dev->prev_data = devm_kzalloc(dev->dev, sizeof(*dev->prev_data), GFP_KERNEL);
-	if (!dev->prev_data)
-		return -ENOMEM;
+	dev->prev_data = kzalloc(sizeof(*dev->prev_data), GFP_KERNEL);
+	if (!dev->prev_data) {
+		ret = -ENOMEM;
+		goto err_free_policy;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(amd_pmf_ta_uuid); i++) {
 		ret = amd_pmf_tee_init(dev, &amd_pmf_ta_uuid[i]);
 		if (ret)
-			return ret;
+			goto err_free_prev_data;
 
 		ret = amd_pmf_start_policy_engine(dev);
-		dev_dbg(dev->dev, "start policy engine ret: %d\n", ret);
-		status = ret == TA_PMF_TYPE_SUCCESS;
+		switch (ret) {
+		case TA_PMF_TYPE_SUCCESS:
+			status = true;
+			break;
+		case TA_ERROR_CRYPTO_INVALID_PARAM:
+		case TA_ERROR_CRYPTO_BIN_TOO_LARGE:
+			amd_pmf_tee_deinit(dev);
+			status = false;
+			break;
+		default:
+			ret = -EINVAL;
+			amd_pmf_tee_deinit(dev);
+			goto err_free_prev_data;
+		}
+
 		if (status)
 			break;
-		amd_pmf_tee_deinit(dev);
 	}
 
 	if (!status && !pb_side_load) {
 		ret = -EINVAL;
-		goto err;
+		goto err_free_prev_data;
 	}
 
 	if (pb_side_load)
@@ -576,12 +597,22 @@ int amd_pmf_init_smart_pc(struct amd_pmf_dev *dev)
 
 	ret = amd_pmf_register_input_device(dev);
 	if (ret)
-		goto err;
+		goto err_pmf_remove_pb;
 
 	return 0;
 
-err:
-	amd_pmf_deinit_smart_pc(dev);
+err_pmf_remove_pb:
+	if (pb_side_load && dev->esbin)
+		amd_pmf_remove_pb(dev);
+	amd_pmf_tee_deinit(dev);
+err_free_prev_data:
+	kfree(dev->prev_data);
+err_free_policy:
+	kfree(dev->policy_buf);
+err_free_dram_buf:
+	kfree(dev->buf);
+err_cancel_work:
+	cancel_delayed_work_sync(&dev->pb_work);
 
 	return ret;
 }
@@ -595,5 +626,11 @@ void amd_pmf_deinit_smart_pc(struct amd_pmf_dev *dev)
 		amd_pmf_remove_pb(dev);
 
 	cancel_delayed_work_sync(&dev->pb_work);
+	kfree(dev->prev_data);
+	dev->prev_data = NULL;
+	kfree(dev->policy_buf);
+	dev->policy_buf = NULL;
+	kfree(dev->buf);
+	dev->buf = NULL;
 	amd_pmf_tee_deinit(dev);
 }

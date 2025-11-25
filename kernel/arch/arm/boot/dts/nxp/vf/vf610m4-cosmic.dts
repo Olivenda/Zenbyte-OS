@@ -79,10 +79,12 @@
 };
 
 &iomuxc {
-	pinctrl_uart3: uart3grp {
-		fsl,pins = <
-			VF610_PAD_PTA20__UART3_TX		0x21a2
-			VF610_PAD_PTA21__UART3_RX		0x21a1
-		>;
+	vf610-cosmic {
+		pinctrl_uart3: uart3grp {
+			fsl,pins = <
+				VF610_PAD_PTA20__UART3_TX		0x21a2
+				VF610_PAD_PTA21__UART3_RX		0x21a1
+			>;
+		};
 	};
 };

@@ -699,10 +699,10 @@ RAW socket option CAN_RAW_JOIN_FILTERS
 
 The CAN_RAW socket can set multiple CAN identifier specific filters that
 lead to multiple filters in the af_can.c filter processing. These filters
-are independent from each other which leads to logical OR'ed filters when
+are indenpendent from each other which leads to logical OR'ed filters when
 applied (see :ref:`socketcan-rawfilter`).
 
-This socket option joins the given CAN filters in the way that only CAN
+This socket option joines the given CAN filters in the way that only CAN
 frames are passed to user space that matched *all* given CAN filters. The
 semantic for the applied filters is therefore changed to a logical AND.
 
@@ -1104,12 +1104,15 @@ for writing CAN network device driver are described below:
 General Settings
 ----------------
 
-CAN network device drivers can use alloc_candev_mqs() and friends instead of
-alloc_netdev_mqs(), to automatically take care of CAN-specific setup:
-
 .. code-block:: C
 
-    dev = alloc_candev_mqs(...);
+    dev->type  = ARPHRD_CAN; /* the netdevice hardware type */
+    dev->flags = IFF_NOARP;  /* CAN has no arp */
+
+    dev->mtu = CAN_MTU; /* sizeof(struct can_frame) -> Classical CAN interface */
+
+    or alternative, when the controller supports CAN with flexible data rate:
+    dev->mtu = CANFD_MTU; /* sizeof(struct canfd_frame) -> CAN FD interface */
 
 The struct can_frame or struct canfd_frame is the payload of each socket
 buffer (skbuff) in the protocol family PF_CAN.

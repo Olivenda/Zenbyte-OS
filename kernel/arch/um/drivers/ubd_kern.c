@@ -474,12 +474,12 @@ static irqreturn_t ubd_intr(int irq, void *dev)
 }
 
 /* Only changed by ubd_init, which is an initcall. */
-static struct os_helper_thread *io_td;
+static int io_pid = -1;
 
 static void kill_io_thread(void)
 {
-	if (io_td)
-		os_kill_helper_thread(io_td);
+	if(io_pid != -1)
+		os_kill_process(io_pid, 1);
 }
 
 __uml_exitcall(kill_io_thread);
@@ -865,6 +865,7 @@ static int ubd_add(int n, char **error_out)
 	ubd_dev->tag_set.ops = &ubd_mq_ops;
 	ubd_dev->tag_set.queue_depth = 64;
 	ubd_dev->tag_set.numa_node = NUMA_NO_NODE;
+	ubd_dev->tag_set.flags = BLK_MQ_F_SHOULD_MERGE;
 	ubd_dev->tag_set.driver_data = ubd_dev;
 	ubd_dev->tag_set.nr_hw_queues = 1;
 
@@ -1104,8 +1105,8 @@ static int __init ubd_init(void)
 
 late_initcall(ubd_init);
 
-static int __init ubd_driver_init(void)
-{
+static int __init ubd_driver_init(void){
+	unsigned long stack;
 	int err;
 
 	/* Set by CONFIG_BLK_DEV_UBD_SYNC or ubd=sync.*/
@@ -1114,11 +1115,13 @@ static int __init ubd_driver_init(void)
 		/* Letting ubd=sync be like using ubd#s= instead of ubd#= is
 		 * enough. So use anyway the io thread. */
 	}
-	err = start_io_thread(&io_td, &thread_fd);
-	if (err < 0) {
+	stack = alloc_stack(0, 0);
+	io_pid = start_io_thread(stack + PAGE_SIZE, &thread_fd);
+	if(io_pid < 0){
 		printk(KERN_ERR
 		       "ubd : Failed to start I/O thread (errno = %d) - "
-		       "falling back to synchronous I/O\n", -err);
+		       "falling back to synchronous I/O\n", -io_pid);
+		io_pid = -1;
 		return 0;
 	}
 	err = um_request_irq(UBD_IRQ, thread_fd, IRQ_READ, ubd_intr,
@@ -1494,11 +1497,11 @@ int kernel_fd = -1;
 /* Only changed by the io thread. XXX: currently unused. */
 static int io_count;
 
-void *io_thread(void *arg)
+int io_thread(void *arg)
 {
 	int n, count, written, res;
 
-	os_fix_helper_thread_signals();
+	os_fix_helper_signals();
 
 	while(1){
 		n = bulk_req_safe_read(
@@ -1540,5 +1543,5 @@ void *io_thread(void *arg)
 		} while (written < n);
 	}
 
-	return NULL;
+	return 0;
 }

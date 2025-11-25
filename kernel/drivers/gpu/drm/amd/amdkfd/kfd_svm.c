@@ -563,8 +563,7 @@ svm_range_vram_node_new(struct kfd_node *node, struct svm_range *prange,
 	int r;
 
 	p = container_of(prange->svms, struct kfd_process, svms);
-	pr_debug("process pid: %d svms 0x%p [0x%lx 0x%lx]\n",
-		 p->lead_thread->pid, prange->svms,
+	pr_debug("pasid: %x svms 0x%p [0x%lx 0x%lx]\n", p->pasid, prange->svms,
 		 prange->start, prange->last);
 
 	if (svm_range_validate_svm_bo(node, prange))
@@ -1195,7 +1194,6 @@ svm_range_get_pte_flags(struct kfd_node *node,
 	struct kfd_node *bo_node;
 	uint32_t flags = prange->flags;
 	uint32_t mapping_flags = 0;
-	uint32_t gc_ip_version = KFD_GC_VERSION(node);
 	uint64_t pte_flags;
 	bool snoop = (domain != SVM_RANGE_VRAM_DOMAIN);
 	bool coherent = flags & (KFD_IOCTL_SVM_FLAG_COHERENT | KFD_IOCTL_SVM_FLAG_EXT_COHERENT);
@@ -1205,7 +1203,7 @@ svm_range_get_pte_flags(struct kfd_node *node,
 	if (domain == SVM_RANGE_VRAM_DOMAIN)
 		bo_node = prange->svm_bo->node;
 
-	switch (gc_ip_version) {
+	switch (amdgpu_ip_version(node->adev, GC_HWIP, 0)) {
 	case IP_VERSION(9, 4, 1):
 		if (domain == SVM_RANGE_VRAM_DOMAIN) {
 			if (bo_node == node) {
@@ -1242,9 +1240,8 @@ svm_range_get_pte_flags(struct kfd_node *node,
 		break;
 	case IP_VERSION(9, 4, 3):
 	case IP_VERSION(9, 4, 4):
-	case IP_VERSION(9, 5, 0):
 		if (ext_coherent)
-			mtype_local = AMDGPU_VM_MTYPE_CC;
+			mtype_local = node->adev->rev_id ? AMDGPU_VM_MTYPE_CC : AMDGPU_VM_MTYPE_UC;
 		else
 			mtype_local = amdgpu_mtype_local == 1 ? AMDGPU_VM_MTYPE_NC :
 				amdgpu_mtype_local == 2 ? AMDGPU_VM_MTYPE_CC : AMDGPU_VM_MTYPE_RW;
@@ -1259,13 +1256,9 @@ svm_range_get_pte_flags(struct kfd_node *node,
 			 */
 			else if (svm_nodes_in_same_hive(bo_node, node) && !ext_coherent)
 				mapping_flags |= AMDGPU_VM_MTYPE_NC;
-			/* PCIe P2P on GPUs pre-9.5.0 */
-			else if (gc_ip_version < IP_VERSION(9, 5, 0) &&
-				 !svm_nodes_in_same_hive(bo_node, node))
-				mapping_flags |= AMDGPU_VM_MTYPE_UC;
-			/* Other remote memory */
+			/* PCIe P2P or extended system scope coherence */
 			else
-				mapping_flags |= ext_coherent ? AMDGPU_VM_MTYPE_UC : AMDGPU_VM_MTYPE_NC;
+				mapping_flags |= AMDGPU_VM_MTYPE_UC;
 		/* system memory accessed by the APU */
 		} else if (node->adev->flags & AMD_IS_APU) {
 			/* On NUMA systems, locality is determined per-page
@@ -1277,10 +1270,7 @@ svm_range_get_pte_flags(struct kfd_node *node,
 				mapping_flags |= ext_coherent ? AMDGPU_VM_MTYPE_UC : AMDGPU_VM_MTYPE_NC;
 		/* system memory accessed by the dGPU */
 		} else {
-			if (gc_ip_version < IP_VERSION(9, 5, 0) || ext_coherent)
-				mapping_flags |= AMDGPU_VM_MTYPE_UC;
-			else
-				mapping_flags |= AMDGPU_VM_MTYPE_NC;
+			mapping_flags |= AMDGPU_VM_MTYPE_UC;
 		}
 		break;
 	case IP_VERSION(12, 0, 0):
@@ -1302,7 +1292,7 @@ svm_range_get_pte_flags(struct kfd_node *node,
 	pte_flags = AMDGPU_PTE_VALID;
 	pte_flags |= (domain == SVM_RANGE_VRAM_DOMAIN) ? 0 : AMDGPU_PTE_SYSTEM;
 	pte_flags |= snoop ? AMDGPU_PTE_SNOOPED : 0;
-	if (gc_ip_version >= IP_VERSION(12, 0, 0))
+	if (KFD_GC_VERSION(node) >= IP_VERSION(12, 0, 0))
 		pte_flags |= AMDGPU_PTE_IS_PTE;
 
 	pte_flags |= amdgpu_gem_va_map_flags(node->adev, mapping_flags);
@@ -2705,7 +2695,7 @@ svm_range_best_restore_location(struct svm_range *prange,
 		return -1;
 	}
 
-	if (node->adev->apu_prefer_gtt)
+	if (node->adev->flags & AMD_IS_APU)
 		return 0;
 
 	if (prange->preferred_loc == gpuid ||
@@ -2993,7 +2983,7 @@ svm_range_restore_pages(struct amdgpu_device *adev, unsigned int pasid,
 		return -EFAULT;
 	}
 
-	p = kfd_lookup_process_by_pasid(pasid, NULL);
+	p = kfd_lookup_process_by_pasid(pasid);
 	if (!p) {
 		pr_debug("kfd process not founded pasid 0x%x\n", pasid);
 		return 0;
@@ -3139,6 +3129,8 @@ retry_write_locked:
 	start = max_t(unsigned long, ALIGN_DOWN(addr, size), prange->start);
 	last = min_t(unsigned long, ALIGN(addr + 1, size) - 1, prange->last);
 	if (prange->actual_loc != 0 || best_loc != 0) {
+		migration = true;
+
 		if (best_loc) {
 			r = svm_migrate_to_vram(prange, best_loc, start, last,
 					mm, KFD_MIGRATE_TRIGGER_PAGEFAULT_GPU);
@@ -3161,9 +3153,7 @@ retry_write_locked:
 		if (r) {
 			pr_debug("failed %d to migrate svms %p [0x%lx 0x%lx]\n",
 				 r, svms, start, last);
-			goto out_migrate_fail;
-		} else {
-			migration = true;
+			goto out_unlock_range;
 		}
 	}
 
@@ -3173,7 +3163,6 @@ retry_write_locked:
 		pr_debug("failed %d to map svms 0x%p [0x%lx 0x%lx] to gpus\n",
 			 r, svms, start, last);
 
-out_migrate_fail:
 	kfd_smi_event_page_fault_end(node, p->lead_thread->pid, addr,
 				     migration);
 
@@ -3261,8 +3250,7 @@ void svm_range_list_fini(struct kfd_process *p)
 	struct svm_range *prange;
 	struct svm_range *next;
 
-	pr_debug("process pid %d svms 0x%p\n", p->lead_thread->pid,
-		 &p->svms);
+	pr_debug("pasid 0x%x svms 0x%p\n", p->pasid, &p->svms);
 
 	cancel_delayed_work_sync(&p->svms.restore_work);
 
@@ -3285,8 +3273,7 @@ void svm_range_list_fini(struct kfd_process *p)
 
 	mutex_destroy(&p->svms.lock);
 
-	pr_debug("process pid %d svms 0x%p done\n",
-		p->lead_thread->pid, &p->svms);
+	pr_debug("pasid 0x%x svms 0x%p done\n", p->pasid, &p->svms);
 }
 
 int svm_range_list_init(struct kfd_process *p)
@@ -3459,7 +3446,7 @@ svm_range_best_prefetch_location(struct svm_range *prange)
 		goto out;
 	}
 
-	if (bo_node->adev->apu_prefer_gtt) {
+	if (bo_node->adev->flags & AMD_IS_APU) {
 		best_loc = 0;
 		goto out;
 	}
@@ -3649,8 +3636,8 @@ svm_range_set_attr(struct kfd_process *p, struct mm_struct *mm,
 	bool flush_tlb;
 	int r, ret = 0;
 
-	pr_debug("process pid %d svms 0x%p [0x%llx 0x%llx] pages 0x%llx\n",
-		 p->lead_thread->pid, &p->svms, start, start + size - 1, size);
+	pr_debug("pasid 0x%x svms 0x%p [0x%llx 0x%llx] pages 0x%llx\n",
+		 p->pasid, &p->svms, start, start + size - 1, size);
 
 	r = svm_range_check_attr(p, nattr, attrs);
 	if (r)
@@ -3758,8 +3745,8 @@ out_unlock_range:
 out:
 	mutex_unlock(&process_info->lock);
 
-	pr_debug("process pid %d svms 0x%p [0x%llx 0x%llx] done, r=%d\n",
-		 p->lead_thread->pid, &p->svms, start, start + size - 1, r);
+	pr_debug("pasid 0x%x svms 0x%p [0x%llx 0x%llx] done, r=%d\n", p->pasid,
+		 &p->svms, start, start + size - 1, r);
 
 	return ret ? ret : r;
 }
@@ -4097,8 +4084,8 @@ exit:
 	return ret;
 }
 
-void svm_range_get_info(struct kfd_process *p, uint32_t *num_svm_ranges,
-			uint64_t *svm_priv_data_size)
+int svm_range_get_info(struct kfd_process *p, uint32_t *num_svm_ranges,
+		       uint64_t *svm_priv_data_size)
 {
 	uint64_t total_size, accessibility_size, common_attr_size;
 	int nattr_common = 4, nattr_accessibility = 1;
@@ -4110,6 +4097,8 @@ void svm_range_get_info(struct kfd_process *p, uint32_t *num_svm_ranges,
 	*svm_priv_data_size = 0;
 
 	svms = &p->svms;
+	if (!svms)
+		return -EINVAL;
 
 	mutex_lock(&svms->lock);
 	list_for_each_entry(prange, &svms->list, list) {
@@ -4151,6 +4140,7 @@ void svm_range_get_info(struct kfd_process *p, uint32_t *num_svm_ranges,
 
 	pr_debug("num_svm_ranges %u total_priv_size %llu\n", *num_svm_ranges,
 		 *svm_priv_data_size);
+	return 0;
 }
 
 int kfd_criu_checkpoint_svm(struct kfd_process *p,
@@ -4167,6 +4157,8 @@ int kfd_criu_checkpoint_svm(struct kfd_process *p,
 	struct mm_struct *mm;
 
 	svms = &p->svms;
+	if (!svms)
+		return -EINVAL;
 
 	mm = get_task_mm(p->lead_thread);
 	if (!mm) {

@@ -822,7 +822,7 @@ static void ip_vs_conn_rcu_free(struct rcu_head *head)
 /* Try to delete connection while not holding reference */
 static void ip_vs_conn_del(struct ip_vs_conn *cp)
 {
-	if (timer_delete(&cp->timer)) {
+	if (del_timer(&cp->timer)) {
 		/* Drop cp->control chain too */
 		if (cp->control)
 			cp->timeout = 0;
@@ -833,7 +833,7 @@ static void ip_vs_conn_del(struct ip_vs_conn *cp)
 /* Try to delete connection while holding reference */
 static void ip_vs_conn_del_put(struct ip_vs_conn *cp)
 {
-	if (timer_delete(&cp->timer)) {
+	if (del_timer(&cp->timer)) {
 		/* Drop cp->control chain too */
 		if (cp->control)
 			cp->timeout = 0;
@@ -846,7 +846,7 @@ static void ip_vs_conn_del_put(struct ip_vs_conn *cp)
 
 static void ip_vs_conn_expire(struct timer_list *t)
 {
-	struct ip_vs_conn *cp = timer_container_of(cp, t, timer);
+	struct ip_vs_conn *cp = from_timer(cp, t, timer);
 	struct netns_ipvs *ipvs = cp->ipvs;
 
 	/*
@@ -860,7 +860,7 @@ static void ip_vs_conn_expire(struct timer_list *t)
 		struct ip_vs_conn *ct = cp->control;
 
 		/* delete the timer if it is activated by other users */
-		timer_delete(&cp->timer);
+		del_timer(&cp->timer);
 
 		/* does anybody control me? */
 		if (ct) {
@@ -926,7 +926,7 @@ static void ip_vs_conn_expire(struct timer_list *t)
 void ip_vs_conn_expire_now(struct ip_vs_conn *cp)
 {
 	/* Using mod_timer_pending will ensure the timer is not
-	 * modified after the final timer_delete in ip_vs_conn_expire.
+	 * modified after the final del_timer in ip_vs_conn_expire.
 	 */
 	if (timer_pending(&cp->timer) &&
 	    time_after(cp->timer.expires, jiffies))
@@ -1046,35 +1046,28 @@ ip_vs_conn_new(const struct ip_vs_conn_param *p, int dest_af,
 #ifdef CONFIG_PROC_FS
 struct ip_vs_iter_state {
 	struct seq_net_private	p;
-	unsigned int		bucket;
-	unsigned int		skip_elems;
+	struct hlist_head	*l;
 };
 
-static void *ip_vs_conn_array(struct ip_vs_iter_state *iter)
+static void *ip_vs_conn_array(struct seq_file *seq, loff_t pos)
 {
 	int idx;
 	struct ip_vs_conn *cp;
+	struct ip_vs_iter_state *iter = seq->private;
 
-	for (idx = iter->bucket; idx < ip_vs_conn_tab_size; idx++) {
-		unsigned int skip = 0;
-
+	for (idx = 0; idx < ip_vs_conn_tab_size; idx++) {
 		hlist_for_each_entry_rcu(cp, &ip_vs_conn_tab[idx], c_list) {
 			/* __ip_vs_conn_get() is not needed by
 			 * ip_vs_conn_seq_show and ip_vs_conn_sync_seq_show
 			 */
-			if (skip >= iter->skip_elems) {
-				iter->bucket = idx;
+			if (pos-- == 0) {
+				iter->l = &ip_vs_conn_tab[idx];
 				return cp;
 			}
-
-			++skip;
 		}
-
-		iter->skip_elems = 0;
 		cond_resched_rcu();
 	}
 
-	iter->bucket = idx;
 	return NULL;
 }
 
@@ -1083,14 +1076,9 @@ static void *ip_vs_conn_seq_start(struct seq_file *seq, loff_t *pos)
 {
 	struct ip_vs_iter_state *iter = seq->private;
 
+	iter->l = NULL;
 	rcu_read_lock();
-	if (*pos == 0) {
-		iter->skip_elems = 0;
-		iter->bucket = 0;
-		return SEQ_START_TOKEN;
-	}
-
-	return ip_vs_conn_array(iter);
+	return *pos ? ip_vs_conn_array(seq, *pos - 1) :SEQ_START_TOKEN;
 }
 
 static void *ip_vs_conn_seq_next(struct seq_file *seq, void *v, loff_t *pos)
@@ -1098,22 +1086,28 @@ static void *ip_vs_conn_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 	struct ip_vs_conn *cp = v;
 	struct ip_vs_iter_state *iter = seq->private;
 	struct hlist_node *e;
+	struct hlist_head *l = iter->l;
+	int idx;
 
 	++*pos;
 	if (v == SEQ_START_TOKEN)
-		return ip_vs_conn_array(iter);
+		return ip_vs_conn_array(seq, 0);
 
 	/* more on same hash chain? */
 	e = rcu_dereference(hlist_next_rcu(&cp->c_list));
-	if (e) {
-		iter->skip_elems++;
+	if (e)
 		return hlist_entry(e, struct ip_vs_conn, c_list);
+
+	idx = l - ip_vs_conn_tab;
+	while (++idx < ip_vs_conn_tab_size) {
+		hlist_for_each_entry_rcu(cp, &ip_vs_conn_tab[idx], c_list) {
+			iter->l = &ip_vs_conn_tab[idx];
+			return cp;
+		}
+		cond_resched_rcu();
 	}
-
-	iter->skip_elems = 0;
-	iter->bucket++;
-
-	return ip_vs_conn_array(iter);
+	iter->l = NULL;
+	return NULL;
 }
 
 static void ip_vs_conn_seq_stop(struct seq_file *seq, void *v)

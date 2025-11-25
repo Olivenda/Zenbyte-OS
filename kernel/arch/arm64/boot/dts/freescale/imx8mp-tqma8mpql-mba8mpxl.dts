@@ -234,8 +234,7 @@
 
 	sound {
 		compatible = "fsl,imx-audio-tlv320aic32x4";
-		model = "tqm-tlv320aic32";
-		audio-asrc = <&easrc>;
+		model = "tq-tlv320aic32x";
 		audio-cpu = <&sai3>;
 		audio-codec = <&tlv320aic3x04>;
 	};

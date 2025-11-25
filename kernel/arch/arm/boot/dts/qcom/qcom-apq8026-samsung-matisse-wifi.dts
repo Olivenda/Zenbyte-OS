@@ -5,7 +5,6 @@
 
 /dts-v1/;
 
-#include "qcom-msm8226.dtsi"
 #include "qcom-msm8226-samsung-matisse-common.dtsi"
 
 / {

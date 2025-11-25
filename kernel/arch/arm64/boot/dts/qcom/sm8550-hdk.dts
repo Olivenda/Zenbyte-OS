@@ -945,10 +945,6 @@
 	status = "okay";
 };
 
-&iris {
-	status = "okay";
-};
-
 &gpi_dma1 {
 	status = "okay";
 };

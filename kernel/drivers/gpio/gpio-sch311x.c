@@ -178,16 +178,14 @@ static void __sch311x_gpio_set(struct sch311x_gpio_block *block,
 	outb(data, block->runtime_reg + block->data_reg);
 }
 
-static int sch311x_gpio_set(struct gpio_chip *chip, unsigned int offset,
-			    int value)
+static void sch311x_gpio_set(struct gpio_chip *chip, unsigned offset,
+			     int value)
 {
 	struct sch311x_gpio_block *block = gpiochip_get_data(chip);
 
 	spin_lock(&block->lock);
 	__sch311x_gpio_set(block, offset, value);
 	spin_unlock(&block->lock);
-
-	return 0;
 }
 
 static int sch311x_gpio_direction_in(struct gpio_chip *chip, unsigned offset)

@@ -26,7 +26,6 @@
 
 /* RT1320 SDCA Control - function number */
 #define FUNC_NUM_AMP 0x04
-#define FUNC_NUM_MIC 0x02
 
 /* RT1320 SDCA entity */
 #define RT1320_SDCA_ENT0 0x00
@@ -70,7 +69,6 @@
 
 enum {
 	RT1320_AIF1,
-	RT1320_AIF2,
 };
 
 /*
@@ -84,8 +82,6 @@ enum rt1320_version_id {
 };
 
 #define RT1320_VER_B_ID 0x07392238
-#define RT1320_VAB_MCU_PATCH "realtek/rt1320/rt1320-patch-code-vab.bin"
-#define RT1320_VC_MCU_PATCH "realtek/rt1320/rt1320-patch-code-vc.bin"
 
 struct rt1320_sdw_priv {
 	struct snd_soc_component *component;
@@ -96,8 +92,6 @@ struct rt1320_sdw_priv {
 	bool hw_init;
 	bool first_hw_init;
 	int version_id;
-	bool fu_dapm_mute;
-	bool fu_mixer_mute[4];
 };
 
 #endif /* __RT1320_SDW_H__ */

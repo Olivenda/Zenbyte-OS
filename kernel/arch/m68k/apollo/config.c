@@ -3,7 +3,9 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/tty.h>
 #include <linux/rtc.h>
+#include <linux/vt_kern.h>
 #include <linux/interrupt.h>
 
 #include <asm/setup.h>

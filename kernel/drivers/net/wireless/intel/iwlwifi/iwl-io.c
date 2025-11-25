@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2003-2014, 2018-2022, 2024-2025 Intel Corporation
+ * Copyright (C) 2003-2014, 2018-2022, 2024 Intel Corporation
  * Copyright (C) 2015-2016 Intel Deutschland GmbH
  */
 #include <linux/delay.h>
@@ -47,21 +47,21 @@ IWL_EXPORT_SYMBOL(iwl_read32);
 
 #define IWL_POLL_INTERVAL 10	/* microseconds */
 
-int iwl_poll_bits_mask(struct iwl_trans *trans, u32 addr,
-		       u32 bits, u32 mask, int timeout)
+int iwl_poll_bit(struct iwl_trans *trans, u32 addr,
+		 u32 bits, u32 mask, int timeout)
 {
 	int t = 0;
 
 	do {
 		if ((iwl_read32(trans, addr) & mask) == (bits & mask))
-			return 0;
+			return t;
 		udelay(IWL_POLL_INTERVAL);
 		t += IWL_POLL_INTERVAL;
 	} while (t < timeout);
 
 	return -ETIMEDOUT;
 }
-IWL_EXPORT_SYMBOL(iwl_poll_bits_mask);
+IWL_EXPORT_SYMBOL(iwl_poll_bit);
 
 u32 iwl_read_direct32(struct iwl_trans *trans, u32 reg)
 {
@@ -75,6 +75,7 @@ u32 iwl_read_direct32(struct iwl_trans *trans, u32 reg)
 	/* return as if we have a HW timeout/failure */
 	return 0x5a5a5a5a;
 }
+IWL_EXPORT_SYMBOL(iwl_read_direct32);
 
 void iwl_write_direct32(struct iwl_trans *trans, u32 reg, u32 value)
 {
@@ -92,6 +93,7 @@ void iwl_write_direct64(struct iwl_trans *trans, u64 reg, u64 value)
 		iwl_trans_release_nic_access(trans);
 	}
 }
+IWL_EXPORT_SYMBOL(iwl_write_direct64);
 
 int iwl_poll_direct_bit(struct iwl_trans *trans, u32 addr, u32 mask,
 			int timeout)
@@ -107,6 +109,7 @@ int iwl_poll_direct_bit(struct iwl_trans *trans, u32 addr, u32 mask,
 
 	return -ETIMEDOUT;
 }
+IWL_EXPORT_SYMBOL(iwl_poll_direct_bit);
 
 u32 iwl_read_prph_no_grab(struct iwl_trans *trans, u32 ofs)
 {
@@ -114,12 +117,14 @@ u32 iwl_read_prph_no_grab(struct iwl_trans *trans, u32 ofs)
 	trace_iwlwifi_dev_ioread_prph32(trans->dev, ofs, val);
 	return val;
 }
+IWL_EXPORT_SYMBOL(iwl_read_prph_no_grab);
 
 void iwl_write_prph_no_grab(struct iwl_trans *trans, u32 ofs, u32 val)
 {
 	trace_iwlwifi_dev_iowrite_prph32(trans->dev, ofs, val);
 	iwl_trans_write_prph(trans, ofs, val);
 }
+IWL_EXPORT_SYMBOL(iwl_write_prph_no_grab);
 
 void iwl_write_prph64_no_grab(struct iwl_trans *trans, u64 ofs, u64 val)
 {
@@ -127,6 +132,7 @@ void iwl_write_prph64_no_grab(struct iwl_trans *trans, u64 ofs, u64 val)
 	iwl_write_prph_no_grab(trans, ofs, val & 0xffffffff);
 	iwl_write_prph_no_grab(trans, ofs + 4, val >> 32);
 }
+IWL_EXPORT_SYMBOL(iwl_write_prph64_no_grab);
 
 u32 iwl_read_prph(struct iwl_trans *trans, u32 ofs)
 {
@@ -205,13 +211,13 @@ IWL_EXPORT_SYMBOL(iwl_clear_bits_prph);
 
 void iwl_force_nmi(struct iwl_trans *trans)
 {
-	if (trans->mac_cfg->device_family < IWL_DEVICE_FAMILY_9000)
+	if (trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_9000)
 		iwl_write_prph_delay(trans, DEVICE_SET_NMI_REG,
 				     DEVICE_SET_NMI_VAL_DRV, 1);
-	else if (trans->mac_cfg->device_family < IWL_DEVICE_FAMILY_AX210)
+	else if (trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_AX210)
 		iwl_write_umac_prph(trans, UREG_NIC_SET_NMI_DRIVER,
 				UREG_NIC_SET_NMI_DRIVER_NMI_FROM_DRIVER);
-	else if (trans->mac_cfg->device_family < IWL_DEVICE_FAMILY_BZ)
+	else if (trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_BZ)
 		iwl_write_umac_prph(trans, UREG_DOORBELL_TO_ISR6,
 				    UREG_DOORBELL_TO_ISR6_NMI_BIT);
 	else
@@ -254,7 +260,7 @@ struct reg {
 static int iwl_dump_rfh(struct iwl_trans *trans, char **buf)
 {
 	int i, q;
-	int num_q = trans->info.num_rxqs;
+	int num_q = trans->num_rx_queues;
 	static const u32 rfh_tbl[] = {
 		RFH_RXF_DMA_CFG,
 		RFH_GEN_CFG,
@@ -362,7 +368,7 @@ int iwl_dump_fh(struct iwl_trans *trans, char **buf)
 		FH_TSSR_TX_ERROR_REG
 	};
 
-	if (trans->mac_cfg->mq_rx_supported)
+	if (trans->trans_cfg->mq_rx_supported)
 		return iwl_dump_rfh(trans, buf);
 
 #ifdef CONFIG_IWLWIFI_DEBUGFS
@@ -417,7 +423,7 @@ static void iwl_dump_host_monitor_block(struct iwl_trans *trans,
 
 static void iwl_dump_host_monitor(struct iwl_trans *trans)
 {
-	switch (trans->mac_cfg->device_family) {
+	switch (trans->trans_cfg->device_family) {
 	case IWL_DEVICE_FAMILY_22000:
 	case IWL_DEVICE_FAMILY_AX210:
 		IWL_ERR(trans, "CSR_RESET = 0x%x\n",
@@ -439,11 +445,11 @@ static void iwl_dump_host_monitor(struct iwl_trans *trans)
 
 int iwl_finish_nic_init(struct iwl_trans *trans)
 {
-	const struct iwl_mac_cfg *mac_cfg = trans->mac_cfg;
+	const struct iwl_cfg_trans_params *cfg_trans = trans->trans_cfg;
 	u32 poll_ready;
 	int err;
 
-	if (mac_cfg->bisr_workaround) {
+	if (cfg_trans->bisr_workaround) {
 		/* ensure the TOP FSM isn't still in previous reset */
 		mdelay(2);
 	}
@@ -452,7 +458,7 @@ int iwl_finish_nic_init(struct iwl_trans *trans)
 	 * Set "initialization complete" bit to move adapter from
 	 * D0U* --> D0A* (powered-up active) state.
 	 */
-	if (mac_cfg->device_family >= IWL_DEVICE_FAMILY_BZ) {
+	if (cfg_trans->device_family >= IWL_DEVICE_FAMILY_BZ) {
 		iwl_set_bit(trans, CSR_GP_CNTRL,
 			    CSR_GP_CNTRL_REG_FLAG_BZ_MAC_ACCESS_REQ |
 			    CSR_GP_CNTRL_REG_FLAG_MAC_INIT);
@@ -463,7 +469,7 @@ int iwl_finish_nic_init(struct iwl_trans *trans)
 		poll_ready = CSR_GP_CNTRL_REG_FLAG_MAC_CLOCK_READY;
 	}
 
-	if (mac_cfg->device_family == IWL_DEVICE_FAMILY_8000)
+	if (cfg_trans->device_family == IWL_DEVICE_FAMILY_8000)
 		udelay(2);
 
 	/*
@@ -471,14 +477,14 @@ int iwl_finish_nic_init(struct iwl_trans *trans)
 	 * device-internal resources is supported, e.g. iwl_write_prph()
 	 * and accesses to uCode SRAM.
 	 */
-	err = iwl_poll_bits(trans, CSR_GP_CNTRL, poll_ready, 25000);
+	err = iwl_poll_bit(trans, CSR_GP_CNTRL, poll_ready, poll_ready, 25000);
 	if (err < 0) {
 		IWL_DEBUG_INFO(trans, "Failed to wake NIC\n");
 
 		iwl_dump_host_monitor(trans);
 	}
 
-	if (mac_cfg->bisr_workaround) {
+	if (cfg_trans->bisr_workaround) {
 		/* ensure BISR shift has finished */
 		udelay(200);
 	}
@@ -520,5 +526,5 @@ void iwl_trans_sync_nmi_with_addr(struct iwl_trans *trans, u32 inta_addr,
 	if (interrupts_enabled)
 		iwl_trans_interrupts(trans, true);
 
-	iwl_trans_fw_error(trans, IWL_ERR_TYPE_NMI_FORCED);
+	iwl_trans_fw_error(trans, false);
 }

@@ -770,7 +770,6 @@ static int netlink_release(struct socket *sock)
 			nlk->cb.done(&nlk->cb);
 		module_put(nlk->cb.module);
 		kfree_skb(nlk->cb.skb);
-		WRITE_ONCE(nlk->cb_running, false);
 	}
 
 	module_put(nlk->module);
@@ -1155,16 +1154,11 @@ static struct sock *netlink_getsockbyportid(struct sock *ssk, u32 portid)
 	return sock;
 }
 
-struct sock *netlink_getsockbyfd(int fd)
+struct sock *netlink_getsockbyfilp(struct file *filp)
 {
-	CLASS(fd, f)(fd);
-	struct inode *inode;
+	struct inode *inode = file_inode(filp);
 	struct sock *sock;
 
-	if (fd_empty(f))
-		return ERR_PTR(-EBADF);
-
-	inode = file_inode(fd_file(f));
 	if (!S_ISSOCK(inode->i_mode))
 		return ERR_PTR(-ENOTSOCK);
 
@@ -1284,7 +1278,6 @@ static struct sk_buff *netlink_trim(struct sk_buff *skb, gfp_t allocation)
 {
 	int delta;
 
-	skb_assert_len(skb);
 	WARN_ON(skb->sk != NULL);
 	delta = skb->end - skb->tail;
 	if (is_vmalloc_addr(skb->head) || delta * 2 < skb->truesize)
@@ -2273,7 +2266,7 @@ static int netlink_dump(struct sock *sk, bool lock_taken)
 	}
 
 	/* NLMSG_GOODSIZE is small to avoid high order allocations being
-	 * required, but it makes sense to _attempt_ a 32KiB allocation
+	 * required, but it makes sense to _attempt_ a 16K bytes allocation
 	 * to reduce number of system calls on dump operations, if user
 	 * ever provided a big enough buffer.
 	 */
@@ -2302,7 +2295,7 @@ static int netlink_dump(struct sock *sk, bool lock_taken)
 	}
 
 	/* Trim skb to allocated size. User is expected to provide buffer as
-	 * large as max(min_dump_alloc, 32KiB (max_recvmsg_len capped at
+	 * large as max(min_dump_alloc, 16KiB (mac_recvmsg_len capped at
 	 * netlink_recvmsg())). dump will pack as many smaller messages as
 	 * could fit within the allocated skb. skb is typically allocated
 	 * with larger space than required (could be as much as near 2x the
@@ -2473,7 +2466,7 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err,
 	unsigned int flags = 0;
 	size_t tlvlen;
 
-	/* Error messages get the original request appended, unless the user
+	/* Error messages get the original request appened, unless the user
 	 * requests to cap the error message, and get extra error data if
 	 * requested.
 	 */
@@ -2887,7 +2880,8 @@ static const struct rhashtable_params netlink_rhashtable_params = {
 };
 
 #if defined(CONFIG_BPF_SYSCALL) && defined(CONFIG_PROC_FS)
-BTF_ID_LIST_SINGLE(btf_netlink_sock_id, struct, netlink_sock)
+BTF_ID_LIST(btf_netlink_sock_id)
+BTF_ID(struct, netlink_sock)
 
 static const struct bpf_iter_seq_info netlink_seq_info = {
 	.seq_ops		= &netlink_seq_ops,
@@ -2935,8 +2929,12 @@ static int __init netlink_proto_init(void)
 
 	for (i = 0; i < MAX_LINKS; i++) {
 		if (rhashtable_init(&nl_table[i].hash,
-				    &netlink_rhashtable_params) < 0)
+				    &netlink_rhashtable_params) < 0) {
+			while (--i > 0)
+				rhashtable_destroy(&nl_table[i].hash);
+			kfree(nl_table);
 			goto panic;
+		}
 	}
 
 	netlink_add_usersock_entry();

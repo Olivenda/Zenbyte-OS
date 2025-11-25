@@ -54,13 +54,20 @@ static int __ref __early_map_kernel_hugepage(unsigned long va, phys_addr_t pa,
 {
 	pmd_t *pmdp = pmd_off_k(va);
 	pte_t *ptep;
-	unsigned int shift = mmu_psize_to_shift(psize);
+
+	if (WARN_ON(psize != MMU_PAGE_512K && psize != MMU_PAGE_8M))
+		return -EINVAL;
 
 	if (new) {
 		if (WARN_ON(slab_is_available()))
 			return -EINVAL;
 
-		if (psize == MMU_PAGE_8M) {
+		if (psize == MMU_PAGE_512K) {
+			ptep = early_pte_alloc_kernel(pmdp, va);
+			/* The PTE should never be already present */
+			if (WARN_ON(pte_present(*ptep) && pgprot_val(prot)))
+				return -EINVAL;
+		} else {
 			if (WARN_ON(!pmd_none(*pmdp) || !pmd_none(*(pmdp + 1))))
 				return -EINVAL;
 
@@ -71,25 +78,20 @@ static int __ref __early_map_kernel_hugepage(unsigned long va, phys_addr_t pa,
 			pmd_populate_kernel(&init_mm, pmdp + 1, ptep);
 
 			ptep = (pte_t *)pmdp;
-		} else {
-			ptep = early_pte_alloc_kernel(pmdp, va);
-			/* The PTE should never be already present */
-			if (WARN_ON(pte_present(*ptep) && pgprot_val(prot)))
-				return -EINVAL;
 		}
 	} else {
-		if (psize == MMU_PAGE_8M)
-			ptep = (pte_t *)pmdp;
-		else
+		if (psize == MMU_PAGE_512K)
 			ptep = pte_offset_kernel(pmdp, va);
+		else
+			ptep = (pte_t *)pmdp;
 	}
 
 	if (WARN_ON(!ptep))
 		return -ENOMEM;
 
 	set_huge_pte_at(&init_mm, va, ptep,
-			arch_make_huge_pte(pfn_pte(pa >> PAGE_SHIFT, prot), shift, 0),
-			1UL << shift);
+			pte_mkhuge(pfn_pte(pa >> PAGE_SHIFT, prot)),
+			1UL << mmu_psize_to_shift(psize));
 
 	return 0;
 }
@@ -121,18 +123,14 @@ static int mmu_mapin_ram_chunk(unsigned long offset, unsigned long top,
 	unsigned long p = offset;
 	int err = 0;
 
-	WARN_ON(!IS_ALIGNED(offset, SZ_16K) || !IS_ALIGNED(top, SZ_16K));
+	WARN_ON(!IS_ALIGNED(offset, SZ_512K) || !IS_ALIGNED(top, SZ_512K));
 
-	for (; p < ALIGN(p, SZ_512K) && p < top && !err; p += SZ_16K, v += SZ_16K)
-		err = __early_map_kernel_hugepage(v, p, prot, MMU_PAGE_16K, new);
 	for (; p < ALIGN(p, SZ_8M) && p < top && !err; p += SZ_512K, v += SZ_512K)
 		err = __early_map_kernel_hugepage(v, p, prot, MMU_PAGE_512K, new);
 	for (; p < ALIGN_DOWN(top, SZ_8M) && p < top && !err; p += SZ_8M, v += SZ_8M)
 		err = __early_map_kernel_hugepage(v, p, prot, MMU_PAGE_8M, new);
 	for (; p < ALIGN_DOWN(top, SZ_512K) && p < top && !err; p += SZ_512K, v += SZ_512K)
 		err = __early_map_kernel_hugepage(v, p, prot, MMU_PAGE_512K, new);
-	for (; p < ALIGN_DOWN(top, SZ_16K) && p < top && !err; p += SZ_16K, v += SZ_16K)
-		err = __early_map_kernel_hugepage(v, p, prot, MMU_PAGE_16K, new);
 
 	if (!new)
 		flush_tlb_kernel_range(PAGE_OFFSET + v, PAGE_OFFSET + top);

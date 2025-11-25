@@ -760,7 +760,7 @@ static void emac_shutdown(struct platform_device *pdev)
 
 static struct platform_driver emac_platform_driver = {
 	.probe	= emac_probe,
-	.remove = emac_remove,
+	.remove_new = emac_remove,
 	.driver = {
 		.name		= "qcom-emac",
 		.of_match_table = emac_dt_match,

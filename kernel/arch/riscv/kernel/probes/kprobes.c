@@ -12,7 +12,7 @@
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
 #include <asm/bug.h>
-#include <asm/text-patching.h>
+#include <asm/patch.h>
 
 #include "decode-insn.h"
 

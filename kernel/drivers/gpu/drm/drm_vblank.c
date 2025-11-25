@@ -487,8 +487,7 @@ out:
 
 static void vblank_disable_fn(struct timer_list *t)
 {
-	struct drm_vblank_crtc *vblank = timer_container_of(vblank, t,
-							    disable_timer);
+	struct drm_vblank_crtc *vblank = from_timer(vblank, t, disable_timer);
 	struct drm_device *dev = vblank->dev;
 	unsigned int pipe = vblank->pipe;
 	unsigned long irqflags;
@@ -509,7 +508,7 @@ static void drm_vblank_init_release(struct drm_device *dev, void *ptr)
 		    drm_core_check_feature(dev, DRIVER_MODESET));
 
 	drm_vblank_destroy_worker(vblank);
-	timer_delete_sync(&vblank->disable_timer);
+	del_timer_sync(&vblank->disable_timer);
 }
 
 /**

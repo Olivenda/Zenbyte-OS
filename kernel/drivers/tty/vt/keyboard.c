@@ -275,7 +275,7 @@ static DEFINE_TIMER(kd_mksound_timer, kd_nosound);
 
 void kd_mksound(unsigned int hz, unsigned int ticks)
 {
-	timer_delete_sync(&kd_mksound_timer);
+	del_timer_sync(&kd_mksound_timer);
 
 	input_handler_for_each_handle(&kbd_handler, &hz, kd_sound_helper);
 
@@ -376,17 +376,6 @@ static void to_utf8(struct vc_data *vc, uint c)
 	}
 }
 
-static void put_queue_utf8(struct vc_data *vc, u32 value)
-{
-	if (kbd->kbdmode == VC_UNICODE)
-		to_utf8(vc, value);
-	else {
-		int c = conv_uni_to_8bit(value);
-		if (c != -1)
-			put_queue(vc, c);
-	}
-}
-
 /* FIXME: review locking for vt.c callers */
 static void set_leds(void)
 {
@@ -465,7 +454,13 @@ static unsigned int handle_diacr(struct vc_data *vc, unsigned int ch)
 	if (ch == ' ' || ch == (BRL_UC_ROW|0) || ch == d)
 		return d;
 
-	put_queue_utf8(vc, d);
+	if (kbd->kbdmode == VC_UNICODE)
+		to_utf8(vc, d);
+	else {
+		int c = conv_uni_to_8bit(d);
+		if (c != -1)
+			put_queue(vc, c);
+	}
 
 	return ch;
 }
@@ -476,7 +471,13 @@ static unsigned int handle_diacr(struct vc_data *vc, unsigned int ch)
 static void fn_enter(struct vc_data *vc)
 {
 	if (diacr) {
-		put_queue_utf8(vc, diacr);
+		if (kbd->kbdmode == VC_UNICODE)
+			to_utf8(vc, diacr);
+		else {
+			int c = conv_uni_to_8bit(diacr);
+			if (c != -1)
+				put_queue(vc, c);
+		}
 		diacr = 0;
 	}
 
@@ -684,7 +685,13 @@ static void k_unicode(struct vc_data *vc, unsigned int value, char up_flag)
 		diacr = value;
 		return;
 	}
-	put_queue_utf8(vc, value);
+	if (kbd->kbdmode == VC_UNICODE)
+		to_utf8(vc, value);
+	else {
+		int c = conv_uni_to_8bit(value);
+		if (c != -1)
+			put_queue(vc, c);
+	}
 }
 
 /*
@@ -1512,7 +1519,7 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 	if ((raw_mode || kbd->kbdmode == VC_OFF) && type != KT_SPEC && type != KT_SHIFT)
 		return;
 
-	(*k_handler[type])(vc, KVAL(keysym), !down);
+	(*k_handler[type])(vc, keysym & 0xff, !down);
 
 	param.ledstate = kbd->ledflagstate;
 	atomic_notifier_call_chain(&keyboard_notifier_list, KBD_POST_KEYSYM, &param);

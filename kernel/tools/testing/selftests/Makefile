@@ -18,7 +18,6 @@ TARGETS += devices/error_logs
 TARGETS += devices/probe
 TARGETS += dmabuf-heaps
 TARGETS += drivers/dma-buf
-TARGETS += drivers/ntsync
 TARGETS += drivers/s390x/uvdevice
 TARGETS += drivers/net
 TARGETS += drivers/net/bonding
@@ -35,7 +34,6 @@ TARGETS += filesystems/epoll
 TARGETS += filesystems/fat
 TARGETS += filesystems/overlayfs
 TARGETS += filesystems/statmount
-TARGETS += filesystems/mount-notify
 TARGETS += firmware
 TARGETS += fpu
 TARGETS += ftrace
@@ -48,7 +46,6 @@ TARGETS += ipc
 TARGETS += ir
 TARGETS += kcmp
 TARGETS += kexec
-TARGETS += kselftest_harness
 TARGETS += kvm
 TARGETS += landlock
 TARGETS += lib
@@ -63,24 +60,18 @@ TARGETS += mount
 TARGETS += mount_setattr
 TARGETS += move_mount_set_group
 TARGETS += mqueue
-TARGETS += mseal_system_mappings
 TARGETS += nci
 TARGETS += net
 TARGETS += net/af_unix
-TARGETS += net/can
 TARGETS += net/forwarding
 TARGETS += net/hsr
 TARGETS += net/mptcp
 TARGETS += net/netfilter
 TARGETS += net/openvswitch
-TARGETS += net/ovpn
 TARGETS += net/packetdrill
 TARGETS += net/rds
 TARGETS += net/tcp_ao
-TARGETS += nolibc
 TARGETS += nsfs
-TARGETS += pci_endpoint
-TARGETS += pcie_bwctrl
 TARGETS += perf_events
 TARGETS += pidfd
 TARGETS += pid_namespace
@@ -100,7 +91,7 @@ TARGETS += rust
 TARGETS += sched_ext
 TARGETS += seccomp
 TARGETS += sgx
-TARGETS += signal
+TARGETS += sigaltstack
 TARGETS += size
 TARGETS += sparc64
 TARGETS += splice
@@ -119,7 +110,6 @@ endif
 TARGETS += tmpfs
 TARGETS += tpm2
 TARGETS += tty
-TARGETS += ublk
 TARGETS += uevent
 TARGETS += user_events
 TARGETS += vDSO
@@ -294,14 +284,6 @@ ifdef INSTALL_PATH
 		$(MAKE) -s --no-print-directory OUTPUT=$$BUILD_TARGET COLLECTION=$$TARGET \
 			-C $$TARGET emit_tests >> $(TEST_LIST); \
 	done;
-	@VERSION=$$(git describe HEAD 2>/dev/null); \
-	if [ -n "$$VERSION" ]; then \
-		echo "$$VERSION" > $(INSTALL_PATH)/VERSION; \
-		printf "Version saved to $(INSTALL_PATH)/VERSION\n"; \
-	else \
-		printf "Unable to get version from git describe\n"; \
-	fi
-	@echo "**Kselftest Installation is complete: $(INSTALL_PATH)**"
 else
 	$(error Error: set INSTALL_PATH to use install)
 endif

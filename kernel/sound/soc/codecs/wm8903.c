@@ -1229,15 +1229,15 @@ static int wm8903_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		  WM8903_AIF_LRCLK_INV | WM8903_AIF_BCLK_INV);
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBC_CFC:
+	case SND_SOC_DAIFMT_CBS_CFS:
 		break;
-	case SND_SOC_DAIFMT_CBC_CFP:
+	case SND_SOC_DAIFMT_CBS_CFM:
 		aif1 |= WM8903_LRCLK_DIR;
 		break;
-	case SND_SOC_DAIFMT_CBP_CFP:
+	case SND_SOC_DAIFMT_CBM_CFM:
 		aif1 |= WM8903_LRCLK_DIR | WM8903_BCLK_DIR;
 		break;
-	case SND_SOC_DAIFMT_CBP_CFC:
+	case SND_SOC_DAIFMT_CBM_CFS:
 		aif1 |= WM8903_BCLK_DIR;
 		break;
 	default:
@@ -1825,15 +1825,13 @@ static int wm8903_gpio_direction_out(struct gpio_chip *chip,
 	return 0;
 }
 
-static int wm8903_gpio_set(struct gpio_chip *chip, unsigned int offset,
-			   int value)
+static void wm8903_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
 {
 	struct wm8903_priv *wm8903 = gpiochip_get_data(chip);
 
-	return regmap_update_bits(wm8903->regmap,
-				  WM8903_GPIO_CONTROL_1 + offset,
-				  WM8903_GP1_LVL_MASK,
-				  !!value << WM8903_GP1_LVL_SHIFT);
+	regmap_update_bits(wm8903->regmap, WM8903_GPIO_CONTROL_1 + offset,
+			   WM8903_GP1_LVL_MASK,
+			   !!value << WM8903_GP1_LVL_SHIFT);
 }
 
 static const struct gpio_chip wm8903_template_chip = {

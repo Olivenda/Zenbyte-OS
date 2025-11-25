@@ -27,7 +27,6 @@
 #include <linux/clk.h>
 #include <linux/console.h>
 #include <linux/io.h>
-#include <linux/string_choices.h>
 
 #include <linux/uaccess.h>
 #include <asm/div64.h>
@@ -1720,8 +1719,8 @@ static int sm501fb_init_fb(struct fb_info *fb, enum sm501_controller head,
 		BUG();
 	}
 
-	dev_info(info->dev, "fb %s %s at start\n",
-		 fbname, str_enabled_disabled(enable));
+	dev_info(info->dev, "fb %s %sabled at start\n",
+		 fbname, enable ? "en" : "dis");
 
 	/* check to see if our routing allows this */
 

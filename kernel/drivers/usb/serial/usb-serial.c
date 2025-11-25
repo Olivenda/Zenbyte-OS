@@ -706,12 +706,14 @@ static const struct usb_device_id *match_dynamic_id(struct usb_interface *intf,
 {
 	struct usb_dynid *dynid;
 
-	guard(mutex)(&usb_dynids_lock);
+	spin_lock(&drv->dynids.lock);
 	list_for_each_entry(dynid, &drv->dynids.list, node) {
 		if (usb_match_one_id(intf, &dynid->id)) {
+			spin_unlock(&drv->dynids.lock);
 			return &dynid->id;
 		}
 	}
+	spin_unlock(&drv->dynids.lock);
 	return NULL;
 }
 
@@ -1176,6 +1178,7 @@ static void usb_serial_disconnect(struct usb_interface *interface)
 	struct usb_serial *serial = usb_get_intfdata(interface);
 	struct device *dev = &interface->dev;
 	struct usb_serial_port *port;
+	struct tty_struct *tty;
 
 	/* sibling interface is cleaning up */
 	if (!serial)
@@ -1190,7 +1193,11 @@ static void usb_serial_disconnect(struct usb_interface *interface)
 
 	for (i = 0; i < serial->num_ports; ++i) {
 		port = serial->port[i];
-		tty_port_tty_vhangup(&port->port);
+		tty = tty_port_tty_get(&port->port);
+		if (tty) {
+			tty_vhangup(tty);
+			tty_kref_put(tty);
+		}
 		usb_serial_port_poison_urbs(port);
 		wake_up_interruptible(&port->port.delta_msr_wait);
 		cancel_work_sync(&port->work);

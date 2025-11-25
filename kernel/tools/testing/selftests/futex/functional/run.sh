@@ -82,9 +82,3 @@ echo
 
 echo
 ./futex_waitv $COLOR
-
-echo
-./futex_priv_hash $COLOR
-
-echo
-./futex_numa_mpol $COLOR

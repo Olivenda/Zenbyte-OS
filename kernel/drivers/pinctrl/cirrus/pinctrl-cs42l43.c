@@ -448,7 +448,7 @@ static const struct pinconf_ops cs42l43_pin_conf_ops = {
 	.pin_config_group_set	= cs42l43_pin_config_group_set,
 };
 
-static const struct pinctrl_desc cs42l43_pin_desc = {
+static struct pinctrl_desc cs42l43_pin_desc = {
 	.name		= "cs42l43-pinctrl",
 	.owner		= THIS_MODULE,
 
@@ -483,8 +483,7 @@ static int cs42l43_gpio_get(struct gpio_chip *chip, unsigned int offset)
 	return ret;
 }
 
-static int cs42l43_gpio_set(struct gpio_chip *chip, unsigned int offset,
-			    int value)
+static void cs42l43_gpio_set(struct gpio_chip *chip, unsigned int offset, int value)
 {
 	struct cs42l43_pin *priv = gpiochip_get_data(chip);
 	unsigned int shift = offset + CS42L43_GPIO1_LVL_SHIFT;
@@ -494,27 +493,23 @@ static int cs42l43_gpio_set(struct gpio_chip *chip, unsigned int offset,
 		offset + 1, str_high_low(value));
 
 	ret = pm_runtime_resume_and_get(priv->dev);
-	if (ret)
-		return ret;
+	if (ret) {
+		dev_err(priv->dev, "Failed to resume for set: %d\n", ret);
+		return;
+	}
 
 	ret = regmap_update_bits(priv->regmap, CS42L43_GPIO_CTRL1,
 				 BIT(shift), value << shift);
 	if (ret)
-		return ret;
+		dev_err(priv->dev, "Failed to set gpio%d: %d\n", offset + 1, ret);
 
 	pm_runtime_put(priv->dev);
-
-	return 0;
 }
 
 static int cs42l43_gpio_direction_out(struct gpio_chip *chip,
 				      unsigned int offset, int value)
 {
-	int ret;
-
-	ret = cs42l43_gpio_set(chip, offset, value);
-	if (ret)
-		return ret;
+	cs42l43_gpio_set(chip, offset, value);
 
 	return pinctrl_gpio_direction_output(chip, offset);
 }

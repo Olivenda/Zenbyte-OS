@@ -215,7 +215,8 @@ void osq_unlock(struct optimistic_spin_queue *lock)
 	/*
 	 * Fast path for the uncontended case.
 	 */
-	if (atomic_try_cmpxchg_release(&lock->tail, &curr, OSQ_UNLOCKED_VAL))
+	if (likely(atomic_cmpxchg_release(&lock->tail, curr,
+					  OSQ_UNLOCKED_VAL) == curr))
 		return;
 
 	/*

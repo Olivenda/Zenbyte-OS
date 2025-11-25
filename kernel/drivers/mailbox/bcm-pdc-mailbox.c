@@ -1618,7 +1618,7 @@ static void pdc_remove(struct platform_device *pdev)
 
 static struct platform_driver pdc_mbox_driver = {
 	.probe = pdc_probe,
-	.remove = pdc_remove,
+	.remove_new = pdc_remove,
 	.driver = {
 		   .name = "brcm-iproc-pdc-mbox",
 		   .of_match_table = pdc_mbox_of_match,

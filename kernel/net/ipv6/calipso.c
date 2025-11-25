@@ -32,7 +32,7 @@
 #include <linux/unaligned.h>
 #include <linux/crc-ccitt.h>
 
-/* Maximum size of the calipso option including
+/* Maximium size of the calipso option including
  * the two-byte TLV header.
  */
 #define CALIPSO_OPT_LEN_MAX (2 + 252)
@@ -42,13 +42,13 @@
  */
 #define CALIPSO_HDR_LEN (2 + 8)
 
-/* Maximum size of the calipso option including
+/* Maximium size of the calipso option including
  * the two-byte TLV header and upto 3 bytes of
  * leading pad and 7 bytes of trailing pad.
  */
 #define CALIPSO_OPT_LEN_MAX_WITH_PAD (3 + CALIPSO_OPT_LEN_MAX + 7)
 
- /* Maximum size of u32 aligned buffer required to hold calipso
+ /* Maximium size of u32 aligned buffer required to hold calipso
   * option.  Max of 3 initial pad bytes starting from buffer + 3.
   * i.e. the worst case is when the previous tlv finishes on 4n + 3.
   */

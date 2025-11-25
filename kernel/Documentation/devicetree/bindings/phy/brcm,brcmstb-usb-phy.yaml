@@ -18,7 +18,6 @@ properties:
       - brcm,bcm4908-usb-phy
       - brcm,bcm7211-usb-phy
       - brcm,bcm7216-usb-phy
-      - brcm,bcm74110-usb-phy
       - brcm,brcmstb-usb-phy
 
   reg:
@@ -140,9 +139,7 @@ allOf:
       properties:
         compatible:
           contains:
-            enum:
-              - brcm,bcm7216-usb-phy
-              - brcm,bcm74110-usb-phy
+            const: brcm,bcm7216-usb-phy
     then:
       properties:
         reg:

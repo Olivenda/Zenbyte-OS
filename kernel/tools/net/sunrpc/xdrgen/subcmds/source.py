@@ -83,7 +83,8 @@ def generate_client_source(filename: str, root: Specification, language: str) ->
     gen = XdrSourceTopGenerator(language, "client")
     gen.emit_source(filename, root)
 
-    print("")
+    # cel: todo: client needs XDR size macros
+
     for definition in root.definitions:
         emit_source_encoder(definition.value, language, "client")
     for definition in root.definitions:

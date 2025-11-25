@@ -836,7 +836,7 @@ static int __snd_card_als4000_probe(struct pci_dev *pci,
 		return -ENXIO;
 	}
 
-	err = pcim_request_all_regions(pci, "ALS4000");
+	err = pci_request_regions(pci, "ALS4000");
 	if (err < 0)
 		return err;
 	iobase = pci_resource_start(pci, 0);
@@ -877,8 +877,8 @@ static int __snd_card_als4000_probe(struct pci_dev *pci,
 
 	snd_als4000_configure(chip);
 
-	strscpy(card->driver, "ALS4000");
-	strscpy(card->shortname, "Avance Logic ALS4000");
+	strcpy(card->driver, "ALS4000");
+	strcpy(card->shortname, "Avance Logic ALS4000");
 	sprintf(card->longname, "%s at 0x%lx, irq %i",
 		card->shortname, chip->alt_port, chip->irq);
 

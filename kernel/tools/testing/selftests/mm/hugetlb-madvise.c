@@ -47,13 +47,14 @@ void write_fault_pages(void *addr, unsigned long nr_pages)
 
 void read_fault_pages(void *addr, unsigned long nr_pages)
 {
+	volatile unsigned long dummy = 0;
 	unsigned long i;
 
 	for (i = 0; i < nr_pages; i++) {
-		unsigned long *addr2 =
-			((unsigned long *)(addr + (i * huge_page_size)));
+		dummy += *((unsigned long *)(addr + (i * huge_page_size)));
+
 		/* Prevent the compiler from optimizing out the entire loop: */
-		FORCE_READ(*addr2);
+		asm volatile("" : "+r" (dummy));
 	}
 }
 

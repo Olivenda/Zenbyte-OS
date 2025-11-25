@@ -45,18 +45,13 @@ static const u16 rgb565[16] = {
 	0xffff, 0xffe0, 0x07ff, 0x07e0, 0xf81f, 0xf800, 0x001f, 0x0000
 };
 
-unsigned int vivid_fb_green_bits(struct vivid_dev *dev)
-{
-	return dev->fb_defined.green.length;
-}
-
-void vivid_fb_clear(struct vivid_dev *dev)
+void vivid_clear_fb(struct vivid_dev *dev)
 {
 	void *p = dev->video_vbase;
 	const u16 *rgb = rgb555;
 	unsigned x, y;
 
-	if (vivid_fb_green_bits(dev) == 6)
+	if (dev->fb_defined.green.length == 6)
 		rgb = rgb565;
 
 	for (y = 0; y < dev->display_height; y++) {
@@ -338,7 +333,7 @@ static int vivid_fb_init_vidmode(struct vivid_dev *dev)
 }
 
 /* Release any memory we've grabbed */
-static void vivid_fb_release_buffers(struct vivid_dev *dev)
+void vivid_fb_release_buffers(struct vivid_dev *dev)
 {
 	if (dev->video_vbase == NULL)
 		return;
@@ -375,7 +370,7 @@ int vivid_fb_init(struct vivid_dev *dev)
 		return ret;
 	}
 
-	vivid_fb_clear(dev);
+	vivid_clear_fb(dev);
 
 	/* Register the framebuffer */
 	if (register_framebuffer(&dev->fb_info) < 0) {
@@ -385,17 +380,6 @@ int vivid_fb_init(struct vivid_dev *dev)
 
 	/* Set the card to the requested mode */
 	vivid_fb_set_par(&dev->fb_info);
-
-	v4l2_info(&dev->v4l2_dev, "Framebuffer device registered as fb%d\n",
-		  dev->fb_info.node);
-
 	return 0;
 
-}
-
-void vivid_fb_deinit(struct vivid_dev *dev)
-{
-	v4l2_info(&dev->v4l2_dev, "unregistering fb%d\n", dev->fb_info.node);
-	unregister_framebuffer(&dev->fb_info);
-	vivid_fb_release_buffers(dev);
 }

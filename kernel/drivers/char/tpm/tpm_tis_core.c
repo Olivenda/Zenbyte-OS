@@ -580,8 +580,7 @@ out_err:
 	return rc;
 }
 
-static int tpm_tis_send(struct tpm_chip *chip, u8 *buf, size_t bufsiz,
-			size_t len)
+static int tpm_tis_send(struct tpm_chip *chip, u8 *buf, size_t len)
 {
 	int rc, irq;
 	struct tpm_tis_data *priv = dev_get_drvdata(&chip->dev);

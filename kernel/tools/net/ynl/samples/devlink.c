@@ -22,7 +22,6 @@ int main(int argc, char **argv)
 	ynl_dump_foreach(devs, d) {
 		struct devlink_info_get_req *info_req;
 		struct devlink_info_get_rsp *info_rsp;
-		unsigned i;
 
 		printf("%s/%s:\n", d->bus_name, d->dev_name);
 
@@ -35,11 +34,11 @@ int main(int argc, char **argv)
 		if (!info_rsp)
 			goto err_free_devs;
 
-		if (info_rsp->_len.info_driver_name)
+		if (info_rsp->_present.info_driver_name_len)
 			printf("    driver: %s\n", info_rsp->info_driver_name);
-		if (info_rsp->_count.info_version_running)
+		if (info_rsp->n_info_version_running)
 			printf("    running fw:\n");
-		for (i = 0; i < info_rsp->_count.info_version_running; i++)
+		for (unsigned i = 0; i < info_rsp->n_info_version_running; i++)
 			printf("        %s: %s\n",
 			       info_rsp->info_version_running[i].info_version_name,
 			       info_rsp->info_version_running[i].info_version_value);

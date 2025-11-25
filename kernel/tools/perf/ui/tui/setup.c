@@ -108,7 +108,7 @@ static void ui__signal_backtrace(int sig)
 
 	printf("-------- backtrace --------\n");
 	size = backtrace(stackdump, ARRAY_SIZE(stackdump));
-	__dump_stack(stdout, stackdump, size);
+	backtrace_symbols_fd(stackdump, size, STDOUT_FILENO);
 
 	exit(0);
 }

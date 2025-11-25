@@ -69,6 +69,7 @@ obj-$(CONFIG_SND) += \
 	lx6464es/ \
 	echoaudio/ \
 	emu10k1/ \
+	hda/ \
 	ice1712/ \
 	korg1212/ \
 	mixart/ \

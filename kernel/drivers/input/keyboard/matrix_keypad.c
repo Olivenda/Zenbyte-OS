@@ -17,6 +17,7 @@
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
 #include <linux/input/matrix_keypad.h>
 #include <linux/slab.h>
 #include <linux/of.h>
@@ -26,7 +27,6 @@ struct matrix_keypad {
 	unsigned int row_shift;
 
 	unsigned int col_scan_delay_us;
-	unsigned int all_cols_on_delay_us;
 	/* key debounce interval in milli-second */
 	unsigned int debounce_ms;
 	bool drive_inactive_cols;
@@ -69,7 +69,7 @@ static void activate_col(struct matrix_keypad *keypad, int col, bool on)
 	__activate_col(keypad, col, on);
 
 	if (on && keypad->col_scan_delay_us)
-		fsleep(keypad->col_scan_delay_us);
+		udelay(keypad->col_scan_delay_us);
 }
 
 static void activate_all_cols(struct matrix_keypad *keypad, bool on)
@@ -78,9 +78,6 @@ static void activate_all_cols(struct matrix_keypad *keypad, bool on)
 
 	for (col = 0; col < keypad->num_col_gpios; col++)
 		__activate_col(keypad, col, on);
-
-	if (on && keypad->all_cols_on_delay_us)
-		fsleep(keypad->all_cols_on_delay_us);
 }
 
 static bool row_asserted(struct matrix_keypad *keypad, int row)
@@ -104,16 +101,6 @@ static void disable_row_irqs(struct matrix_keypad *keypad)
 		disable_irq_nosync(keypad->row_irqs[i]);
 }
 
-static uint32_t read_row_state(struct matrix_keypad *keypad)
-{
-	int row;
-	u32 row_state = 0;
-
-	for (row = 0; row < keypad->num_row_gpios; row++)
-		row_state |= row_asserted(keypad, row) ? BIT(row) : 0;
-	return row_state;
-}
-
 /*
  * This gets the keys from keyboard and reports it to input subsystem
  */
@@ -125,10 +112,6 @@ static void matrix_keypad_scan(struct work_struct *work)
 	const unsigned short *keycodes = input_dev->keycode;
 	uint32_t new_state[MATRIX_MAX_COLS];
 	int row, col, code;
-	u32 init_row_state, new_row_state;
-
-	/* read initial row state to detect changes between scan */
-	init_row_state = read_row_state(keypad);
 
 	/* de-activate all columns for scanning */
 	activate_all_cols(keypad, false);
@@ -143,7 +126,9 @@ static void matrix_keypad_scan(struct work_struct *work)
 
 		activate_col(keypad, col, true);
 
-		new_state[col] = read_row_state(keypad);
+		for (row = 0; row < keypad->num_row_gpios; row++)
+			new_state[col] |=
+				row_asserted(keypad, row) ? BIT(row) : 0;
 
 		activate_col(keypad, col, false);
 	}
@@ -173,29 +158,18 @@ static void matrix_keypad_scan(struct work_struct *work)
 	activate_all_cols(keypad, true);
 
 	/* Enable IRQs again */
-	scoped_guard(spinlock_irq, &keypad->lock) {
-		keypad->scan_pending = false;
-		enable_row_irqs(keypad);
-	}
-
-	/* read new row state and detect if value has changed */
-	new_row_state = read_row_state(keypad);
-	if (init_row_state != new_row_state) {
-		guard(spinlock_irq)(&keypad->lock);
-		if (unlikely(keypad->scan_pending || keypad->stopped))
-			return;
-		disable_row_irqs(keypad);
-		keypad->scan_pending = true;
-		schedule_delayed_work(&keypad->work,
-				      msecs_to_jiffies(keypad->debounce_ms));
-	}
+	spin_lock_irq(&keypad->lock);
+	keypad->scan_pending = false;
+	enable_row_irqs(keypad);
+	spin_unlock_irq(&keypad->lock);
 }
 
 static irqreturn_t matrix_keypad_interrupt(int irq, void *id)
 {
 	struct matrix_keypad *keypad = id;
+	unsigned long flags;
 
-	guard(spinlock_irqsave)(&keypad->lock);
+	spin_lock_irqsave(&keypad->lock, flags);
 
 	/*
 	 * See if another IRQ beaten us to it and scheduled the
@@ -211,6 +185,7 @@ static irqreturn_t matrix_keypad_interrupt(int irq, void *id)
 			      msecs_to_jiffies(keypad->debounce_ms));
 
 out:
+	spin_unlock_irqrestore(&keypad->lock, flags);
 	return IRQ_HANDLED;
 }
 
@@ -234,9 +209,9 @@ static void matrix_keypad_stop(struct input_dev *dev)
 {
 	struct matrix_keypad *keypad = input_get_drvdata(dev);
 
-	scoped_guard(spinlock_irq, &keypad->lock) {
-		keypad->stopped = true;
-	}
+	spin_lock_irq(&keypad->lock);
+	keypad->stopped = true;
+	spin_unlock_irq(&keypad->lock);
 
 	flush_delayed_work(&keypad->work);
 	/*
@@ -420,8 +395,6 @@ static int matrix_keypad_probe(struct platform_device *pdev)
 				 &keypad->debounce_ms);
 	device_property_read_u32(&pdev->dev, "col-scan-delay-us",
 				 &keypad->col_scan_delay_us);
-	device_property_read_u32(&pdev->dev, "all-cols-on-delay-us",
-				 &keypad->all_cols_on_delay_us);
 
 	err = matrix_keypad_init_gpio(pdev, keypad);
 	if (err)

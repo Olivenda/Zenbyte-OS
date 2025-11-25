@@ -8548,7 +8548,7 @@ int cik_suspend(struct radeon_device *rdev)
  */
 int cik_init(struct radeon_device *rdev)
 {
-	struct radeon_ring *ring, *ring_cp1, *ring_cp2;
+	struct radeon_ring *ring;
 	int r;
 
 	/* Read BIOS */
@@ -8623,22 +8623,19 @@ int cik_init(struct radeon_device *rdev)
 	ring->ring_obj = NULL;
 	r600_ring_init(rdev, ring, 1024 * 1024);
 
-	ring_cp1 = &rdev->ring[CAYMAN_RING_TYPE_CP1_INDEX];
-	ring_cp2 = &rdev->ring[CAYMAN_RING_TYPE_CP2_INDEX];
-	ring_cp1->ring_obj = NULL;
-	ring_cp2->ring_obj = NULL;
-	ring_cp1->doorbell_index = RADEON_MAX_DOORBELLS;
-	ring_cp2->doorbell_index = RADEON_MAX_DOORBELLS;
-
-	r600_ring_init(rdev, ring_cp1, 1024 * 1024);
-	r = radeon_doorbell_get(rdev, &ring_cp1->doorbell_index);
+	ring = &rdev->ring[CAYMAN_RING_TYPE_CP1_INDEX];
+	ring->ring_obj = NULL;
+	r600_ring_init(rdev, ring, 1024 * 1024);
+	r = radeon_doorbell_get(rdev, &ring->doorbell_index);
 	if (r)
 		return r;
 
-	r600_ring_init(rdev, ring_cp2, 1024 * 1024);
-	r = radeon_doorbell_get(rdev, &ring_cp2->doorbell_index);
+	ring = &rdev->ring[CAYMAN_RING_TYPE_CP2_INDEX];
+	ring->ring_obj = NULL;
+	r600_ring_init(rdev, ring, 1024 * 1024);
+	r = radeon_doorbell_get(rdev, &ring->doorbell_index);
 	if (r)
-		goto out;
+		return r;
 
 	ring = &rdev->ring[R600_RING_TYPE_DMA_INDEX];
 	ring->ring_obj = NULL;
@@ -8656,16 +8653,12 @@ int cik_init(struct radeon_device *rdev)
 
 	r = r600_pcie_gart_init(rdev);
 	if (r)
-		goto out;
+		return r;
 
 	rdev->accel_working = true;
 	r = cik_startup(rdev);
 	if (r) {
 		dev_err(rdev->dev, "disabling GPU acceleration\n");
-		radeon_doorbell_free(rdev, ring_cp1->doorbell_index);
-		radeon_doorbell_free(rdev, ring_cp2->doorbell_index);
-		ring_cp1->doorbell_index = RADEON_MAX_DOORBELLS;
-		ring_cp2->doorbell_index = RADEON_MAX_DOORBELLS;
 		cik_cp_fini(rdev);
 		cik_sdma_fini(rdev);
 		cik_irq_fini(rdev);
@@ -8685,16 +8678,10 @@ int cik_init(struct radeon_device *rdev)
 	 */
 	if (!rdev->mc_fw && !(rdev->flags & RADEON_IS_IGP)) {
 		DRM_ERROR("radeon: MC ucode required for NI+.\n");
-		r = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 
 	return 0;
-
-out:
-	radeon_doorbell_free(rdev, ring_cp1->doorbell_index);
-	radeon_doorbell_free(rdev, ring_cp2->doorbell_index);
-	return r;
 }
 
 /**
@@ -8708,7 +8695,6 @@ out:
  */
 void cik_fini(struct radeon_device *rdev)
 {
-	struct radeon_ring *ring;
 	radeon_pm_fini(rdev);
 	cik_cp_fini(rdev);
 	cik_sdma_fini(rdev);
@@ -8722,10 +8708,6 @@ void cik_fini(struct radeon_device *rdev)
 	radeon_ib_pool_fini(rdev);
 	radeon_irq_kms_fini(rdev);
 	uvd_v1_0_fini(rdev);
-	ring = &rdev->ring[CAYMAN_RING_TYPE_CP1_INDEX];
-	radeon_doorbell_free(rdev, ring->doorbell_index);
-	ring = &rdev->ring[CAYMAN_RING_TYPE_CP2_INDEX];
-	radeon_doorbell_free(rdev, ring->doorbell_index);
 	radeon_uvd_fini(rdev);
 	radeon_vce_fini(rdev);
 	cik_pcie_gart_fini(rdev);

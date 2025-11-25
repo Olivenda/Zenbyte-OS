@@ -5,7 +5,8 @@
 
 #include <linux/workqueue.h>
 
-#include "intel_display_core.h"
+#include "i915_drv.h"
+
 #include "intel_display_types.h"
 #include "intel_encoder.h"
 
@@ -31,9 +32,9 @@ void intel_encoder_link_check_flush_work(struct intel_encoder *encoder)
 
 void intel_encoder_link_check_queue_work(struct intel_encoder *encoder, int delay_ms)
 {
-	struct intel_display *display = to_intel_display(encoder);
+	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 
-	mod_delayed_work(display->wq.unordered,
+	mod_delayed_work(i915->unordered_wq,
 			 &encoder->link_check_work, msecs_to_jiffies(delay_ms));
 }
 

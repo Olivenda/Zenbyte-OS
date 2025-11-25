@@ -21,7 +21,6 @@ properties:
       - nvidia,tegra124-soctherm
       - nvidia,tegra132-soctherm
       - nvidia,tegra210-soctherm
-      - nvidia,tegra210b01-soctherm
 
   reg:
     maxItems: 2
@@ -208,7 +207,6 @@ allOf:
             enum:
               - nvidia,tegra124-soctherm
               - nvidia,tegra210-soctherm
-              - nvidia,tegra210b01-soctherm
     then:
       properties:
         reg:

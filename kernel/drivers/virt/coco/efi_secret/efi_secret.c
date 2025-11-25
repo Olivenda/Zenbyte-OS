@@ -31,6 +31,8 @@
 
 struct efi_secret {
 	struct dentry *secrets_dir;
+	struct dentry *fs_dir;
+	struct dentry *fs_files[EFI_SECRET_NUM_FILES];
 	void __iomem *secret_data;
 	u64 secret_data_len;
 };
@@ -117,8 +119,10 @@ static void wipe_memory(void *addr, size_t size)
 
 static int efi_secret_unlink(struct inode *dir, struct dentry *dentry)
 {
+	struct efi_secret *s = efi_secret_get();
 	struct inode *inode = d_inode(dentry);
 	struct secret_entry *e = (struct secret_entry *)inode->i_private;
+	int i;
 
 	if (e) {
 		/* Zero out the secret data */
@@ -127,6 +131,10 @@ static int efi_secret_unlink(struct inode *dir, struct dentry *dentry)
 	}
 
 	inode->i_private = NULL;
+
+	for (i = 0; i < EFI_SECRET_NUM_FILES; i++)
+		if (s->fs_files[i] == dentry)
+			s->fs_files[i] = NULL;
 
 	return simple_unlink(inode, dentry);
 }
@@ -178,6 +186,15 @@ unmap:
 static void efi_secret_securityfs_teardown(struct platform_device *dev)
 {
 	struct efi_secret *s = efi_secret_get();
+	int i;
+
+	for (i = (EFI_SECRET_NUM_FILES - 1); i >= 0; i--) {
+		securityfs_remove(s->fs_files[i]);
+		s->fs_files[i] = NULL;
+	}
+
+	securityfs_remove(s->fs_dir);
+	s->fs_dir = NULL;
 
 	securityfs_remove(s->secrets_dir);
 	s->secrets_dir = NULL;
@@ -192,7 +209,7 @@ static int efi_secret_securityfs_setup(struct platform_device *dev)
 	unsigned char *ptr;
 	struct secret_header *h;
 	struct secret_entry *e;
-	struct dentry *dent, *dir;
+	struct dentry *dent;
 	char guid_str[EFI_VARIABLE_GUID_LEN + 1];
 
 	ptr = (void __force *)s->secret_data;
@@ -215,6 +232,8 @@ static int efi_secret_securityfs_setup(struct platform_device *dev)
 	}
 
 	s->secrets_dir = NULL;
+	s->fs_dir = NULL;
+	memset(s->fs_files, 0, sizeof(s->fs_files));
 
 	dent = securityfs_create_dir("secrets", NULL);
 	if (IS_ERR(dent)) {
@@ -224,13 +243,14 @@ static int efi_secret_securityfs_setup(struct platform_device *dev)
 	}
 	s->secrets_dir = dent;
 
-	dir = securityfs_create_dir("coco", s->secrets_dir);
-	if (IS_ERR(dir)) {
+	dent = securityfs_create_dir("coco", s->secrets_dir);
+	if (IS_ERR(dent)) {
 		dev_err(&dev->dev, "Error creating coco securityfs directory entry err=%ld\n",
-			PTR_ERR(dir));
-		return PTR_ERR(dir);
+			PTR_ERR(dent));
+		return PTR_ERR(dent);
 	}
-	d_inode(dir)->i_op = &efi_secret_dir_inode_operations;
+	d_inode(dent)->i_op = &efi_secret_dir_inode_operations;
+	s->fs_dir = dent;
 
 	bytes_left = h->len - sizeof(*h);
 	ptr += sizeof(*h);
@@ -246,14 +266,15 @@ static int efi_secret_securityfs_setup(struct platform_device *dev)
 		if (efi_guidcmp(e->guid, NULL_GUID)) {
 			efi_guid_to_str(&e->guid, guid_str);
 
-			dent = securityfs_create_file(guid_str, 0440, dir, (void *)e,
+			dent = securityfs_create_file(guid_str, 0440, s->fs_dir, (void *)e,
 						      &efi_secret_bin_file_fops);
 			if (IS_ERR(dent)) {
 				dev_err(&dev->dev, "Error creating efi_secret securityfs entry\n");
 				ret = PTR_ERR(dent);
 				goto err_cleanup;
 			}
-			i++;
+
+			s->fs_files[i++] = dent;
 		}
 		ptr += e->len;
 		bytes_left -= e->len;
@@ -305,7 +326,7 @@ static void efi_secret_remove(struct platform_device *dev)
 
 static struct platform_driver efi_secret_driver = {
 	.probe = efi_secret_probe,
-	.remove = efi_secret_remove,
+	.remove_new = efi_secret_remove,
 	.driver = {
 		.name = "efi_secret",
 	},

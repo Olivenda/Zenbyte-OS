@@ -294,8 +294,12 @@ static void hellcreek_get_strings(struct dsa_switch *ds, int port,
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(hellcreek_counter); ++i)
-		ethtool_puts(&data, hellcreek_counter[i].name);
+	for (i = 0; i < ARRAY_SIZE(hellcreek_counter); ++i) {
+		const struct hellcreek_counter *counter = &hellcreek_counter[i];
+
+		strscpy(data + i * ETH_GSTRING_LEN,
+			counter->name, ETH_GSTRING_LEN);
+	}
 }
 
 static int hellcreek_get_sset_count(struct dsa_switch *ds, int port, int sset)
@@ -1061,7 +1065,7 @@ static void hellcreek_setup_tc_identity_mapping(struct hellcreek *hellcreek)
 
 static int hellcreek_setup_fdb(struct hellcreek *hellcreek)
 {
-	static const struct hellcreek_fdb_entry l2_ptp = {
+	static struct hellcreek_fdb_entry l2_ptp = {
 		/* MAC: 01-1B-19-00-00-00 */
 		.mac	      = { 0x01, 0x1b, 0x19, 0x00, 0x00, 0x00 },
 		.portmask     = 0x03,	/* Management ports */
@@ -1072,7 +1076,7 @@ static int hellcreek_setup_fdb(struct hellcreek *hellcreek)
 		.reprio_tc    = 6,	/* TC: 6 as per IEEE 802.1AS */
 		.reprio_en    = 1,
 	};
-	static const struct hellcreek_fdb_entry udp4_ptp = {
+	static struct hellcreek_fdb_entry udp4_ptp = {
 		/* MAC: 01-00-5E-00-01-81 */
 		.mac	      = { 0x01, 0x00, 0x5e, 0x00, 0x01, 0x81 },
 		.portmask     = 0x03,	/* Management ports */
@@ -1083,7 +1087,7 @@ static int hellcreek_setup_fdb(struct hellcreek *hellcreek)
 		.reprio_tc    = 6,
 		.reprio_en    = 1,
 	};
-	static const struct hellcreek_fdb_entry udp6_ptp = {
+	static struct hellcreek_fdb_entry udp6_ptp = {
 		/* MAC: 33-33-00-00-01-81 */
 		.mac	      = { 0x33, 0x33, 0x00, 0x00, 0x01, 0x81 },
 		.portmask     = 0x03,	/* Management ports */
@@ -1094,7 +1098,7 @@ static int hellcreek_setup_fdb(struct hellcreek *hellcreek)
 		.reprio_tc    = 6,
 		.reprio_en    = 1,
 	};
-	static const struct hellcreek_fdb_entry l2_p2p = {
+	static struct hellcreek_fdb_entry l2_p2p = {
 		/* MAC: 01-80-C2-00-00-0E */
 		.mac	      = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x0e },
 		.portmask     = 0x03,	/* Management ports */
@@ -1105,7 +1109,7 @@ static int hellcreek_setup_fdb(struct hellcreek *hellcreek)
 		.reprio_tc    = 6,	/* TC: 6 as per IEEE 802.1AS */
 		.reprio_en    = 1,
 	};
-	static const struct hellcreek_fdb_entry udp4_p2p = {
+	static struct hellcreek_fdb_entry udp4_p2p = {
 		/* MAC: 01-00-5E-00-00-6B */
 		.mac	      = { 0x01, 0x00, 0x5e, 0x00, 0x00, 0x6b },
 		.portmask     = 0x03,	/* Management ports */
@@ -1116,7 +1120,7 @@ static int hellcreek_setup_fdb(struct hellcreek *hellcreek)
 		.reprio_tc    = 6,
 		.reprio_en    = 1,
 	};
-	static const struct hellcreek_fdb_entry udp6_p2p = {
+	static struct hellcreek_fdb_entry udp6_p2p = {
 		/* MAC: 33-33-00-00-00-6B */
 		.mac	      = { 0x33, 0x33, 0x00, 0x00, 0x00, 0x6b },
 		.portmask     = 0x03,	/* Management ports */
@@ -1127,7 +1131,7 @@ static int hellcreek_setup_fdb(struct hellcreek *hellcreek)
 		.reprio_tc    = 6,
 		.reprio_en    = 1,
 	};
-	static const struct hellcreek_fdb_entry stp = {
+	static struct hellcreek_fdb_entry stp = {
 		/* MAC: 01-80-C2-00-00-00 */
 		.mac	      = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x00 },
 		.portmask     = 0x03,	/* Management ports */
@@ -1320,13 +1324,13 @@ static int hellcreek_devlink_region_fdb_snapshot(struct devlink *dl,
 	return 0;
 }
 
-static const struct devlink_region_ops hellcreek_region_vlan_ops = {
+static struct devlink_region_ops hellcreek_region_vlan_ops = {
 	.name	    = "vlan",
 	.snapshot   = hellcreek_devlink_region_vlan_snapshot,
 	.destructor = kfree,
 };
 
-static const struct devlink_region_ops hellcreek_region_fdb_ops = {
+static struct devlink_region_ops hellcreek_region_fdb_ops = {
 	.name	    = "fdb",
 	.snapshot   = hellcreek_devlink_region_fdb_snapshot,
 	.destructor = kfree,
@@ -1335,7 +1339,7 @@ static const struct devlink_region_ops hellcreek_region_fdb_ops = {
 static int hellcreek_setup_devlink_regions(struct dsa_switch *ds)
 {
 	struct hellcreek *hellcreek = ds->priv;
-	const struct devlink_region_ops *ops;
+	struct devlink_region_ops *ops;
 	struct devlink_region *region;
 	u64 size;
 	int ret;
@@ -2101,7 +2105,7 @@ MODULE_DEVICE_TABLE(of, hellcreek_of_match);
 
 static struct platform_driver hellcreek_driver = {
 	.probe	= hellcreek_probe,
-	.remove = hellcreek_remove,
+	.remove_new = hellcreek_remove,
 	.shutdown = hellcreek_shutdown,
 	.driver = {
 		.name = "hellcreek",

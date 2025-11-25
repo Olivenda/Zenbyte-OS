@@ -291,12 +291,13 @@ static int ad799x_read_raw(struct iio_dev *indio_dev,
 
 	switch (m) {
 	case IIO_CHAN_INFO_RAW:
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
 		mutex_lock(&st->lock);
 		ret = ad799x_scan_direct(st, chan->scan_index);
 		mutex_unlock(&st->lock);
-		iio_device_release_direct(indio_dev);
+		iio_device_release_direct_mode(indio_dev);
 
 		if (ret < 0)
 			return ret;
@@ -405,13 +406,14 @@ static int ad799x_write_event_config(struct iio_dev *indio_dev,
 				     const struct iio_chan_spec *chan,
 				     enum iio_event_type type,
 				     enum iio_event_direction dir,
-				     bool state)
+				     int state)
 {
 	struct ad799x_state *st = iio_priv(indio_dev);
 	int ret;
 
-	if (!iio_device_claim_direct(indio_dev))
-		return -EBUSY;
+	ret = iio_device_claim_direct_mode(indio_dev);
+	if (ret)
+		return ret;
 
 	mutex_lock(&st->lock);
 
@@ -427,7 +429,7 @@ static int ad799x_write_event_config(struct iio_dev *indio_dev,
 
 	ret = ad799x_write_config(st, st->config);
 	mutex_unlock(&st->lock);
-	iio_device_release_direct(indio_dev);
+	iio_device_release_direct_mode(indio_dev);
 	return ret;
 }
 
@@ -958,7 +960,7 @@ static const struct i2c_device_id ad799x_id[] = {
 	{ "ad7994", ad7994 },
 	{ "ad7997", ad7997 },
 	{ "ad7998", ad7998 },
-	{ }
+	{}
 };
 
 MODULE_DEVICE_TABLE(i2c, ad799x_id);

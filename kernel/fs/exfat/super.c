@@ -36,10 +36,29 @@ static void exfat_put_super(struct super_block *sb)
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 
 	mutex_lock(&sbi->s_lock);
-	exfat_clear_volume_dirty(sb);
 	exfat_free_bitmap(sbi);
 	brelse(sbi->boot_bh);
 	mutex_unlock(&sbi->s_lock);
+}
+
+static int exfat_sync_fs(struct super_block *sb, int wait)
+{
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	int err = 0;
+
+	if (unlikely(exfat_forced_shutdown(sb)))
+		return 0;
+
+	if (!wait)
+		return 0;
+
+	/* If there are some dirty buffers in the bdev inode */
+	mutex_lock(&sbi->s_lock);
+	sync_blockdev(sb->s_bdev);
+	if (exfat_clear_volume_dirty(sb))
+		err = -EIO;
+	mutex_unlock(&sbi->s_lock);
+	return err;
 }
 
 static int exfat_statfs(struct dentry *dentry, struct kstatfs *buf)
@@ -47,6 +66,15 @@ static int exfat_statfs(struct dentry *dentry, struct kstatfs *buf)
 	struct super_block *sb = dentry->d_sb;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	unsigned long long id = huge_encode_dev(sb->s_bdev->bd_dev);
+
+	if (sbi->used_clusters == EXFAT_CLUSTERS_UNTRACKED) {
+		mutex_lock(&sbi->s_lock);
+		if (exfat_count_used_clusters(sb, &sbi->used_clusters)) {
+			mutex_unlock(&sbi->s_lock);
+			return -EIO;
+		}
+		mutex_unlock(&sbi->s_lock);
+	}
 
 	buf->f_type = sb->s_magic;
 	buf->f_bsize = sbi->cluster_size;
@@ -200,6 +228,7 @@ static const struct super_operations exfat_sops = {
 	.write_inode	= exfat_write_inode,
 	.evict_inode	= exfat_evict_inode,
 	.put_super	= exfat_put_super,
+	.sync_fs	= exfat_sync_fs,
 	.statfs		= exfat_statfs,
 	.show_options	= exfat_show_options,
 	.shutdown	= exfat_shutdown,
@@ -498,6 +527,7 @@ static int exfat_read_boot_sector(struct super_block *sb)
 	sbi->vol_flags = le16_to_cpu(p_boot->vol_flags);
 	sbi->vol_flags_persistent = sbi->vol_flags & (VOLUME_DIRTY | MEDIA_FAILURE);
 	sbi->clu_srch_ptr = EXFAT_FIRST_CLUSTER;
+	sbi->used_clusters = EXFAT_CLUSTERS_UNTRACKED;
 
 	/* check consistencies */
 	if ((u64)sbi->num_FAT_sectors << p_boot->sect_size_bits <
@@ -677,9 +707,9 @@ static int exfat_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 
 	if (sbi->options.utf8)
-		set_default_d_op(sb, &exfat_utf8_dentry_ops);
+		sb->s_d_op = &exfat_utf8_dentry_ops;
 	else
-		set_default_d_op(sb, &exfat_dentry_ops);
+		sb->s_d_op = &exfat_dentry_ops;
 
 	root_inode = new_inode(sb);
 	if (!root_inode) {
@@ -741,14 +771,10 @@ static void exfat_free(struct fs_context *fc)
 
 static int exfat_reconfigure(struct fs_context *fc)
 {
-	struct super_block *sb = fc->root->d_sb;
 	fc->sb_flags |= SB_NODIRATIME;
 
-	sync_filesystem(sb);
-	mutex_lock(&EXFAT_SB(sb)->s_lock);
-	exfat_clear_volume_dirty(sb);
-	mutex_unlock(&EXFAT_SB(sb)->s_lock);
-
+	/* volume flag will be updated in exfat_sync_fs */
+	sync_filesystem(fc->root->d_sb);
 	return 0;
 }
 

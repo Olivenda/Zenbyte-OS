@@ -23,13 +23,9 @@
 
 /**
  * sk_stream_write_space - stream socket write_space callback.
- * @sk: pointer to the socket structure
+ * @sk: socket
  *
- * This function is invoked when there's space available in the socket's
- * send buffer for writing. It first checks if the socket is writable,
- * clears the SOCK_NOSPACE flag indicating that memory for writing
- * is now available, wakes up any processes waiting for write operations
- * and sends asynchronous notifications if needed.
+ * FIXME: write proper description
  */
 void sk_stream_write_space(struct sock *sk)
 {

@@ -37,8 +37,10 @@ static int tps65086_gpio_direction_output(struct gpio_chip *chip,
 	struct tps65086_gpio *gpio = gpiochip_get_data(chip);
 
 	/* Set the initial value */
-	return regmap_update_bits(gpio->tps->regmap, TPS65086_GPOCTRL,
-				  BIT(4 + offset), value ? BIT(4 + offset) : 0);
+	regmap_update_bits(gpio->tps->regmap, TPS65086_GPOCTRL,
+			   BIT(4 + offset), value ? BIT(4 + offset) : 0);
+
+	return 0;
 }
 
 static int tps65086_gpio_get(struct gpio_chip *chip, unsigned offset)
@@ -53,13 +55,13 @@ static int tps65086_gpio_get(struct gpio_chip *chip, unsigned offset)
 	return val & BIT(4 + offset);
 }
 
-static int tps65086_gpio_set(struct gpio_chip *chip, unsigned int offset,
-			     int value)
+static void tps65086_gpio_set(struct gpio_chip *chip, unsigned offset,
+			      int value)
 {
 	struct tps65086_gpio *gpio = gpiochip_get_data(chip);
 
-	return regmap_update_bits(gpio->tps->regmap, TPS65086_GPOCTRL,
-				  BIT(4 + offset), value ? BIT(4 + offset) : 0);
+	regmap_update_bits(gpio->tps->regmap, TPS65086_GPOCTRL,
+			   BIT(4 + offset), value ? BIT(4 + offset) : 0);
 }
 
 static const struct gpio_chip template_chip = {

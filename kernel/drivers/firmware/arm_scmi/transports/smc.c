@@ -45,7 +45,6 @@
  * @irq: An optional IRQ for completion
  * @cinfo: SCMI channel info
  * @shmem: Transmit/Receive shared memory area
- * @io_ops: Transport specific I/O operations
  * @shmem_lock: Lock to protect access to Tx/Rx shared memory area.
  *		Used when NOT operating in atomic mode.
  * @inflight: Atomic flag to protect access to Tx/Rx shared memory area.
@@ -61,7 +60,6 @@ struct scmi_smc {
 	int irq;
 	struct scmi_chan_info *cinfo;
 	struct scmi_shared_mem __iomem *shmem;
-	struct scmi_shmem_io_ops *io_ops;
 	/* Protect access to shmem area */
 	struct mutex shmem_lock;
 #define INFLIGHT_NONE	MSG_TOKEN_MAX
@@ -146,8 +144,7 @@ static int smc_chan_setup(struct scmi_chan_info *cinfo, struct device *dev,
 	if (!scmi_info)
 		return -ENOMEM;
 
-	scmi_info->shmem = core->shmem->setup_iomap(cinfo, dev, tx, &res,
-						    &scmi_info->io_ops);
+	scmi_info->shmem = core->shmem->setup_iomap(cinfo, dev, tx, &res);
 	if (IS_ERR(scmi_info->shmem))
 		return PTR_ERR(scmi_info->shmem);
 
@@ -232,8 +229,7 @@ static int smc_send_message(struct scmi_chan_info *cinfo,
 	 */
 	smc_channel_lock_acquire(scmi_info, xfer);
 
-	core->shmem->tx_prepare(scmi_info->shmem, xfer, cinfo,
-				scmi_info->io_ops->toio);
+	core->shmem->tx_prepare(scmi_info->shmem, xfer, cinfo);
 
 	if (scmi_info->cap_id != ULONG_MAX)
 		arm_smccc_1_1_invoke(scmi_info->func_id, scmi_info->cap_id, 0,
@@ -257,8 +253,7 @@ static void smc_fetch_response(struct scmi_chan_info *cinfo,
 {
 	struct scmi_smc *scmi_info = cinfo->transport_info;
 
-	core->shmem->fetch_response(scmi_info->shmem, xfer,
-				    scmi_info->io_ops->fromio);
+	core->shmem->fetch_response(scmi_info->shmem, xfer);
 }
 
 static void smc_mark_txdone(struct scmi_chan_info *cinfo, int ret,
@@ -282,7 +277,7 @@ static struct scmi_desc scmi_smc_desc = {
 	.ops = &scmi_smc_ops,
 	.max_rx_timeout_ms = 30,
 	.max_msg = 20,
-	.max_msg_size = SCMI_SHMEM_MAX_PAYLOAD_SIZE,
+	.max_msg_size = 128,
 	/*
 	 * Setting .sync_cmds_atomic_replies to true for SMC assumes that,
 	 * once the SMC instruction has completed successfully, the issued
@@ -301,7 +296,6 @@ static const struct of_device_id scmi_of_match[] = {
 	{ .compatible = "qcom,scmi-smc" },
 	{ /* Sentinel */ },
 };
-MODULE_DEVICE_TABLE(of, scmi_of_match);
 
 DEFINE_SCMI_TRANSPORT_DRIVER(scmi_smc, scmi_smc_driver, scmi_smc_desc,
 			     scmi_of_match, core);

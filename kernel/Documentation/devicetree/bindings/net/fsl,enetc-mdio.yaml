@@ -20,13 +20,10 @@ maintainers:
 
 properties:
   compatible:
-    oneOf:
-      - items:
-          - enum:
-              - pci1957,ee01
-          - const: fsl,enetc-mdio
-      - items:
-          - const: pci1131,ee00
+    items:
+      - enum:
+          - pci1957,ee01
+      - const: fsl,enetc-mdio
 
   reg:
     maxItems: 1

@@ -18,7 +18,6 @@
 #include <linux/device.h>
 #include <linux/etherdevice.h>
 #include <linux/crc32.h>
-#include <linux/string_choices.h>
 
 #include <linux/usb/cdc.h>
 #include <linux/usb/gadget.h>
@@ -561,7 +560,7 @@ static void ncm_do_notify(struct f_ncm *ncm)
 		req->length = sizeof *event;
 
 		DBG(cdev, "notify connect %s\n",
-				str_true_false(ncm->is_open));
+				ncm->is_open ? "true" : "false");
 		ncm->notify_state = NCM_NOTIFY_NONE;
 		break;
 
@@ -1554,7 +1553,8 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	ncm->port.open = ncm_open;
 	ncm->port.close = ncm_close;
 
-	hrtimer_setup(&ncm->task_timer, ncm_tx_timeout, CLOCK_MONOTONIC, HRTIMER_MODE_REL_SOFT);
+	hrtimer_init(&ncm->task_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_SOFT);
+	ncm->task_timer.function = ncm_tx_timeout;
 
 	if (cdev->use_os_string) {
 		os_desc_table[0].os_desc = &ncm_opts->ncm_os_desc;

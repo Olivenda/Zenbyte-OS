@@ -245,18 +245,14 @@ static int wilc_bus_probe(struct spi_device *spi)
 	if (ret)
 		goto power_down;
 
-	ret = wilc_get_chipid(wilc);
-	if (ret)
-		goto power_down;
-
-	ret = wilc_cfg80211_register(wilc);
+	ret = wilc_validate_chipid(wilc);
 	if (ret)
 		goto power_down;
 
 	ret = wilc_load_mac_from_nv(wilc);
 	if (ret) {
 		pr_err("Can not retrieve MAC address from chip\n");
-		goto unregister_wiphy;
+		goto power_down;
 	}
 
 	wilc_wlan_power(wilc, false);
@@ -264,17 +260,14 @@ static int wilc_bus_probe(struct spi_device *spi)
 				   NL80211_IFTYPE_STATION, false);
 	if (IS_ERR(vif)) {
 		ret = PTR_ERR(vif);
-		goto unregister_wiphy;
+		goto power_down;
 	}
 	return 0;
 
-unregister_wiphy:
-	wiphy_unregister(wilc->wiphy);
 power_down:
 	wilc_wlan_power(wilc, false);
 netdev_cleanup:
 	wilc_netdev_cleanup(wilc);
-	wiphy_free(wilc->wiphy);
 free:
 	kfree(spi_priv);
 	return ret;
@@ -286,8 +279,6 @@ static void wilc_bus_remove(struct spi_device *spi)
 	struct wilc_spi *spi_priv = wilc->bus_data;
 
 	wilc_netdev_cleanup(wilc);
-	wiphy_unregister(wilc->wiphy);
-	wiphy_free(wilc->wiphy);
 	kfree(spi_priv);
 }
 
@@ -1238,7 +1229,7 @@ static int wilc_validate_chipid(struct wilc *wilc)
 		dev_err(&spi->dev, "Fail cmd read chip id...\n");
 		return ret;
 	}
-	if (!is_wilc1000(chipid) && !is_wilc3000(chipid)) {
+	if (!is_wilc1000(chipid)) {
 		dev_err(&spi->dev, "Unknown chip id 0x%x\n", chipid);
 		return -ENODEV;
 	}

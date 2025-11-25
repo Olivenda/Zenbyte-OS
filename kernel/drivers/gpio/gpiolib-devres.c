@@ -6,7 +6,7 @@
  * Copyright (c) 2011 John Crispin <john@phrozen.org>
  */
 
-#include <linux/device/devres.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/export.h>
 #include <linux/gfp.h>
@@ -19,14 +19,32 @@
 struct fwnode_handle;
 struct lock_class_key;
 
-static void devm_gpiod_release(void *desc)
+static void devm_gpiod_release(struct device *dev, void *res)
 {
-	gpiod_put(desc);
+	struct gpio_desc **desc = res;
+
+	gpiod_put(*desc);
 }
 
-static void devm_gpiod_release_array(void *descs)
+static int devm_gpiod_match(struct device *dev, void *res, void *data)
 {
-	gpiod_put_array(descs);
+	struct gpio_desc **this = res, **gpio = data;
+
+	return *this == *gpio;
+}
+
+static void devm_gpiod_release_array(struct device *dev, void *res)
+{
+	struct gpio_descs **descs = res;
+
+	gpiod_put_array(*descs);
+}
+
+static int devm_gpiod_match_array(struct device *dev, void *res, void *data)
+{
+	struct gpio_descs **this = res, **gpios = data;
+
+	return *this == *gpios;
 }
 
 /**
@@ -96,8 +114,8 @@ struct gpio_desc *__must_check devm_gpiod_get_index(struct device *dev,
 						    unsigned int idx,
 						    enum gpiod_flags flags)
 {
+	struct gpio_desc **dr;
 	struct gpio_desc *desc;
-	int ret;
 
 	desc = gpiod_get_index(dev, con_id, idx, flags);
 	if (IS_ERR(desc))
@@ -108,16 +126,23 @@ struct gpio_desc *__must_check devm_gpiod_get_index(struct device *dev,
 	 * already under resource management by this device.
 	 */
 	if (flags & GPIOD_FLAGS_BIT_NONEXCLUSIVE) {
-		bool dres;
+		struct devres *dres;
 
-		dres = devm_is_action_added(dev, devm_gpiod_release, desc);
+		dres = devres_find(dev, devm_gpiod_release,
+				   devm_gpiod_match, &desc);
 		if (dres)
 			return desc;
 	}
 
-	ret = devm_add_action_or_reset(dev, devm_gpiod_release, desc);
-	if (ret)
-		return ERR_PTR(ret);
+	dr = devres_alloc(devm_gpiod_release, sizeof(struct gpio_desc *),
+			  GFP_KERNEL);
+	if (!dr) {
+		gpiod_put(desc);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	*dr = desc;
+	devres_add(dev, dr);
 
 	return desc;
 }
@@ -146,16 +171,22 @@ struct gpio_desc *devm_fwnode_gpiod_get_index(struct device *dev,
 					      enum gpiod_flags flags,
 					      const char *label)
 {
+	struct gpio_desc **dr;
 	struct gpio_desc *desc;
-	int ret;
+
+	dr = devres_alloc(devm_gpiod_release, sizeof(struct gpio_desc *),
+			  GFP_KERNEL);
+	if (!dr)
+		return ERR_PTR(-ENOMEM);
 
 	desc = gpiod_find_and_request(dev, fwnode, con_id, index, flags, label, false);
-	if (IS_ERR(desc))
+	if (IS_ERR(desc)) {
+		devres_free(dr);
 		return desc;
+	}
 
-	ret = devm_add_action_or_reset(dev, devm_gpiod_release, desc);
-	if (ret)
-		return ERR_PTR(ret);
+	*dr = desc;
+	devres_add(dev, dr);
 
 	return desc;
 }
@@ -213,16 +244,22 @@ struct gpio_descs *__must_check devm_gpiod_get_array(struct device *dev,
 						     const char *con_id,
 						     enum gpiod_flags flags)
 {
+	struct gpio_descs **dr;
 	struct gpio_descs *descs;
-	int ret;
+
+	dr = devres_alloc(devm_gpiod_release_array,
+			  sizeof(struct gpio_descs *), GFP_KERNEL);
+	if (!dr)
+		return ERR_PTR(-ENOMEM);
 
 	descs = gpiod_get_array(dev, con_id, flags);
-	if (IS_ERR(descs))
+	if (IS_ERR(descs)) {
+		devres_free(dr);
 		return descs;
+	}
 
-	ret = devm_add_action_or_reset(dev, devm_gpiod_release_array, descs);
-	if (ret)
-		return ERR_PTR(ret);
+	*dr = descs;
+	devres_add(dev, dr);
 
 	return descs;
 }
@@ -270,7 +307,8 @@ EXPORT_SYMBOL_GPL(devm_gpiod_get_array_optional);
  */
 void devm_gpiod_put(struct device *dev, struct gpio_desc *desc)
 {
-	devm_release_action(dev, devm_gpiod_release, desc);
+	WARN_ON(devres_release(dev, devm_gpiod_release, devm_gpiod_match,
+		&desc));
 }
 EXPORT_SYMBOL_GPL(devm_gpiod_put);
 
@@ -279,28 +317,24 @@ EXPORT_SYMBOL_GPL(devm_gpiod_put);
  * @dev:	GPIO consumer
  * @desc:	GPIO descriptor to remove resource management from
  *
- * *DEPRECATED*
- * This function should not be used. It's been provided as a workaround for
- * resource ownership issues in the regulator framework and should be replaced
- * with a better solution.
- *
  * Remove resource management from a GPIO descriptor. This is needed when
  * you want to hand over lifecycle management of a descriptor to another
  * mechanism.
  */
+
 void devm_gpiod_unhinge(struct device *dev, struct gpio_desc *desc)
 {
 	int ret;
 
 	if (IS_ERR_OR_NULL(desc))
 		return;
-
+	ret = devres_destroy(dev, devm_gpiod_release,
+			     devm_gpiod_match, &desc);
 	/*
 	 * If the GPIO descriptor is requested as nonexclusive, we
 	 * may call this function several times on the same descriptor
 	 * so it is OK if devres_destroy() returns -ENOENT.
 	 */
-	ret = devm_remove_action_nowarn(dev, devm_gpiod_release, desc);
 	if (ret == -ENOENT)
 		return;
 	/* Anything else we should warn about */
@@ -319,7 +353,8 @@ EXPORT_SYMBOL_GPL(devm_gpiod_unhinge);
  */
 void devm_gpiod_put_array(struct device *dev, struct gpio_descs *descs)
 {
-	devm_release_action(dev, devm_gpiod_release_array, descs);
+	WARN_ON(devres_release(dev, devm_gpiod_release_array,
+			       devm_gpiod_match_array, &descs));
 }
 EXPORT_SYMBOL_GPL(devm_gpiod_put_array);
 

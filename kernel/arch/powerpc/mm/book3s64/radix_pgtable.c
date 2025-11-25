@@ -363,7 +363,19 @@ static int __meminit create_physical_mapping(unsigned long start,
 }
 
 #ifdef CONFIG_KFENCE
-static __init phys_addr_t alloc_kfence_pool(void)
+static bool __ro_after_init kfence_early_init = !!CONFIG_KFENCE_SAMPLE_INTERVAL;
+
+static int __init parse_kfence_early_init(char *arg)
+{
+	int val;
+
+	if (get_option(&arg, &val))
+		kfence_early_init = !!val;
+	return 0;
+}
+early_param("kfence.sample_interval", parse_kfence_early_init);
+
+static inline phys_addr_t alloc_kfence_pool(void)
 {
 	phys_addr_t kfence_pool;
 
@@ -393,7 +405,7 @@ no_kfence:
 	return 0;
 }
 
-static __init void map_kfence_pool(phys_addr_t kfence_pool)
+static inline void map_kfence_pool(phys_addr_t kfence_pool)
 {
 	if (!kfence_pool)
 		return;
@@ -1122,25 +1134,18 @@ int __meminit radix__vmemmap_populate(unsigned long start, unsigned long end, in
 	pte_t *pte;
 
 	/*
-	 * If altmap is present, Make sure we align the start vmemmap addr
-	 * to PAGE_SIZE so that we calculate the correct start_pfn in
-	 * altmap boundary check to decide whether we should use altmap or
-	 * RAM based backing memory allocation. Also the address need to be
-	 * aligned for set_pte operation. If the start addr is already
-	 * PMD_SIZE aligned and with in the altmap boundary then we will
-	 * try to use a pmd size altmap mapping else we go for page size
-	 * mapping.
-	 *
-	 * If altmap is not present, align the vmemmap addr to PMD_SIZE and
-	 * always allocate a PMD size page for vmemmap backing.
-	 *
+	 * Make sure we align the start vmemmap addr so that we calculate
+	 * the correct start_pfn in altmap boundary check to decided whether
+	 * we should use altmap or RAM based backing memory allocation. Also
+	 * the address need to be aligned for set_pte operation.
+
+	 * If the start addr is already PMD_SIZE aligned we will try to use
+	 * a pmd mapping. We don't want to be too aggressive here beacause
+	 * that will cause more allocations in RAM. So only if the namespace
+	 * vmemmap start addr is PMD_SIZE aligned we will use PMD mapping.
 	 */
 
-	if (altmap)
-		start = ALIGN_DOWN(start, PAGE_SIZE);
-	else
-		start = ALIGN_DOWN(start, PMD_SIZE);
-
+	start = ALIGN_DOWN(start, PAGE_SIZE);
 	for (addr = start; addr < end; addr = next) {
 		next = pmd_addr_end(addr, end);
 
@@ -1166,7 +1171,7 @@ int __meminit radix__vmemmap_populate(unsigned long start, unsigned long end, in
 			 * in altmap block allocation failures, in which case
 			 * we fallback to RAM for vmemmap allocation.
 			 */
-			if (altmap && (!IS_ALIGNED(addr, PMD_SIZE) ||
+			if (!IS_ALIGNED(addr, PMD_SIZE) || (altmap &&
 			    altmap_cross_boundary(altmap, addr, PMD_SIZE))) {
 				/*
 				 * make sure we don't create altmap mappings
@@ -1180,7 +1185,7 @@ int __meminit radix__vmemmap_populate(unsigned long start, unsigned long end, in
 				vmemmap_set_pmd(pmd, p, node, addr, next);
 				pr_debug("PMD_SIZE vmemmap mapping\n");
 				continue;
-			} else {
+			} else if (altmap) {
 				/*
 				 * A vmemmap block allocation can fail due to
 				 * alignment requirements and we trying to align
@@ -1433,7 +1438,7 @@ unsigned long radix__pmd_hugepage_update(struct mm_struct *mm, unsigned long add
 	unsigned long old;
 
 #ifdef CONFIG_DEBUG_VM
-	WARN_ON(!radix__pmd_trans_huge(*pmdp));
+	WARN_ON(!radix__pmd_trans_huge(*pmdp) && !pmd_devmap(*pmdp));
 	assert_spin_locked(pmd_lockptr(mm, pmdp));
 #endif
 
@@ -1450,7 +1455,7 @@ unsigned long radix__pud_hugepage_update(struct mm_struct *mm, unsigned long add
 	unsigned long old;
 
 #ifdef CONFIG_DEBUG_VM
-	WARN_ON(!pud_trans_huge(*pudp));
+	WARN_ON(!pud_devmap(*pudp));
 	assert_spin_locked(pud_lockptr(mm, pudp));
 #endif
 
@@ -1468,6 +1473,7 @@ pmd_t radix__pmdp_collapse_flush(struct vm_area_struct *vma, unsigned long addre
 
 	VM_BUG_ON(address & ~HPAGE_PMD_MASK);
 	VM_BUG_ON(radix__pmd_trans_huge(*pmdp));
+	VM_BUG_ON(pmd_devmap(*pmdp));
 	/*
 	 * khugepaged calls this for normal pmd
 	 */

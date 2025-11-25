@@ -9,7 +9,6 @@
 #define _ASM_S390_APPLDATA_H
 
 #include <linux/io.h>
-#include <asm/machine.h>
 #include <asm/diag.h>
 
 #define APPLDATA_START_INTERVAL_REC	0x80
@@ -49,7 +48,7 @@ static inline int appldata_asm(struct appldata_parameter_list *parm_list,
 {
 	int ry;
 
-	if (!machine_is_vm())
+	if (!MACHINE_IS_VM)
 		return -EOPNOTSUPP;
 	parm_list->diag = 0xdc;
 	parm_list->function = fn;

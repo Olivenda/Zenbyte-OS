@@ -25,7 +25,6 @@ properties:
           - mediatek,mt8188-gce
           - mediatek,mt8192-gce
           - mediatek,mt8195-gce
-          - mediatek,mt8196-gce
       - items:
           - const: mediatek,mt6795-gce
           - const: mediatek,mt8173-gce
@@ -49,9 +48,6 @@ properties:
   clock-names:
     items:
       - const: gce
-
-  iommus:
-    maxItems: 1
 
 required:
   - compatible

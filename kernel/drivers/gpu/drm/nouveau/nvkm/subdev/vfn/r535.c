@@ -21,8 +21,6 @@
  */
 #include "priv.h"
 
-#include <rm/gpu.h>
-
 static void
 r535_vfn_dtor(struct nvkm_vfn *vfn)
 {
@@ -34,7 +32,6 @@ r535_vfn_new(const struct nvkm_vfn_func *hw,
 	     struct nvkm_device *device, enum nvkm_subdev_type type, int inst, u32 addr,
 	     struct nvkm_vfn **pvfn)
 {
-	const struct nvkm_rm_gpu *gpu = device->gsp->rm->gpu;
 	struct nvkm_vfn_func *rm;
 	int ret;
 
@@ -42,12 +39,8 @@ r535_vfn_new(const struct nvkm_vfn_func *hw,
 		return -ENOMEM;
 
 	rm->dtor = r535_vfn_dtor;
-	rm->intr = &tu102_vfn_intr;
-	rm->user.addr = 0x030000;
-	rm->user.size = 0x010000;
-	rm->user.base.minver = -1;
-	rm->user.base.maxver = -1;
-	rm->user.base.oclass = gpu->usermode.class;
+	rm->intr = hw->intr;
+	rm->user = hw->user;
 
 	ret = nvkm_vfn_new_(rm, device, type, inst, addr, pvfn);
 	if (ret)

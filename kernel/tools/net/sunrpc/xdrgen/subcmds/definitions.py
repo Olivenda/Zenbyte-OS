@@ -28,7 +28,9 @@ from xdr_parse import xdr_parser, set_xdr_annotate
 logger.setLevel(logging.INFO)
 
 
-def emit_header_definitions(root: Specification, language: str, peer: str) -> None:
+def emit_header_definitions(
+    root: Specification, language: str, peer: str
+) -> None:
     """Emit header definitions"""
     for definition in root.definitions:
         if isinstance(definition.value, _XdrConstant):
@@ -50,25 +52,6 @@ def emit_header_definitions(root: Specification, language: str, peer: str) -> No
         gen.emit_definition(definition.value)
 
 
-def emit_header_maxsize(root: Specification, language: str, peer: str) -> None:
-    """Emit header maxsize macros"""
-    print("")
-    for definition in root.definitions:
-        if isinstance(definition.value, _XdrEnum):
-            gen = XdrEnumGenerator(language, peer)
-        elif isinstance(definition.value, _XdrPointer):
-            gen = XdrPointerGenerator(language, peer)
-        elif isinstance(definition.value, _XdrTypedef):
-            gen = XdrTypedefGenerator(language, peer)
-        elif isinstance(definition.value, _XdrStruct):
-            gen = XdrStructGenerator(language, peer)
-        elif isinstance(definition.value, _XdrUnion):
-            gen = XdrUnionGenerator(language, peer)
-        else:
-            continue
-        gen.emit_maxsize(definition.value)
-
-
 def handle_parse_error(e: UnexpectedInput) -> bool:
     """Simple parse error reporting, no recovery attempted"""
     print(e)
@@ -88,7 +71,6 @@ def subcmd(args: Namespace) -> int:
         gen.emit_definition(args.filename, ast)
 
         emit_header_definitions(ast, args.language, args.peer)
-        emit_header_maxsize(ast, args.language, args.peer)
 
         gen = XdrHeaderBottomGenerator(args.language, args.peer)
         gen.emit_definition(args.filename, ast)

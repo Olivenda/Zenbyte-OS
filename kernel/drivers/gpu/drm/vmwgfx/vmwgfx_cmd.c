@@ -544,7 +544,7 @@ int vmw_cmd_send_fence(struct vmw_private *dev_priv, uint32_t *seqno)
 	cmd_fence = (struct svga_fifo_cmd_fence *) fm;
 	cmd_fence->fence = *seqno;
 	vmw_cmd_commit_flush(dev_priv, bytes);
-	vmw_fences_update(dev_priv->fman);
+	vmw_update_seqno(dev_priv);
 
 out_err:
 	return ret;

@@ -436,6 +436,7 @@ static void au1xpsc_ac97_drvremove(struct platform_device *pdev)
 	au1xpsc_ac97_workdata = NULL;	/* MDEV */
 }
 
+#ifdef CONFIG_PM
 static int au1xpsc_ac97_drvsuspend(struct device *dev)
 {
 	struct au1xpsc_audio_data *wd = dev_get_drvdata(dev);
@@ -466,13 +467,23 @@ static int au1xpsc_ac97_drvresume(struct device *dev)
 	return 0;
 }
 
-static DEFINE_SIMPLE_DEV_PM_OPS(au1xpscac97_pmops, au1xpsc_ac97_drvsuspend,
-				au1xpsc_ac97_drvresume);
+static const struct dev_pm_ops au1xpscac97_pmops = {
+	.suspend	= au1xpsc_ac97_drvsuspend,
+	.resume		= au1xpsc_ac97_drvresume,
+};
+
+#define AU1XPSCAC97_PMOPS &au1xpscac97_pmops
+
+#else
+
+#define AU1XPSCAC97_PMOPS NULL
+
+#endif
 
 static struct platform_driver au1xpsc_ac97_driver = {
 	.driver	= {
 		.name	= "au1xpsc_ac97",
-		.pm	= pm_ptr(&au1xpscac97_pmops),
+		.pm	= AU1XPSCAC97_PMOPS,
 	},
 	.probe		= au1xpsc_ac97_drvprobe,
 	.remove		= au1xpsc_ac97_drvremove,

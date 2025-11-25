@@ -11,6 +11,7 @@
 #include <linux/i2c.h>
 #include <linux/gpio/consumer.h>
 #include <linux/of_irq.h>
+#include <linux/of_gpio.h>
 #include <linux/acpi.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>

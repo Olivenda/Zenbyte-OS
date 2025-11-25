@@ -1236,14 +1236,20 @@ static int dss_video_pll_probe(struct dss_device *dss)
 	if (!np)
 		return 0;
 
-	if (of_property_present(np, "syscon-pll-ctrl")) {
-		dss->syscon_pll_ctrl =
-			syscon_regmap_lookup_by_phandle_args(np, "syscon-pll-ctrl",
-							     1, &dss->syscon_pll_ctrl_offset);
+	if (of_property_read_bool(np, "syscon-pll-ctrl")) {
+		dss->syscon_pll_ctrl = syscon_regmap_lookup_by_phandle(np,
+			"syscon-pll-ctrl");
 		if (IS_ERR(dss->syscon_pll_ctrl)) {
 			dev_err(&pdev->dev,
 				"failed to get syscon-pll-ctrl regmap\n");
 			return PTR_ERR(dss->syscon_pll_ctrl);
+		}
+
+		if (of_property_read_u32_index(np, "syscon-pll-ctrl", 1,
+				&dss->syscon_pll_ctrl_offset)) {
+			dev_err(&pdev->dev,
+				"failed to get syscon-pll-ctrl offset\n");
+			return -EINVAL;
 		}
 	}
 
@@ -1600,7 +1606,7 @@ static const struct dev_pm_ops dss_pm_ops = {
 
 struct platform_driver omap_dsshw_driver = {
 	.probe		= dss_probe,
-	.remove		= dss_remove,
+	.remove_new	= dss_remove,
 	.shutdown	= dss_shutdown,
 	.driver         = {
 		.name   = "omapdss_dss",

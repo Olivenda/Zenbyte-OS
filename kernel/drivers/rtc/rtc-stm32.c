@@ -393,7 +393,7 @@ static const struct pinmux_ops stm32_rtc_pinmux_ops = {
 	.strict			= true,
 };
 
-static const struct pinctrl_desc stm32_rtc_pdesc = {
+static struct pinctrl_desc stm32_rtc_pdesc = {
 	.name = DRIVER_NAME,
 	.pins = stm32_rtc_pinctrl_pins,
 	.npins = ARRAY_SIZE(stm32_rtc_pinctrl_pins),
@@ -1074,18 +1074,26 @@ static int stm32_rtc_probe(struct platform_device *pdev)
 	regs = &rtc->data->regs;
 
 	if (rtc->data->need_dbp) {
-		unsigned int args[2];
-
-		rtc->dbp = syscon_regmap_lookup_by_phandle_args(pdev->dev.of_node,
-								"st,syscfg",
-								2, args);
+		rtc->dbp = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
+							   "st,syscfg");
 		if (IS_ERR(rtc->dbp)) {
 			dev_err(&pdev->dev, "no st,syscfg\n");
 			return PTR_ERR(rtc->dbp);
 		}
 
-		rtc->dbp_reg = args[0];
-		rtc->dbp_mask = args[1];
+		ret = of_property_read_u32_index(pdev->dev.of_node, "st,syscfg",
+						 1, &rtc->dbp_reg);
+		if (ret) {
+			dev_err(&pdev->dev, "can't read DBP register offset\n");
+			return ret;
+		}
+
+		ret = of_property_read_u32_index(pdev->dev.of_node, "st,syscfg",
+						 2, &rtc->dbp_mask);
+		if (ret) {
+			dev_err(&pdev->dev, "can't read DBP register mask\n");
+			return ret;
+		}
 	}
 
 	if (!rtc->data->has_pclk) {
@@ -1143,11 +1151,11 @@ static int stm32_rtc_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	ret = devm_device_init_wakeup(&pdev->dev);
+	ret = device_init_wakeup(&pdev->dev, true);
 	if (ret)
 		goto err;
 
-	ret = devm_pm_set_wake_irq(&pdev->dev, rtc->irq_alarm);
+	ret = dev_pm_set_wake_irq(&pdev->dev, rtc->irq_alarm);
 	if (ret)
 		goto err;
 
@@ -1208,6 +1216,9 @@ err_no_rtc_ck:
 	if (rtc->data->need_dbp)
 		regmap_update_bits(rtc->dbp, rtc->dbp_reg, rtc->dbp_mask, 0);
 
+	dev_pm_clear_wake_irq(&pdev->dev);
+	device_init_wakeup(&pdev->dev, false);
+
 	return ret;
 }
 
@@ -1234,6 +1245,9 @@ static void stm32_rtc_remove(struct platform_device *pdev)
 	/* Enable backup domain write protection if needed */
 	if (rtc->data->need_dbp)
 		regmap_update_bits(rtc->dbp, rtc->dbp_reg, rtc->dbp_mask, 0);
+
+	dev_pm_clear_wake_irq(&pdev->dev);
+	device_init_wakeup(&pdev->dev, false);
 }
 
 static int stm32_rtc_suspend(struct device *dev)
@@ -1273,7 +1287,7 @@ static const struct dev_pm_ops stm32_rtc_pm_ops = {
 
 static struct platform_driver stm32_rtc_driver = {
 	.probe		= stm32_rtc_probe,
-	.remove		= stm32_rtc_remove,
+	.remove_new	= stm32_rtc_remove,
 	.driver		= {
 		.name	= DRIVER_NAME,
 		.pm	= &stm32_rtc_pm_ops,
@@ -1283,6 +1297,7 @@ static struct platform_driver stm32_rtc_driver = {
 
 module_platform_driver(stm32_rtc_driver);
 
+MODULE_ALIAS("platform:" DRIVER_NAME);
 MODULE_AUTHOR("Amelie Delaunay <amelie.delaunay@st.com>");
 MODULE_DESCRIPTION("STMicroelectronics STM32 Real Time Clock driver");
 MODULE_LICENSE("GPL v2");

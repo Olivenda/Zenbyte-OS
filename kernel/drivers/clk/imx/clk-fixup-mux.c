@@ -17,7 +17,7 @@
  * @fixup: a hook to fixup the write value
  *
  * The imx fixup multiplexer clock is a subclass of basic clk_mux
- * with an additional fixup hook.
+ * with an addtional fixup hook.
  */
 struct clk_fixup_mux {
 	struct clk_mux mux;

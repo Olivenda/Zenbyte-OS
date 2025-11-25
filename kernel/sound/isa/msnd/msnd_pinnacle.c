@@ -142,6 +142,11 @@ static void snd_msnd_eval_dsp_msg(struct snd_msnd *chip, u16 wMessage)
 		}
 		break;
 
+	case HIMT_MIDI_IN_UCHAR:
+		if (chip->msndmidi_mpu)
+			snd_msndmidi_input_read(chip->msndmidi_mpu);
+		break;
+
 	default:
 		dev_dbg(chip->card->dev, LOGNAME ": HIMT message %d 0x%02x\n",
 			HIBYTE(wMessage), HIBYTE(wMessage));
@@ -221,8 +226,8 @@ static int snd_msnd_probe(struct snd_card *card)
 	}
 
 #ifdef MSND_CLASSIC
-	strscpy(card->shortname, "Classic/Tahiti/Monterey");
-	strscpy(card->longname, "Turtle Beach Multisound");
+	strcpy(card->shortname, "Classic/Tahiti/Monterey");
+	strcpy(card->longname, "Turtle Beach Multisound");
 	dev_info(card->dev, LOGNAME ": %s, "
 	       "I/O 0x%lx-0x%lx, IRQ %d, memory mapped to 0x%lX-0x%lX\n",
 	       card->shortname,
@@ -251,38 +256,38 @@ static int snd_msnd_probe(struct snd_card *card)
 	switch (info & 0x7) {
 	case 0x0:
 		rev = "I";
-		strscpy(card->shortname, pin);
+		strcpy(card->shortname, pin);
 		break;
 	case 0x1:
 		rev = "F";
-		strscpy(card->shortname, pin);
+		strcpy(card->shortname, pin);
 		break;
 	case 0x2:
 		rev = "G";
-		strscpy(card->shortname, pin);
+		strcpy(card->shortname, pin);
 		break;
 	case 0x3:
 		rev = "H";
-		strscpy(card->shortname, pin);
+		strcpy(card->shortname, pin);
 		break;
 	case 0x4:
 		rev = "E";
-		strscpy(card->shortname, fiji);
+		strcpy(card->shortname, fiji);
 		break;
 	case 0x5:
 		rev = "C";
-		strscpy(card->shortname, fiji);
+		strcpy(card->shortname, fiji);
 		break;
 	case 0x6:
 		rev = "D";
-		strscpy(card->shortname, fiji);
+		strcpy(card->shortname, fiji);
 		break;
 	case 0x7:
 		rev = "A-B (Fiji) or A-E (Pinnacle)";
-		strscpy(card->shortname, pinfiji);
+		strcpy(card->shortname, pinfiji);
 		break;
 	}
-	strscpy(card->longname, "Turtle Beach Multisound Pinnacle");
+	strcpy(card->longname, "Turtle Beach Multisound Pinnacle");
 	dev_info(card->dev, LOGNAME ": %s revision %s, Xilinx version %s, "
 	       "I/O 0x%lx-0x%lx, IRQ %d, memory mapped to 0x%lX-0x%lX\n",
 	       card->shortname,

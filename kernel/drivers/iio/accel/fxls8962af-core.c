@@ -22,7 +22,6 @@
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/regmap.h>
-#include <linux/types.h>
 #include <linux/units.h>
 
 #include <linux/iio/buffer.h>
@@ -130,8 +129,6 @@
 
 #define FXLS8962AF_DEVICE_ID			0x62
 #define FXLS8964AF_DEVICE_ID			0x84
-#define FXLS8974CF_DEVICE_ID			0x86
-#define FXLS8967AF_DEVICE_ID			0x87
 
 /* Raw temp channel offset */
 #define FXLS8962AF_TEMP_CENTER_VAL		25
@@ -167,7 +164,7 @@ struct fxls8962af_data {
 	const struct fxls8962af_chip_info *chip_info;
 	struct {
 		__le16 channels[3];
-		aligned_s64 ts;
+		s64 ts __aligned(8);
 	} scan;
 	int64_t timestamp, old_timestamp;	/* Only used in hw fifo mode. */
 	struct iio_mount_matrix orientation;
@@ -183,7 +180,7 @@ const struct regmap_config fxls8962af_i2c_regmap_conf = {
 	.val_bits = 8,
 	.max_register = FXLS8962AF_MAX_REG,
 };
-EXPORT_SYMBOL_NS_GPL(fxls8962af_i2c_regmap_conf, "IIO_FXLS8962AF");
+EXPORT_SYMBOL_NS_GPL(fxls8962af_i2c_regmap_conf, IIO_FXLS8962AF);
 
 const struct regmap_config fxls8962af_spi_regmap_conf = {
 	.reg_bits = 8,
@@ -191,7 +188,7 @@ const struct regmap_config fxls8962af_spi_regmap_conf = {
 	.val_bits = 8,
 	.max_register = FXLS8962AF_MAX_REG,
 };
-EXPORT_SYMBOL_NS_GPL(fxls8962af_spi_regmap_conf, "IIO_FXLS8962AF");
+EXPORT_SYMBOL_NS_GPL(fxls8962af_spi_regmap_conf, IIO_FXLS8962AF);
 
 enum {
 	fxls8962af_idx_x,
@@ -469,20 +466,22 @@ static int fxls8962af_write_raw(struct iio_dev *indio_dev,
 		if (val != 0)
 			return -EINVAL;
 
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
 
 		ret = fxls8962af_set_full_scale(data, val2);
 
-		iio_device_release_direct(indio_dev);
+		iio_device_release_direct_mode(indio_dev);
 		return ret;
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
 
 		ret = fxls8962af_set_samp_freq(data, val, val2);
 
-		iio_device_release_direct(indio_dev);
+		iio_device_release_direct_mode(indio_dev);
 		return ret;
 	default:
 		return -EINVAL;
@@ -626,7 +625,7 @@ static int
 fxls8962af_write_event_config(struct iio_dev *indio_dev,
 			      const struct iio_chan_spec *chan,
 			      enum iio_event_type type,
-			      enum iio_event_direction dir, bool state)
+			      enum iio_event_direction dir, int state)
 {
 	struct fxls8962af_data *data = iio_priv(indio_dev);
 	u8 enable_event, enable_bits;
@@ -690,13 +689,14 @@ fxls8962af_write_event_config(struct iio_dev *indio_dev,
 		fxls8962af_active(data);
 		ret = fxls8962af_power_on(data);
 	} else {
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
 
 		/* Not in buffered mode so disable power */
 		ret = fxls8962af_power_off(data);
 
-		iio_device_release_direct(indio_dev);
+		iio_device_release_direct_mode(indio_dev);
 	}
 
 	return ret;
@@ -773,18 +773,6 @@ static const struct fxls8962af_chip_info fxls_chip_info_table[] = {
 	[fxls8964af] = {
 		.chip_id = FXLS8964AF_DEVICE_ID,
 		.name = "fxls8964af",
-		.channels = fxls8962af_channels,
-		.num_channels = ARRAY_SIZE(fxls8962af_channels),
-	},
-	[fxls8967af] = {
-		.chip_id = FXLS8967AF_DEVICE_ID,
-		.name = "fxls8967af",
-		.channels = fxls8962af_channels,
-		.num_channels = ARRAY_SIZE(fxls8962af_channels),
-	},
-	[fxls8974cf] = {
-		.chip_id = FXLS8974CF_DEVICE_ID,
-		.name = "fxls8974cf",
 		.channels = fxls8962af_channels,
 		.num_channels = ARRAY_SIZE(fxls8962af_channels),
 	},
@@ -996,8 +984,8 @@ static int fxls8962af_fifo_flush(struct iio_dev *indio_dev)
 			       sizeof(data->scan.channels[0]));
 		}
 
-		iio_push_to_buffers_with_ts(indio_dev, &data->scan,
-					    sizeof(data->scan), tstamp);
+		iio_push_to_buffers_with_timestamp(indio_dev, &data->scan,
+						   tstamp);
 
 		tstamp += sample_period;
 	}
@@ -1128,7 +1116,8 @@ static int fxls8962af_irq_setup(struct iio_dev *indio_dev, int irq)
 	if (ret)
 		return ret;
 
-	irq_type = irq_get_trigger_type(irq);
+	irq_type = irqd_get_trigger_type(irq_get_irq_data(irq));
+
 	switch (irq_type) {
 	case IRQF_TRIGGER_HIGH:
 	case IRQF_TRIGGER_RISING:
@@ -1239,15 +1228,12 @@ int fxls8962af_core_probe(struct device *dev, struct regmap *regmap, int irq)
 	if (ret)
 		return ret;
 
-	if (device_property_read_bool(dev, "wakeup-source")) {
-		ret = devm_device_init_wakeup(dev);
-		if (ret)
-			return dev_err_probe(dev, ret, "Failed to init wakeup\n");
-	}
+	if (device_property_read_bool(dev, "wakeup-source"))
+		device_init_wakeup(dev, true);
 
 	return devm_iio_device_register(dev, indio_dev);
 }
-EXPORT_SYMBOL_NS_GPL(fxls8962af_core_probe, "IIO_FXLS8962AF");
+EXPORT_SYMBOL_NS_GPL(fxls8962af_core_probe, IIO_FXLS8962AF);
 
 static int fxls8962af_runtime_suspend(struct device *dev)
 {

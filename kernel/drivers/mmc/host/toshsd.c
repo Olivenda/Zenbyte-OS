@@ -612,7 +612,7 @@ static int toshsd_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		return ret;
 
-	mmc = devm_mmc_alloc_host(&pdev->dev, sizeof(*host));
+	mmc = mmc_alloc_host(sizeof(struct toshsd_host), &pdev->dev);
 	if (!mmc) {
 		ret = -ENOMEM;
 		goto err;
@@ -669,6 +669,7 @@ unmap:
 release:
 	pci_release_regions(pdev);
 free:
+	mmc_free_host(mmc);
 	pci_set_drvdata(pdev, NULL);
 err:
 	pci_disable_device(pdev);
@@ -684,6 +685,7 @@ static void toshsd_remove(struct pci_dev *pdev)
 	free_irq(pdev->irq, host);
 	pci_iounmap(pdev, host->ioaddr);
 	pci_release_regions(pdev);
+	mmc_free_host(host->mmc);
 	pci_set_drvdata(pdev, NULL);
 	pci_disable_device(pdev);
 }

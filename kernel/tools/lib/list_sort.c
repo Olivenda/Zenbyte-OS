@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/kernel.h>
 #include <linux/compiler.h>
 #include <linux/export.h>
+#include <linux/string.h>
 #include <linux/list_sort.h>
 #include <linux/list.h>
 

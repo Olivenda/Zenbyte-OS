@@ -38,16 +38,17 @@ static inline struct nilfs_ifile_info *NILFS_IFILE_I(struct inode *ifile)
  * @out_ino: pointer to a variable to store inode number
  * @out_bh: buffer_head contains newly allocated disk inode
  *
- * nilfs_ifile_create_inode() allocates a new inode in the ifile metadata
- * file and stores the inode number in the variable pointed to by @out_ino,
- * as well as storing the ifile's buffer with the disk inode in the location
- * pointed to by @out_bh.
+ * Return Value: On success, 0 is returned and the newly allocated inode
+ * number is stored in the place pointed by @ino, and buffer_head pointer
+ * that contains newly allocated disk inode structure is stored in the
+ * place pointed by @out_bh
+ * On error, one of the following negative error codes is returned.
  *
- * Return: 0 on success, or one of the following negative error codes on
- * failure:
- * * %-EIO	- I/O error (including metadata corruption).
- * * %-ENOMEM	- Insufficient memory available.
- * * %-ENOSPC	- No inode left.
+ * %-EIO - I/O error.
+ *
+ * %-ENOMEM - Insufficient amount of memory available.
+ *
+ * %-ENOSPC - No inode left.
  */
 int nilfs_ifile_create_inode(struct inode *ifile, ino_t *out_ino,
 			     struct buffer_head **out_bh)
@@ -82,11 +83,14 @@ int nilfs_ifile_create_inode(struct inode *ifile, ino_t *out_ino,
  * @ifile: ifile inode
  * @ino: inode number
  *
- * Return: 0 on success, or one of the following negative error codes on
- * failure:
- * * %-EIO	- I/O error (including metadata corruption).
- * * %-ENOENT	- Inode number unallocated.
- * * %-ENOMEM	- Insufficient memory available.
+ * Return Value: On success, 0 is returned. On error, one of the following
+ * negative error codes is returned.
+ *
+ * %-EIO - I/O error.
+ *
+ * %-ENOMEM - Insufficient amount of memory available.
+ *
+ * %-ENOENT - The inode number @ino have not been allocated.
  */
 int nilfs_ifile_delete_inode(struct inode *ifile, ino_t ino)
 {
@@ -94,7 +98,7 @@ int nilfs_ifile_delete_inode(struct inode *ifile, ino_t ino)
 		.pr_entry_nr = ino, .pr_entry_bh = NULL
 	};
 	struct nilfs_inode *raw_inode;
-	size_t offset;
+	void *kaddr;
 	int ret;
 
 	ret = nilfs_palloc_prepare_free_entry(ifile, &req);
@@ -109,11 +113,11 @@ int nilfs_ifile_delete_inode(struct inode *ifile, ino_t ino)
 		return ret;
 	}
 
-	offset = nilfs_palloc_entry_offset(ifile, req.pr_entry_nr,
-					   req.pr_entry_bh);
-	raw_inode = kmap_local_folio(req.pr_entry_bh->b_folio, offset);
+	kaddr = kmap_local_page(req.pr_entry_bh->b_page);
+	raw_inode = nilfs_palloc_block_get_entry(ifile, req.pr_entry_nr,
+						 req.pr_entry_bh, kaddr);
 	raw_inode->i_flags = 0;
-	kunmap_local(raw_inode);
+	kunmap_local(kaddr);
 
 	mark_buffer_dirty(req.pr_entry_bh);
 	brelse(req.pr_entry_bh);
@@ -146,8 +150,6 @@ int nilfs_ifile_get_inode_block(struct inode *ifile, ino_t ino,
  * @ifile: ifile inode
  * @nmaxinodes: current maximum of available inodes count [out]
  * @nfreeinodes: free inodes count [out]
- *
- * Return: 0 on success, or a negative error code on failure.
  */
 int nilfs_ifile_count_free_inodes(struct inode *ifile,
 				    u64 *nmaxinodes, u64 *nfreeinodes)
@@ -172,8 +174,7 @@ int nilfs_ifile_count_free_inodes(struct inode *ifile,
  * @cno: number of checkpoint entry to read
  * @inode_size: size of an inode
  *
- * Return: 0 on success, or one of the following negative error codes on
- * failure:
+ * Return: 0 on success, or the following negative error code on failure.
  * * %-EINVAL	- Invalid checkpoint.
  * * %-ENOMEM	- Insufficient memory available.
  * * %-EIO	- I/O error (including metadata corruption).

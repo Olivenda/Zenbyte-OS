@@ -80,10 +80,10 @@ static const struct ptdump_prot_bits pte_bits[] = {
 		.set	= "CON",
 		.clear	= "   ",
 	}, {
-		.mask	= PMD_TYPE_MASK,
-		.val	= PMD_TYPE_SECT,
-		.set	= "BLK",
-		.clear	= "   ",
+		.mask	= PTE_TABLE_BIT,
+		.val	= PTE_TABLE_BIT,
+		.set	= "   ",
+		.clear	= "BLK",
 	}, {
 		.mask	= PTE_UXN,
 		.val	= PTE_UXN,
@@ -189,12 +189,12 @@ static void note_prot_wx(struct ptdump_pg_state *st, unsigned long addr)
 }
 
 void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
-	       pteval_t val)
+	       u64 val)
 {
 	struct ptdump_pg_state *st = container_of(pt_st, struct ptdump_pg_state, ptdump);
 	struct ptdump_pg_level *pg_level = st->pg_level;
 	static const char units[] = "KMGTPE";
-	ptdesc_t prot = 0;
+	u64 prot = 0;
 
 	/* check if the current level has been folded dynamically */
 	if (st->mm && ((level == 1 && mm_p4d_folded(st->mm)) ||
@@ -251,38 +251,6 @@ void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 
 }
 
-void note_page_pte(struct ptdump_state *pt_st, unsigned long addr, pte_t pte)
-{
-	note_page(pt_st, addr, 4, pte_val(pte));
-}
-
-void note_page_pmd(struct ptdump_state *pt_st, unsigned long addr, pmd_t pmd)
-{
-	note_page(pt_st, addr, 3, pmd_val(pmd));
-}
-
-void note_page_pud(struct ptdump_state *pt_st, unsigned long addr, pud_t pud)
-{
-	note_page(pt_st, addr, 2, pud_val(pud));
-}
-
-void note_page_p4d(struct ptdump_state *pt_st, unsigned long addr, p4d_t p4d)
-{
-	note_page(pt_st, addr, 1, p4d_val(p4d));
-}
-
-void note_page_pgd(struct ptdump_state *pt_st, unsigned long addr, pgd_t pgd)
-{
-	note_page(pt_st, addr, 0, pgd_val(pgd));
-}
-
-void note_page_flush(struct ptdump_state *pt_st)
-{
-	pte_t pte_zero = {0};
-
-	note_page(pt_st, 0, -1, pte_val(pte_zero));
-}
-
 void ptdump_walk(struct seq_file *s, struct ptdump_info *info)
 {
 	unsigned long end = ~0UL;
@@ -298,12 +266,7 @@ void ptdump_walk(struct seq_file *s, struct ptdump_info *info)
 		.pg_level = &kernel_pg_levels[0],
 		.level = -1,
 		.ptdump = {
-			.note_page_pte = note_page_pte,
-			.note_page_pmd = note_page_pmd,
-			.note_page_pud = note_page_pud,
-			.note_page_p4d = note_page_p4d,
-			.note_page_pgd = note_page_pgd,
-			.note_page_flush = note_page_flush,
+			.note_page = note_page,
 			.range = (struct ptdump_range[]){
 				{info->base_addr, end},
 				{0, 0}
@@ -340,12 +303,7 @@ bool ptdump_check_wx(void)
 		.level = -1,
 		.check_wx = true,
 		.ptdump = {
-			.note_page_pte = note_page_pte,
-			.note_page_pmd = note_page_pmd,
-			.note_page_pud = note_page_pud,
-			.note_page_p4d = note_page_p4d,
-			.note_page_pgd = note_page_pgd,
-			.note_page_flush = note_page_flush,
+			.note_page = note_page,
 			.range = (struct ptdump_range[]) {
 				{_PAGE_OFFSET(vabits_actual), ~0UL},
 				{0, 0}

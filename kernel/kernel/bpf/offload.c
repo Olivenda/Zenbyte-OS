@@ -25,7 +25,6 @@
 #include <linux/rhashtable.h>
 #include <linux/rtnetlink.h>
 #include <linux/rwsem.h>
-#include <net/netdev_lock.h>
 #include <net/xdp.h>
 
 /* Protects offdevs, members of bpf_offload_netdev and offload members
@@ -529,14 +528,13 @@ struct bpf_map *bpf_map_offload_map_alloc(union bpf_attr *attr)
 		return ERR_PTR(-ENOMEM);
 
 	bpf_map_init_from_attr(&offmap->map, attr);
+
 	rtnl_lock();
+	down_write(&bpf_devs_lock);
 	offmap->netdev = __dev_get_by_index(net, attr->map_ifindex);
 	err = bpf_dev_offload_check(offmap->netdev);
 	if (err)
-		goto err_unlock_rtnl;
-
-	netdev_lock_ops(offmap->netdev);
-	down_write(&bpf_devs_lock);
+		goto err_unlock;
 
 	ondev = bpf_offload_find_netdev(offmap->netdev);
 	if (!ondev) {
@@ -550,15 +548,12 @@ struct bpf_map *bpf_map_offload_map_alloc(union bpf_attr *attr)
 
 	list_add_tail(&offmap->offloads, &ondev->maps);
 	up_write(&bpf_devs_lock);
-	netdev_unlock_ops(offmap->netdev);
 	rtnl_unlock();
 
 	return &offmap->map;
 
 err_unlock:
 	up_write(&bpf_devs_lock);
-	netdev_unlock_ops(offmap->netdev);
-err_unlock_rtnl:
 	rtnl_unlock();
 	bpf_map_area_free(offmap);
 	return ERR_PTR(err);

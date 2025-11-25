@@ -29,10 +29,12 @@
 #include <linux/syscalls.h>
 #include <linux/sysctl.h>
 
-#include <asm/syscall.h>
-
 /* Not exposed in headers: strictly internal use only. */
 #define SECCOMP_MODE_DEAD	(SECCOMP_MODE_FILTER + 1)
+
+#ifdef CONFIG_HAVE_ARCH_SECCOMP_FILTER
+#include <asm/syscall.h>
+#endif
 
 #ifdef CONFIG_SECCOMP_FILTER
 #include <linux/file.h>
@@ -574,9 +576,6 @@ void seccomp_filter_release(struct task_struct *tsk)
 	if (WARN_ON((tsk->flags & PF_EXITING) == 0))
 		return;
 
-	if (READ_ONCE(tsk->seccomp.filter) == NULL)
-		return;
-
 	spin_lock_irq(&tsk->sighand->siglock);
 	orig = tsk->seccomp.filter;
 	/* Detach task from its filter tree. */
@@ -601,13 +600,6 @@ static inline void seccomp_sync_threads(unsigned long flags)
 
 	BUG_ON(!mutex_is_locked(&current->signal->cred_guard_mutex));
 	assert_spin_locked(&current->sighand->siglock);
-
-	/*
-	 * Don't touch any of the threads if the process is being killed.
-	 * This allows for a lockless check in seccomp_filter_release.
-	 */
-	if (current->signal->flags & SIGNAL_GROUP_EXIT)
-		return;
 
 	/* Synchronize all threads. */
 	caller = current;
@@ -1100,13 +1092,6 @@ void secure_computing_strict(int this_syscall)
 	else
 		BUG();
 }
-int __secure_computing(void)
-{
-	int this_syscall = syscall_get_nr(current, current_pt_regs());
-
-	secure_computing_strict(this_syscall);
-	return 0;
-}
 #else
 
 #ifdef CONFIG_SECCOMP_FILTER
@@ -1256,12 +1241,13 @@ out:
 	return -1;
 }
 
-static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
+static int __seccomp_filter(int this_syscall, const struct seccomp_data *sd,
+			    const bool recheck_after_trace)
 {
 	u32 filter_ret, action;
-	struct seccomp_data sd;
 	struct seccomp_filter *match = NULL;
 	int data;
+	struct seccomp_data sd_local;
 
 	/*
 	 * Make sure that any changes to mode from another thread have
@@ -1269,9 +1255,12 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 	 */
 	smp_rmb();
 
-	populate_seccomp_data(&sd);
+	if (!sd) {
+		populate_seccomp_data(&sd_local);
+		sd = &sd_local;
+	}
 
-	filter_ret = seccomp_run_filters(&sd, &match);
+	filter_ret = seccomp_run_filters(sd, &match);
 	data = filter_ret & SECCOMP_RET_DATA;
 	action = filter_ret & SECCOMP_RET_ACTION_FULL;
 
@@ -1329,13 +1318,13 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 		 * a reload of all registers. This does not goto skip since
 		 * a skip would have already been reported.
 		 */
-		if (__seccomp_filter(this_syscall, true))
+		if (__seccomp_filter(this_syscall, NULL, true))
 			return -1;
 
 		return 0;
 
 	case SECCOMP_RET_USER_NOTIF:
-		if (seccomp_do_user_notification(this_syscall, match, &sd))
+		if (seccomp_do_user_notification(this_syscall, match, sd))
 			goto skip;
 
 		return 0;
@@ -1377,7 +1366,8 @@ skip:
 	return -1;
 }
 #else
-static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
+static int __seccomp_filter(int this_syscall, const struct seccomp_data *sd,
+			    const bool recheck_after_trace)
 {
 	BUG();
 
@@ -1385,7 +1375,7 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 }
 #endif
 
-int __secure_computing(void)
+int __secure_computing(const struct seccomp_data *sd)
 {
 	int mode = current->seccomp.mode;
 	int this_syscall;
@@ -1394,14 +1384,15 @@ int __secure_computing(void)
 	    unlikely(current->ptrace & PT_SUSPEND_SECCOMP))
 		return 0;
 
-	this_syscall = syscall_get_nr(current, current_pt_regs());
+	this_syscall = sd ? sd->nr :
+		syscall_get_nr(current, current_pt_regs());
 
 	switch (mode) {
 	case SECCOMP_MODE_STRICT:
 		__secure_computing_strict(this_syscall);  /* may call do_exit */
 		return 0;
 	case SECCOMP_MODE_FILTER:
-		return __seccomp_filter(this_syscall, false);
+		return __seccomp_filter(this_syscall, sd, false);
 	/* Surviving SECCOMP_RET_KILL_* must be proactively impossible. */
 	case SECCOMP_MODE_DEAD:
 		WARN_ON_ONCE(1);
@@ -2487,7 +2478,7 @@ static int seccomp_actions_logged_handler(const struct ctl_table *ro_table, int 
 	return ret;
 }
 
-static const struct ctl_table seccomp_sysctl_table[] = {
+static struct ctl_table seccomp_sysctl_table[] = {
 	{
 		.procname	= "actions_avail",
 		.data		= (void *) &seccomp_actions_avail,

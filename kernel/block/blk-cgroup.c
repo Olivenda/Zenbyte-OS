@@ -110,6 +110,12 @@ static struct cgroup_subsys_state *blkcg_css(void)
 	return task_css(current, io_cgrp_id);
 }
 
+static bool blkcg_policy_enabled(struct request_queue *q,
+				 const struct blkcg_policy *pol)
+{
+	return pol && test_bit(pol->plid, q->blkcg_pols);
+}
+
 static void blkg_free_workfn(struct work_struct *work)
 {
 	struct blkcg_gq *blkg = container_of(work, struct blkcg_gq,
@@ -388,7 +394,7 @@ static struct blkcg_gq *blkg_create(struct blkcg *blkcg, struct gendisk *disk,
 
 	/* allocate */
 	if (!new_blkg) {
-		new_blkg = blkg_alloc(blkcg, disk, GFP_NOWAIT);
+		new_blkg = blkg_alloc(blkcg, disk, GFP_NOWAIT | __GFP_NOWARN);
 		if (unlikely(!new_blkg)) {
 			ret = -ENOMEM;
 			goto err_put_css;
@@ -653,7 +659,6 @@ static int blkcg_reset_stats(struct cgroup_subsys_state *css,
 	struct blkcg_gq *blkg;
 	int i;
 
-	pr_info_once("blkio.%s is deprecated\n", cftype->name);
 	mutex_lock(&blkcg_pol_mutex);
 	spin_lock_irq(&blkcg->lock);
 
@@ -791,7 +796,7 @@ int blkg_conf_open_bdev(struct blkg_conf_ctx *ctx)
 		return -EINVAL;
 	input = skip_spaces(input);
 
-	bdev = blkdev_get_no_open(MKDEV(major, minor), false);
+	bdev = blkdev_get_no_open(MKDEV(major, minor));
 	if (!bdev)
 		return -ENODEV;
 	if (bdev_is_partition(bdev)) {
@@ -809,38 +814,6 @@ int blkg_conf_open_bdev(struct blkg_conf_ctx *ctx)
 	ctx->body = input;
 	ctx->bdev = bdev;
 	return 0;
-}
-/*
- * Similar to blkg_conf_open_bdev, but additionally freezes the queue,
- * ensures the correct locking order between freeze queue and q->rq_qos_mutex.
- *
- * This function returns negative error on failure. On success it returns
- * memflags which must be saved and later passed to blkg_conf_exit_frozen
- * for restoring the memalloc scope.
- */
-unsigned long __must_check blkg_conf_open_bdev_frozen(struct blkg_conf_ctx *ctx)
-{
-	int ret;
-	unsigned long memflags;
-
-	if (ctx->bdev)
-		return -EINVAL;
-
-	ret = blkg_conf_open_bdev(ctx);
-	if (ret < 0)
-		return ret;
-	/*
-	 * At this point, we haven’t started protecting anything related to QoS,
-	 * so we release q->rq_qos_mutex here, which was first acquired in blkg_
-	 * conf_open_bdev. Later, we re-acquire q->rq_qos_mutex after freezing
-	 * the queue to maintain the correct locking order.
-	 */
-	mutex_unlock(&ctx->bdev->bd_queue->rq_qos_mutex);
-
-	memflags = blk_mq_freeze_queue(ctx->bdev->bd_queue);
-	mutex_lock(&ctx->bdev->bd_queue->rq_qos_mutex);
-
-	return memflags;
 }
 
 /**
@@ -991,20 +964,6 @@ void blkg_conf_exit(struct blkg_conf_ctx *ctx)
 }
 EXPORT_SYMBOL_GPL(blkg_conf_exit);
 
-/*
- * Similar to blkg_conf_exit, but also unfreezes the queue. Should be used
- * when blkg_conf_open_bdev_frozen is used to open the bdev.
- */
-void blkg_conf_exit_frozen(struct blkg_conf_ctx *ctx, unsigned long memflags)
-{
-	if (ctx->bdev) {
-		struct request_queue *q = ctx->bdev->bd_queue;
-
-		blkg_conf_exit(ctx);
-		blk_mq_unfreeze_queue(q, memflags);
-	}
-}
-
 static void blkg_iostat_add(struct blkg_iostat *dst, struct blkg_iostat *src)
 {
 	int i;
@@ -1056,8 +1015,8 @@ static void __blkcg_rstat_flush(struct blkcg *blkcg, int cpu)
 	/*
 	 * For covering concurrent parent blkg update from blkg_release().
 	 *
-	 * When flushing from cgroup, the subsystem rstat lock is always held,
-	 * so this lock won't cause contention most of time.
+	 * When flushing from cgroup, cgroup_rstat_lock is always held, so
+	 * this lock won't cause contention most of time.
 	 */
 	raw_spin_lock_irqsave(&blkg_stat_lock, flags);
 
@@ -1126,7 +1085,7 @@ static void blkcg_rstat_flush(struct cgroup_subsys_state *css, int cpu)
 /*
  * We source root cgroup stats from the system-wide stats to avoid
  * tracking the same information twice and incurring overhead when no
- * cgroups are defined. For that reason, css_rstat_flush in
+ * cgroups are defined. For that reason, cgroup_rstat_flush in
  * blkcg_print_stat does not actually fill out the iostat in the root
  * cgroup's blkcg_gq.
  *
@@ -1235,7 +1194,7 @@ static int blkcg_print_stat(struct seq_file *sf, void *v)
 	if (!seq_css(sf)->parent)
 		blkcg_fill_root_iostats();
 	else
-		css_rstat_flush(&blkcg->css);
+		cgroup_rstat_flush(blkcg->css.cgroup);
 
 	rcu_read_lock();
 	hlist_for_each_entry_rcu(blkg, &blkcg->blkg_list, blkcg_node) {
@@ -1449,7 +1408,7 @@ blkcg_css_alloc(struct cgroup_subsys_state *parent_css)
 
 	spin_lock_init(&blkcg->lock);
 	refcount_set(&blkcg->online_pin, 1);
-	INIT_RADIX_TREE(&blkcg->blkg_tree, GFP_NOWAIT);
+	INIT_RADIX_TREE(&blkcg->blkg_tree, GFP_NOWAIT | __GFP_NOWARN);
 	INIT_HLIST_HEAD(&blkcg->blkg_list);
 #ifdef CONFIG_CGROUP_WRITEBACK
 	INIT_LIST_HEAD(&blkcg->cgwb_list);
@@ -1580,7 +1539,6 @@ int blkcg_activate_policy(struct gendisk *disk, const struct blkcg_policy *pol)
 	struct request_queue *q = disk->queue;
 	struct blkg_policy_data *pd_prealloc = NULL;
 	struct blkcg_gq *blkg, *pinned_blkg = NULL;
-	unsigned int memflags;
 	int ret;
 
 	if (blkcg_policy_enabled(q, pol))
@@ -1595,7 +1553,7 @@ int blkcg_activate_policy(struct gendisk *disk, const struct blkcg_policy *pol)
 		return -EINVAL;
 
 	if (queue_is_mq(q))
-		memflags = blk_mq_freeze_queue(q);
+		blk_mq_freeze_queue(q);
 retry:
 	spin_lock_irq(&q->queue_lock);
 
@@ -1612,7 +1570,7 @@ retry:
 			pd_prealloc = NULL;
 		} else {
 			pd = pol->pd_alloc_fn(disk, blkg->blkcg,
-					      GFP_NOWAIT);
+					      GFP_NOWAIT | __GFP_NOWARN);
 		}
 
 		if (!pd) {
@@ -1659,7 +1617,7 @@ retry:
 	spin_unlock_irq(&q->queue_lock);
 out:
 	if (queue_is_mq(q))
-		blk_mq_unfreeze_queue(q, memflags);
+		blk_mq_unfreeze_queue(q);
 	if (pinned_blkg)
 		blkg_put(pinned_blkg);
 	if (pd_prealloc)
@@ -1703,13 +1661,12 @@ void blkcg_deactivate_policy(struct gendisk *disk,
 {
 	struct request_queue *q = disk->queue;
 	struct blkcg_gq *blkg;
-	unsigned int memflags;
 
 	if (!blkcg_policy_enabled(q, pol))
 		return;
 
 	if (queue_is_mq(q))
-		memflags = blk_mq_freeze_queue(q);
+		blk_mq_freeze_queue(q);
 
 	mutex_lock(&q->blkcg_mutex);
 	spin_lock_irq(&q->queue_lock);
@@ -1733,7 +1690,7 @@ void blkcg_deactivate_policy(struct gendisk *disk,
 	mutex_unlock(&q->blkcg_mutex);
 
 	if (queue_is_mq(q))
-		blk_mq_unfreeze_queue(q, memflags);
+		blk_mq_unfreeze_queue(q);
 }
 EXPORT_SYMBOL_GPL(blkcg_deactivate_policy);
 
@@ -1806,15 +1763,12 @@ int blkcg_policy_register(struct blkcg_policy *pol)
 	mutex_unlock(&blkcg_pol_mutex);
 
 	/* everything is in place, add intf files for the new policy */
-	if (pol->dfl_cftypes == pol->legacy_cftypes) {
-		WARN_ON(cgroup_add_cftypes(&io_cgrp_subsys,
-					   pol->dfl_cftypes));
-	} else {
+	if (pol->dfl_cftypes)
 		WARN_ON(cgroup_add_dfl_cftypes(&io_cgrp_subsys,
 					       pol->dfl_cftypes));
+	if (pol->legacy_cftypes)
 		WARN_ON(cgroup_add_legacy_cftypes(&io_cgrp_subsys,
 						  pol->legacy_cftypes));
-	}
 	mutex_unlock(&blkcg_pol_register_mutex);
 	return 0;
 
@@ -2225,7 +2179,7 @@ void blk_cgroup_bio_start(struct bio *bio)
 	}
 
 	u64_stats_update_end_irqrestore(&bis->sync, flags);
-	css_rstat_updated(&blkcg->css, cpu);
+	cgroup_rstat_updated(blkcg->css.cgroup, cpu);
 	put_cpu();
 }
 

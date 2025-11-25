@@ -408,7 +408,7 @@ static struct platform_driver st_rc_driver = {
 		.pm     = &st_rc_pm_ops,
 	},
 	.probe = st_rc_probe,
-	.remove = st_rc_remove,
+	.remove_new = st_rc_remove,
 };
 
 module_platform_driver(st_rc_driver);

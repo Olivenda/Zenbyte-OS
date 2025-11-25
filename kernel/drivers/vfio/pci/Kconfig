@@ -1,11 +1,15 @@
 # SPDX-License-Identifier: GPL-2.0-only
 menu "VFIO support for PCI devices"
-	depends on PCI
+	depends on PCI && MMU
 
 config VFIO_PCI_CORE
 	tristate
 	select VFIO_VIRQFD
 	select IRQ_BYPASS_MANAGER
+
+config VFIO_PCI_MMAP
+	def_bool y if !S390
+	depends on VFIO_PCI_CORE
 
 config VFIO_PCI_INTX
 	def_bool y if !S390

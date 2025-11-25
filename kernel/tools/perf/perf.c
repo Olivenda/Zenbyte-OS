@@ -84,7 +84,7 @@ static struct cmd_struct commands[] = {
 #endif
 	{ "kvm",	cmd_kvm,	0 },
 	{ "test",	cmd_test,	0 },
-#if defined(HAVE_LIBTRACEEVENT)
+#if defined(HAVE_LIBTRACEEVENT) && (defined(HAVE_LIBAUDIT_SUPPORT) || defined(HAVE_SYSCALL_TABLE_SUPPORT))
 	{ "trace",	cmd_trace,	0 },
 #endif
 	{ "inject",	cmd_inject,	0 },
@@ -346,9 +346,12 @@ static int run_builtin(struct cmd_struct *p, int argc, const char **argv)
 		use_pager = 1;
 	commit_pager_choice();
 
+	perf_env__init(&perf_env);
+	perf_env__set_cmdline(&perf_env, argc, argv);
 	status = p->fn(argc, argv);
 	perf_config__exit();
 	exit_browser(status);
+	perf_env__exit(&perf_env);
 
 	if (status)
 		return status & 0xff;
@@ -511,6 +514,10 @@ int main(int argc, const char **argv)
 		fprintf(stderr,
 			"trace command not available: missing libtraceevent devel package at build time.\n");
 		goto out;
+#elif !defined(HAVE_LIBAUDIT_SUPPORT) && !defined(HAVE_SYSCALL_TABLE_SUPPORT)
+		fprintf(stderr,
+			"trace command not available: missing audit-libs devel package at build time.\n");
+		goto out;
 #else
 		setup_path();
 		argv[0] = "trace";
@@ -534,6 +541,8 @@ int main(int argc, const char **argv)
 		goto out;
 	}
 	cmd = argv[0];
+
+	test_attr__init();
 
 	/*
 	 * We use PATH to find perf commands, but we prepend some higher

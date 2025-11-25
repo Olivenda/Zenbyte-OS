@@ -12,8 +12,11 @@
 #include "policy.h"
 #include "audit.h"
 
+static struct dentry *np __ro_after_init;
 static struct dentry *root __ro_after_init;
 struct dentry *policy_root __ro_after_init;
+static struct dentry *audit_node __ro_after_init;
+static struct dentry *enforce_node __ro_after_init;
 
 /**
  * setaudit() - Write handler for the securityfs node, "ipe/success_audit"
@@ -130,8 +133,6 @@ static ssize_t getenforce(struct file *f, char __user *data,
  * * %-ERANGE			- Policy version number overflow
  * * %-EINVAL			- Policy version parsing error
  * * %-EEXIST			- Same name policy already deployed
- * * %-ENOKEY			- Policy signing key not found
- * * %-EKEYREJECTED		- Policy signature verification failed
  */
 static ssize_t new_policy(struct file *f, const char __user *data,
 			  size_t len, loff_t *offset)
@@ -140,17 +141,12 @@ static ssize_t new_policy(struct file *f, const char __user *data,
 	char *copy = NULL;
 	int rc = 0;
 
-	if (!file_ns_capable(f, &init_user_ns, CAP_MAC_ADMIN)) {
-		rc = -EPERM;
-		goto out;
-	}
+	if (!file_ns_capable(f, &init_user_ns, CAP_MAC_ADMIN))
+		return -EPERM;
 
 	copy = memdup_user_nul(data, len);
-	if (IS_ERR(copy)) {
-		rc = PTR_ERR(copy);
-		copy = NULL;
-		goto out;
-	}
+	if (IS_ERR(copy))
+		return PTR_ERR(copy);
 
 	p = ipe_new_policy(NULL, 0, copy, len);
 	if (IS_ERR(p)) {
@@ -162,14 +158,12 @@ static ssize_t new_policy(struct file *f, const char __user *data,
 	if (rc)
 		goto out;
 
+	ipe_audit_policy_load(p);
+
 out:
-	kfree(copy);
-	if (rc < 0) {
+	if (rc < 0)
 		ipe_free_policy(p);
-		ipe_audit_policy_load(ERR_PTR(rc));
-	} else {
-		ipe_audit_policy_load(p);
-	}
+	kfree(copy);
 	return (rc < 0) ? rc : len;
 }
 
@@ -197,26 +191,27 @@ static int __init ipe_init_securityfs(void)
 {
 	int rc = 0;
 	struct ipe_policy *ap;
-	struct dentry *dentry;
 
 	if (!ipe_enabled)
 		return -EOPNOTSUPP;
 
 	root = securityfs_create_dir("ipe", NULL);
-	if (IS_ERR(root))
-		return PTR_ERR(root);
-
-	dentry = securityfs_create_file("success_audit", 0600, root,
-					    NULL, &audit_fops);
-	if (IS_ERR(dentry)) {
-		rc = PTR_ERR(dentry);
+	if (IS_ERR(root)) {
+		rc = PTR_ERR(root);
 		goto err;
 	}
 
-	dentry = securityfs_create_file("enforce", 0600, root, NULL,
+	audit_node = securityfs_create_file("success_audit", 0600, root,
+					    NULL, &audit_fops);
+	if (IS_ERR(audit_node)) {
+		rc = PTR_ERR(audit_node);
+		goto err;
+	}
+
+	enforce_node = securityfs_create_file("enforce", 0600, root, NULL,
 					      &enforce_fops);
-	if (IS_ERR(dentry)) {
-		rc = PTR_ERR(dentry);
+	if (IS_ERR(enforce_node)) {
+		rc = PTR_ERR(enforce_node);
 		goto err;
 	}
 
@@ -233,14 +228,18 @@ static int __init ipe_init_securityfs(void)
 			goto err;
 	}
 
-	dentry = securityfs_create_file("new_policy", 0200, root, NULL, &np_fops);
-	if (IS_ERR(dentry)) {
-		rc = PTR_ERR(dentry);
+	np = securityfs_create_file("new_policy", 0200, root, NULL, &np_fops);
+	if (IS_ERR(np)) {
+		rc = PTR_ERR(np);
 		goto err;
 	}
 
 	return 0;
 err:
+	securityfs_remove(np);
+	securityfs_remove(policy_root);
+	securityfs_remove(enforce_node);
+	securityfs_remove(audit_node);
 	securityfs_remove(root);
 	return rc;
 }

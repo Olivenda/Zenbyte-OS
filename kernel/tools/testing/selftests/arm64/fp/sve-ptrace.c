@@ -82,12 +82,10 @@ static void fill_buf(char *buf, size_t size)
 static int do_child(void)
 {
 	if (ptrace(PTRACE_TRACEME, -1, NULL, NULL))
-		ksft_exit_fail_msg("ptrace(PTRACE_TRACEME) failed: %s (%d)\n",
-				   strerror(errno), errno);
+		ksft_exit_fail_msg("PTRACE_TRACEME", strerror(errno));
 
 	if (raise(SIGSTOP))
-		ksft_exit_fail_msg("raise(SIGSTOP) failed: %s (%d)\n",
-				   strerror(errno), errno);
+		ksft_exit_fail_msg("raise(SIGSTOP)", strerror(errno));
 
 	return EXIT_SUCCESS;
 }
@@ -302,10 +300,8 @@ static void ptrace_sve_fpsimd(pid_t child, const struct vec_type *type)
 			p[j] = j;
 	}
 
-	/* This should only succeed for SVE */
 	ret = set_sve(child, type, sve);
-	ksft_test_result((type->regset == NT_ARM_SVE) == (ret == 0),
-			 "%s FPSIMD set via SVE: %d\n",
+	ksft_test_result(ret == 0, "%s FPSIMD set via SVE: %d\n",
 			 type->name, ret);
 	if (ret)
 		goto out;
@@ -345,7 +341,7 @@ static void ptrace_set_sve_get_sve_data(pid_t child,
 	data_size = SVE_PT_SVE_OFFSET + SVE_PT_SVE_SIZE(vq, SVE_PT_REGS_SVE);
 	write_buf = malloc(data_size);
 	if (!write_buf) {
-		ksft_test_result_fail("Error allocating %ld byte buffer for %s VL %u\n",
+		ksft_test_result_fail("Error allocating %d byte buffer for %s VL %u\n",
 				      data_size, type->name, vl);
 		return;
 	}
@@ -446,7 +442,7 @@ static void ptrace_set_sve_get_fpsimd_data(pid_t child,
 	data_size = SVE_PT_SVE_OFFSET + SVE_PT_SVE_SIZE(vq, SVE_PT_REGS_SVE);
 	write_buf = malloc(data_size);
 	if (!write_buf) {
-		ksft_test_result_fail("Error allocating %ld byte buffer for %s VL %u\n",
+		ksft_test_result_fail("Error allocating %d byte buffer for %s VL %u\n",
 				      data_size, type->name, vl);
 		return;
 	}
@@ -550,7 +546,7 @@ static void ptrace_set_fpsimd_get_sve_data(pid_t child,
 	read_sve = read_buf;
 
 	if (read_sve->vl != vl) {
-		ksft_test_result_fail("Child VL != expected VL: %u != %u\n",
+		ksft_test_result_fail("Child VL != expected VL %d\n",
 				      read_sve->vl, vl);
 		goto out;
 	}
@@ -560,7 +556,7 @@ static void ptrace_set_fpsimd_get_sve_data(pid_t child,
 	case SVE_PT_REGS_FPSIMD:
 		expected_size = SVE_PT_FPSIMD_SIZE(vq, SVE_PT_REGS_FPSIMD);
 		if (read_sve_size < expected_size) {
-			ksft_test_result_fail("Read %ld bytes, expected %ld\n",
+			ksft_test_result_fail("Read %d bytes, expected %d\n",
 					      read_sve_size, expected_size);
 			goto out;
 		}
@@ -576,7 +572,7 @@ static void ptrace_set_fpsimd_get_sve_data(pid_t child,
 	case SVE_PT_REGS_SVE:
 		expected_size = SVE_PT_SVE_SIZE(vq, SVE_PT_REGS_SVE);
 		if (read_sve_size < expected_size) {
-			ksft_test_result_fail("Read %ld bytes, expected %ld\n",
+			ksft_test_result_fail("Read %d bytes, expected %d\n",
 					      read_sve_size, expected_size);
 			goto out;
 		}
@@ -752,6 +748,9 @@ int main(void)
 
 	ksft_print_header();
 	ksft_set_plan(EXPECTED_TESTS);
+
+	if (!(getauxval(AT_HWCAP) & HWCAP_SVE))
+		ksft_exit_skip("SVE not available\n");
 
 	child = fork();
 	if (!child)

@@ -4,7 +4,8 @@ config F2FS_FS
 	depends on BLOCK
 	select BUFFER_HEAD
 	select NLS
-	select CRC32
+	select CRYPTO
+	select CRYPTO_CRC32
 	select F2FS_FS_XATTR if FS_ENCRYPTION
 	select FS_ENCRYPTION_ALGS if FS_ENCRYPTION
 	select FS_IOMAP

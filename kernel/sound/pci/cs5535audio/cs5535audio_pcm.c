@@ -423,7 +423,7 @@ int snd_cs5535audio_pcm(struct cs5535audio *cs5535au)
 
 	pcm->private_data = cs5535au;
 	pcm->info_flags = 0;
-	strscpy(pcm->name, "CS5535 Audio");
+	strcpy(pcm->name, "CS5535 Audio");
 
 	snd_pcm_set_managed_buffer_all(pcm, SNDRV_DMA_TYPE_DEV,
 				       &cs5535au->pci->dev,

@@ -2153,15 +2153,14 @@ static void __init blogic_inithoststruct(struct blogic_adapter *adapter,
 }
 
 /*
-  blogic_sdev_configure will actually set the queue depth on individual
+  blogic_slaveconfig will actually set the queue depth on individual
   scsi devices as they are permanently added to the device chain.  We
   shamelessly rip off the SelectQueueDepths code to make this work mostly
   like it used to.  Since we don't get called once at the end of the scan
   but instead get called for each device, we have to do things a bit
   differently.
 */
-static int blogic_sdev_configure(struct scsi_device *dev,
-				 struct queue_limits *lim)
+static int blogic_slaveconfig(struct scsi_device *dev)
 {
 	struct blogic_adapter *adapter =
 		(struct blogic_adapter *) dev->host->hostdata;
@@ -3673,7 +3672,7 @@ static const struct scsi_host_template blogic_template = {
 	.name = "BusLogic",
 	.info = blogic_drvr_info,
 	.queuecommand = blogic_qcmd,
-	.sdev_configure = blogic_sdev_configure,
+	.slave_configure = blogic_slaveconfig,
 	.bios_param = blogic_diskparam,
 	.eh_host_reset_handler = blogic_hostreset,
 #if 0
@@ -3716,7 +3715,7 @@ static void __exit blogic_exit(void)
 __setup("BusLogic=", blogic_setup);
 
 #ifdef MODULE
-/*static const struct pci_device_id blogic_pci_tbl[] = {
+/*static struct pci_device_id blogic_pci_tbl[] = {
 	{ PCI_VENDOR_ID_BUSLOGIC, PCI_DEVICE_ID_BUSLOGIC_MULTIMASTER,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
 	{ PCI_VENDOR_ID_BUSLOGIC, PCI_DEVICE_ID_BUSLOGIC_MULTIMASTER_NC,

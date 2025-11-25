@@ -8,7 +8,7 @@
 #ifndef _MWIFIEX_IOCTL_H_
 #define _MWIFIEX_IOCTL_H_
 
-#define NUM_WEP_KEYS	4
+#include <net/lib80211.h>
 
 enum {
 	MWIFIEX_SCAN_TYPE_UNCHANGED = 0,

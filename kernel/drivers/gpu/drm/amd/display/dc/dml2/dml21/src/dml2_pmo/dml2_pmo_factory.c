@@ -72,6 +72,7 @@ bool dml2_pmo_create(enum dml2_project_id project_id, struct dml2_pmo_instance *
 		out->init_for_stutter = pmo_dcn4_fams2_init_for_stutter;
 		out->test_for_stutter = pmo_dcn4_fams2_test_for_stutter;
 		out->optimize_for_stutter = pmo_dcn4_fams2_optimize_for_stutter;
+
 		result = true;
 		break;
 	case dml2_project_invalid:

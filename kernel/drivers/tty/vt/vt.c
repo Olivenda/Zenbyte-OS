@@ -104,6 +104,7 @@
 #include <linux/uaccess.h>
 #include <linux/kdb.h>
 #include <linux/ctype.h>
+#include <linux/bsearch.h>
 #include <linux/gcd.h>
 
 #define MAX_NR_CON_DRIVER 16
@@ -441,15 +442,6 @@ static void vc_uniscr_scroll(struct vc_data *vc, unsigned int top,
 		juggle_array(&uni_lines[top], size, nr);
 		vc_uniscr_clear_lines(vc, bottom - nr, nr);
 	}
-}
-
-static u32 vc_uniscr_getc(struct vc_data *vc, int relative_pos)
-{
-	int pos = vc->state.x + vc->vc_need_wrap + relative_pos;
-
-	if (vc->vc_uni_lines && in_range(pos, 0, vc->vc_cols))
-		return vc->vc_uni_lines[vc->state.y][pos];
-	return 0;
 }
 
 static void vc_uniscr_copy_area(u32 **dst_lines,
@@ -1870,14 +1862,6 @@ int mouse_reporting(void)
 	return vc_cons[fg_console].d->vc_report_mouse;
 }
 
-/* invoked via ioctl(TIOCLINUX) */
-static int get_bracketed_paste(struct tty_struct *tty)
-{
-	struct vc_data *vc = tty->driver_data;
-
-	return vc->vc_bracketed_paste;
-}
-
 enum {
 	CSI_DEC_hl_CURSOR_KEYS	= 1,	/* CKM: cursor keys send ^[Ox/^[[x */
 	CSI_DEC_hl_132_COLUMNS	= 3,	/* COLM: 80/132 mode switch */
@@ -1888,7 +1872,6 @@ enum {
 	CSI_DEC_hl_MOUSE_X10	= 9,
 	CSI_DEC_hl_SHOW_CURSOR	= 25,	/* TCEM */
 	CSI_DEC_hl_MOUSE_VT200	= 1000,
-	CSI_DEC_hl_BRACKETED_PASTE = 2004,
 };
 
 /* console_lock is held */
@@ -1940,9 +1923,6 @@ static void csi_DEC_hl(struct vc_data *vc, bool on_off)
 			break;
 		case CSI_DEC_hl_MOUSE_VT200:
 			vc->vc_report_mouse = on_off ? 2 : 0;
-			break;
-		case CSI_DEC_hl_BRACKETED_PASTE:
-			vc->vc_bracketed_paste = on_off;
 			break;
 		}
 }
@@ -2169,7 +2149,6 @@ static void reset_terminal(struct vc_data *vc, int do_clear)
 	vc->state.charset	= 0;
 	vc->vc_need_wrap	= 0;
 	vc->vc_report_mouse	= 0;
-	vc->vc_bracketed_paste	= 0;
 	vc->vc_utf              = default_utf8;
 	vc->vc_utf_count	= 0;
 
@@ -2733,6 +2712,43 @@ static void do_con_trol(struct tty_struct *tty, struct vc_data *vc, u8 c)
 	}
 }
 
+/* is_double_width() is based on the wcwidth() implementation by
+ * Markus Kuhn -- 2007-05-26 (Unicode 5.0)
+ * Latest version: https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
+ */
+struct interval {
+	uint32_t first;
+	uint32_t last;
+};
+
+static int ucs_cmp(const void *key, const void *elt)
+{
+	uint32_t ucs = *(uint32_t *)key;
+	struct interval e = *(struct interval *) elt;
+
+	if (ucs > e.last)
+		return 1;
+	else if (ucs < e.first)
+		return -1;
+	return 0;
+}
+
+static int is_double_width(uint32_t ucs)
+{
+	static const struct interval double_width[] = {
+		{ 0x1100, 0x115F }, { 0x2329, 0x232A }, { 0x2E80, 0x303E },
+		{ 0x3040, 0xA4CF }, { 0xAC00, 0xD7A3 }, { 0xF900, 0xFAFF },
+		{ 0xFE10, 0xFE19 }, { 0xFE30, 0xFE6F }, { 0xFF00, 0xFF60 },
+		{ 0xFFE0, 0xFFE6 }, { 0x20000, 0x2FFFD }, { 0x30000, 0x3FFFD }
+	};
+	if (ucs < double_width[0].first ||
+	    ucs > double_width[ARRAY_SIZE(double_width) - 1].last)
+		return 0;
+
+	return bsearch(&ucs, double_width, ARRAY_SIZE(double_width),
+			sizeof(struct interval), ucs_cmp) != NULL;
+}
+
 struct vc_draw_region {
 	unsigned long from, to;
 	int x;
@@ -2801,7 +2817,7 @@ static int vc_translate_unicode(struct vc_data *vc, int c, bool *rescan)
 	if ((c & 0xc0) == 0x80) {
 		/* Unexpected continuation byte? */
 		if (!vc->vc_utf_count)
-			goto bad_sequence;
+			return 0xfffd;
 
 		vc->vc_utf_char = (vc->vc_utf_char << 6) | (c & 0x3f);
 		vc->vc_npar++;
@@ -2813,17 +2829,17 @@ static int vc_translate_unicode(struct vc_data *vc, int c, bool *rescan)
 		/* Reject overlong sequences */
 		if (c <= utf8_length_changes[vc->vc_npar - 1] ||
 				c > utf8_length_changes[vc->vc_npar])
-			goto bad_sequence;
+			return 0xfffd;
 
 		return vc_sanitize_unicode(c);
 	}
 
 	/* Single ASCII byte or first byte of a sequence received */
 	if (vc->vc_utf_count) {
-		/* A continuation byte was expected */
+		/* Continuation byte expected */
 		*rescan = true;
 		vc->vc_utf_count = 0;
-		goto bad_sequence;
+		return 0xfffd;
 	}
 
 	/* Nothing to do if an ASCII byte was received */
@@ -2842,14 +2858,11 @@ static int vc_translate_unicode(struct vc_data *vc, int c, bool *rescan)
 		vc->vc_utf_count = 3;
 		vc->vc_utf_char = (c & 0x07);
 	} else {
-		goto bad_sequence;
+		return 0xfffd;
 	}
 
 need_more_bytes:
 	return -1;
-
-bad_sequence:
-	return 0xfffd;
 }
 
 static int vc_translate(struct vc_data *vc, int *c, bool *rescan)
@@ -2927,143 +2940,54 @@ static bool vc_is_control(struct vc_data *vc, int tc, int c)
 	return false;
 }
 
-static void vc_con_rewind(struct vc_data *vc)
-{
-	if (vc->state.x && !vc->vc_need_wrap) {
-		vc->vc_pos -= 2;
-		vc->state.x--;
-	}
-	vc->vc_need_wrap = 0;
-}
-
-#define UCS_ZWS		0x200b	/* Zero Width Space */
-#define UCS_VS16	0xfe0f	/* Variation Selector 16 */
-#define UCS_REPLACEMENT	0xfffd	/* Replacement Character */
-
-static int vc_process_ucs(struct vc_data *vc, int *c, int *tc)
-{
-	u32 prev_c, curr_c = *c;
-
-	if (ucs_is_double_width(curr_c)) {
-		/*
-		 * The Unicode screen memory is allocated only when
-		 * required. This is one such case as we need to remember
-		 * which displayed characters are double-width.
-		 */
-		vc_uniscr_check(vc);
-		return 2;
-	}
-
-	if (!ucs_is_zero_width(curr_c))
-		return 1;
-
-	/* From here curr_c is known to be zero-width. */
-
-	if (ucs_is_double_width(vc_uniscr_getc(vc, -2))) {
-		/*
-		 * Let's merge this zero-width code point with the preceding
-		 * double-width code point by replacing the existing
-		 * zero-width space padding. To do so we rewind one column
-		 * and pretend this has a width of 1.
-		 * We give the legacy display the same initial space padding.
-		 */
-		vc_con_rewind(vc);
-		*tc = ' ';
-		return 1;
-	}
-
-	/* From here the preceding character, if any, must be single-width. */
-	prev_c = vc_uniscr_getc(vc, -1);
-
-	if (curr_c == UCS_VS16 && prev_c != 0) {
-		/*
-		 * VS16 (U+FE0F) is special. It typically turns the preceding
-		 * single-width character into a double-width one. Let it
-		 * have a width of 1 effectively making the combination with
-		 * the preceding character double-width.
-		 */
-		*tc = ' ';
-		return 1;
-	}
-
-	/* try recomposition */
-	prev_c = ucs_recompose(prev_c, curr_c);
-	if (prev_c != 0) {
-		vc_con_rewind(vc);
-		*tc = *c = prev_c;
-		return 1;
-	}
-
-	/* Otherwise zero-width code points are ignored. */
-	return 0;
-}
-
-static int vc_get_glyph(struct vc_data *vc, int tc)
-{
-	int glyph = conv_uni_to_pc(vc, tc);
-	u16 charmask = vc->vc_hi_font_mask ? 0x1ff : 0xff;
-
-	if (!(glyph & ~charmask))
-		return glyph;
-
-	if (glyph == -1)
-		return -1; /* nothing to display */
-
-	/* Glyph not found */
-	if ((!vc->vc_utf || vc->vc_disp_ctrl || tc < 128) && !(tc & ~charmask)) {
-		/*
-		 * In legacy mode use the glyph we get by a 1:1 mapping.
-		 * This would make absolutely no sense with Unicode in mind, but do this for
-		 * ASCII characters since a font may lack Unicode mapping info and we don't
-		 * want to end up with having question marks only.
-		 */
-		return tc;
-	}
-
-	/*
-	 * The Unicode screen memory is allocated only when required.
-	 * This is one such case: we're about to "cheat" with the displayed
-	 * character meaning the simple screen buffer won't hold the original
-	 * information, whereas the Unicode screen buffer always does.
-	 */
-	vc_uniscr_check(vc);
-
-	/* Try getting a simpler fallback character. */
-	tc = ucs_get_fallback(tc);
-	if (tc)
-		return vc_get_glyph(vc, tc);
-
-	/* Display U+FFFD (Unicode Replacement Character). */
-	return conv_uni_to_pc(vc, UCS_REPLACEMENT);
-}
-
 static int vc_con_write_normal(struct vc_data *vc, int tc, int c,
 		struct vc_draw_region *draw)
 {
 	int next_c;
 	unsigned char vc_attr = vc->vc_attr;
-	u16 himask = vc->vc_hi_font_mask;
+	u16 himask = vc->vc_hi_font_mask, charmask = himask ? 0x1ff : 0xff;
 	u8 width = 1;
 	bool inverse = false;
 
 	if (vc->vc_utf && !vc->vc_disp_ctrl) {
-		width = vc_process_ucs(vc, &c, &tc);
-		if (!width)
-			goto out;
+		if (is_double_width(c))
+			width = 2;
 	}
 
 	/* Now try to find out how to display it */
-	tc = vc_get_glyph(vc, tc);
-	if (tc == -1)
-		return -1; /* nothing to display */
-	if (tc < 0) {
-		inverse = true;
-		tc = conv_uni_to_pc(vc, '?');
-		if (tc < 0)
-			tc = '?';
+	tc = conv_uni_to_pc(vc, tc);
+	if (tc & ~charmask) {
+		if (tc == -1 || tc == -2)
+			return -1; /* nothing to display */
 
-		vc_attr = vc_invert_attr(vc);
-		con_flush(vc, draw);
+		/* Glyph not found */
+		if ((!vc->vc_utf || vc->vc_disp_ctrl || c < 128) &&
+				!(c & ~charmask)) {
+			/*
+			 * In legacy mode use the glyph we get by a 1:1
+			 * mapping.
+			 * This would make absolutely no sense with Unicode in
+			 * mind, but do this for ASCII characters since a font
+			 * may lack Unicode mapping info and we don't want to
+			 * end up with having question marks only.
+			 */
+			tc = c;
+		} else {
+			/*
+			 * Display U+FFFD. If it's not found, display an inverse
+			 * question mark.
+			 */
+			tc = conv_uni_to_pc(vc, 0xfffd);
+			if (tc < 0) {
+				inverse = true;
+				tc = conv_uni_to_pc(vc, '?');
+				if (tc < 0)
+					tc = '?';
+
+				vc_attr = vc_invert_attr(vc);
+				con_flush(vc, draw);
+			}
+		}
 	}
 
 	next_c = c;
@@ -3104,14 +3028,8 @@ static int vc_con_write_normal(struct vc_data *vc, int tc, int c,
 		tc = conv_uni_to_pc(vc, ' ');
 		if (tc < 0)
 			tc = ' ';
-		/*
-		 * Store a zero-width space in the Unicode screen given that
-		 * the previous code point is semantically double width.
-		 */
-		next_c = UCS_ZWS;
+		next_c = ' ';
 	}
-
-out:
 	notify_write(vc, c);
 
 	if (inverse)
@@ -3496,8 +3414,6 @@ int tioclinux(struct tty_struct *tty, unsigned long arg)
 		break;
 	case TIOCL_BLANKEDSCREEN:
 		return console_blanked;
-	case TIOCL_GETBRACKETEDPASTE:
-		return get_bracketed_paste(tty);
 	default:
 		return -EINVAL;
 	}
@@ -4585,7 +4501,7 @@ void do_blank_screen(int entering_gfx)
 	}
 
 	hide_cursor(vc);
-	timer_delete_sync(&console_timer);
+	del_timer_sync(&console_timer);
 	blank_timer_expired = 0;
 
 	save_screen(vc);
@@ -4691,7 +4607,7 @@ void poke_blanked_console(void)
 	/* This isn't perfectly race free, but a race here would be mostly harmless,
 	 * at worst, we'll do a spurious blank and it's unlikely
 	 */
-	timer_delete(&console_timer);
+	del_timer(&console_timer);
 	blank_timer_expired = 0;
 
 	if (ignore_poke || !vc_cons[fg_console].d || vc_cons[fg_console].d->vc_mode == KD_GRAPHICS)

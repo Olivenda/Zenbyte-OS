@@ -7,7 +7,6 @@
 #include <linux/nmi.h>
 #include <linux/slab.h>
 #include <linux/stop_machine.h>
-#include <asm/msr.h>
 
 #include "ifs.h"
 
@@ -210,8 +209,8 @@ static int doscan(void *data)
 	 * take up to 200 milliseconds (in the case where all chunks
 	 * are processed in a single pass) before it retires.
 	 */
-	wrmsrq(MSR_ACTIVATE_SCAN, params->activate->data);
-	rdmsrq(MSR_SCAN_STATUS, status.data);
+	wrmsrl(MSR_ACTIVATE_SCAN, params->activate->data);
+	rdmsrl(MSR_SCAN_STATUS, status.data);
 
 	trace_ifs_status(ifsd->cur_batch, start, stop, status.data);
 
@@ -322,9 +321,9 @@ static int do_array_test(void *data)
 	first = cpumask_first(cpu_smt_mask(cpu));
 
 	if (cpu == first) {
-		wrmsrq(MSR_ARRAY_BIST, command->data);
+		wrmsrl(MSR_ARRAY_BIST, command->data);
 		/* Pass back the result of the test */
-		rdmsrq(MSR_ARRAY_BIST, command->data);
+		rdmsrl(MSR_ARRAY_BIST, command->data);
 	}
 
 	return 0;
@@ -375,8 +374,8 @@ static int do_array_test_gen1(void *status)
 	first = cpumask_first(cpu_smt_mask(cpu));
 
 	if (cpu == first) {
-		wrmsrq(MSR_ARRAY_TRIGGER, ARRAY_GEN1_TEST_ALL_ARRAYS);
-		rdmsrq(MSR_ARRAY_STATUS, *((u64 *)status));
+		wrmsrl(MSR_ARRAY_TRIGGER, ARRAY_GEN1_TEST_ALL_ARRAYS);
+		rdmsrl(MSR_ARRAY_STATUS, *((u64 *)status));
 	}
 
 	return 0;
@@ -527,8 +526,8 @@ static int dosbaf(void *data)
 	 * starts scan of each requested bundle. The core test happens
 	 * during the "execution" of the WRMSR.
 	 */
-	wrmsrq(MSR_ACTIVATE_SBAF, run_params->activate->data);
-	rdmsrq(MSR_SBAF_STATUS, status.data);
+	wrmsrl(MSR_ACTIVATE_SBAF, run_params->activate->data);
+	rdmsrl(MSR_SBAF_STATUS, status.data);
 	trace_ifs_sbaf(ifsd->cur_batch, *run_params->activate, status);
 
 	/* Pass back the result of the test */

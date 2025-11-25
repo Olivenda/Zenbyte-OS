@@ -559,8 +559,10 @@ static int __init octeon_wdt_init(void)
 	watchdog_set_nowayout(&octeon_wdt, nowayout);
 
 	ret = watchdog_register_device(&octeon_wdt);
-	if (ret)
+	if (ret) {
+		pr_err("watchdog_register_device() failed: %d\n", ret);
 		return ret;
+	}
 
 	if (disable) {
 		pr_notice("disabled\n");

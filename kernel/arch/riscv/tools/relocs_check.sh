@@ -14,9 +14,7 @@ bad_relocs=$(
 ${srctree}/scripts/relocs_check.sh "$@" |
 	# These relocations are okay
 	#	R_RISCV_RELATIVE
-	#	R_RISCV_NONE
-	grep -F -w -v 'R_RISCV_RELATIVE
-R_RISCV_NONE'
+	grep -F -w -v 'R_RISCV_RELATIVE'
 )
 
 if [ -z "$bad_relocs" ]; then

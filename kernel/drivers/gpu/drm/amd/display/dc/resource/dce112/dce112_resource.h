@@ -42,10 +42,10 @@ enum dc_status dce112_validate_with_context(
 		struct dc_state *context,
 		struct dc_state *old_context);
 
-enum dc_status dce112_validate_bandwidth(
+bool dce112_validate_bandwidth(
 	struct dc *dc,
 	struct dc_state *context,
-	enum dc_validate_mode validate_mode);
+	bool fast_validate);
 
 enum dc_status dce112_add_stream_to_ctx(
 		struct dc *dc,

@@ -24,6 +24,7 @@
 };
 
 &main_cpsw0 {
+	pinctrl-names = "default";
 	status = "okay";
 };
 

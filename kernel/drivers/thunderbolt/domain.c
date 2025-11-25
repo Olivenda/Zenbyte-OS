@@ -217,7 +217,7 @@ static ssize_t boot_acl_store(struct device *dev, struct device_attribute *attr,
 	ret = tb->cm_ops->set_boot_acl(tb, acl, tb->nboot_acl);
 	if (!ret) {
 		/* Notify userspace about the change */
-		tb_domain_event(tb, NULL);
+		kobject_uevent(&tb->dev.kobj, KOBJ_CHANGE);
 	}
 	mutex_unlock(&tb->lock);
 

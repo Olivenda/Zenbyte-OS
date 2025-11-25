@@ -13,7 +13,6 @@
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
 #include <linux/rtc.h>
-#include <linux/string_choices.h>
 
 #define DRV_NAME "cros-usbpd-logger"
 
@@ -136,8 +135,8 @@ static void cros_usbpd_print_log_entry(struct ec_response_pd_log *r,
 		len += append_str(buf, len, "Power supply fault: %s", fault);
 		break;
 	case PD_EVENT_VIDEO_DP_MODE:
-		len += append_str(buf, len, "DP mode %s",
-				  str_enabled_disabled(r->data == 1));
+		len += append_str(buf, len, "DP mode %sabled", r->data == 1 ?
+				  "en" : "dis");
 		break;
 	case PD_EVENT_VIDEO_CODEC:
 		minfo = (struct mcdp_info *)r->payload;
@@ -263,7 +262,7 @@ static struct platform_driver cros_usbpd_logger_driver = {
 		.pm = &cros_usbpd_logger_pm_ops,
 	},
 	.probe = cros_usbpd_logger_probe,
-	.remove = cros_usbpd_logger_remove,
+	.remove_new = cros_usbpd_logger_remove,
 	.id_table = cros_usbpd_logger_id,
 };
 

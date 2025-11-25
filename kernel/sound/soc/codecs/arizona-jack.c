@@ -319,6 +319,7 @@ static void arizona_stop_mic(struct arizona_priv *info)
 
 	if (change) {
 		regulator_disable(info->micvdd);
+		pm_runtime_mark_last_busy(arizona->dev);
 		pm_runtime_put_autosuspend(arizona->dev);
 	}
 }
@@ -1126,6 +1127,7 @@ out:
 
 	mutex_unlock(&info->lock);
 
+	pm_runtime_mark_last_busy(arizona->dev);
 	pm_runtime_put_autosuspend(arizona->dev);
 
 	return IRQ_HANDLED;

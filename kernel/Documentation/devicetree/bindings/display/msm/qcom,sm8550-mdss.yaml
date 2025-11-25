@@ -30,14 +30,10 @@ properties:
     maxItems: 1
 
   interconnects:
-    items:
-      - description: Interconnect path from mdp0 port to the data bus
-      - description: Interconnect path from CPU to the reg bus
+    maxItems: 2
 
   interconnect-names:
-    items:
-      - const: mdp0-mem
-      - const: cpu-cfg
+    maxItems: 2
 
 patternProperties:
   "^display-controller@[0-9a-f]+$":
@@ -95,9 +91,9 @@ examples:
         reg = <0x0ae00000 0x1000>;
         reg-names = "mdss";
 
-        interconnects = <&mmss_noc MASTER_MDP 0 &mc_virt SLAVE_EBI1 0>,
-                        <&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_DISPLAY_CFG 0>;
-        interconnect-names = "mdp0-mem", "cpu-cfg";
+        interconnects = <&mmss_noc MASTER_MDP 0 &gem_noc SLAVE_LLCC 0>,
+                        <&mc_virt MASTER_LLCC 0 &mc_virt SLAVE_EBI1 0>;
+        interconnect-names = "mdp0-mem", "mdp1-mem";
 
         resets = <&dispcc DISP_CC_MDSS_CORE_BCR>;
 

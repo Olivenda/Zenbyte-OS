@@ -12,7 +12,7 @@
 #define __ALIGN		.align 4
 #define __ALIGN_STR	__stringify(__ALIGN)
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 
 .macro ST2 e, o, off
 #ifdef CONFIG_ARC_HAS_LL64
@@ -61,7 +61,7 @@
 	CFI_ENDPROC ASM_NL	\
 	.size name, .-name
 
-#else	/* !__ASSEMBLER__ */
+#else	/* !__ASSEMBLY__ */
 
 #ifdef CONFIG_ARC_HAS_ICCM
 #define __arcfp_code __section(".text.arcfp")
@@ -75,6 +75,6 @@
 #define __arcfp_data __section(".data")
 #endif
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 
 #endif

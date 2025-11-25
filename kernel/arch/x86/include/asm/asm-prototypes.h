@@ -16,10 +16,10 @@
 #include <asm/gsseg.h>
 #include <asm/nospec-branch.h>
 
-#ifndef CONFIG_X86_CX8
+#ifndef CONFIG_X86_CMPXCHG64
 extern void cmpxchg8b_emu(void);
 #endif
 
-#ifdef CONFIG_STACKPROTECTOR
+#if defined(__GENKSYMS__) && defined(CONFIG_STACKPROTECTOR)
 extern unsigned long __ref_stack_chk_guard;
 #endif

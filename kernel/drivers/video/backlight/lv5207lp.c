@@ -9,6 +9,7 @@
 
 #include <linux/backlight.h>
 #include <linux/err.h>
+#include <linux/fb.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/platform_data/lv5207lp.h>

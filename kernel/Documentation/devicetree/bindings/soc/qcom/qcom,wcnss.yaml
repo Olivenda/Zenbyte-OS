@@ -54,7 +54,7 @@ properties:
       - compatible
 
   wifi:
-    unevaluatedProperties: false
+    additionalProperties: false
     type: object
     properties:
       compatible:
@@ -87,9 +87,6 @@ properties:
       - interrupt-names
       - qcom,smem-states
       - qcom,smem-state-names
-
-    allOf:
-      - $ref: /schemas/net/wireless/wireless-controller.yaml#
 
 required:
   - compatible

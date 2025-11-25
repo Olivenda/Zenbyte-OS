@@ -8,14 +8,13 @@
 
 from .test_keyboard import ArrayKeyboard, TestArrayKeyboard
 from hidtools.util import BusType
-from . import base
 
 import libevdev
 import logging
 
 logger = logging.getLogger("hidtools.test.apple-keyboard")
 
-KERNEL_MODULE = base.KernelModule("apple", "hid-apple")
+KERNEL_MODULE = ("apple", "hid-apple")
 
 
 class KbdData(object):

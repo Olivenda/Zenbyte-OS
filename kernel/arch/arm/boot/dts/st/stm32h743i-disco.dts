@@ -105,7 +105,7 @@
 };
 
 &usart2 {
-	pinctrl-0 = <&usart2_pins_a>;
+	pinctrl-0 = <&usart2_pins>;
 	pinctrl-names = "default";
 	status = "okay";
 };

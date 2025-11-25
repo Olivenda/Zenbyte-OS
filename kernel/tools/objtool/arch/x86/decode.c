@@ -36,7 +36,7 @@ static int is_x86_64(const struct elf *elf)
 	case EM_386:
 		return 0;
 	default:
-		ERROR("unexpected ELF machine type %d", elf->ehdr.e_machine);
+		WARN("unexpected ELF machine type %d", elf->ehdr.e_machine);
 		return -1;
 	}
 }
@@ -173,7 +173,7 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 	ret = insn_decode(&ins, sec->data->d_buf + offset, maxlen,
 			  x86_64 ? INSN_MODE_64 : INSN_MODE_32);
 	if (ret < 0) {
-		ERROR("can't decode instruction at %s:0x%lx", sec->name, offset);
+		WARN("can't decode instruction at %s:0x%lx", sec->name, offset);
 		return -1;
 	}
 
@@ -188,15 +188,6 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 	op1 = ins.opcode.bytes[0];
 	op2 = ins.opcode.bytes[1];
 	op3 = ins.opcode.bytes[2];
-
-	/*
-	 * XXX hack, decoder is buggered and thinks 0xea is 7 bytes long.
-	 */
-	if (op1 == 0xea) {
-		insn->len = 1;
-		insn->type = INSN_BUG;
-		return 0;
-	}
 
 	if (ins.rex_prefix.nbytes) {
 		rex = ins.rex_prefix.bytes[0];
@@ -330,7 +321,7 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 			break;
 
 		default:
-			/* ERROR ? */
+			/* WARN ? */
 			break;
 		}
 
@@ -465,17 +456,15 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 		if (!rex_w)
 			break;
 
+		/* skip RIP relative displacement */
+		if (is_RIP())
+			break;
+
 		/* skip nontrivial SIB */
 		if (have_SIB()) {
 			modrm_rm = sib_base;
 			if (sib_index != CFI_SP)
 				break;
-		}
-
-		/* lea disp(%rip), %dst */
-		if (is_RIP()) {
-			insn->type = INSN_LEA_RIP;
-			break;
 		}
 
 		/* lea disp(%src), %dst */
@@ -531,7 +520,7 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 			case INAT_PFX_REPNE:
 				if (modrm == 0xca)
 					/* eretu/erets */
-					insn->type = INSN_SYSRET;
+					insn->type = INSN_CONTEXT_SWITCH;
 				break;
 			default:
 				if (modrm == 0xca)
@@ -544,15 +533,11 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 
 			insn->type = INSN_JUMP_CONDITIONAL;
 
-		} else if (op2 == 0x05 || op2 == 0x34) {
+		} else if (op2 == 0x05 || op2 == 0x07 || op2 == 0x34 ||
+			   op2 == 0x35) {
 
-			/* syscall, sysenter */
-			insn->type = INSN_SYSCALL;
-
-		} else if (op2 == 0x07 || op2 == 0x35) {
-
-			/* sysret, sysexit */
-			insn->type = INSN_SYSRET;
+			/* sysenter, sysret */
+			insn->type = INSN_CONTEXT_SWITCH;
 
 		} else if (op2 == 0x0b || op2 == 0xb9) {
 
@@ -574,7 +559,8 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 			if (ins.prefixes.nbytes == 1 &&
 			    ins.prefixes.bytes[0] == 0xf2) {
 				/* ENQCMD cannot be used in the kernel. */
-				WARN("ENQCMD instruction at %s:%lx", sec->name, offset);
+				WARN("ENQCMD instruction at %s:%lx", sec->name,
+				     offset);
 			}
 
 		} else if (op2 == 0xa0 || op2 == 0xa8) {
@@ -658,7 +644,7 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 			if (disp->sym->type == STT_SECTION)
 				func = find_symbol_by_offset(disp->sym->sec, reloc_addend(disp));
 			if (!func) {
-				ERROR("no func for pv_ops[]");
+				WARN("no func for pv_ops[]");
 				return -1;
 			}
 
@@ -689,7 +675,7 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 
 	case 0xca: /* retf */
 	case 0xcb: /* retf */
-		insn->type = INSN_SYSRET;
+		insn->type = INSN_CONTEXT_SWITCH;
 		break;
 
 	case 0xe0: /* loopne */
@@ -734,7 +720,7 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 		} else if (modrm_reg == 5) {
 
 			/* jmpf */
-			insn->type = INSN_SYSRET;
+			insn->type = INSN_CONTEXT_SWITCH;
 
 		} else if (modrm_reg == 6) {
 
@@ -751,10 +737,7 @@ int arch_decode_instruction(struct objtool_file *file, const struct section *sec
 		break;
 	}
 
-	if (ins.immediate.nbytes)
-		insn->immediate = ins.immediate.value;
-	else if (ins.displacement.nbytes)
-		insn->immediate = ins.displacement.value;
+	insn->immediate = ins.immediate.nbytes ? ins.immediate.value : 0;
 
 	return 0;
 }
@@ -788,7 +771,7 @@ const char *arch_nop_insn(int len)
 	};
 
 	if (len < 1 || len > 5) {
-		ERROR("invalid NOP size: %d\n", len);
+		WARN("invalid NOP size: %d\n", len);
 		return NULL;
 	}
 
@@ -808,7 +791,7 @@ const char *arch_ret_insn(int len)
 	};
 
 	if (len < 1 || len > 5) {
-		ERROR("invalid RET size: %d\n", len);
+		WARN("invalid RET size: %d\n", len);
 		return NULL;
 	}
 
@@ -851,32 +834,16 @@ int arch_decode_hint_reg(u8 sp_reg, int *base)
 
 bool arch_is_retpoline(struct symbol *sym)
 {
-	return !strncmp(sym->name, "__x86_indirect_", 15) ||
-	       !strncmp(sym->name, "__pi___x86_indirect_", 20);
+	return !strncmp(sym->name, "__x86_indirect_", 15);
 }
 
 bool arch_is_rethunk(struct symbol *sym)
 {
-	return !strcmp(sym->name, "__x86_return_thunk") ||
-	       !strcmp(sym->name, "__pi___x86_return_thunk");
+	return !strcmp(sym->name, "__x86_return_thunk");
 }
 
 bool arch_is_embedded_insn(struct symbol *sym)
 {
 	return !strcmp(sym->name, "retbleed_return_thunk") ||
-	       !strcmp(sym->name, "srso_alias_safe_ret") ||
 	       !strcmp(sym->name, "srso_safe_ret");
-}
-
-unsigned int arch_reloc_size(struct reloc *reloc)
-{
-	switch (reloc_type(reloc)) {
-	case R_X86_64_32:
-	case R_X86_64_32S:
-	case R_X86_64_PC32:
-	case R_X86_64_PLT32:
-		return 4;
-	default:
-		return 8;
-	}
 }

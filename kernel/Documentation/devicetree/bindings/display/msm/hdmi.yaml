@@ -66,6 +66,21 @@ properties:
     maxItems: 1
     description: hpd pin
 
+  qcom,hdmi-tx-mux-en-gpios:
+    maxItems: 1
+    deprecated: true
+    description: HDMI mux enable pin
+
+  qcom,hdmi-tx-mux-sel-gpios:
+    maxItems: 1
+    deprecated: true
+    description: HDMI mux select pin
+
+  qcom,hdmi-tx-mux-lpm-gpios:
+    maxItems: 1
+    deprecated: true
+    description: HDMI mux lpm pin
+
   '#sound-dai-cells':
     const: 1
 
@@ -74,12 +89,12 @@ properties:
     $ref: /schemas/graph.yaml#/properties/ports
     properties:
       port@0:
-        $ref: /schemas/graph.yaml#/properties/port
+        $ref: /schemas/graph.yaml#/$defs/port-base
         description: |
           Input endpoints of the controller.
 
       port@1:
-        $ref: /schemas/graph.yaml#/properties/port
+        $ref: /schemas/graph.yaml#/$defs/port-base
         description: |
           Output endpoints of the controller.
 

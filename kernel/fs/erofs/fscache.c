@@ -102,7 +102,8 @@ static void erofs_fscache_req_io_put(struct erofs_fscache_io *io)
 		erofs_fscache_req_put(req);
 }
 
-static void erofs_fscache_req_end_io(void *priv, ssize_t transferred_or_error)
+static void erofs_fscache_req_end_io(void *priv,
+		ssize_t transferred_or_error, bool was_async)
 {
 	struct erofs_fscache_io *io = priv;
 	struct erofs_fscache_rq *req = io->private;
@@ -179,7 +180,8 @@ struct erofs_fscache_bio {
 	struct bio_vec bvecs[BIO_MAX_VECS];
 };
 
-static void erofs_fscache_bio_endio(void *priv, ssize_t transferred_or_error)
+static void erofs_fscache_bio_endio(void *priv,
+		ssize_t transferred_or_error, bool was_async)
 {
 	struct erofs_fscache_bio *io = priv;
 
@@ -274,8 +276,7 @@ static int erofs_fscache_data_read_slice(struct erofs_fscache_rq *req)
 		size_t size = map.m_llen;
 		void *src;
 
-		src = erofs_read_metabuf(&buf, sb, map.m_pa,
-					 erofs_inode_in_metabox(inode));
+		src = erofs_read_metabuf(&buf, sb, map.m_pa, EROFS_KMAP);
 		if (IS_ERR(src))
 			return PTR_ERR(src);
 

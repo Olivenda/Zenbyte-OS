@@ -433,11 +433,9 @@ static int truly_nt35521_probe(struct mipi_dsi_device *dsi)
 	struct truly_nt35521 *ctx;
 	int ret;
 
-	ctx = devm_drm_panel_alloc(dev, struct truly_nt35521, panel,
-				   &truly_nt35521_panel_funcs,
-				   DRM_MODE_CONNECTOR_DSI);
-	if (IS_ERR(ctx))
-		return PTR_ERR(ctx);
+	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
+	if (!ctx)
+		return -ENOMEM;
 
 	ctx->supplies[0].supply = "positive5";
 	ctx->supplies[1].supply = "negative5";
@@ -466,6 +464,9 @@ static int truly_nt35521_probe(struct mipi_dsi_device *dsi)
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |
 			  MIPI_DSI_MODE_VIDEO_HSE | MIPI_DSI_MODE_NO_EOT_PACKET |
 			  MIPI_DSI_CLOCK_NON_CONTINUOUS;
+
+	drm_panel_init(&ctx->panel, dev, &truly_nt35521_panel_funcs,
+		       DRM_MODE_CONNECTOR_DSI);
 
 	ctx->panel.backlight = truly_nt35521_create_backlight(dsi);
 	if (IS_ERR(ctx->panel.backlight))

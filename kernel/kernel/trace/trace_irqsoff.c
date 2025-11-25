@@ -123,12 +123,12 @@ static int func_prolog_dec(struct trace_array *tr,
 		return 0;
 
 	*data = per_cpu_ptr(tr->array_buffer.data, cpu);
-	disabled = local_inc_return(&(*data)->disabled);
+	disabled = atomic_inc_return(&(*data)->disabled);
 
 	if (likely(disabled == 1))
 		return 1;
 
-	local_dec(&(*data)->disabled);
+	atomic_dec(&(*data)->disabled);
 
 	return 0;
 }
@@ -150,9 +150,9 @@ irqsoff_tracer_call(unsigned long ip, unsigned long parent_ip,
 
 	trace_ctx = tracing_gen_ctx_flags(flags);
 
-	trace_function(tr, ip, parent_ip, trace_ctx, fregs);
+	trace_function(tr, ip, parent_ip, trace_ctx);
 
-	local_dec(&data->disabled);
+	atomic_dec(&data->disabled);
 }
 #endif /* CONFIG_FUNCTION_TRACER */
 
@@ -176,15 +176,13 @@ static int irqsoff_display_graph(struct trace_array *tr, int set)
 }
 
 static int irqsoff_graph_entry(struct ftrace_graph_ent *trace,
-			       struct fgraph_ops *gops,
-			       struct ftrace_regs *fregs)
+			       struct fgraph_ops *gops)
 {
 	struct trace_array *tr = irqsoff_trace;
 	struct trace_array_cpu *data;
 	unsigned long flags;
 	unsigned int trace_ctx;
-	u64 *calltime;
-	int ret = 0;
+	int ret;
 
 	if (ftrace_graph_ignore_func(gops, trace))
 		return 0;
@@ -201,41 +199,29 @@ static int irqsoff_graph_entry(struct ftrace_graph_ent *trace,
 	if (!func_prolog_dec(tr, &data, &flags))
 		return 0;
 
-	calltime = fgraph_reserve_data(gops->idx, sizeof(*calltime));
-	if (calltime) {
-		*calltime = trace_clock_local();
-		trace_ctx = tracing_gen_ctx_flags(flags);
-		ret = __trace_graph_entry(tr, trace, trace_ctx);
-	}
-	local_dec(&data->disabled);
+	trace_ctx = tracing_gen_ctx_flags(flags);
+	ret = __trace_graph_entry(tr, trace, trace_ctx);
+	atomic_dec(&data->disabled);
 
 	return ret;
 }
 
 static void irqsoff_graph_return(struct ftrace_graph_ret *trace,
-				 struct fgraph_ops *gops,
-				 struct ftrace_regs *fregs)
+				 struct fgraph_ops *gops)
 {
 	struct trace_array *tr = irqsoff_trace;
 	struct trace_array_cpu *data;
 	unsigned long flags;
 	unsigned int trace_ctx;
-	u64 *calltime;
-	u64 rettime;
-	int size;
 
 	ftrace_graph_addr_finish(gops, trace);
 
 	if (!func_prolog_dec(tr, &data, &flags))
 		return;
 
-	rettime = trace_clock_local();
-	calltime = fgraph_retrieve_data(gops->idx, &size);
-	if (calltime) {
-		trace_ctx = tracing_gen_ctx_flags(flags);
-		__trace_graph_return(tr, trace, trace_ctx, *calltime, rettime);
-	}
-	local_dec(&data->disabled);
+	trace_ctx = tracing_gen_ctx_flags(flags);
+	__trace_graph_return(tr, trace, trace_ctx);
+	atomic_dec(&data->disabled);
 }
 
 static struct fgraph_ops fgraph_ops = {
@@ -290,17 +276,11 @@ __trace_function(struct trace_array *tr,
 	if (is_graph(tr))
 		trace_graph_function(tr, ip, parent_ip, trace_ctx);
 	else
-		trace_function(tr, ip, parent_ip, trace_ctx, NULL);
+		trace_function(tr, ip, parent_ip, trace_ctx);
 }
 
 #else
-static inline void
-__trace_function(struct trace_array *tr,
-		 unsigned long ip, unsigned long parent_ip,
-		 unsigned int trace_ctx)
-{
-	return trace_function(tr, ip, parent_ip, trace_ctx, NULL);
-}
+#define __trace_function trace_function
 
 static enum print_line_t irqsoff_print_line(struct trace_iterator *iter)
 {
@@ -394,7 +374,6 @@ start_critical_timing(unsigned long ip, unsigned long parent_ip)
 	int cpu;
 	struct trace_array *tr = irqsoff_trace;
 	struct trace_array_cpu *data;
-	long disabled;
 
 	if (!tracer_enabled || !tracing_is_enabled())
 		return;
@@ -406,22 +385,20 @@ start_critical_timing(unsigned long ip, unsigned long parent_ip)
 
 	data = per_cpu_ptr(tr->array_buffer.data, cpu);
 
-	if (unlikely(!data) || local_read(&data->disabled))
+	if (unlikely(!data) || atomic_read(&data->disabled))
 		return;
 
-	disabled = local_inc_return(&data->disabled);
+	atomic_inc(&data->disabled);
 
-	if (disabled == 1) {
-		data->critical_sequence = max_sequence;
-		data->preempt_timestamp = ftrace_now(cpu);
-		data->critical_start = parent_ip ? : ip;
+	data->critical_sequence = max_sequence;
+	data->preempt_timestamp = ftrace_now(cpu);
+	data->critical_start = parent_ip ? : ip;
 
-		__trace_function(tr, ip, parent_ip, tracing_gen_ctx());
+	__trace_function(tr, ip, parent_ip, tracing_gen_ctx());
 
-		per_cpu(tracing_cpu, cpu) = 1;
-	}
+	per_cpu(tracing_cpu, cpu) = 1;
 
-	local_dec(&data->disabled);
+	atomic_dec(&data->disabled);
 }
 
 static nokprobe_inline void
@@ -431,7 +408,6 @@ stop_critical_timing(unsigned long ip, unsigned long parent_ip)
 	struct trace_array *tr = irqsoff_trace;
 	struct trace_array_cpu *data;
 	unsigned int trace_ctx;
-	long disabled;
 
 	cpu = raw_smp_processor_id();
 	/* Always clear the tracing cpu on stopping the trace */
@@ -446,19 +422,16 @@ stop_critical_timing(unsigned long ip, unsigned long parent_ip)
 	data = per_cpu_ptr(tr->array_buffer.data, cpu);
 
 	if (unlikely(!data) ||
-	    !data->critical_start || local_read(&data->disabled))
+	    !data->critical_start || atomic_read(&data->disabled))
 		return;
 
-	disabled = local_inc_return(&data->disabled);
+	atomic_inc(&data->disabled);
 
-	if (disabled == 1) {
-		trace_ctx = tracing_gen_ctx();
-		__trace_function(tr, ip, parent_ip, trace_ctx);
-		check_critical_timing(tr, data, parent_ip ? : ip, cpu);
-		data->critical_start = 0;
-	}
-
-	local_dec(&data->disabled);
+	trace_ctx = tracing_gen_ctx();
+	__trace_function(tr, ip, parent_ip, trace_ctx);
+	check_critical_timing(tr, data, parent_ip ? : ip, cpu);
+	data->critical_start = 0;
+	atomic_dec(&data->disabled);
 }
 
 /* start and stop critical timings used to for stoppage (in idle) */

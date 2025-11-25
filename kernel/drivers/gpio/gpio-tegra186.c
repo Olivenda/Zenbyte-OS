@@ -202,28 +202,6 @@ static int tegra186_init_valid_mask(struct gpio_chip *chip,
 	return 0;
 }
 
-static int tegra186_gpio_set(struct gpio_chip *chip, unsigned int offset,
-			     int level)
-{
-	struct tegra_gpio *gpio = gpiochip_get_data(chip);
-	void __iomem *base;
-	u32 value;
-
-	base = tegra186_gpio_get_base(gpio, offset);
-	if (WARN_ON(base == NULL))
-		return -ENODEV;
-
-	value = readl(base + TEGRA186_GPIO_OUTPUT_VALUE);
-	if (level == 0)
-		value &= ~TEGRA186_GPIO_OUTPUT_VALUE_HIGH;
-	else
-		value |= TEGRA186_GPIO_OUTPUT_VALUE_HIGH;
-
-	writel(value, base + TEGRA186_GPIO_OUTPUT_VALUE);
-
-	return 0;
-}
-
 static int tegra186_gpio_get_direction(struct gpio_chip *chip,
 				       unsigned int offset)
 {
@@ -271,12 +249,9 @@ static int tegra186_gpio_direction_output(struct gpio_chip *chip,
 	struct tegra_gpio *gpio = gpiochip_get_data(chip);
 	void __iomem *base;
 	u32 value;
-	int ret;
 
 	/* configure output level first */
-	ret = tegra186_gpio_set(chip, offset, level);
-	if (ret)
-		return ret;
+	chip->set(chip, offset, level);
 
 	base = tegra186_gpio_get_base(gpio, offset);
 	if (WARN_ON(base == NULL))
@@ -382,6 +357,26 @@ static int tegra186_gpio_get(struct gpio_chip *chip, unsigned int offset)
 		value = readl(base + TEGRA186_GPIO_INPUT);
 
 	return value & BIT(0);
+}
+
+static void tegra186_gpio_set(struct gpio_chip *chip, unsigned int offset,
+			      int level)
+{
+	struct tegra_gpio *gpio = gpiochip_get_data(chip);
+	void __iomem *base;
+	u32 value;
+
+	base = tegra186_gpio_get_base(gpio, offset);
+	if (WARN_ON(base == NULL))
+		return;
+
+	value = readl(base + TEGRA186_GPIO_OUTPUT_VALUE);
+	if (level == 0)
+		value &= ~TEGRA186_GPIO_OUTPUT_VALUE_HIGH;
+	else
+		value |= TEGRA186_GPIO_OUTPUT_VALUE_HIGH;
+
+	writel(value, base + TEGRA186_GPIO_OUTPUT_VALUE);
 }
 
 static int tegra186_gpio_set_config(struct gpio_chip *chip,
@@ -615,7 +610,7 @@ static void tegra186_irq_print_chip(struct irq_data *data, struct seq_file *p)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(data);
 
-	seq_puts(p, dev_name(gc->parent));
+	seq_printf(p, dev_name(gc->parent));
 }
 
 static const struct irq_chip tegra186_gpio_irq_chip = {

@@ -344,8 +344,7 @@ vhost_vsock_alloc_skb(struct vhost_virtqueue *vq,
 
 	len = iov_length(vq->iov, out);
 
-	if (len < VIRTIO_VSOCK_SKB_HEADROOM ||
-	    len > VIRTIO_VSOCK_MAX_PKT_BUF_SIZE + VIRTIO_VSOCK_SKB_HEADROOM)
+	if (len > VIRTIO_VSOCK_MAX_PKT_BUF_SIZE + VIRTIO_VSOCK_SKB_HEADROOM)
 		return NULL;
 
 	/* len contains both payload and hdr */
@@ -376,10 +375,12 @@ vhost_vsock_alloc_skb(struct vhost_virtqueue *vq,
 		return NULL;
 	}
 
-	virtio_vsock_skb_put(skb, payload_len);
+	virtio_vsock_skb_rx_put(skb);
 
-	if (skb_copy_datagram_from_iter(skb, 0, &iov_iter, payload_len)) {
-		vq_err(vq, "Failed to copy %zu byte payload\n", payload_len);
+	nbytes = copy_from_iter(skb->data, payload_len, &iov_iter);
+	if (nbytes != payload_len) {
+		vq_err(vq, "Expected %zu byte payload, got %zu bytes\n",
+		       payload_len, nbytes);
 		kfree_skb(skb);
 		return NULL;
 	}

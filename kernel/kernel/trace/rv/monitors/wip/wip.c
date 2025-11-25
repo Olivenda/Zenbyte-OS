@@ -10,7 +10,7 @@
 
 #define MODULE_NAME "wip"
 
-#include <rv_trace.h>
+#include <trace/events/rv.h>
 #include <trace/events/sched.h>
 #include <trace/events/preemptirq.h>
 
@@ -71,7 +71,8 @@ static struct rv_monitor rv_wip = {
 
 static int __init register_wip(void)
 {
-	return rv_register_monitor(&rv_wip, NULL);
+	rv_register_monitor(&rv_wip);
+	return 0;
 }
 
 static void __exit unregister_wip(void)

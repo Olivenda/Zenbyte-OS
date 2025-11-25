@@ -13,7 +13,6 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_color_mgmt.h>
 #include <drm/drm_damage_helper.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_format_helper.h>
@@ -31,37 +30,35 @@
  * This file contains setup code for the CRTC.
  */
 
-static void mgag200_set_gamma_lut(struct drm_crtc *crtc, unsigned int index,
-				  u16 red, u16 green, u16 blue)
+void mgag200_crtc_set_gamma_linear(struct mga_device *mdev,
+				   const struct drm_format_info *format)
 {
-	struct drm_device *dev = crtc->dev;
-	struct mga_device *mdev = to_mga_device(dev);
-	u8 i8 = index & 0xff;
-	u8 r8 = red >> 8;
-	u8 g8 = green >> 8;
-	u8 b8 = blue >> 8;
+	int i;
 
-	if (drm_WARN_ON_ONCE(dev, index != i8))
-		return; /* driver bug */
-
-	WREG8(DAC_INDEX + MGA1064_INDEX, i8);
-	WREG8(DAC_INDEX + MGA1064_COL_PAL, r8);
-	WREG8(DAC_INDEX + MGA1064_COL_PAL, g8);
-	WREG8(DAC_INDEX + MGA1064_COL_PAL, b8);
-}
-
-void mgag200_crtc_fill_gamma(struct mga_device *mdev,
-			     const struct drm_format_info *format)
-{
-	struct drm_crtc *crtc = &mdev->crtc;
+	WREG8(DAC_INDEX + MGA1064_INDEX, 0);
 
 	switch (format->format) {
 	case DRM_FORMAT_RGB565:
-		drm_crtc_fill_gamma_565(crtc, mgag200_set_gamma_lut);
+		/* Use better interpolation, to take 32 values from 0 to 255 */
+		for (i = 0; i < MGAG200_LUT_SIZE / 8; i++) {
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, i * 8 + i / 4);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, i * 4 + i / 16);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, i * 8 + i / 4);
+		}
+		/* Green has one more bit, so add padding with 0 for red and blue. */
+		for (i = MGAG200_LUT_SIZE / 8; i < MGAG200_LUT_SIZE / 4; i++) {
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, 0);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, i * 4 + i / 16);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, 0);
+		}
 		break;
 	case DRM_FORMAT_RGB888:
 	case DRM_FORMAT_XRGB8888:
-		drm_crtc_fill_gamma_888(crtc, mgag200_set_gamma_lut);
+		for (i = 0; i < MGAG200_LUT_SIZE; i++) {
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, i);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, i);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, i);
+		}
 		break;
 	default:
 		drm_warn_once(&mdev->base, "Unsupported format %p4cc for gamma correction\n",
@@ -70,19 +67,36 @@ void mgag200_crtc_fill_gamma(struct mga_device *mdev,
 	}
 }
 
-void mgag200_crtc_load_gamma(struct mga_device *mdev,
-			     const struct drm_format_info *format,
-			     struct drm_color_lut *lut)
+void mgag200_crtc_set_gamma(struct mga_device *mdev,
+			    const struct drm_format_info *format,
+			    struct drm_color_lut *lut)
 {
-	struct drm_crtc *crtc = &mdev->crtc;
+	int i;
+
+	WREG8(DAC_INDEX + MGA1064_INDEX, 0);
 
 	switch (format->format) {
 	case DRM_FORMAT_RGB565:
-		drm_crtc_load_gamma_565_from_888(crtc, lut, mgag200_set_gamma_lut);
+		/* Use better interpolation, to take 32 values from lut[0] to lut[255] */
+		for (i = 0; i < MGAG200_LUT_SIZE / 8; i++) {
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, lut[i * 8 + i / 4].red >> 8);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, lut[i * 4 + i / 16].green >> 8);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, lut[i * 8 + i / 4].blue >> 8);
+		}
+		/* Green has one more bit, so add padding with 0 for red and blue. */
+		for (i = MGAG200_LUT_SIZE / 8; i < MGAG200_LUT_SIZE / 4; i++) {
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, 0);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, lut[i * 4 + i / 16].green >> 8);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, 0);
+		}
 		break;
 	case DRM_FORMAT_RGB888:
 	case DRM_FORMAT_XRGB8888:
-		drm_crtc_load_gamma_888(crtc, lut, mgag200_set_gamma_lut);
+		for (i = 0; i < MGAG200_LUT_SIZE; i++) {
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, lut[i].red >> 8);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, lut[i].green >> 8);
+			WREG8(DAC_INDEX + MGA1064_COL_PAL, lut[i].blue >> 8);
+		}
 		break;
 	default:
 		drm_warn_once(&mdev->base, "Unsupported format %p4cc for gamma correction\n",
@@ -628,9 +642,9 @@ void mgag200_crtc_helper_atomic_flush(struct drm_crtc *crtc, struct drm_atomic_s
 		const struct drm_format_info *format = mgag200_crtc_state->format;
 
 		if (crtc_state->gamma_lut)
-			mgag200_crtc_load_gamma(mdev, format, crtc_state->gamma_lut->data);
+			mgag200_crtc_set_gamma(mdev, format, crtc_state->gamma_lut->data);
 		else
-			mgag200_crtc_fill_gamma(mdev, format);
+			mgag200_crtc_set_gamma_linear(mdev, format);
 	}
 }
 
@@ -651,9 +665,9 @@ void mgag200_crtc_helper_atomic_enable(struct drm_crtc *crtc, struct drm_atomic_
 		funcs->pixpllc_atomic_update(crtc, old_state);
 
 	if (crtc_state->gamma_lut)
-		mgag200_crtc_load_gamma(mdev, format, crtc_state->gamma_lut->data);
+		mgag200_crtc_set_gamma(mdev, format, crtc_state->gamma_lut->data);
 	else
-		mgag200_crtc_fill_gamma(mdev, format);
+		mgag200_crtc_set_gamma_linear(mdev, format);
 
 	mgag200_enable_display(mdev);
 }

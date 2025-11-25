@@ -55,7 +55,8 @@ properties:
 
   qcom,smem:
     $ref: /schemas/types.yaml#/definitions/uint32-array
-    maxItems: 2
+    items:
+      maxItems: 2
     description:
       Two identifiers of the inbound and outbound smem items used for this edge.
 

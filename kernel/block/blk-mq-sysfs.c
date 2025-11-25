@@ -61,9 +61,9 @@ static ssize_t blk_mq_hw_sysfs_show(struct kobject *kobj,
 	if (!entry->show)
 		return -EIO;
 
-	mutex_lock(&q->elevator_lock);
+	mutex_lock(&q->sysfs_lock);
 	res = entry->show(hctx, page);
-	mutex_unlock(&q->elevator_lock);
+	mutex_unlock(&q->sysfs_lock);
 	return res;
 }
 
@@ -225,27 +225,30 @@ int blk_mq_sysfs_register(struct gendisk *disk)
 	unsigned long i, j;
 	int ret;
 
+	lockdep_assert_held(&q->sysfs_dir_lock);
+
 	ret = kobject_add(q->mq_kobj, &disk_to_dev(disk)->kobj, "mq");
 	if (ret < 0)
-		return ret;
+		goto out;
 
 	kobject_uevent(q->mq_kobj, KOBJ_ADD);
 
-	mutex_lock(&q->tag_set->tag_list_lock);
 	queue_for_each_hw_ctx(q, hctx, i) {
 		ret = blk_mq_register_hctx(hctx);
 		if (ret)
-			goto out_unreg;
+			goto unreg;
 	}
-	mutex_unlock(&q->tag_set->tag_list_lock);
-	return 0;
 
-out_unreg:
+	q->mq_sysfs_init_done = true;
+
+out:
+	return ret;
+
+unreg:
 	queue_for_each_hw_ctx(q, hctx, j) {
 		if (j < i)
 			blk_mq_unregister_hctx(hctx);
 	}
-	mutex_unlock(&q->tag_set->tag_list_lock);
 
 	kobject_uevent(q->mq_kobj, KOBJ_REMOVE);
 	kobject_del(q->mq_kobj);
@@ -258,13 +261,15 @@ void blk_mq_sysfs_unregister(struct gendisk *disk)
 	struct blk_mq_hw_ctx *hctx;
 	unsigned long i;
 
-	mutex_lock(&q->tag_set->tag_list_lock);
+	lockdep_assert_held(&q->sysfs_dir_lock);
+
 	queue_for_each_hw_ctx(q, hctx, i)
 		blk_mq_unregister_hctx(hctx);
-	mutex_unlock(&q->tag_set->tag_list_lock);
 
 	kobject_uevent(q->mq_kobj, KOBJ_REMOVE);
 	kobject_del(q->mq_kobj);
+
+	q->mq_sysfs_init_done = false;
 }
 
 void blk_mq_sysfs_unregister_hctxs(struct request_queue *q)
@@ -272,11 +277,15 @@ void blk_mq_sysfs_unregister_hctxs(struct request_queue *q)
 	struct blk_mq_hw_ctx *hctx;
 	unsigned long i;
 
-	if (!blk_queue_registered(q))
-		return;
+	mutex_lock(&q->sysfs_dir_lock);
+	if (!q->mq_sysfs_init_done)
+		goto unlock;
 
 	queue_for_each_hw_ctx(q, hctx, i)
 		blk_mq_unregister_hctx(hctx);
+
+unlock:
+	mutex_unlock(&q->sysfs_dir_lock);
 }
 
 int blk_mq_sysfs_register_hctxs(struct request_queue *q)
@@ -285,8 +294,9 @@ int blk_mq_sysfs_register_hctxs(struct request_queue *q)
 	unsigned long i;
 	int ret = 0;
 
-	if (!blk_queue_registered(q))
-		goto out;
+	mutex_lock(&q->sysfs_dir_lock);
+	if (!q->mq_sysfs_init_done)
+		goto unlock;
 
 	queue_for_each_hw_ctx(q, hctx, i) {
 		ret = blk_mq_register_hctx(hctx);
@@ -294,6 +304,8 @@ int blk_mq_sysfs_register_hctxs(struct request_queue *q)
 			break;
 	}
 
-out:
+unlock:
+	mutex_unlock(&q->sysfs_dir_lock);
+
 	return ret;
 }

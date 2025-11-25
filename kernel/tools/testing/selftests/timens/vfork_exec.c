@@ -91,8 +91,6 @@ int main(int argc, char *argv[])
 		return check("child after exec", &now);
 	}
 
-	ksft_print_header();
-
 	nscheck();
 
 	ksft_set_plan(4);

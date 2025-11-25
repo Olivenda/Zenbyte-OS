@@ -353,7 +353,10 @@ static int __init dm_st_init(void)
 
 static void __exit dm_st_exit(void)
 {
-	dm_unregister_path_selector(&st_ps);
+	int r = dm_unregister_path_selector(&st_ps);
+
+	if (r < 0)
+		DMERR("unregister failed %d", r);
 }
 
 module_init(dm_st_init);

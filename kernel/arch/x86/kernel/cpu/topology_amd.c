@@ -3,7 +3,6 @@
 
 #include <asm/apic.h>
 #include <asm/memtype.h>
-#include <asm/msr.h>
 #include <asm/processor.h>
 
 #include "cpu.h"
@@ -139,7 +138,7 @@ static void parse_fam10h_node_id(struct topo_scan *tscan)
 	if (!boot_cpu_has(X86_FEATURE_NODEID_MSR))
 		return;
 
-	rdmsrq(MSR_FAM10H_NODE_ID, nid.msr);
+	rdmsrl(MSR_FAM10H_NODE_ID, nid.msr);
 	store_node(tscan, nid.nodes_per_pkg + 1, nid.node_id);
 	tscan->c->topo.llc_id = nid.node_id;
 }
@@ -166,7 +165,7 @@ static void topoext_fixup(struct topo_scan *tscan)
 	if (msr_set_bit(0xc0011005, 54) <= 0)
 		return;
 
-	rdmsrq(0xc0011005, msrval);
+	rdmsrl(0xc0011005, msrval);
 	if (msrval & BIT_64(54)) {
 		set_cpu_cap(c, X86_FEATURE_TOPOEXT);
 		pr_info_once(FW_INFO "CPU: Re-enabling disabled Topology Extensions Support.\n");
@@ -183,9 +182,6 @@ static void parse_topology_amd(struct topo_scan *tscan)
 	 * available, cpu_parse_topology_ext() will return true.
 	 */
 	bool has_xtopology = cpu_parse_topology_ext(tscan);
-
-	if (cpu_feature_enabled(X86_FEATURE_AMD_HTR_CORES))
-		tscan->c->topo.cpu_type = cpuid_ebx(0x80000026);
 
 	/*
 	 * If XTOPOLOGY leaves (0x26/0xb) are not available, try to

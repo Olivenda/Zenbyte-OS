@@ -94,8 +94,10 @@ static int __init ppc4xx_parse_dma_ranges(struct pci_controller *hose,
 					  struct resource *res)
 {
 	u64 size;
-	struct of_range_parser parser;
-	struct of_range range;
+	const u32 *ranges;
+	int rlen;
+	int pna = of_n_addr_cells(hose->dn);
+	int np = pna + 5;
 
 	/* Default */
 	res->start = 0;
@@ -103,15 +105,18 @@ static int __init ppc4xx_parse_dma_ranges(struct pci_controller *hose,
 	res->end = size - 1;
 	res->flags = IORESOURCE_MEM | IORESOURCE_PREFETCH;
 
-	if (of_pci_dma_range_parser_init(&parser, hose->dn))
+	/* Get dma-ranges property */
+	ranges = of_get_property(hose->dn, "dma-ranges", &rlen);
+	if (ranges == NULL)
 		goto out;
 
-	for_each_of_range(&parser, &range) {
-		u32 pci_space = range.flags;
-		u64 pci_addr = range.bus_addr;
-		u64 cpu_addr = range.cpu_addr;
-		size = range.size;
-
+	/* Walk it */
+	while ((rlen -= np * 4) >= 0) {
+		u32 pci_space = ranges[0];
+		u64 pci_addr = of_read_number(ranges + 1, 2);
+		u64 cpu_addr = of_translate_dma_address(hose->dn, ranges + 3);
+		size = of_read_number(ranges + pna + 3, 2);
+		ranges += np;
 		if (cpu_addr == OF_BAD_ADDR || size == 0)
 			continue;
 

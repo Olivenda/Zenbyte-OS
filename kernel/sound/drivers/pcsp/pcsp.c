@@ -103,7 +103,8 @@ static int snd_card_pcsp_probe(int devnum, struct device *dev)
 	if (devnum != 0)
 		return -EINVAL;
 
-	hrtimer_setup(&pcsp_chip.timer, pcsp_do_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	hrtimer_init(&pcsp_chip.timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	pcsp_chip.timer.function = pcsp_do_timer;
 
 	err = snd_devm_card_new(dev, index, id, THIS_MODULE, 0, &card);
 	if (err < 0)
@@ -122,8 +123,8 @@ static int snd_card_pcsp_probe(int devnum, struct device *dev)
 	if (err < 0)
 		return err;
 
-	strscpy(card->driver, "PC-Speaker");
-	strscpy(card->shortname, "pcsp");
+	strcpy(card->driver, "PC-Speaker");
+	strcpy(card->shortname, "pcsp");
 	sprintf(card->longname, "Internal PC-Speaker at port 0x%x",
 		pcsp_chip.port);
 

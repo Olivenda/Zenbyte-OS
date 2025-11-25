@@ -21,7 +21,7 @@ properties:
   vlogic-supply: true
 
   interrupts:
-    maxItems: 1
+    minItems: 1
     description:
       Interrupt mapping for the trigger interrupt from the internal oscillator.
 

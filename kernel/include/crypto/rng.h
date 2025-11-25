@@ -102,10 +102,12 @@ static inline struct rng_alg *__crypto_rng_alg(struct crypto_alg *alg)
 }
 
 /**
- * crypto_rng_alg() - obtain 'struct rng_alg' pointer from RNG handle
- * @tfm: RNG handle
+ * crypto_rng_alg - obtain name of RNG
+ * @tfm: cipher handle
  *
- * Return: Pointer to 'struct rng_alg', derived from @tfm RNG handle
+ * Return the generic name (cra_name) of the initialized random number generator
+ *
+ * Return: generic name string
  */
 static inline struct rng_alg *crypto_rng_alg(struct crypto_rng *tfm)
 {

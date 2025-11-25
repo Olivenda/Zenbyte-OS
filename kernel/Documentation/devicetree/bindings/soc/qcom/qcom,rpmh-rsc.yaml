@@ -44,13 +44,7 @@ description: |
 
 properties:
   compatible:
-    oneOf:
-      - items:
-          - enum:
-              - qcom,sc7180-rpmh-apps-rsc
-              - qcom,sdm845-rpmh-apps-rsc
-          - const: qcom,rpmh-rsc
-      - const: qcom,rpmh-rsc
+    const: qcom,rpmh-rsc
 
   interrupts:
     minItems: 1
@@ -130,21 +124,7 @@ required:
   - qcom,tcs-offset
   - reg
   - reg-names
-
-allOf:
-  # Some platforms may lack a OSI-mode PSCI implementation, which implies the
-  # system power domain can't provide feedback about entering power collapse
-  - if:
-      not:
-        properties:
-          compatible:
-            contains:
-              enum:
-                - qcom,sc7180-rpmh-apps-rsc
-                - qcom,sdm845-rpmh-apps-rsc
-    then:
-      required:
-        - power-domains
+  - power-domains
 
 additionalProperties: false
 

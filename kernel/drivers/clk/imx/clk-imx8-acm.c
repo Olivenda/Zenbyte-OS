@@ -22,7 +22,7 @@
  * struct clk_imx_acm_pm_domains - structure for multi power domain
  * @pd_dev: power domain device
  * @pd_dev_link: power domain device link
- * @num_domains: power domain number
+ * @num_domains: power domain nummber
  */
 struct clk_imx_acm_pm_domains {
 	struct device **pd_dev;

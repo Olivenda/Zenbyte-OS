@@ -26,26 +26,19 @@ properties:
     description:
       The regulator that provides 3.3V or 5.0V core power to the hub.
 
-  peer-hub: true
-
-  ports:
-    $ref: /schemas/graph.yaml#/properties/ports
-
-    patternProperties:
-      '^port@':
-        $ref: /schemas/graph.yaml#/properties/port
-
-        properties:
-          reg:
-            minimum: 1
-            maximum: 4
+  peer-hub:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      For onboard hub controllers that support USB 3.x and USB 2.0 hubs
+      with shared resets and power supplies, this property is used to identify
+      the hubs with which these are shared.
 
 required:
   - compatible
   - reg
 
 allOf:
-  - $ref: usb-hub.yaml#
+  - $ref: usb-device.yaml#
   - if:
       properties:
         compatible:
@@ -69,7 +62,7 @@ allOf:
         peer-hub: true
         vdd-supply: true
 
-unevaluatedProperties: false
+additionalProperties: false
 
 examples:
   - |

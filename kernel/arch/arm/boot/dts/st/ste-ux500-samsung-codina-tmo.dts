@@ -544,7 +544,6 @@
 				touchscreen-size-y = <800>;
 				pinctrl-names = "default";
 				pinctrl-0 = <&tsp_default>;
-				linux,keycodes = <KEY_MENU>, <KEY_BACK>;
 			};
 		};
 

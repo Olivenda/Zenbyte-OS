@@ -31,7 +31,6 @@
 #include <linux/slab.h>
 #include <linux/edac.h>
 #include <linux/mmzone.h>
-#include <linux/string_choices.h>
 
 #include "edac_module.h"
 
@@ -900,7 +899,7 @@ static void decode_mtr(int slot_row, u16 mtr)
 	edac_dbg(2, "\t\tWIDTH: x%d\n", MTR_DRAM_WIDTH(mtr));
 
 	edac_dbg(2, "\t\tELECTRICAL THROTTLING is %s\n",
-		 str_enabled_disabled(MTR_DIMMS_ETHROTTLE(mtr)));
+		 MTR_DIMMS_ETHROTTLE(mtr) ? "enabled" : "disabled");
 
 	edac_dbg(2, "\t\tNUMBANK: %d bank(s)\n", MTR_DRAM_BANKS(mtr));
 	edac_dbg(2, "\t\tNUMRANK: %s\n",

@@ -110,7 +110,7 @@
 #define LONG_SRA	srai.w
 #define LONG_SRAV	sra.w
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 #define LONG		.word
 #endif
 #define LONGSIZE	4
@@ -131,7 +131,7 @@
 #define LONG_SRA	srai.d
 #define LONG_SRAV	sra.d
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 #define LONG		.dword
 #endif
 #define LONGSIZE	8
@@ -158,7 +158,7 @@
 
 #define PTR_SCALESHIFT	2
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 #define PTR		.word
 #endif
 #define PTRSIZE		4
@@ -181,7 +181,7 @@
 
 #define PTR_SCALESHIFT	3
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 #define PTR		.dword
 #endif
 #define PTRSIZE		8

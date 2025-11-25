@@ -610,11 +610,9 @@ static int do_test_single(struct bpf_align_test *test)
 		.log_size = sizeof(bpf_vlog),
 		.log_level = 2,
 	);
-	const char *main_pass_start = "0: R1=ctx() R10=fp0";
 	const char *line_ptr;
 	int cur_line = -1;
 	int prog_len, i;
-	char *start;
 	int fd_prog;
 	int ret;
 
@@ -634,13 +632,7 @@ static int do_test_single(struct bpf_align_test *test)
 		ret = 0;
 		/* We make a local copy so that we can strtok() it */
 		strncpy(bpf_vlog_copy, bpf_vlog, sizeof(bpf_vlog_copy));
-		start = strstr(bpf_vlog_copy, main_pass_start);
-		if (!start) {
-			ret = 1;
-			printf("Can't find initial line '%s'\n", main_pass_start);
-			goto out;
-		}
-		line_ptr = strtok(start, "\n");
+		line_ptr = strtok(bpf_vlog_copy, "\n");
 		for (i = 0; i < MAX_MATCHES; i++) {
 			struct bpf_reg_match m = test->matches[i];
 			const char *p;
@@ -690,7 +682,6 @@ static int do_test_single(struct bpf_align_test *test)
 				break;
 			}
 		}
-out:
 		if (fd_prog >= 0)
 			close(fd_prog);
 	}

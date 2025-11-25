@@ -10,7 +10,7 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/device/faux.h>
+#include <linux/platform_device.h>
 #include <linux/list.h>
 #include <linux/mii.h>
 #include <linux/phy.h>
@@ -40,7 +40,7 @@ struct fixed_phy {
 	struct gpio_desc *link_gpiod;
 };
 
-static struct faux_device *fdev;
+static struct platform_device *pdev;
 static struct fixed_mdio_bus platform_fmb = {
 	.phys = LIST_HEAD_INIT(platform_fmb.phys),
 };
@@ -131,7 +131,7 @@ int fixed_phy_set_link_update(struct phy_device *phydev,
 EXPORT_SYMBOL_GPL(fixed_phy_set_link_update);
 
 static int fixed_phy_add_gpiod(unsigned int irq, int phy_addr,
-			       const struct fixed_phy_status *status,
+			       struct fixed_phy_status *status,
 			       struct gpio_desc *gpiod)
 {
 	int ret;
@@ -160,9 +160,10 @@ static int fixed_phy_add_gpiod(unsigned int irq, int phy_addr,
 	return 0;
 }
 
-int fixed_phy_add(int phy_addr, const struct fixed_phy_status *status)
+int fixed_phy_add(unsigned int irq, int phy_addr,
+		  struct fixed_phy_status *status)
 {
-	return fixed_phy_add_gpiod(PHY_POLL, phy_addr, status, NULL);
+	return fixed_phy_add_gpiod(irq, phy_addr, status, NULL);
 }
 EXPORT_SYMBOL_GPL(fixed_phy_add);
 
@@ -222,11 +223,12 @@ static struct gpio_desc *fixed_phy_get_gpiod(struct device_node *np)
 }
 #endif
 
-struct phy_device *fixed_phy_register(const struct fixed_phy_status *status,
-				      struct device_node *np)
+static struct phy_device *__fixed_phy_register(unsigned int irq,
+					       struct fixed_phy_status *status,
+					       struct device_node *np,
+					       struct gpio_desc *gpiod)
 {
 	struct fixed_mdio_bus *fmb = &platform_fmb;
-	struct gpio_desc *gpiod;
 	struct phy_device *phy;
 	int phy_addr;
 	int ret;
@@ -235,16 +237,18 @@ struct phy_device *fixed_phy_register(const struct fixed_phy_status *status,
 		return ERR_PTR(-EPROBE_DEFER);
 
 	/* Check if we have a GPIO associated with this fixed phy */
-	gpiod = fixed_phy_get_gpiod(np);
-	if (IS_ERR(gpiod))
-		return ERR_CAST(gpiod);
+	if (!gpiod) {
+		gpiod = fixed_phy_get_gpiod(np);
+		if (IS_ERR(gpiod))
+			return ERR_CAST(gpiod);
+	}
 
 	/* Get the next available PHY address, up to PHY_MAX_ADDR */
 	phy_addr = ida_alloc_max(&phy_fixed_ida, PHY_MAX_ADDR - 1, GFP_KERNEL);
 	if (phy_addr < 0)
 		return ERR_PTR(phy_addr);
 
-	ret = fixed_phy_add_gpiod(PHY_POLL, phy_addr, status, gpiod);
+	ret = fixed_phy_add_gpiod(irq, phy_addr, status, gpiod);
 	if (ret < 0) {
 		ida_free(&phy_fixed_ida, phy_addr);
 		return ERR_PTR(ret);
@@ -302,7 +306,23 @@ struct phy_device *fixed_phy_register(const struct fixed_phy_status *status,
 
 	return phy;
 }
+
+struct phy_device *fixed_phy_register(unsigned int irq,
+				      struct fixed_phy_status *status,
+				      struct device_node *np)
+{
+	return __fixed_phy_register(irq, status, np, NULL);
+}
 EXPORT_SYMBOL_GPL(fixed_phy_register);
+
+struct phy_device *
+fixed_phy_register_with_gpiod(unsigned int irq,
+			      struct fixed_phy_status *status,
+			      struct gpio_desc *gpiod)
+{
+	return __fixed_phy_register(irq, status, NULL, gpiod);
+}
+EXPORT_SYMBOL_GPL(fixed_phy_register_with_gpiod);
 
 void fixed_phy_unregister(struct phy_device *phy)
 {
@@ -318,9 +338,9 @@ static int __init fixed_mdio_bus_init(void)
 	struct fixed_mdio_bus *fmb = &platform_fmb;
 	int ret;
 
-	fdev = faux_device_create("Fixed MDIO bus", NULL, NULL);
-	if (!fdev)
-		return -ENODEV;
+	pdev = platform_device_register_simple("Fixed MDIO bus", 0, NULL, 0);
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
 
 	fmb->mii_bus = mdiobus_alloc();
 	if (fmb->mii_bus == NULL) {
@@ -331,7 +351,7 @@ static int __init fixed_mdio_bus_init(void)
 	snprintf(fmb->mii_bus->id, MII_BUS_ID_SIZE, "fixed-0");
 	fmb->mii_bus->name = "Fixed MDIO Bus";
 	fmb->mii_bus->priv = fmb;
-	fmb->mii_bus->parent = &fdev->dev;
+	fmb->mii_bus->parent = &pdev->dev;
 	fmb->mii_bus->read = &fixed_mdio_read;
 	fmb->mii_bus->write = &fixed_mdio_write;
 	fmb->mii_bus->phy_mask = ~0;
@@ -345,7 +365,7 @@ static int __init fixed_mdio_bus_init(void)
 err_mdiobus_alloc:
 	mdiobus_free(fmb->mii_bus);
 err_mdiobus_reg:
-	faux_device_destroy(fdev);
+	platform_device_unregister(pdev);
 	return ret;
 }
 module_init(fixed_mdio_bus_init);
@@ -357,7 +377,7 @@ static void __exit fixed_mdio_bus_exit(void)
 
 	mdiobus_unregister(fmb->mii_bus);
 	mdiobus_free(fmb->mii_bus);
-	faux_device_destroy(fdev);
+	platform_device_unregister(pdev);
 
 	list_for_each_entry_safe(fp, tmp, &fmb->phys, node) {
 		list_del(&fp->node);

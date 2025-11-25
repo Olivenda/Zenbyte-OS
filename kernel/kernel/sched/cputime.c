@@ -2,9 +2,6 @@
 /*
  * Simple CPU accounting cgroup controller
  */
-#include <linux/sched/cputime.h>
-#include <linux/tsacct_kern.h>
-#include "sched.h"
 
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING_NATIVE
  #include <asm/cputime.h>
@@ -25,7 +22,7 @@
  */
 DEFINE_PER_CPU(struct irqtime, cpu_irqtime);
 
-int sched_clock_irqtime;
+static int sched_clock_irqtime;
 
 void enable_sched_clock_irqtime(void)
 {
@@ -60,7 +57,7 @@ void irqtime_account_irq(struct task_struct *curr, unsigned int offset)
 	s64 delta;
 	int cpu;
 
-	if (!irqtime_enabled())
+	if (!sched_clock_irqtime)
 		return;
 
 	cpu = smp_processor_id();
@@ -91,7 +88,9 @@ static u64 irqtime_tick_accounted(u64 maxtime)
 	return delta;
 }
 
-#else /* !CONFIG_IRQ_TIME_ACCOUNTING: */
+#else /* CONFIG_IRQ_TIME_ACCOUNTING */
+
+#define sched_clock_irqtime	(0)
 
 static u64 irqtime_tick_accounted(u64 dummy)
 {
@@ -244,7 +243,7 @@ void __account_forceidle_time(struct task_struct *p, u64 delta)
 
 	task_group_account_field(p, CPUTIME_FORCEIDLE, delta);
 }
-#endif /* CONFIG_SCHED_CORE */
+#endif
 
 /*
  * When a guest is interrupted for a longer amount of time, missed clock
@@ -265,7 +264,7 @@ static __always_inline u64 steal_account_process_time(u64 maxtime)
 
 		return steal;
 	}
-#endif /* CONFIG_PARAVIRT */
+#endif
 	return 0;
 }
 
@@ -291,7 +290,7 @@ static inline u64 read_sum_exec_runtime(struct task_struct *t)
 {
 	return t->se.sum_exec_runtime;
 }
-#else /* !CONFIG_64BIT: */
+#else
 static u64 read_sum_exec_runtime(struct task_struct *t)
 {
 	u64 ns;
@@ -304,7 +303,7 @@ static u64 read_sum_exec_runtime(struct task_struct *t)
 
 	return ns;
 }
-#endif /* !CONFIG_64BIT */
+#endif
 
 /*
  * Accumulate raw cputime values of dead tasks (sig->[us]time) and live
@@ -414,11 +413,11 @@ static void irqtime_account_idle_ticks(int ticks)
 {
 	irqtime_account_process_tick(current, 0, ticks);
 }
-#else /* !CONFIG_IRQ_TIME_ACCOUNTING: */
+#else /* CONFIG_IRQ_TIME_ACCOUNTING */
 static inline void irqtime_account_idle_ticks(int ticks) { }
 static inline void irqtime_account_process_tick(struct task_struct *p, int user_tick,
 						int nr_ticks) { }
-#endif /* !CONFIG_IRQ_TIME_ACCOUNTING */
+#endif /* CONFIG_IRQ_TIME_ACCOUNTING */
 
 /*
  * Use precise platform statistics if available:
@@ -479,7 +478,7 @@ void account_process_tick(struct task_struct *p, int user_tick)
 	if (vtime_accounting_enabled_this_cpu())
 		return;
 
-	if (irqtime_enabled()) {
+	if (sched_clock_irqtime) {
 		irqtime_account_process_tick(p, user_tick, 1);
 		return;
 	}
@@ -508,7 +507,7 @@ void account_idle_ticks(unsigned long ticks)
 {
 	u64 cputime, steal;
 
-	if (irqtime_enabled()) {
+	if (sched_clock_irqtime) {
 		irqtime_account_idle_ticks(ticks);
 		return;
 	}

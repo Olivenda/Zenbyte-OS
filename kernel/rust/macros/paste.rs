@@ -2,7 +2,7 @@
 
 use proc_macro::{Delimiter, Group, Ident, Spacing, Span, TokenTree};
 
-fn concat_helper(tokens: &[TokenTree]) -> Vec<(String, Span)> {
+fn concat(tokens: &[TokenTree], group_span: Span) -> TokenTree {
     let mut tokens = tokens.iter();
     let mut segments = Vec::new();
     let mut span = None;
@@ -46,21 +46,12 @@ fn concat_helper(tokens: &[TokenTree]) -> Vec<(String, Span)> {
                 };
                 segments.push((value, sp));
             }
-            Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::None => {
-                let tokens = group.stream().into_iter().collect::<Vec<TokenTree>>();
-                segments.append(&mut concat_helper(tokens.as_slice()));
-            }
-            token => panic!("unexpected token in paste segments: {token:?}"),
+            _ => panic!("unexpected token in paste segments"),
         };
     }
 
-    segments
-}
-
-fn concat(tokens: &[TokenTree], group_span: Span) -> TokenTree {
-    let segments = concat_helper(tokens);
     let pasted: String = segments.into_iter().map(|x| x.0).collect();
-    TokenTree::Ident(Ident::new(&pasted, group_span))
+    TokenTree::Ident(Ident::new(&pasted, span.unwrap_or(group_span)))
 }
 
 pub(crate) fn expand(tokens: &mut Vec<TokenTree>) {

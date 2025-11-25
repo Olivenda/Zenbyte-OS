@@ -13,9 +13,6 @@
 
 #include <linux/sched.h>
 
-#define SIGUNKNOWN 0
-#define MAXMAPPED_SIG 35
-
 int aa_may_signal(const struct cred *subj_cred, struct aa_label *sender,
 		  const struct cred *target_cred, struct aa_label *target,
 		  int sig);

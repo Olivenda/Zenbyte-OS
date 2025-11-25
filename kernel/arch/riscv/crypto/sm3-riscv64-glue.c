@@ -13,9 +13,8 @@
 #include <asm/vector.h>
 #include <crypto/internal/hash.h>
 #include <crypto/internal/simd.h>
-#include <crypto/sm3.h>
 #include <crypto/sm3_base.h>
-#include <linux/kernel.h>
+#include <linux/linkage.h>
 #include <linux/module.h>
 
 /*
@@ -25,8 +24,8 @@
 asmlinkage void sm3_transform_zvksh_zvkb(
 	struct sm3_state *state, const u8 *data, int num_blocks);
 
-static void sm3_block(struct sm3_state *state, const u8 *data,
-		      int num_blocks)
+static int riscv64_sm3_update(struct shash_desc *desc, const u8 *data,
+			      unsigned int len)
 {
 	/*
 	 * Ensure struct sm3_state begins directly with the SM3
@@ -36,36 +35,52 @@ static void sm3_block(struct sm3_state *state, const u8 *data,
 
 	if (crypto_simd_usable()) {
 		kernel_vector_begin();
-		sm3_transform_zvksh_zvkb(state, data, num_blocks);
+		sm3_base_do_update(desc, data, len, sm3_transform_zvksh_zvkb);
 		kernel_vector_end();
 	} else {
-		sm3_block_generic(state, data, num_blocks);
+		sm3_update(shash_desc_ctx(desc), data, len);
 	}
-}
-
-static int riscv64_sm3_update(struct shash_desc *desc, const u8 *data,
-			      unsigned int len)
-{
-	return sm3_base_do_update_blocks(desc, data, len, sm3_block);
+	return 0;
 }
 
 static int riscv64_sm3_finup(struct shash_desc *desc, const u8 *data,
 			     unsigned int len, u8 *out)
 {
-	sm3_base_do_finup(desc, data, len, sm3_block);
-	return sm3_base_finish(desc, out);
+	struct sm3_state *ctx;
+
+	if (crypto_simd_usable()) {
+		kernel_vector_begin();
+		if (len)
+			sm3_base_do_update(desc, data, len,
+					   sm3_transform_zvksh_zvkb);
+		sm3_base_do_finalize(desc, sm3_transform_zvksh_zvkb);
+		kernel_vector_end();
+
+		return sm3_base_finish(desc, out);
+	}
+
+	ctx = shash_desc_ctx(desc);
+	if (len)
+		sm3_update(ctx, data, len);
+	sm3_final(ctx, out);
+
+	return 0;
+}
+
+static int riscv64_sm3_final(struct shash_desc *desc, u8 *out)
+{
+	return riscv64_sm3_finup(desc, NULL, 0, out);
 }
 
 static struct shash_alg riscv64_sm3_alg = {
 	.init = sm3_base_init,
 	.update = riscv64_sm3_update,
+	.final = riscv64_sm3_final,
 	.finup = riscv64_sm3_finup,
-	.descsize = SM3_STATE_SIZE,
+	.descsize = sizeof(struct sm3_state),
 	.digestsize = SM3_DIGEST_SIZE,
 	.base = {
 		.cra_blocksize = SM3_BLOCK_SIZE,
-		.cra_flags = CRYPTO_AHASH_ALG_BLOCK_ONLY |
-			     CRYPTO_AHASH_ALG_FINUP_MAX,
 		.cra_priority = 300,
 		.cra_name = "sm3",
 		.cra_driver_name = "sm3-riscv64-zvksh-zvkb",

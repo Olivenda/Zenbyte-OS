@@ -319,29 +319,26 @@ static int squashfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_flags |= SB_RDONLY;
 	sb->s_op = &squashfs_super_ops;
 
+	err = -ENOMEM;
+
 	msblk->block_cache = squashfs_cache_init("metadata",
 			SQUASHFS_CACHED_BLKS, SQUASHFS_METADATA_SIZE);
-	if (IS_ERR(msblk->block_cache)) {
-		err = PTR_ERR(msblk->block_cache);
+	if (msblk->block_cache == NULL)
 		goto failed_mount;
-	}
 
 	/* Allocate read_page block */
 	msblk->read_page = squashfs_cache_init("data",
-		SQUASHFS_READ_PAGES, msblk->block_size);
-	if (IS_ERR(msblk->read_page)) {
+		msblk->max_thread_num, msblk->block_size);
+	if (msblk->read_page == NULL) {
 		errorf(fc, "Failed to allocate read_page block");
-		err = PTR_ERR(msblk->read_page);
 		goto failed_mount;
 	}
 
 	if (msblk->devblksize == PAGE_SIZE) {
 		struct inode *cache = new_inode(sb);
 
-		if (cache == NULL) {
-			err = -ENOMEM;
+		if (cache == NULL)
 			goto failed_mount;
-		}
 
 		set_nlink(cache, 1);
 		cache->i_size = OFFSET_MAX;
@@ -413,9 +410,9 @@ handle_fragments:
 		goto check_directory_table;
 
 	msblk->fragment_cache = squashfs_cache_init("fragment",
-		min(SQUASHFS_CACHED_FRAGMENTS, fragments), msblk->block_size);
-	if (IS_ERR(msblk->fragment_cache)) {
-		err = PTR_ERR(msblk->fragment_cache);
+		SQUASHFS_CACHED_FRAGMENTS, msblk->block_size);
+	if (msblk->fragment_cache == NULL) {
+		err = -ENOMEM;
 		goto failed_mount;
 	}
 

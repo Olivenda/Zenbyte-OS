@@ -242,8 +242,7 @@
 #define PTRACE_OLDSETOPTIONS		21
 #define PTRACE_SYSEMU			31
 #define PTRACE_SYSEMU_SINGLESTEP	32
-
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 #include <linux/stddef.h>
 #include <linux/types.h>
 
@@ -451,6 +450,6 @@ struct user_regs_struct {
 	unsigned long ieee_instruction_pointer;	/* obsolete, always 0 */
 };
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 
 #endif /* _UAPI_S390_PTRACE_H */

@@ -75,7 +75,6 @@
 
 #include <linux/types.h>
 #include <linux/compiler.h>
-#include <linux/cleanup.h>
 
 extern bool static_key_initialized;
 
@@ -347,8 +346,6 @@ static inline void static_key_disable(struct static_key *key)
 #define STATIC_KEY_INIT_FALSE	{ .enabled = ATOMIC_INIT(0) }
 
 #endif	/* CONFIG_JUMP_LABEL */
-
-DEFINE_LOCK_GUARD_0(jump_label_lock, jump_label_lock(), jump_label_unlock())
 
 #define STATIC_KEY_INIT STATIC_KEY_INIT_FALSE
 #define jump_label_enabled static_key_enabled

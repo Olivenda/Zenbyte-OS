@@ -7,6 +7,8 @@
 
 / {
 	model = "Toradex Apalis iMX8QM";
+	compatible = "toradex,apalis-imx8",
+		     "fsl,imx8qm";
 };
 
 &ethphy0 {
@@ -20,10 +22,6 @@
  */
 &fec1 {
 	phy-mode = "rgmii-rxid";
-};
-
-&hsio_refa_clk {
-	enable-gpios = <&lsio_gpio4 27 GPIO_ACTIVE_HIGH>;
 };
 
 /* TODO: Apalis HDMI1 */
@@ -192,6 +190,12 @@
 			  "MXM3_291",
 			  "MXM3_289",
 			  "MXM3_287";
+
+	/* Enable pcie root / sata ref clock unconditionally */
+	pcie-sata-hog {
+		gpios = <27 GPIO_ACTIVE_HIGH>;
+	};
+
 };
 
 &lsio_gpio5 {

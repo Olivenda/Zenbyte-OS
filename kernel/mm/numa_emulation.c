@@ -8,12 +8,11 @@
 #include <linux/memblock.h>
 #include <linux/numa_memblks.h>
 #include <asm/numa.h>
-#include <acpi/acpi_numa.h>
 
 #define FAKE_NODE_MIN_SIZE	((u64)32 << 20)
 #define FAKE_NODE_MIN_HASH_MASK	(~(FAKE_NODE_MIN_SIZE - 1UL))
 
-int emu_nid_to_phys[MAX_NUMNODES];
+static int emu_nid_to_phys[MAX_NUMNODES];
 static char *emu_cmdline __initdata;
 
 int __init numa_emu_cmdline(char *str)
@@ -73,7 +72,7 @@ static int __init emu_setup_memblk(struct numa_meminfo *ei,
 	}
 
 	printk(KERN_INFO "Faking node %d at [mem %#018Lx-%#018Lx] (%LuMB)\n",
-	       nid, eb->start, eb->end - 1, (eb->end - eb->start) / SZ_1M);
+	       nid, eb->start, eb->end - 1, (eb->end - eb->start) >> 20);
 	return 0;
 }
 
@@ -264,7 +263,7 @@ static int __init split_nodes_size_interleave_uniform(struct numa_meminfo *ei,
 	min_size = ALIGN(max(min_size, FAKE_NODE_MIN_SIZE), FAKE_NODE_MIN_SIZE);
 	if (size < min_size) {
 		pr_err("Fake node size %LuMB too small, increasing to %LuMB\n",
-			size / SZ_1M, min_size / SZ_1M);
+			size >> 20, min_size >> 20);
 		size = min_size;
 	}
 	size = ALIGN_DOWN(size, FAKE_NODE_MIN_SIZE);
@@ -380,7 +379,6 @@ void __init numa_emulation(struct numa_meminfo *numa_meminfo, int numa_dist_cnt)
 	size_t phys_size = numa_dist_cnt * numa_dist_cnt * sizeof(phys_dist[0]);
 	int max_emu_nid, dfl_phys_nid;
 	int i, j, ret;
-	nodemask_t physnode_mask = numa_nodes_parsed;
 
 	if (!emu_cmdline)
 		goto no_emu;
@@ -397,6 +395,7 @@ void __init numa_emulation(struct numa_meminfo *numa_meminfo, int numa_dist_cnt)
 	 * split the system RAM into N fake nodes.
 	 */
 	if (strchr(emu_cmdline, 'U')) {
+		nodemask_t physnode_mask = numa_nodes_parsed;
 		unsigned long n;
 		int nid = 0;
 
@@ -466,6 +465,9 @@ void __init numa_emulation(struct numa_meminfo *numa_meminfo, int numa_dist_cnt)
 	 */
 	max_emu_nid = setup_emu2phys_nid(&dfl_phys_nid);
 
+	/* commit */
+	*numa_meminfo = ei;
+
 	/* Make sure numa_nodes_parsed only contains emulated nodes */
 	nodes_clear(numa_nodes_parsed);
 	for (i = 0; i < ARRAY_SIZE(ei.blk); i++)
@@ -473,21 +475,10 @@ void __init numa_emulation(struct numa_meminfo *numa_meminfo, int numa_dist_cnt)
 		    ei.blk[i].nid != NUMA_NO_NODE)
 			node_set(ei.blk[i].nid, numa_nodes_parsed);
 
-	/* fix pxm_to_node_map[] and node_to_pxm_map[] to avoid collision
-	 * with faked numa nodes, particularly during later memory hotplug
-	 * handling, and also update numa_nodes_parsed accordingly.
-	 */
-	ret = fix_pxm_node_maps(max_emu_nid);
-	if (ret < 0)
-		goto no_emu;
-
-	/* commit */
-	*numa_meminfo = ei;
-
-	numa_emu_update_cpu_to_node(emu_nid_to_phys, max_emu_nid + 1);
+	numa_emu_update_cpu_to_node(emu_nid_to_phys, ARRAY_SIZE(emu_nid_to_phys));
 
 	/* make sure all emulated nodes are mapped to a physical node */
-	for (i = 0; i < max_emu_nid + 1; i++)
+	for (i = 0; i < ARRAY_SIZE(emu_nid_to_phys); i++)
 		if (emu_nid_to_phys[i] == NUMA_NO_NODE)
 			emu_nid_to_phys[i] = dfl_phys_nid;
 
@@ -510,34 +501,12 @@ void __init numa_emulation(struct numa_meminfo *numa_meminfo, int numa_dist_cnt)
 			numa_set_distance(i, j, dist);
 		}
 	}
-	for (i = 0; i < numa_distance_cnt; i++) {
-		for (j = 0; j < numa_distance_cnt; j++) {
-			int physi, physj;
-			u8 dist;
-
-			/* distance between fake nodes is already ok */
-			if (emu_nid_to_phys[i] != NUMA_NO_NODE &&
-			    emu_nid_to_phys[j] != NUMA_NO_NODE)
-				continue;
-			if (emu_nid_to_phys[i] != NUMA_NO_NODE)
-				physi = emu_nid_to_phys[i];
-			else
-				physi = i - max_emu_nid;
-			if (emu_nid_to_phys[j] != NUMA_NO_NODE)
-				physj = emu_nid_to_phys[j];
-			else
-				physj = j - max_emu_nid;
-			dist = phys_dist[physi * numa_dist_cnt + physj];
-			numa_set_distance(i, j, dist);
-		}
-	}
 
 	/* free the copied physical distance table */
 	memblock_free(phys_dist, phys_size);
 	return;
 
 no_emu:
-	numa_nodes_parsed = physnode_mask;
 	/* No emulation.  Build identity emu_nid_to_phys[] for numa_add_cpu() */
 	for (i = 0; i < ARRAY_SIZE(emu_nid_to_phys); i++)
 		emu_nid_to_phys[i] = i;

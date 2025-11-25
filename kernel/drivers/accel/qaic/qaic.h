@@ -32,12 +32,6 @@
 #define to_accel_kdev(qddev) (to_drm(qddev)->accel->kdev) /* Return Linux device of accel node */
 #define to_qaic_device(dev) (to_qaic_drm_device((dev))->qdev)
 
-enum aic_families {
-	FAMILY_AIC100,
-	FAMILY_AIC200,
-	FAMILY_MAX,
-};
-
 enum __packed dev_states {
 	/* Device is offline or will be very soon */
 	QAIC_OFFLINE,
@@ -121,10 +115,10 @@ struct qaic_device {
 	struct pci_dev		*pdev;
 	/* Req. ID of request that will be queued next in MHI control device */
 	u32			next_seq_num;
-	/* Base address of the MHI bar */
-	void __iomem		*bar_mhi;
-	/* Base address of the DBCs bar */
-	void __iomem		*bar_dbc;
+	/* Base address of bar 0 */
+	void __iomem		*bar_0;
+	/* Base address of bar 2 */
+	void __iomem		*bar_2;
 	/* Controller structure for MHI devices */
 	struct mhi_controller	*mhi_cntrl;
 	/* MHI control channel device */
@@ -169,14 +163,6 @@ struct qaic_device {
 	struct workqueue_struct *bootlog_wq;
 	/* Synchronizes access of pages in MHI bootlog device */
 	struct mutex            bootlog_mutex;
-	/* MHI RAS channel device */
-	struct mhi_device	*ras_ch;
-	/* Correctable error count */
-	unsigned int		ce_count;
-	/* Un-correctable error count */
-	unsigned int		ue_count;
-	/* Un-correctable non-fatal error count */
-	unsigned int		ue_nf_count;
 };
 
 struct qaic_drm_device {
@@ -223,6 +209,8 @@ struct qaic_bo {
 	bool			sliced;
 	/* Request ID of this BO if it is queued for execution */
 	u16			req_id;
+	/* Handle assigned to this BO */
+	u32			handle;
 	/* Wait on this for completion of DMA transfer of this BO */
 	struct completion	xfer_done;
 	/*

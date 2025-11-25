@@ -311,6 +311,7 @@ struct bcm_vk_peer_log {
 	u32 wr_idx;
 	u32 buf_size;
 	u32 mask;
+	char data[];
 };
 
 /* max buf size allowed */

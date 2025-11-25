@@ -810,7 +810,7 @@ static const struct dev_pm_ops sun6i_spi_pm_ops = {
 
 static struct platform_driver sun6i_spi_driver = {
 	.probe	= sun6i_spi_probe,
-	.remove = sun6i_spi_remove,
+	.remove_new = sun6i_spi_remove,
 	.driver	= {
 		.name		= "sun6i-spi",
 		.of_match_table	= sun6i_spi_match,

@@ -425,6 +425,7 @@ static int l2tp_ip_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	int rc;
 	struct inet_sock *inet = inet_sk(sk);
 	struct rtable *rt = NULL;
+	struct flowi4 *fl4;
 	int connected = 0;
 	__be32 daddr;
 
@@ -454,6 +455,7 @@ static int l2tp_ip_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		if (sk->sk_state != TCP_ESTABLISHED)
 			goto out;
 
+		daddr = inet->inet_daddr;
 		connected = 1;
 	}
 
@@ -480,24 +482,29 @@ static int l2tp_ip_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		goto error;
 	}
 
+	fl4 = &inet->cork.fl.u.ip4;
 	if (connected)
 		rt = dst_rtable(__sk_dst_check(sk, 0));
 
 	rcu_read_lock();
 	if (!rt) {
-		struct flowi4 *fl4 = &inet->cork.fl.u.ip4;
+		const struct ip_options_rcu *inet_opt;
 
-		inet_sk_init_flowi4(inet, fl4);
+		inet_opt = rcu_dereference(inet->inet_opt);
 
-		/* Overwrite ->daddr if msg->msg_name was provided */
-		if (!connected)
-			fl4->daddr = daddr;
+		/* Use correct destination address if we have options. */
+		if (inet_opt && inet_opt->opt.srr)
+			daddr = inet_opt->opt.faddr;
 
 		/* If this fails, retransmit mechanism of transport layer will
 		 * keep trying until route appears or the connection times
 		 * itself out.
 		 */
-		rt = ip_route_output_flow(sock_net(sk), fl4, sk);
+		rt = ip_route_output_ports(sock_net(sk), fl4, sk,
+					   daddr, inet->inet_saddr,
+					   inet->inet_dport, inet->inet_sport,
+					   sk->sk_protocol, ip_sock_rt_tos(sk),
+					   sk->sk_bound_dev_if);
 		if (IS_ERR(rt))
 			goto no_route;
 		if (connected) {

@@ -111,7 +111,6 @@ struct bnxt_qplib_mrw {
 	struct bnxt_qplib_pd		*pd;
 	int				type;
 	u32				access_flags;
-#define BNXT_QPLIB_MR_ACCESS_MASK	0xFF
 #define BNXT_QPLIB_FR_PMR		0x80000000
 	u32				lkey;
 	u32				rkey;
@@ -297,7 +296,6 @@ struct bnxt_qplib_cc_param_ext {
 
 struct bnxt_qplib_cc_param {
 	u8 alt_vlan_pcp;
-	u8 qp1_tos_dscp;
 	u16 alt_tos_dscp;
 	u8 cc_mode;
 	u8 enable;
@@ -354,10 +352,6 @@ int bnxt_qplib_qext_stat(struct bnxt_qplib_rcfw *rcfw, u32 fid,
 			 struct bnxt_qplib_ext_stat *estat);
 int bnxt_qplib_modify_cc(struct bnxt_qplib_res *res,
 			 struct bnxt_qplib_cc_param *cc_param);
-int bnxt_qplib_read_context(struct bnxt_qplib_rcfw *rcfw, u8 type, u32 xid,
-			    u32 resp_size, void *resp_va);
-int bnxt_qplib_query_cc_param(struct bnxt_qplib_res *res,
-			      struct bnxt_qplib_cc_param *cc_param);
 
 #define BNXT_VAR_MAX_WQE       4352
 #define BNXT_VAR_MAX_SLOT_ALIGN 256

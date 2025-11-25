@@ -101,22 +101,7 @@ KBUILD_AFLAGS			+= $(call cc-option,-mthin-add-sub) $(call cc-option,-Wa$(comma)
 KBUILD_CFLAGS			+= $(call cc-option,-mthin-add-sub) $(call cc-option,-Wa$(comma)-mthin-add-sub)
 
 ifdef CONFIG_OBJTOOL
-ifdef CONFIG_CC_HAS_ANNOTATE_TABLEJUMP
-KBUILD_CFLAGS			+= -mannotate-tablejump
-else
-KBUILD_CFLAGS			+= -fno-jump-tables # keep compatibility with older compilers
-endif
-ifdef CONFIG_RUSTC_HAS_ANNOTATE_TABLEJUMP
-KBUILD_RUSTFLAGS		+= -Cllvm-args=--loongarch-annotate-tablejump
-else
-KBUILD_RUSTFLAGS		+= -Zno-jump-tables # keep compatibility with older compilers
-endif
-ifdef CONFIG_LTO_CLANG
-# The annotate-tablejump option can not be passed to LLVM backend when LTO is enabled.
-# Ensure it is aware of linker with LTO, '--loongarch-annotate-tablejump' also needs to
-# be passed via '-mllvm' to ld.lld.
-KBUILD_LDFLAGS			+= $(call ld-option,-mllvm --loongarch-annotate-tablejump)
-endif
+KBUILD_CFLAGS			+= -fno-jump-tables
 endif
 
 KBUILD_RUSTFLAGS		+= --target=loongarch64-unknown-none-softfloat -Ccode-model=small
@@ -192,14 +177,11 @@ vmlinux.elf vmlinux.efi vmlinuz.efi: vmlinux
 	$(Q)$(MAKE) $(build)=$(boot) $(bootvars-y) $(boot)/$@
 
 install:
-	$(call cmd,install)
+	$(Q)install -D -m 755 $(KBUILD_IMAGE) $(INSTALL_PATH)/$(image-name-y)-$(KERNELRELEASE)
+	$(Q)install -D -m 644 .config $(INSTALL_PATH)/config-$(KERNELRELEASE)
+	$(Q)install -D -m 644 System.map $(INSTALL_PATH)/System.map-$(KERNELRELEASE)
 
 define archhelp
-	echo '  vmlinux.elf    - Uncompressed ELF kernel image (arch/loongarch/boot/vmlinux.elf)'
-	echo '  vmlinux.efi    - Uncompressed EFI kernel image (arch/loongarch/boot/vmlinux.efi)'
-	echo '  vmlinuz.efi    - GZIP/ZSTD-compressed EFI kernel image (arch/loongarch/boot/vmlinuz.efi)'
-	echo '                   Default when CONFIG_EFI_ZBOOT=y'
-	echo '  install        - Install kernel using (your) ~/bin/$(INSTALLKERNEL) or'
-	echo '                   (distribution) /sbin/$(INSTALLKERNEL) or install.sh to $$(INSTALL_PATH)'
+	echo '  install              - install kernel into $(INSTALL_PATH)'
 	echo
 endef

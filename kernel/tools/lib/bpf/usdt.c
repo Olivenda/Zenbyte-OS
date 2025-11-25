@@ -20,7 +20,6 @@
 #include "libbpf_common.h"
 #include "libbpf_internal.h"
 #include "hashmap.h"
-#include "str_error.h"
 
 /* libbpf's USDT support consists of BPF-side state/code and user-space
  * state/code working together in concert. BPF-side parts are defined in
@@ -59,7 +58,7 @@
  *
  * STAP_PROBE3(my_usdt_provider, my_usdt_probe_name, 123, x, &y);
  *
- * USDT is identified by its <provider-name>:<probe-name> pair of names. Each
+ * USDT is identified by it's <provider-name>:<probe-name> pair of names. Each
  * individual USDT has a fixed number of arguments (3 in the above example)
  * and specifies values of each argument as if it was a function call.
  *
@@ -81,7 +80,7 @@
  * NOP instruction that kernel can replace with an interrupt instruction to
  * trigger instrumentation code (BPF program for all that we care about).
  *
- * Semaphore above is an optional feature. It records an address of a 2-byte
+ * Semaphore above is and optional feature. It records an address of a 2-byte
  * refcount variable (normally in '.probes' ELF section) used for signaling if
  * there is anything that is attached to USDT. This is useful for user
  * applications if, for example, they need to prepare some arguments that are
@@ -121,7 +120,7 @@
  * a uprobe BPF program (which for kernel, at least currently, is just a kprobe
  * program, so BPF_PROG_TYPE_KPROBE program type). With the only difference
  * that uprobe is usually attached at the function entry, while USDT will
- * normally be somewhere inside the function. But it should always be
+ * normally will be somewhere inside the function. But it should always be
  * pointing to NOP instruction, which makes such uprobes the fastest uprobe
  * kind.
  *
@@ -151,7 +150,7 @@
  * libbpf sets to spec ID during attach time, or, if kernel is too old to
  * support BPF cookie, through IP-to-spec-ID map that libbpf maintains in such
  * case. The latter means that some modes of operation can't be supported
- * without BPF cookie. Such a mode is attaching to shared library "generically",
+ * without BPF cookie. Such mode is attaching to shared library "generically",
  * without specifying target process. In such case, it's impossible to
  * calculate absolute IP addresses for IP-to-spec-ID map, and thus such mode
  * is not supported without BPF cookie support.
@@ -185,7 +184,7 @@
  * as even if USDT spec string is the same, USDT cookie value can be
  * different. It was deemed excessive to try to deduplicate across independent
  * USDT attachments by taking into account USDT spec string *and* USDT cookie
- * value, which would complicate spec ID accounting significantly for little
+ * value, which would complicated spec ID accounting significantly for little
  * gain.
  */
 
@@ -477,8 +476,8 @@ static int parse_vma_segs(int pid, const char *lib_path, struct elf_seg **segs, 
 		goto proceed;
 
 	if (!realpath(lib_path, path)) {
-		pr_warn("usdt: failed to get absolute path of '%s' (err %s), using path as is...\n",
-			lib_path, errstr(-errno));
+		pr_warn("usdt: failed to get absolute path of '%s' (err %d), using path as is...\n",
+			lib_path, -errno);
 		libbpf_strlcpy(path, lib_path, sizeof(path));
 	}
 
@@ -487,8 +486,8 @@ proceed:
 	f = fopen(line, "re");
 	if (!f) {
 		err = -errno;
-		pr_warn("usdt: failed to open '%s' to get base addr of '%s': %s\n",
-			line, lib_path, errstr(err));
+		pr_warn("usdt: failed to open '%s' to get base addr of '%s': %d\n",
+			line, lib_path, err);
 		return err;
 	}
 
@@ -618,8 +617,7 @@ static int collect_usdt_targets(struct usdt_manager *man, Elf *elf, const char *
 
 	err = parse_elf_segs(elf, path, &segs, &seg_cnt);
 	if (err) {
-		pr_warn("usdt: failed to process ELF program segments for '%s': %s\n",
-			path, errstr(err));
+		pr_warn("usdt: failed to process ELF program segments for '%s': %d\n", path, err);
 		goto err_out;
 	}
 
@@ -721,8 +719,8 @@ static int collect_usdt_targets(struct usdt_manager *man, Elf *elf, const char *
 			if (vma_seg_cnt == 0) {
 				err = parse_vma_segs(pid, path, &vma_segs, &vma_seg_cnt);
 				if (err) {
-					pr_warn("usdt: failed to get memory segments in PID %d for shared library '%s': %s\n",
-						pid, path, errstr(err));
+					pr_warn("usdt: failed to get memory segments in PID %d for shared library '%s': %d\n",
+						pid, path, err);
 					goto err_out;
 				}
 			}
@@ -1060,8 +1058,8 @@ struct bpf_link *usdt_manager_attach_usdt(struct usdt_manager *man, const struct
 
 		if (is_new && bpf_map_update_elem(spec_map_fd, &spec_id, &target->spec, BPF_ANY)) {
 			err = -errno;
-			pr_warn("usdt: failed to set USDT spec #%d for '%s:%s' in '%s': %s\n",
-				spec_id, usdt_provider, usdt_name, path, errstr(err));
+			pr_warn("usdt: failed to set USDT spec #%d for '%s:%s' in '%s': %d\n",
+				spec_id, usdt_provider, usdt_name, path, err);
 			goto err_out;
 		}
 		if (!man->has_bpf_cookie &&
@@ -1071,9 +1069,9 @@ struct bpf_link *usdt_manager_attach_usdt(struct usdt_manager *man, const struct
 				pr_warn("usdt: IP collision detected for spec #%d for '%s:%s' in '%s'\n",
 				        spec_id, usdt_provider, usdt_name, path);
 			} else {
-				pr_warn("usdt: failed to map IP 0x%lx to spec #%d for '%s:%s' in '%s': %s\n",
+				pr_warn("usdt: failed to map IP 0x%lx to spec #%d for '%s:%s' in '%s': %d\n",
 					target->abs_ip, spec_id, usdt_provider, usdt_name,
-					path, errstr(err));
+					path, err);
 			}
 			goto err_out;
 		}
@@ -1089,8 +1087,8 @@ struct bpf_link *usdt_manager_attach_usdt(struct usdt_manager *man, const struct
 								      target->rel_ip, &opts);
 			err = libbpf_get_error(uprobe_link);
 			if (err) {
-				pr_warn("usdt: failed to attach uprobe #%d for '%s:%s' in '%s': %s\n",
-					i, usdt_provider, usdt_name, path, errstr(err));
+				pr_warn("usdt: failed to attach uprobe #%d for '%s:%s' in '%s': %d\n",
+					i, usdt_provider, usdt_name, path, err);
 				goto err_out;
 			}
 
@@ -1112,8 +1110,8 @@ struct bpf_link *usdt_manager_attach_usdt(struct usdt_manager *man, const struct
 								    NULL, &opts_multi);
 		if (!link->multi_link) {
 			err = -errno;
-			pr_warn("usdt: failed to attach uprobe multi for '%s:%s' in '%s': %s\n",
-				usdt_provider, usdt_name, path, errstr(err));
+			pr_warn("usdt: failed to attach uprobe multi for '%s:%s' in '%s': %d\n",
+				usdt_provider, usdt_name, path, err);
 			goto err_out;
 		}
 

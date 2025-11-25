@@ -634,11 +634,13 @@ static void imx6_pm_stby_poweroff(void)
 
 static int imx6_pm_stby_poweroff_probe(void)
 {
-	if (register_platform_power_off(imx6_pm_stby_poweroff)) {
-		pr_warn("%s: platform power off already claimed!\n", __func__);
+	if (pm_power_off) {
+		pr_warn("%s: pm_power_off already claimed  %p %ps!\n",
+			__func__, pm_power_off, pm_power_off);
 		return -EBUSY;
 	}
 
+	pm_power_off = imx6_pm_stby_poweroff;
 	return 0;
 }
 

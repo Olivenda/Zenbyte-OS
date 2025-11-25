@@ -18,15 +18,7 @@
 
 /* platform specific devices */
 #include "hda.h"
-#include "lnl.h"
-
-/* LunarLake ops */
-static struct snd_sof_dsp_ops sof_lnl_ops;
-
-static int sof_lnl_ops_init(struct snd_sof_dev *sdev)
-{
-	return sof_lnl_set_ops(sdev, &sof_lnl_ops);
-}
+#include "mtl.h"
 
 static const struct sof_dev_desc lnl_desc = {
 	.use_acpi_target_states	= true,
@@ -72,13 +64,15 @@ static struct pci_driver snd_sof_pci_intel_lnl_driver = {
 	.remove = sof_pci_remove,
 	.shutdown = sof_pci_shutdown,
 	.driver = {
-		.pm = pm_ptr(&sof_pci_pm),
+		.pm = &sof_pci_pm,
 	},
 };
 module_pci_driver(snd_sof_pci_intel_lnl_driver);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("SOF support for LunarLake platforms");
-MODULE_IMPORT_NS("SND_SOC_SOF_INTEL_HDA_GENERIC");
-MODULE_IMPORT_NS("SND_SOC_SOF_INTEL_HDA_COMMON");
-MODULE_IMPORT_NS("SND_SOC_SOF_PCI_DEV");
+MODULE_IMPORT_NS(SND_SOC_SOF_INTEL_HDA_GENERIC);
+MODULE_IMPORT_NS(SND_SOC_SOF_INTEL_HDA_COMMON);
+MODULE_IMPORT_NS(SND_SOC_SOF_INTEL_MTL);
+MODULE_IMPORT_NS(SND_SOC_SOF_HDA_MLINK);
+MODULE_IMPORT_NS(SND_SOC_SOF_PCI_DEV);

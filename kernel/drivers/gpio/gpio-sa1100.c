@@ -43,14 +43,11 @@ static int sa1100_gpio_get(struct gpio_chip *chip, unsigned offset)
 		BIT(offset);
 }
 
-static int sa1100_gpio_set(struct gpio_chip *chip, unsigned int offset,
-			   int value)
+static void sa1100_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
 {
 	int reg = value ? R_GPSR : R_GPCR;
 
 	writel_relaxed(BIT(offset), sa1100_gpio_chip(chip)->membase + reg);
-
-	return 0;
 }
 
 static int sa1100_get_direction(struct gpio_chip *chip, unsigned offset)
@@ -322,7 +319,7 @@ void __init sa1100_init_gpio(void)
 
 	gpiochip_add_data(&sa1100_gpio_chip.chip, NULL);
 
-	sa1100_gpio_irqdomain = irq_domain_create_simple(NULL,
+	sa1100_gpio_irqdomain = irq_domain_add_simple(NULL,
 			28, IRQ_GPIO0,
 			&sa1100_gpio_irqdomain_ops, sgc);
 

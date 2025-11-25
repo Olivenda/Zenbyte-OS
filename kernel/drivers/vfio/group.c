@@ -104,14 +104,15 @@ static int vfio_group_ioctl_set_container(struct vfio_group *group,
 {
 	struct vfio_container *container;
 	struct iommufd_ctx *iommufd;
+	struct fd f;
 	int ret;
 	int fd;
 
 	if (get_user(fd, arg))
 		return -EFAULT;
 
-	CLASS(fd, f)(fd);
-	if (fd_empty(f))
+	f = fdget(fd);
+	if (!fd_file(f))
 		return -EBADF;
 
 	mutex_lock(&group->group_lock);
@@ -152,6 +153,7 @@ static int vfio_group_ioctl_set_container(struct vfio_group *group,
 
 out_unlock:
 	mutex_unlock(&group->group_lock);
+	fdput(f);
 	return ret;
 }
 
@@ -265,12 +267,24 @@ static struct file *vfio_device_open_file(struct vfio_device *device)
 	if (ret)
 		goto err_free;
 
-	filep = anon_inode_getfile_fmode("[vfio-device]", &vfio_device_fops,
-				   df, O_RDWR, FMODE_PREAD | FMODE_PWRITE);
+	/*
+	 * We can't use anon_inode_getfd() because we need to modify
+	 * the f_mode flags directly to allow more than just ioctls
+	 */
+	filep = anon_inode_getfile("[vfio-device]", &vfio_device_fops,
+				   df, O_RDWR);
 	if (IS_ERR(filep)) {
 		ret = PTR_ERR(filep);
 		goto err_close_device;
 	}
+
+	/*
+	 * TODO: add an anon_inode interface to do this.
+	 * Appears to be missing by lack of need rather than
+	 * explicitly prevented.  Now there's need.
+	 */
+	filep->f_mode |= (FMODE_PREAD | FMODE_PWRITE);
+
 	/*
 	 * Use the pseudo fs inode on the device to link all mmaps
 	 * to the same address space, allowing us to unmap all vmas

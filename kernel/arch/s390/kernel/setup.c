@@ -54,7 +54,6 @@
 
 #include <asm/archrandom.h>
 #include <asm/boot_data.h>
-#include <asm/machine.h>
 #include <asm/ipl.h>
 #include <asm/facility.h>
 #include <asm/smp.h>
@@ -158,28 +157,24 @@ u64 __bootdata_preserved(stfle_fac_list[16]);
 EXPORT_SYMBOL(stfle_fac_list);
 struct oldmem_data __bootdata_preserved(oldmem_data);
 
-char __bootdata(boot_rb)[PAGE_SIZE * 2];
-bool __bootdata(boot_earlyprintk);
-size_t __bootdata(boot_rb_off);
-char __bootdata(bootdebug_filter)[128];
-bool __bootdata(bootdebug);
-
-unsigned long __bootdata_preserved(VMALLOC_START);
+unsigned long VMALLOC_START;
 EXPORT_SYMBOL(VMALLOC_START);
 
-unsigned long __bootdata_preserved(VMALLOC_END);
+unsigned long VMALLOC_END;
 EXPORT_SYMBOL(VMALLOC_END);
 
-struct page *__bootdata_preserved(vmemmap);
+struct page *vmemmap;
 EXPORT_SYMBOL(vmemmap);
-unsigned long __bootdata_preserved(vmemmap_size);
+unsigned long vmemmap_size;
 
-unsigned long __bootdata_preserved(MODULES_VADDR);
-unsigned long __bootdata_preserved(MODULES_END);
+unsigned long MODULES_VADDR;
+unsigned long MODULES_END;
 
 /* An array with a pointer to the lowcore of every CPU. */
 struct lowcore *lowcore_ptr[NR_CPUS];
 EXPORT_SYMBOL(lowcore_ptr);
+
+DEFINE_STATIC_KEY_FALSE(cpu_has_bear);
 
 /*
  * The Write Back bit position in the physaddr is given by the SLPC PCI.
@@ -250,7 +245,7 @@ static void __init conmode_default(void)
 	char query_buffer[1024];
 	char *ptr;
 
-	if (machine_is_vm()) {
+        if (MACHINE_IS_VM) {
 		cpcmd("QUERY CONSOLE", query_buffer, 1024, NULL);
 		console_devno = simple_strtoul(query_buffer + 5, NULL, 16);
 		ptr = strstr(query_buffer, "SUBCHANNEL =");
@@ -288,7 +283,7 @@ static void __init conmode_default(void)
 			SET_CONSOLE_SCLP;
 #endif
 		}
-	} else if (machine_is_kvm()) {
+	} else if (MACHINE_IS_KVM) {
 		if (sclp.has_vt220 && IS_ENABLED(CONFIG_SCLP_VT220_CONSOLE))
 			SET_CONSOLE_VT220;
 		else if (sclp.has_linemode && IS_ENABLED(CONFIG_SCLP_CONSOLE))
@@ -364,24 +359,36 @@ void *restart_stack;
 
 unsigned long stack_alloc(void)
 {
-	void *stack;
+#ifdef CONFIG_VMAP_STACK
+	void *ret;
 
-	stack = __vmalloc_node(THREAD_SIZE, THREAD_SIZE, THREADINFO_GFP,
-			       NUMA_NO_NODE, __builtin_return_address(0));
-	kmemleak_not_leak(stack);
-	return (unsigned long)stack;
+	ret = __vmalloc_node(THREAD_SIZE, THREAD_SIZE, THREADINFO_GFP,
+			     NUMA_NO_NODE, __builtin_return_address(0));
+	kmemleak_not_leak(ret);
+	return (unsigned long)ret;
+#else
+	return __get_free_pages(GFP_KERNEL, THREAD_SIZE_ORDER);
+#endif
 }
 
 void stack_free(unsigned long stack)
 {
-	vfree((void *)stack);
+#ifdef CONFIG_VMAP_STACK
+	vfree((void *) stack);
+#else
+	free_pages(stack, THREAD_SIZE_ORDER);
+#endif
 }
 
 static unsigned long __init stack_alloc_early(void)
 {
 	unsigned long stack;
 
-	stack = (unsigned long)memblock_alloc_or_panic(THREAD_SIZE, THREAD_SIZE);
+	stack = (unsigned long)memblock_alloc(THREAD_SIZE, THREAD_SIZE);
+	if (!stack) {
+		panic("%s: Failed to allocate %lu bytes align=0x%lx\n",
+		      __func__, THREAD_SIZE, THREAD_SIZE);
+	}
 	return stack;
 }
 
@@ -414,6 +421,7 @@ static void __init setup_lowcore(void)
 	lc->clock_comparator = clock_comparator_max;
 	lc->current_task = (unsigned long)&init_task;
 	lc->lpp = LPP_MAGIC;
+	lc->machine_flags = get_lowcore()->machine_flags;
 	lc->preempt_count = get_lowcore()->preempt_count;
 	nmi_alloc_mcesa_early(&lc->mcesad);
 	lc->sys_enter_timer = get_lowcore()->sys_enter_timer;
@@ -504,7 +512,10 @@ static void __init setup_resources(void)
 	bss_resource.end = __pa_symbol(__bss_stop) - 1;
 
 	for_each_mem_range(i, &start, &end) {
-		res = memblock_alloc_or_panic(sizeof(*res), 8);
+		res = memblock_alloc(sizeof(*res), 8);
+		if (!res)
+			panic("%s: Failed to allocate %zu bytes align=0x%x\n",
+			      __func__, sizeof(*res), 8);
 		res->flags = IORESOURCE_BUSY | IORESOURCE_SYSTEM_RAM;
 
 		res->name = "System RAM";
@@ -523,7 +534,10 @@ static void __init setup_resources(void)
 			    std_res->start > res->end)
 				continue;
 			if (std_res->end > res->end) {
-				sub_res = memblock_alloc_or_panic(sizeof(*sub_res), 8);
+				sub_res = memblock_alloc(sizeof(*sub_res), 8);
+				if (!sub_res)
+					panic("%s: Failed to allocate %zu bytes align=0x%x\n",
+					      __func__, sizeof(*sub_res), 8);
 				*sub_res = *std_res;
 				sub_res->end = res->end;
 				std_res->start = res->end + 1;
@@ -605,7 +619,7 @@ static void __init reserve_crashkernel(void)
 	int rc;
 
 	rc = parse_crashkernel(boot_command_line, ident_map_size,
-			       &crash_size, &crash_base, NULL, NULL, NULL);
+			       &crash_size, &crash_base, NULL, NULL);
 
 	crash_base = ALIGN(crash_base, KEXEC_CRASH_MEM_ALIGN);
 	crash_size = ALIGN(crash_size, KEXEC_CRASH_MEM_ALIGN);
@@ -650,7 +664,7 @@ static void __init reserve_crashkernel(void)
 		return;
 	}
 
-	if (!oldmem_data.start && machine_is_vm())
+	if (!oldmem_data.start && MACHINE_IS_VM)
 		diag10_range(PFN_DOWN(crash_base), PFN_DOWN(crash_size));
 	crashk_res.start = crash_base;
 	crashk_res.end = crash_base + crash_size - 1;
@@ -690,7 +704,7 @@ static void __init reserve_physmem_info(void)
 {
 	unsigned long addr, size;
 
-	if (get_physmem_reserved(RR_MEM_DETECT_EXT, &addr, &size))
+	if (get_physmem_reserved(RR_MEM_DETECT_EXTENDED, &addr, &size))
 		memblock_reserve(addr, size);
 }
 
@@ -698,7 +712,7 @@ static void __init free_physmem_info(void)
 {
 	unsigned long addr, size;
 
-	if (get_physmem_reserved(RR_MEM_DETECT_EXT, &addr, &size))
+	if (get_physmem_reserved(RR_MEM_DETECT_EXTENDED, &addr, &size))
 		memblock_phys_free(addr, size);
 }
 
@@ -719,11 +733,6 @@ static void __init memblock_add_physmem_info(void)
 	memblock_set_node(0, ULONG_MAX, &memblock.memory, 0);
 }
 
-static void __init setup_high_memory(void)
-{
-	high_memory = __va(ident_map_size);
-}
-
 /*
  * Reserve memory used for lowcore.
  */
@@ -733,7 +742,7 @@ static void __init reserve_lowcore(void)
 	void *lowcore_end = lowcore_start + sizeof(struct lowcore);
 	void *start, *end;
 
-	if (absolute_pointer(__identity_base) < lowcore_end) {
+	if ((void *)__identity_base < lowcore_end) {
 		start = max(lowcore_start, (void *)__identity_base);
 		end = min(lowcore_end, (void *)(__identity_base + ident_map_size));
 		memblock_reserve(__pa(start), __pa(end));
@@ -815,7 +824,9 @@ static void __init setup_randomness(void)
 {
 	struct sysinfo_3_2_2 *vmms;
 
-	vmms = memblock_alloc_or_panic(PAGE_SIZE, PAGE_SIZE);
+	vmms = memblock_alloc(PAGE_SIZE, PAGE_SIZE);
+	if (!vmms)
+		panic("Failed to allocate memory for sysinfo structure\n");
 	if (stsi(vmms, 3, 2, 2) == 0 && vmms->count)
 		add_device_randomness(&vmms->vm, sizeof(vmms->vm[0]) * vmms->count);
 	memblock_free(vmms, PAGE_SIZE);
@@ -875,23 +886,6 @@ static void __init log_component_list(void)
 }
 
 /*
- * Print avoiding interpretation of % in buf and taking bootdebug option
- * into consideration.
- */
-static void __init print_rb_entry(const char *buf)
-{
-	char fmt[] = KERN_SOH "0boot: %s";
-	int level = printk_get_level(buf);
-
-	buf = skip_timestamp(printk_skip_level(buf));
-	if (level == KERN_DEBUG[1] && (!bootdebug || !bootdebug_filter_match(buf)))
-		return;
-
-	fmt[1] = level;
-	printk(fmt, buf);
-}
-
-/*
  * Setup function called from init/main.c just after the banner
  * was printed.
  */
@@ -901,20 +895,17 @@ void __init setup_arch(char **cmdline_p)
         /*
          * print what head.S has found out about the machine
          */
-	if (machine_is_vm())
+	if (MACHINE_IS_VM)
 		pr_info("Linux is running as a z/VM "
 			"guest operating system in 64-bit mode\n");
-	else if (machine_is_kvm())
+	else if (MACHINE_IS_KVM)
 		pr_info("Linux is running under KVM in 64-bit mode\n");
-	else if (machine_is_lpar())
+	else if (MACHINE_IS_LPAR)
 		pr_info("Linux is running natively in 64-bit mode\n");
 	else
 		pr_info("Linux is running as a guest in 64-bit mode\n");
-	/* Print decompressor messages if not already printed */
-	if (!boot_earlyprintk)
-		boot_rb_foreach(print_rb_entry);
 
-	if (machine_has_relocated_lowcore())
+	if (have_relocated_lowcore())
 		pr_info("Lowcore relocated to 0x%px\n", get_lowcore());
 
 	log_component_list();
@@ -956,7 +947,6 @@ void __init setup_arch(char **cmdline_p)
 
 	free_physmem_info();
 	setup_memory_end();
-	setup_high_memory();
 	memblock_dump_all();
 	setup_memory();
 
@@ -965,7 +955,7 @@ void __init setup_arch(char **cmdline_p)
 	setup_uv();
 	dma_contiguous_reserve(ident_map_size);
 	vmcp_cma_reserve();
-	if (cpu_has_edat2())
+	if (MACHINE_HAS_EDAT2)
 		hugetlb_cma_reserve(PUD_SHIFT - PAGE_SHIFT);
 
 	reserve_crashkernel();
@@ -985,7 +975,10 @@ void __init setup_arch(char **cmdline_p)
 	numa_setup();
 	smp_detect_cpus();
 	topology_init_early();
-	setup_protection_map();
+
+	if (test_facility(193))
+		static_branch_enable(&cpu_has_bear);
+
 	/*
 	 * Create kernel page tables.
 	 */

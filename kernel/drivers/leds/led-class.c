@@ -25,8 +25,6 @@
 static DEFINE_MUTEX(leds_lookup_lock);
 static LIST_HEAD(leds_lookup_list);
 
-static struct workqueue_struct *leds_wq;
-
 static ssize_t brightness_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -62,6 +60,7 @@ static ssize_t brightness_store(struct device *dev,
 	if (state == LED_OFF)
 		led_trigger_remove(led_cdev);
 	led_set_brightness(led_cdev, state);
+	flush_work(&led_cdev->set_brightness_work);
 
 	ret = size;
 unlock:
@@ -85,8 +84,8 @@ static ssize_t max_brightness_show(struct device *dev,
 static DEVICE_ATTR_RO(max_brightness);
 
 #ifdef CONFIG_LEDS_TRIGGERS
-static const BIN_ATTR(trigger, 0644, led_trigger_read, led_trigger_write, 0);
-static const struct bin_attribute *const led_trigger_bin_attrs[] = {
+static BIN_ATTR(trigger, 0644, led_trigger_read, led_trigger_write, 0);
+static struct bin_attribute *led_trigger_bin_attrs[] = {
 	&bin_attr_trigger,
 	NULL,
 };
@@ -256,7 +255,7 @@ static const struct class leds_class = {
  * Returns the LED device parsed from the phandle specified in the "leds"
  * property of a device tree node or a negative error-code on failure.
  */
-static struct led_classdev *of_led_get(struct device_node *np, int index)
+struct led_classdev *of_led_get(struct device_node *np, int index)
 {
 	struct device *led_dev;
 	struct device_node *led_node;
@@ -270,6 +269,7 @@ static struct led_classdev *of_led_get(struct device_node *np, int index)
 
 	return led_module_get(led_dev);
 }
+EXPORT_SYMBOL_GPL(of_led_get);
 
 /**
  * led_put() - release a LED device
@@ -557,8 +557,6 @@ int led_classdev_register_ext(struct device *parent,
 
 	led_update_brightness(led_cdev);
 
-	led_cdev->wq = leds_wq;
-
 	led_init_core(led_cdev);
 
 #ifdef CONFIG_LEDS_TRIGGERS
@@ -677,19 +675,12 @@ EXPORT_SYMBOL_GPL(devm_led_classdev_unregister);
 
 static int __init leds_init(void)
 {
-	leds_wq = alloc_ordered_workqueue("leds", 0);
-	if (!leds_wq) {
-		pr_err("Failed to create LEDs ordered workqueue\n");
-		return -ENOMEM;
-	}
-
 	return class_register(&leds_class);
 }
 
 static void __exit leds_exit(void)
 {
 	class_unregister(&leds_class);
-	destroy_workqueue(leds_wq);
 }
 
 subsys_initcall(leds_init);

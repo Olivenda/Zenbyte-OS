@@ -1824,7 +1824,7 @@ static struct platform_driver mxcnd_driver = {
 		   .of_match_table = mxcnd_dt_ids,
 	},
 	.probe = mxcnd_probe,
-	.remove = mxcnd_remove,
+	.remove_new = mxcnd_remove,
 };
 module_platform_driver(mxcnd_driver);
 

@@ -122,7 +122,7 @@ err_mclk_tx:
 	return ret;
 }
 
-static int i2s_tdm_runtime_suspend(struct device *dev)
+static int __maybe_unused i2s_tdm_runtime_suspend(struct device *dev)
 {
 	struct rk_i2s_tdm_dev *i2s_tdm = dev_get_drvdata(dev);
 
@@ -134,7 +134,7 @@ static int i2s_tdm_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int i2s_tdm_runtime_resume(struct device *dev)
+static int __maybe_unused i2s_tdm_runtime_resume(struct device *dev)
 {
 	struct rk_i2s_tdm_dev *i2s_tdm = dev_get_drvdata(dev);
 	int ret;
@@ -515,6 +515,33 @@ static void rockchip_i2s_tdm_xfer_resume(struct snd_pcm_substream *substream,
 			   I2S_XFER_RXS_START);
 }
 
+static int rockchip_i2s_ch_to_io(unsigned int ch, bool substream_capture)
+{
+	if (substream_capture) {
+		switch (ch) {
+		case I2S_CHN_4:
+			return I2S_IO_6CH_OUT_4CH_IN;
+		case I2S_CHN_6:
+			return I2S_IO_4CH_OUT_6CH_IN;
+		case I2S_CHN_8:
+			return I2S_IO_2CH_OUT_8CH_IN;
+		default:
+			return I2S_IO_8CH_OUT_2CH_IN;
+		}
+	} else {
+		switch (ch) {
+		case I2S_CHN_4:
+			return I2S_IO_4CH_OUT_6CH_IN;
+		case I2S_CHN_6:
+			return I2S_IO_6CH_OUT_4CH_IN;
+		case I2S_CHN_8:
+			return I2S_IO_8CH_OUT_2CH_IN;
+		default:
+			return I2S_IO_2CH_OUT_8CH_IN;
+		}
+	}
+}
+
 static int rockchip_i2s_io_multiplex(struct snd_pcm_substream *substream,
 				     struct snd_soc_dai *dai)
 {
@@ -551,6 +578,7 @@ static int rockchip_i2s_io_multiplex(struct snd_pcm_substream *substream,
 			return -EINVAL;
 		}
 
+		rockchip_i2s_ch_to_io(val, true);
 	} else {
 		struct snd_pcm_str *capture_str =
 			&substream->pcm->streams[SNDRV_PCM_STREAM_CAPTURE];
@@ -1390,7 +1418,7 @@ static void rockchip_i2s_tdm_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 }
 
-static int rockchip_i2s_tdm_suspend(struct device *dev)
+static int __maybe_unused rockchip_i2s_tdm_suspend(struct device *dev)
 {
 	struct rk_i2s_tdm_dev *i2s_tdm = dev_get_drvdata(dev);
 
@@ -1399,7 +1427,7 @@ static int rockchip_i2s_tdm_suspend(struct device *dev)
 	return 0;
 }
 
-static int rockchip_i2s_tdm_resume(struct device *dev)
+static int __maybe_unused rockchip_i2s_tdm_resume(struct device *dev)
 {
 	struct rk_i2s_tdm_dev *i2s_tdm = dev_get_drvdata(dev);
 	int ret;
@@ -1414,8 +1442,10 @@ static int rockchip_i2s_tdm_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops rockchip_i2s_tdm_pm_ops = {
-	RUNTIME_PM_OPS(i2s_tdm_runtime_suspend, i2s_tdm_runtime_resume, NULL)
-	SYSTEM_SLEEP_PM_OPS(rockchip_i2s_tdm_suspend, rockchip_i2s_tdm_resume)
+	SET_RUNTIME_PM_OPS(i2s_tdm_runtime_suspend, i2s_tdm_runtime_resume,
+			   NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(rockchip_i2s_tdm_suspend,
+				rockchip_i2s_tdm_resume)
 };
 
 static struct platform_driver rockchip_i2s_tdm_driver = {
@@ -1424,7 +1454,7 @@ static struct platform_driver rockchip_i2s_tdm_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.of_match_table = rockchip_i2s_tdm_match,
-		.pm = pm_ptr(&rockchip_i2s_tdm_pm_ops),
+		.pm = &rockchip_i2s_tdm_pm_ops,
 	},
 };
 module_platform_driver(rockchip_i2s_tdm_driver);

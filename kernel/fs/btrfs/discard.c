@@ -256,9 +256,7 @@ again:
 				 * the discard lists.
 				 */
 				ASSERT(block_group->discard_index !=
-				       BTRFS_DISCARD_INDEX_UNUSED,
-				       "discard_index=%d",
-				       block_group->discard_index);
+				       BTRFS_DISCARD_INDEX_UNUSED);
 			} else {
 				list_del_init(&block_group->discard_list);
 				btrfs_put_block_group(block_group);

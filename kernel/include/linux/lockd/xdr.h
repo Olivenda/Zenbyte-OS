@@ -73,6 +73,8 @@ struct nlm_args {
 	u32			fsm_mode;
 };
 
+typedef struct nlm_args nlm_args;
+
 /*
  * Generic lockd result
  */

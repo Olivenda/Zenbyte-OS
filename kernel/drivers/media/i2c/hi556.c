@@ -624,12 +624,6 @@ static const struct hi556_mode supported_modes[] = {
 	},
 };
 
-static const char * const hi556_supply_names[] = {
-	"dovdd",	/* Digital I/O power */
-	"avdd",		/* Analog power */
-	"dvdd",		/* Digital core power */
-};
-
 struct hi556 {
 	struct v4l2_subdev sd;
 	struct media_pad pad;
@@ -645,12 +639,12 @@ struct hi556 {
 	/* GPIOs, clocks, etc. */
 	struct gpio_desc *reset_gpio;
 	struct clk *clk;
-	struct regulator_bulk_data supplies[ARRAY_SIZE(hi556_supply_names)];
+	struct regulator *avdd;
 
 	/* Current mode */
 	const struct hi556_mode *cur_mode;
 
-	/* To serialize asynchronous callbacks */
+	/* To serialize asynchronus callbacks */
 	struct mutex mutex;
 
 	/* True if the device has been identified */
@@ -725,7 +719,7 @@ static int hi556_write_reg_list(struct hi556 *hi556,
 				      r_list->regs[i].val);
 		if (ret) {
 			dev_err_ratelimited(&client->dev,
-					    "failed to write reg 0x%4.4x. error = %d\n",
+					    "failed to write reg 0x%4.4x. error = %d",
 					    r_list->regs[i].address, ret);
 			return ret;
 		}
@@ -934,7 +928,7 @@ static int hi556_identify_module(struct hi556 *hi556)
 		return ret;
 
 	if (val != HI556_CHIP_ID) {
-		dev_err(&client->dev, "chip id mismatch: %x!=%x\n",
+		dev_err(&client->dev, "chip id mismatch: %x!=%x",
 			HI556_CHIP_ID, val);
 		return -ENXIO;
 	}
@@ -1010,14 +1004,14 @@ static int hi556_start_streaming(struct hi556 *hi556)
 	reg_list = &link_freq_configs[link_freq_index].reg_list;
 	ret = hi556_write_reg_list(hi556, reg_list);
 	if (ret) {
-		dev_err(&client->dev, "failed to set plls\n");
+		dev_err(&client->dev, "failed to set plls");
 		return ret;
 	}
 
 	reg_list = &hi556->cur_mode->reg_list;
 	ret = hi556_write_reg_list(hi556, reg_list);
 	if (ret) {
-		dev_err(&client->dev, "failed to set mode\n");
+		dev_err(&client->dev, "failed to set mode");
 		return ret;
 	}
 
@@ -1029,7 +1023,7 @@ static int hi556_start_streaming(struct hi556 *hi556)
 			      HI556_REG_VALUE_16BIT, HI556_MODE_STREAMING);
 
 	if (ret) {
-		dev_err(&client->dev, "failed to set stream\n");
+		dev_err(&client->dev, "failed to set stream");
 		return ret;
 	}
 
@@ -1042,7 +1036,7 @@ static void hi556_stop_streaming(struct hi556 *hi556)
 
 	if (hi556_write_reg(hi556, HI556_REG_MODE_SELECT,
 			    HI556_REG_VALUE_16BIT, HI556_MODE_STANDBY))
-		dev_err(&client->dev, "failed to set stream\n");
+		dev_err(&client->dev, "failed to set stream");
 }
 
 static int hi556_set_stream(struct v4l2_subdev *sd, int enable)
@@ -1061,6 +1055,7 @@ static int hi556_set_stream(struct v4l2_subdev *sd, int enable)
 
 		ret = hi556_start_streaming(hi556);
 		if (ret) {
+			enable = 0;
 			hi556_stop_streaming(hi556);
 			pm_runtime_put(&client->dev);
 		}
@@ -1227,35 +1222,34 @@ static int hi556_check_hwcfg(struct device *dev)
 	 */
 	ep = fwnode_graph_get_next_endpoint(fwnode, NULL);
 	if (!ep)
-		return dev_err_probe(dev, -EPROBE_DEFER,
-				     "waiting for fwnode graph endpoint\n");
+		return -EPROBE_DEFER;
 
 	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
 	fwnode_handle_put(ep);
 	if (ret)
-		return dev_err_probe(dev, ret, "parsing endpoint failed\n");
+		return ret;
 
 	ret = fwnode_property_read_u32(fwnode, "clock-frequency", &mclk);
 	if (ret) {
-		dev_err(dev, "can't get clock frequency\n");
+		dev_err(dev, "can't get clock frequency");
 		goto check_hwcfg_error;
 	}
 
 	if (mclk != HI556_MCLK) {
-		dev_err(dev, "external clock %d is not supported\n", mclk);
+		dev_err(dev, "external clock %d is not supported", mclk);
 		ret = -EINVAL;
 		goto check_hwcfg_error;
 	}
 
 	if (bus_cfg.bus.mipi_csi2.num_data_lanes != 2) {
-		dev_err(dev, "number of CSI2 data lanes %d is not supported\n",
+		dev_err(dev, "number of CSI2 data lanes %d is not supported",
 			bus_cfg.bus.mipi_csi2.num_data_lanes);
 		ret = -EINVAL;
 		goto check_hwcfg_error;
 	}
 
 	if (!bus_cfg.nr_of_link_frequencies) {
-		dev_err(dev, "no link frequencies defined\n");
+		dev_err(dev, "no link frequencies defined");
 		ret = -EINVAL;
 		goto check_hwcfg_error;
 	}
@@ -1268,7 +1262,7 @@ static int hi556_check_hwcfg(struct device *dev)
 		}
 
 		if (j == bus_cfg.nr_of_link_frequencies) {
-			dev_err(dev, "no link frequency %lld supported\n",
+			dev_err(dev, "no link frequency %lld supported",
 				link_freq_menu_items[i]);
 			ret = -EINVAL;
 			goto check_hwcfg_error;
@@ -1297,10 +1291,17 @@ static int hi556_suspend(struct device *dev)
 {
 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 	struct hi556 *hi556 = to_hi556(sd);
+	int ret;
 
 	gpiod_set_value_cansleep(hi556->reset_gpio, 1);
-	regulator_bulk_disable(ARRAY_SIZE(hi556_supply_names),
-			       hi556->supplies);
+
+	ret = regulator_disable(hi556->avdd);
+	if (ret) {
+		dev_err(dev, "failed to disable avdd: %d\n", ret);
+		gpiod_set_value_cansleep(hi556->reset_gpio, 0);
+		return ret;
+	}
+
 	clk_disable_unprepare(hi556->clk);
 	return 0;
 }
@@ -1315,10 +1316,9 @@ static int hi556_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(hi556_supply_names),
-				    hi556->supplies);
+	ret = regulator_enable(hi556->avdd);
 	if (ret) {
-		dev_err(dev, "failed to enable regulators: %d", ret);
+		dev_err(dev, "failed to enable avdd: %d\n", ret);
 		clk_disable_unprepare(hi556->clk);
 		return ret;
 	}
@@ -1337,11 +1337,14 @@ static int hi556_probe(struct i2c_client *client)
 {
 	struct hi556 *hi556;
 	bool full_power;
-	int i, ret;
+	int ret;
 
 	ret = hi556_check_hwcfg(&client->dev);
-	if (ret)
+	if (ret) {
+		dev_err(&client->dev, "failed to check HW configuration: %d",
+			ret);
 		return ret;
+	}
 
 	hi556 = devm_kzalloc(&client->dev, sizeof(*hi556), GFP_KERNEL);
 	if (!hi556)
@@ -1360,15 +1363,11 @@ static int hi556_probe(struct i2c_client *client)
 		return dev_err_probe(&client->dev, PTR_ERR(hi556->clk),
 				     "failed to get clock\n");
 
-	for (i = 0; i < ARRAY_SIZE(hi556_supply_names); i++)
-		hi556->supplies[i].supply = hi556_supply_names[i];
-
-	ret = devm_regulator_bulk_get(&client->dev,
-				      ARRAY_SIZE(hi556_supply_names),
-				      hi556->supplies);
-	if (ret)
-		return dev_err_probe(&client->dev, ret,
-				     "failed to get regulators\n");
+	/* The regulator core will provide a "dummy" regulator if necessary */
+	hi556->avdd = devm_regulator_get(&client->dev, "avdd");
+	if (IS_ERR(hi556->avdd))
+		return dev_err_probe(&client->dev, PTR_ERR(hi556->avdd),
+				     "failed to get avdd regulator\n");
 
 	full_power = acpi_dev_state_d0(&client->dev);
 	if (full_power) {
@@ -1380,7 +1379,7 @@ static int hi556_probe(struct i2c_client *client)
 
 		ret = hi556_identify_module(hi556);
 		if (ret) {
-			dev_err(&client->dev, "failed to find sensor: %d\n", ret);
+			dev_err(&client->dev, "failed to find sensor: %d", ret);
 			goto probe_error_power_off;
 		}
 	}
@@ -1389,7 +1388,7 @@ static int hi556_probe(struct i2c_client *client)
 	hi556->cur_mode = &supported_modes[0];
 	ret = hi556_init_controls(hi556);
 	if (ret) {
-		dev_err(&client->dev, "failed to init controls: %d\n", ret);
+		dev_err(&client->dev, "failed to init controls: %d", ret);
 		goto probe_error_v4l2_ctrl_handler_free;
 	}
 
@@ -1400,13 +1399,13 @@ static int hi556_probe(struct i2c_client *client)
 	hi556->pad.flags = MEDIA_PAD_FL_SOURCE;
 	ret = media_entity_pads_init(&hi556->sd.entity, 1, &hi556->pad);
 	if (ret) {
-		dev_err(&client->dev, "failed to init entity pads: %d\n", ret);
+		dev_err(&client->dev, "failed to init entity pads: %d", ret);
 		goto probe_error_v4l2_ctrl_handler_free;
 	}
 
 	ret = v4l2_async_register_subdev_sensor(&hi556->sd);
 	if (ret < 0) {
-		dev_err(&client->dev, "failed to register V4L2 subdev: %d\n",
+		dev_err(&client->dev, "failed to register V4L2 subdev: %d",
 			ret);
 		goto probe_error_media_entity_cleanup;
 	}

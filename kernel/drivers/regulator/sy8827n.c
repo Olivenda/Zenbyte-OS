@@ -140,8 +140,7 @@ static int sy8827n_i2c_probe(struct i2c_client *client)
 		return -EINVAL;
 	}
 
-	di->en_gpio = devm_gpiod_get_optional(dev, "enable",
-			GPIOD_OUT_HIGH | GPIOD_FLAGS_BIT_NONEXCLUSIVE);
+	di->en_gpio = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_HIGH);
 	if (IS_ERR(di->en_gpio))
 		return PTR_ERR(di->en_gpio);
 

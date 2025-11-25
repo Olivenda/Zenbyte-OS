@@ -273,9 +273,9 @@ static void iceland_ih_set_rptr(struct amdgpu_device *adev,
 	WREG32(mmIH_RB_RPTR, ih->rptr);
 }
 
-static int iceland_ih_early_init(struct amdgpu_ip_block *ip_block)
+static int iceland_ih_early_init(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	int ret;
 
 	ret = amdgpu_irq_add_domain(adev);
@@ -287,10 +287,10 @@ static int iceland_ih_early_init(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int iceland_ih_sw_init(struct amdgpu_ip_block *ip_block)
+static int iceland_ih_sw_init(void *handle)
 {
 	int r;
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	r = amdgpu_ih_ring_init(adev, &adev->irq.ih, 64 * 1024, false);
 	if (r)
@@ -301,9 +301,9 @@ static int iceland_ih_sw_init(struct amdgpu_ip_block *ip_block)
 	return r;
 }
 
-static int iceland_ih_sw_fini(struct amdgpu_ip_block *ip_block)
+static int iceland_ih_sw_fini(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	amdgpu_irq_fini_sw(adev);
 	amdgpu_irq_remove_domain(adev);
@@ -311,33 +311,39 @@ static int iceland_ih_sw_fini(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int iceland_ih_hw_init(struct amdgpu_ip_block *ip_block)
+static int iceland_ih_hw_init(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	return iceland_ih_irq_init(adev);
 }
 
-static int iceland_ih_hw_fini(struct amdgpu_ip_block *ip_block)
+static int iceland_ih_hw_fini(void *handle)
 {
-	iceland_ih_irq_disable(ip_block->adev);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	iceland_ih_irq_disable(adev);
 
 	return 0;
 }
 
-static int iceland_ih_suspend(struct amdgpu_ip_block *ip_block)
+static int iceland_ih_suspend(void *handle)
 {
-	return iceland_ih_hw_fini(ip_block);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	return iceland_ih_hw_fini(adev);
 }
 
-static int iceland_ih_resume(struct amdgpu_ip_block *ip_block)
+static int iceland_ih_resume(void *handle)
 {
-	return iceland_ih_hw_init(ip_block);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	return iceland_ih_hw_init(adev);
 }
 
-static bool iceland_ih_is_idle(struct amdgpu_ip_block *ip_block)
+static bool iceland_ih_is_idle(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	u32 tmp = RREG32(mmSRBM_STATUS);
 
 	if (REG_GET_FIELD(tmp, SRBM_STATUS, IH_BUSY))
@@ -346,11 +352,11 @@ static bool iceland_ih_is_idle(struct amdgpu_ip_block *ip_block)
 	return true;
 }
 
-static int iceland_ih_wait_for_idle(struct amdgpu_ip_block *ip_block)
+static int iceland_ih_wait_for_idle(void *handle)
 {
 	unsigned i;
 	u32 tmp;
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	for (i = 0; i < adev->usec_timeout; i++) {
 		/* read MC_STATUS */
@@ -362,10 +368,10 @@ static int iceland_ih_wait_for_idle(struct amdgpu_ip_block *ip_block)
 	return -ETIMEDOUT;
 }
 
-static int iceland_ih_soft_reset(struct amdgpu_ip_block *ip_block)
+static int iceland_ih_soft_reset(void *handle)
 {
 	u32 srbm_soft_reset = 0;
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	u32 tmp = RREG32(mmSRBM_STATUS);
 
 	if (tmp & SRBM_STATUS__IH_BUSY_MASK)
@@ -392,13 +398,13 @@ static int iceland_ih_soft_reset(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int iceland_ih_set_clockgating_state(struct amdgpu_ip_block *ip_block,
+static int iceland_ih_set_clockgating_state(void *handle,
 					  enum amd_clockgating_state state)
 {
 	return 0;
 }
 
-static int iceland_ih_set_powergating_state(struct amdgpu_ip_block *ip_block,
+static int iceland_ih_set_powergating_state(void *handle,
 					  enum amd_powergating_state state)
 {
 	return 0;
@@ -407,6 +413,7 @@ static int iceland_ih_set_powergating_state(struct amdgpu_ip_block *ip_block,
 static const struct amd_ip_funcs iceland_ih_ip_funcs = {
 	.name = "iceland_ih",
 	.early_init = iceland_ih_early_init,
+	.late_init = NULL,
 	.sw_init = iceland_ih_sw_init,
 	.sw_fini = iceland_ih_sw_fini,
 	.hw_init = iceland_ih_hw_init,
@@ -418,6 +425,8 @@ static const struct amd_ip_funcs iceland_ih_ip_funcs = {
 	.soft_reset = iceland_ih_soft_reset,
 	.set_clockgating_state = iceland_ih_set_clockgating_state,
 	.set_powergating_state = iceland_ih_set_powergating_state,
+	.dump_ip_state = NULL,
+	.print_ip_state = NULL,
 };
 
 static const struct amdgpu_ih_funcs iceland_ih_funcs = {

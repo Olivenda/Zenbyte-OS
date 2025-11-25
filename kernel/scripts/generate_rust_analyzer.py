@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import pathlib
-import subprocess
 import sys
 
 def args_crates_cfgs(cfgs):
@@ -36,7 +35,8 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
     crates_cfgs = args_crates_cfgs(cfgs)
 
     def append_crate(display_name, root_module, deps, cfg=[], is_workspace_member=True, is_proc_macro=False, edition="2021"):
-        crate = {
+        crates_indexes[display_name] = len(crates)
+        crates.append({
             "display_name": display_name,
             "root_module": str(root_module),
             "is_workspace_member": is_workspace_member,
@@ -47,15 +47,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
             "env": {
                 "RUST_MODFILE": "This is only for rust-analyzer"
             }
-        }
-        if is_proc_macro:
-            proc_macro_dylib_name = subprocess.check_output(
-                [os.environ["RUSTC"], "--print", "file-names", "--crate-name", display_name, "--crate-type", "proc-macro", "-"],
-                stdin=subprocess.DEVNULL,
-            ).decode('utf-8').strip()
-            crate["proc_macro_dylib_path"] = f"{objtree}/rust/{proc_macro_dylib_name}"
-        crates_indexes[display_name] = len(crates)
-        crates.append(crate)
+        })
 
     def append_sysroot_crate(
         display_name,
@@ -92,26 +84,12 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
         ["std", "proc_macro"],
         is_proc_macro=True,
     )
+    crates[-1]["proc_macro_dylib_path"] = f"{objtree}/rust/libmacros.so"
 
     append_crate(
         "build_error",
         srctree / "rust" / "build_error.rs",
         ["core", "compiler_builtins"],
-    )
-
-    append_crate(
-        "pin_init_internal",
-        srctree / "rust" / "pin-init" / "internal" / "src" / "lib.rs",
-        [],
-        cfg=["kernel"],
-        is_proc_macro=True,
-    )
-
-    append_crate(
-        "pin_init",
-        srctree / "rust" / "pin-init" / "src" / "lib.rs",
-        ["core", "pin_init_internal", "macros"],
-        cfg=["kernel"],
     )
 
     append_crate(
@@ -141,7 +119,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs, core_edit
 
     append_crate_with_generated("bindings", ["core", "ffi"])
     append_crate_with_generated("uapi", ["core", "ffi"])
-    append_crate_with_generated("kernel", ["core", "macros", "build_error", "pin_init", "ffi", "bindings", "uapi"])
+    append_crate_with_generated("kernel", ["core", "macros", "build_error", "ffi", "bindings", "uapi"])
 
     def is_root_crate(build_file, target):
         try:

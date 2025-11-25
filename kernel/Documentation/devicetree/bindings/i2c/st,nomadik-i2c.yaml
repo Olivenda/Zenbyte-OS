@@ -22,7 +22,6 @@ select:
         enum:
           - st,nomadik-i2c
           - mobileye,eyeq5-i2c
-          - mobileye,eyeq6h-i2c
   required:
     - compatible
 
@@ -30,14 +29,14 @@ properties:
   compatible:
     oneOf:
       - items:
-          - enum:
-              - st,nomadik-i2c
-              - mobileye,eyeq5-i2c
-              - mobileye,eyeq6h-i2c
+          - const: st,nomadik-i2c
           - const: arm,primecell
       - items:
           - const: stericsson,db8500-i2c
           - const: st,nomadik-i2c
+          - const: arm,primecell
+      - items:
+          - const: mobileye,eyeq5-i2c
           - const: arm,primecell
 
   reg:
@@ -55,7 +54,7 @@ properties:
       - items:
           - const: mclk
           - const: apb_pclk
-      # Clock name in DB8500 or EyeQ
+      # Clock name in DB8500 or EyeQ5
       - items:
           - const: i2cclk
           - const: apb_pclk
@@ -68,7 +67,7 @@ properties:
 
   clock-frequency:
     minimum: 1
-    maximum: 3400000
+    maximum: 400000
 
   mobileye,olb:
     $ref: /schemas/types.yaml#/definitions/phandle-array

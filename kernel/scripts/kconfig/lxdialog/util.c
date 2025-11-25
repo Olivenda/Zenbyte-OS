@@ -345,7 +345,8 @@ void print_autowrap(WINDOW * win, const char *prompt, int width, int y, int x)
 	int prompt_len, room, wlen;
 	char tempstr[MAX_LEN + 1], *word, *sp, *sp2, *newline_separator = 0;
 
-	snprintf(tempstr, sizeof(tempstr), "%s", prompt);
+	strcpy(tempstr, prompt);
+
 	prompt_len = strlen(tempstr);
 
 	if (prompt_len <= width - x * 2) {	/* If prompt is short */

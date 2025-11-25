@@ -13,9 +13,9 @@
 #include <linux/moduleparam.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
+#include <linux/rwsem.h>
 #include <linux/mm.h>
 #include <linux/rcupdate.h>
-#include <linux/srcu.h>
 #include <linux/slab.h>
 
 #define __param(type, name, init, msg)		\
@@ -41,7 +41,7 @@ __param(int, nr_pages, 0,
 __param(bool, use_huge, false,
 	"Use vmalloc_huge in fix_size_alloc_test");
 
-__param(int, run_test_mask, 7,
+__param(int, run_test_mask, INT_MAX,
 	"Set tests specified in the mask.\n\n"
 		"\t\tid: 1,    name: fix_size_alloc_test\n"
 		"\t\tid: 2,    name: full_fit_alloc_test\n"
@@ -58,9 +58,10 @@ __param(int, run_test_mask, 7,
 );
 
 /*
- * This is for synchronization of setup phase.
+ * Read write semaphore for synchronization of setup
+ * phase that is done in main thread and workers.
  */
-DEFINE_STATIC_SRCU(prepare_for_test_srcu);
+static DECLARE_RWSEM(prepare_for_test_rwsem);
 
 /*
  * Completion tracking for worker threads.
@@ -372,7 +373,7 @@ vm_map_ram_test(void)
 	if (!pages)
 		return -1;
 
-	nr_allocated = alloc_pages_bulk(GFP_KERNEL, map_nr_pages, pages);
+	nr_allocated = alloc_pages_bulk_array(GFP_KERNEL, map_nr_pages, pages);
 	if (nr_allocated != map_nr_pages)
 		goto cleanup;
 
@@ -396,27 +397,25 @@ cleanup:
 struct test_case_desc {
 	const char *test_name;
 	int (*test_func)(void);
-	bool xfail;
 };
 
 static struct test_case_desc test_case_array[] = {
-	{ "fix_size_alloc_test", fix_size_alloc_test, },
-	{ "full_fit_alloc_test", full_fit_alloc_test, },
-	{ "long_busy_list_alloc_test", long_busy_list_alloc_test, },
-	{ "random_size_alloc_test", random_size_alloc_test, },
-	{ "fix_align_alloc_test", fix_align_alloc_test, },
-	{ "random_size_align_alloc_test", random_size_align_alloc_test, },
-	{ "align_shift_alloc_test", align_shift_alloc_test, true },
-	{ "pcpu_alloc_test", pcpu_alloc_test, },
-	{ "kvfree_rcu_1_arg_vmalloc_test", kvfree_rcu_1_arg_vmalloc_test, },
-	{ "kvfree_rcu_2_arg_vmalloc_test", kvfree_rcu_2_arg_vmalloc_test, },
-	{ "vm_map_ram_test", vm_map_ram_test, },
+	{ "fix_size_alloc_test", fix_size_alloc_test },
+	{ "full_fit_alloc_test", full_fit_alloc_test },
+	{ "long_busy_list_alloc_test", long_busy_list_alloc_test },
+	{ "random_size_alloc_test", random_size_alloc_test },
+	{ "fix_align_alloc_test", fix_align_alloc_test },
+	{ "random_size_align_alloc_test", random_size_align_alloc_test },
+	{ "align_shift_alloc_test", align_shift_alloc_test },
+	{ "pcpu_alloc_test", pcpu_alloc_test },
+	{ "kvfree_rcu_1_arg_vmalloc_test", kvfree_rcu_1_arg_vmalloc_test },
+	{ "kvfree_rcu_2_arg_vmalloc_test", kvfree_rcu_2_arg_vmalloc_test },
+	{ "vm_map_ram_test", vm_map_ram_test },
 	/* Add a new test case here. */
 };
 
 struct test_case_data {
 	int test_failed;
-	int test_xfailed;
 	int test_passed;
 	u64 time;
 };
@@ -446,7 +445,7 @@ static int test_func(void *private)
 {
 	struct test_driver *t = private;
 	int random_array[ARRAY_SIZE(test_case_array)];
-	int index, i, j, ret;
+	int index, i, j;
 	ktime_t kt;
 	u64 delta;
 
@@ -459,7 +458,7 @@ static int test_func(void *private)
 	/*
 	 * Block until initialization is done.
 	 */
-	synchronize_srcu(&prepare_for_test_srcu);
+	down_read(&prepare_for_test_rwsem);
 
 	t->start = get_cycles();
 	for (i = 0; i < ARRAY_SIZE(test_case_array); i++) {
@@ -470,14 +469,11 @@ static int test_func(void *private)
 		 */
 		if (!((run_test_mask & (1 << index)) >> index))
 			continue;
+
 		kt = ktime_get();
 		for (j = 0; j < test_repeat_count; j++) {
-			ret = test_case_array[index].test_func();
-
-			if (!ret && !test_case_array[index].xfail)
+			if (!test_case_array[index].test_func())
 				t->data[index].test_passed++;
-			else if (ret && test_case_array[index].xfail)
-				t->data[index].test_xfailed++;
 			else
 				t->data[index].test_failed++;
 		}
@@ -491,6 +487,8 @@ static int test_func(void *private)
 		t->data[index].time = delta;
 	}
 	t->stop = get_cycles();
+
+	up_read(&prepare_for_test_rwsem);
 	test_report_one_done();
 
 	/*
@@ -528,7 +526,7 @@ init_test_configuration(void)
 
 static void do_concurrent_test(void)
 {
-	int i, ret, idx;
+	int i, ret;
 
 	/*
 	 * Set some basic configurations plus sanity check.
@@ -540,7 +538,7 @@ static void do_concurrent_test(void)
 	/*
 	 * Put on hold all workers.
 	 */
-	idx = srcu_read_lock(&prepare_for_test_srcu);
+	down_write(&prepare_for_test_rwsem);
 
 	for (i = 0; i < nr_threads; i++) {
 		struct test_driver *t = &tdriver[i];
@@ -557,7 +555,7 @@ static void do_concurrent_test(void)
 	/*
 	 * Now let the workers do their job.
 	 */
-	srcu_read_unlock(&prepare_for_test_srcu, idx);
+	up_write(&prepare_for_test_rwsem);
 
 	/*
 	 * Sleep quiet until all workers are done with 1 second
@@ -581,11 +579,10 @@ static void do_concurrent_test(void)
 				continue;
 
 			pr_info(
-				"Summary: %s passed: %d failed: %d xfailed: %d repeat: %d loops: %d avg: %llu usec\n",
+				"Summary: %s passed: %d failed: %d repeat: %d loops: %d avg: %llu usec\n",
 				test_case_array[j].test_name,
 				t->data[j].test_passed,
 				t->data[j].test_failed,
-				t->data[j].test_xfailed,
 				test_repeat_count, test_loop_count,
 				t->data[j].time);
 		}
@@ -597,18 +594,13 @@ static void do_concurrent_test(void)
 	kvfree(tdriver);
 }
 
-static int __init vmalloc_test_init(void)
+static int vmalloc_test_init(void)
 {
 	do_concurrent_test();
-	/* Fail will directly unload the module */
-	return IS_BUILTIN(CONFIG_TEST_VMALLOC) ? 0:-EAGAIN;
+	return -EAGAIN; /* Fail will directly unload the module */
 }
 
-#ifdef MODULE
 module_init(vmalloc_test_init)
-#else
-late_initcall(vmalloc_test_init);
-#endif
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Uladzislau Rezki");

@@ -77,12 +77,6 @@ extern const struct xlog_recover_item_ops xlog_attri_item_ops;
 extern const struct xlog_recover_item_ops xlog_attrd_item_ops;
 extern const struct xlog_recover_item_ops xlog_xmi_item_ops;
 extern const struct xlog_recover_item_ops xlog_xmd_item_ops;
-extern const struct xlog_recover_item_ops xlog_rtefi_item_ops;
-extern const struct xlog_recover_item_ops xlog_rtefd_item_ops;
-extern const struct xlog_recover_item_ops xlog_rtrui_item_ops;
-extern const struct xlog_recover_item_ops xlog_rtrud_item_ops;
-extern const struct xlog_recover_item_ops xlog_rtcui_item_ops;
-extern const struct xlog_recover_item_ops xlog_rtcud_item_ops;
 
 /*
  * Macros, structures, prototypes for internal log manager use.
@@ -104,7 +98,7 @@ struct xlog_recover_item {
 	struct list_head	ri_list;
 	int			ri_cnt;	/* count of regions found */
 	int			ri_total;	/* total regions */
-	struct kvec		*ri_buf;	/* ptr to regions buffer */
+	struct xfs_log_iovec	*ri_buf;	/* ptr to regions buffer */
 	const struct xlog_recover_item_ops *ri_ops;
 };
 
@@ -117,7 +111,7 @@ struct xlog_recover {
 	struct list_head	r_itemq;	/* q for items */
 };
 
-#define ITEM_TYPE(i)	(*(unsigned short *)(i)->ri_buf[0].iov_base)
+#define ITEM_TYPE(i)	(*(unsigned short *)(i)->ri_buf[0].i_addr)
 
 #define	XLOG_RECOVER_CRCPASS	0
 #define	XLOG_RECOVER_PASS1	1

@@ -24,7 +24,6 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/bcma/bcma.h>
-#include <linux/string_choices.h>
 #include <net/mac80211.h>
 #include <defs.h>
 #include "phy/phy_int.h"
@@ -49,9 +48,9 @@
 	FIF_BCN_PRBRESP_PROMISC | \
 	FIF_PSPOLL)
 
-#define CHAN2GHZ(channel, frequency, chflags)  { \
+#define CHAN2GHZ(channel, freqency, chflags)  { \
 	.band = NL80211_BAND_2GHZ, \
-	.center_freq = (frequency), \
+	.center_freq = (freqency), \
 	.hw_value = (channel), \
 	.flags = chflags, \
 	.max_antenna_gain = 0, \
@@ -526,8 +525,7 @@ brcms_ops_remove_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	spin_unlock_bh(&wl->lock);
 }
 
-static int brcms_ops_config(struct ieee80211_hw *hw, int radio_idx,
-			    u32 changed)
+static int brcms_ops_config(struct ieee80211_hw *hw, u32 changed)
 {
 	struct ieee80211_conf *conf = &hw->conf;
 	struct brcms_info *wl = hw->priv;
@@ -541,13 +539,13 @@ static int brcms_ops_config(struct ieee80211_hw *hw, int radio_idx,
 						   conf->listen_interval);
 	}
 	if (changed & IEEE80211_CONF_CHANGE_MONITOR)
-		brcms_dbg_info(core, "%s: change monitor mode: %s\n", __func__,
-			       str_true_false(conf->flags &
-					      IEEE80211_CONF_MONITOR));
+		brcms_dbg_info(core, "%s: change monitor mode: %s\n",
+			       __func__, conf->flags & IEEE80211_CONF_MONITOR ?
+			       "true" : "false");
 	if (changed & IEEE80211_CONF_CHANGE_PS)
 		brcms_err(core, "%s: change power-save mode: %s (implement)\n",
-			  __func__,
-			  str_true_false(conf->flags & IEEE80211_CONF_PS));
+			  __func__, conf->flags & IEEE80211_CONF_PS ?
+			  "true" : "false");
 
 	if (changed & IEEE80211_CONF_CHANGE_POWER) {
 		err = brcms_c_set_tx_power(wl->wlc, conf->power_level);
@@ -698,7 +696,7 @@ brcms_ops_bss_info_changed(struct ieee80211_hw *hw,
 	if (changed & BSS_CHANGED_BEACON_ENABLED) {
 		/* Beaconing should be enabled/disabled (beaconing modes) */
 		brcms_err(core, "%s: Beacon enabled: %s\n", __func__,
-			  str_true_false(info->enable_beacon));
+			  info->enable_beacon ? "true" : "false");
 		if (info->enable_beacon &&
 		    hw->wiphy->flags & WIPHY_FLAG_AP_PROBE_RESP_OFFLOAD) {
 			brcms_c_enable_probe_resp(wl->wlc, true);
@@ -717,7 +715,7 @@ brcms_ops_bss_info_changed(struct ieee80211_hw *hw,
 	if (changed & BSS_CHANGED_IBSS) {
 		/* IBSS join status changed */
 		brcms_err(core, "%s: IBSS joined: %s (implement)\n",
-			  __func__, str_true_false(vif->cfg.ibss_joined));
+			  __func__, vif->cfg.ibss_joined ? "true" : "false");
 	}
 
 	if (changed & BSS_CHANGED_ARP_FILTER) {
@@ -732,7 +730,7 @@ brcms_ops_bss_info_changed(struct ieee80211_hw *hw,
 		 * Note that it is only ever disabled for station mode.
 		 */
 		brcms_err(core, "%s: qos enabled: %s (implement)\n",
-			  __func__, str_true_false(info->qos));
+			  __func__, info->qos ? "true" : "false");
 	}
 	return;
 }
@@ -909,7 +907,7 @@ static void brcms_ops_flush(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	struct brcms_info *wl = hw->priv;
 	int ret;
 
-	no_printk("%s: drop = %s\n", __func__, str_true_false(drop));
+	no_printk("%s: drop = %s\n", __func__, drop ? "true" : "false");
 
 	ret = wait_event_timeout(wl->tx_flush_wq,
 				 brcms_tx_flush_completed(wl),

@@ -336,22 +336,16 @@ static phys_addr_t dma_reserved_default_memory_size __initdata;
 
 static int rmem_dma_device_init(struct reserved_mem *rmem, struct device *dev)
 {
-	struct dma_coherent_mem *mem = rmem->priv;
+	if (!rmem->priv) {
+		struct dma_coherent_mem *mem;
 
-	if (!mem) {
 		mem = dma_init_coherent_memory(rmem->base, rmem->base,
 					       rmem->size, true);
 		if (IS_ERR(mem))
 			return PTR_ERR(mem);
 		rmem->priv = mem;
 	}
-
-	/* Warn if the device potentially can't use the reserved memory */
-	if (mem->device_base + rmem->size - 1 >
-	    min_not_zero(dev->coherent_dma_mask, dev->bus_dma_limit))
-		dev_warn(dev, "reserved memory is beyond device's set DMA address range\n");
-
-	dma_assign_coherent_memory(dev, mem);
+	dma_assign_coherent_memory(dev, rmem->priv);
 	return 0;
 }
 

@@ -48,30 +48,40 @@ static int derive_key_aes(const u8 *master_key,
 			  const u8 nonce[FSCRYPT_FILE_NONCE_SIZE],
 			  u8 *derived_key, unsigned int derived_keysize)
 {
-	struct crypto_sync_skcipher *tfm;
-	int err;
+	int res = 0;
+	struct skcipher_request *req = NULL;
+	DECLARE_CRYPTO_WAIT(wait);
+	struct scatterlist src_sg, dst_sg;
+	struct crypto_skcipher *tfm =
+		crypto_alloc_skcipher("ecb(aes)", 0, FSCRYPT_CRYPTOAPI_MASK);
 
-	tfm = crypto_alloc_sync_skcipher("ecb(aes)", 0, FSCRYPT_CRYPTOAPI_MASK);
-	if (IS_ERR(tfm))
-		return PTR_ERR(tfm);
-
-	err = crypto_sync_skcipher_setkey(tfm, nonce, FSCRYPT_FILE_NONCE_SIZE);
-	if (err == 0) {
-		SYNC_SKCIPHER_REQUEST_ON_STACK(req, tfm);
-		struct scatterlist src_sg, dst_sg;
-
-		skcipher_request_set_callback(req,
-					      CRYPTO_TFM_REQ_MAY_BACKLOG |
-						      CRYPTO_TFM_REQ_MAY_SLEEP,
-					      NULL, NULL);
-		sg_init_one(&src_sg, master_key, derived_keysize);
-		sg_init_one(&dst_sg, derived_key, derived_keysize);
-		skcipher_request_set_crypt(req, &src_sg, &dst_sg,
-					   derived_keysize, NULL);
-		err = crypto_skcipher_encrypt(req);
+	if (IS_ERR(tfm)) {
+		res = PTR_ERR(tfm);
+		tfm = NULL;
+		goto out;
 	}
-	crypto_free_sync_skcipher(tfm);
-	return err;
+	crypto_skcipher_set_flags(tfm, CRYPTO_TFM_REQ_FORBID_WEAK_KEYS);
+	req = skcipher_request_alloc(tfm, GFP_KERNEL);
+	if (!req) {
+		res = -ENOMEM;
+		goto out;
+	}
+	skcipher_request_set_callback(req,
+			CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
+			crypto_req_done, &wait);
+	res = crypto_skcipher_setkey(tfm, nonce, FSCRYPT_FILE_NONCE_SIZE);
+	if (res < 0)
+		goto out;
+
+	sg_init_one(&src_sg, master_key, derived_keysize);
+	sg_init_one(&dst_sg, derived_key, derived_keysize);
+	skcipher_request_set_crypt(req, &src_sg, &dst_sg, derived_keysize,
+				   NULL);
+	res = crypto_wait_req(crypto_skcipher_encrypt(req), &wait);
+out:
+	skcipher_request_free(req);
+	crypto_free_skcipher(tfm);
+	return res;
 }
 
 /*
@@ -109,7 +119,7 @@ find_and_lock_process_key(const char *prefix,
 	payload = (const struct fscrypt_key *)ukp->data;
 
 	if (ukp->datalen != sizeof(struct fscrypt_key) ||
-	    payload->size < 1 || payload->size > sizeof(payload->raw)) {
+	    payload->size < 1 || payload->size > FSCRYPT_MAX_KEY_SIZE) {
 		fscrypt_warn(NULL,
 			     "key with description '%s' has invalid payload",
 			     key->description);
@@ -140,7 +150,7 @@ struct fscrypt_direct_key {
 	const struct fscrypt_mode	*dk_mode;
 	struct fscrypt_prepared_key	dk_key;
 	u8				dk_descriptor[FSCRYPT_KEY_DESCRIPTOR_SIZE];
-	u8				dk_raw[FSCRYPT_MAX_RAW_KEY_SIZE];
+	u8				dk_raw[FSCRYPT_MAX_KEY_SIZE];
 };
 
 static void free_direct_key(struct fscrypt_direct_key *dk)

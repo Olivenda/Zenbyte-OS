@@ -87,10 +87,6 @@ struct tc358743_state {
 	struct timer_list timer;
 	struct work_struct work_i2c_poll;
 
-	/* debugfs */
-	struct dentry *debugfs_dir;
-	struct v4l2_debugfs_if *infoframes;
-
 	/* edid  */
 	u8 edid_blocks_written;
 
@@ -330,10 +326,6 @@ static int tc358743_get_detected_timings(struct v4l2_subdev *sd,
 
 	memset(timings, 0, sizeof(struct v4l2_dv_timings));
 
-	/* if HPD is low, ignore any video */
-	if (!(i2c_rd8(sd, HPD_CTL) & MASK_HPD_OUT0))
-		return -ENOLINK;
-
 	if (no_signal(sd)) {
 		v4l2_dbg(1, debug, sd, "%s: no valid signal\n", __func__);
 		return -ENOLINK;
@@ -437,9 +429,9 @@ static void tc358743_enable_edid(struct v4l2_subdev *sd)
 
 	v4l2_dbg(2, debug, sd, "%s:\n", __func__);
 
-	/* Enable hotplug after 143 ms. DDC access to EDID is also enabled when
+	/* Enable hotplug after 100 ms. DDC access to EDID is also enabled when
 	 * hotplug is enabled. See register DDC_CTL */
-	schedule_delayed_work(&state->delayed_work_enable_hotplug, HZ / 7);
+	schedule_delayed_work(&state->delayed_work_enable_hotplug, HZ / 10);
 
 	tc358743_enable_interrupts(sd, true);
 	tc358743_s_ctrl_detect_tx_5v(sd);
@@ -455,35 +447,12 @@ static void tc358743_erase_bksv(struct v4l2_subdev *sd)
 
 /* --------------- AVI infoframe --------------- */
 
-static ssize_t
-tc358743_debugfs_if_read(u32 type, void *priv, struct file *filp,
-			 char __user *ubuf, size_t count, loff_t *ppos)
-{
-	u8 buf[V4L2_DEBUGFS_IF_MAX_LEN] = {};
-	struct v4l2_subdev *sd = priv;
-	int len;
-
-	if (!is_hdmi(sd))
-		return 0;
-
-	if (type != V4L2_DEBUGFS_IF_AVI)
-		return 0;
-
-	i2c_rd(sd, PK_AVI_0HEAD, buf, PK_AVI_16BYTE - PK_AVI_0HEAD + 1);
-	len = buf[2] + 4;
-	if (len > V4L2_DEBUGFS_IF_MAX_LEN)
-		len = -ENOENT;
-	if (len > 0)
-		len = simple_read_from_buffer(ubuf, count, ppos, buf, len);
-	return len < 0 ? 0 : len;
-}
-
 static void print_avi_infoframe(struct v4l2_subdev *sd)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct device *dev = &client->dev;
 	union hdmi_infoframe frame;
-	u8 buffer[HDMI_INFOFRAME_SIZE(AVI)] = {};
+	u8 buffer[HDMI_INFOFRAME_SIZE(AVI)];
 
 	if (!is_hdmi(sd)) {
 		v4l2_info(sd, "DVI-D signal - AVI infoframe not supported\n");
@@ -1522,7 +1491,7 @@ static irqreturn_t tc358743_irq_handler(int irq, void *dev_id)
 
 static void tc358743_irq_poll_timer(struct timer_list *t)
 {
-	struct tc358743_state *state = timer_container_of(state, t, timer);
+	struct tc358743_state *state = from_timer(state, t, timer);
 	unsigned int msecs;
 
 	schedule_work(&state->work_i2c_poll);
@@ -2011,7 +1980,6 @@ static int tc358743_probe_of(struct tc358743_state *state)
 	/*
 	 * The CSI bps per lane must be between 62.5 Mbps and 1 Gbps.
 	 * The default is 594 Mbps for 4-lane 1080p60 or 2-lane 720p60.
-	 * 972 Mbps allows 1080P50 UYVY over 2-lane.
 	 */
 	bps_pr_lane = 2 * endpoint.link_frequencies[0];
 	if (bps_pr_lane < 62500000U || bps_pr_lane > 1000000000U) {
@@ -2025,42 +1993,23 @@ static int tc358743_probe_of(struct tc358743_state *state)
 			       state->pdata.refclk_hz * state->pdata.pll_prd;
 
 	/*
-	 * FIXME: These timings are from REF_02 for 594 or 972 Mbps per lane
-	 * (297 MHz or 486 MHz link frequency).
-	 * In principle it should be possible to calculate
+	 * FIXME: These timings are from REF_02 for 594 Mbps per lane (297 MHz
+	 * link frequency). In principle it should be possible to calculate
 	 * them based on link frequency and resolution.
 	 */
-	switch (bps_pr_lane) {
-	default:
+	if (bps_pr_lane != 594000000U)
 		dev_warn(dev, "untested bps per lane: %u bps\n", bps_pr_lane);
-		fallthrough;
-	case 594000000U:
-		state->pdata.lineinitcnt = 0xe80;
-		state->pdata.lptxtimecnt = 0x003;
-		/* tclk-preparecnt: 3, tclk-zerocnt: 20 */
-		state->pdata.tclk_headercnt = 0x1403;
-		state->pdata.tclk_trailcnt = 0x00;
-		/* ths-preparecnt: 3, ths-zerocnt: 1 */
-		state->pdata.ths_headercnt = 0x0103;
-		state->pdata.twakeup = 0x4882;
-		state->pdata.tclk_postcnt = 0x008;
-		state->pdata.ths_trailcnt = 0x2;
-		state->pdata.hstxvregcnt = 0;
-		break;
-	case 972000000U:
-		state->pdata.lineinitcnt = 0x1b58;
-		state->pdata.lptxtimecnt = 0x007;
-		/* tclk-preparecnt: 6, tclk-zerocnt: 40 */
-		state->pdata.tclk_headercnt = 0x2806;
-		state->pdata.tclk_trailcnt = 0x00;
-		/* ths-preparecnt: 6, ths-zerocnt: 8 */
-		state->pdata.ths_headercnt = 0x0806;
-		state->pdata.twakeup = 0x4268;
-		state->pdata.tclk_postcnt = 0x008;
-		state->pdata.ths_trailcnt = 0x5;
-		state->pdata.hstxvregcnt = 0;
-		break;
-	}
+	state->pdata.lineinitcnt = 0xe80;
+	state->pdata.lptxtimecnt = 0x003;
+	/* tclk-preparecnt: 3, tclk-zerocnt: 20 */
+	state->pdata.tclk_headercnt = 0x1403;
+	state->pdata.tclk_trailcnt = 0x00;
+	/* ths-preparecnt: 3, ths-zerocnt: 1 */
+	state->pdata.ths_headercnt = 0x0103;
+	state->pdata.twakeup = 0x4882;
+	state->pdata.tclk_postcnt = 0x008;
+	state->pdata.ths_trailcnt = 0x2;
+	state->pdata.hstxvregcnt = 0;
 
 	state->reset_gpio = devm_gpiod_get_optional(dev, "reset",
 						    GPIOD_OUT_LOW);
@@ -2232,11 +2181,6 @@ static int tc358743_probe(struct i2c_client *client)
 	if (err < 0)
 		goto err_work_queues;
 
-	state->debugfs_dir = debugfs_create_dir(sd->name, v4l2_debugfs_root());
-	state->infoframes = v4l2_debugfs_if_alloc(state->debugfs_dir,
-						  V4L2_DEBUGFS_IF_AVI, sd,
-						  tc358743_debugfs_if_read);
-
 	v4l2_info(sd, "%s found @ 0x%x (%s)\n", client->name,
 		  client->addr << 1, client->adapter->name);
 
@@ -2262,12 +2206,10 @@ static void tc358743_remove(struct i2c_client *client)
 	struct tc358743_state *state = to_state(sd);
 
 	if (!state->i2c_client->irq) {
-		timer_delete_sync(&state->timer);
+		del_timer_sync(&state->timer);
 		flush_work(&state->work_i2c_poll);
 	}
 	cancel_delayed_work_sync(&state->delayed_work_enable_hotplug);
-	v4l2_debugfs_if_free(state->infoframes);
-	debugfs_remove_recursive(state->debugfs_dir);
 	cec_unregister_adapter(state->cec_adap);
 	v4l2_async_unregister_subdev(sd);
 	v4l2_device_unregister_subdev(sd);

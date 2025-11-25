@@ -902,58 +902,90 @@ static int q6v5_alloc_memory_region(struct q6v5_wcss *wcss)
 
 static int q6v5_wcss_init_clock(struct q6v5_wcss *wcss)
 {
+	int ret;
+
 	wcss->xo = devm_clk_get(wcss->dev, "xo");
-	if (IS_ERR(wcss->xo))
-		return dev_err_probe(wcss->dev, PTR_ERR(wcss->xo),
-				     "failed to get xo clock");
+	if (IS_ERR(wcss->xo)) {
+		ret = PTR_ERR(wcss->xo);
+		if (ret != -EPROBE_DEFER)
+			dev_err(wcss->dev, "failed to get xo clock");
+		return ret;
+	}
 
 	wcss->gcc_abhs_cbcr = devm_clk_get(wcss->dev, "gcc_abhs_cbcr");
-	if (IS_ERR(wcss->gcc_abhs_cbcr))
-		return dev_err_probe(wcss->dev, PTR_ERR(wcss->gcc_abhs_cbcr),
-				     "failed to get gcc abhs clock");
+	if (IS_ERR(wcss->gcc_abhs_cbcr)) {
+		ret = PTR_ERR(wcss->gcc_abhs_cbcr);
+		if (ret != -EPROBE_DEFER)
+			dev_err(wcss->dev, "failed to get gcc abhs clock");
+		return ret;
+	}
 
 	wcss->gcc_axim_cbcr = devm_clk_get(wcss->dev, "gcc_axim_cbcr");
-	if (IS_ERR(wcss->gcc_axim_cbcr))
-		return dev_err_probe(wcss->dev, PTR_ERR(wcss->gcc_axim_cbcr),
-				     "failed to get gcc axim clock\n");
+	if (IS_ERR(wcss->gcc_axim_cbcr)) {
+		ret = PTR_ERR(wcss->gcc_axim_cbcr);
+		if (ret != -EPROBE_DEFER)
+			dev_err(wcss->dev, "failed to get gcc axim clock\n");
+		return ret;
+	}
 
 	wcss->ahbfabric_cbcr_clk = devm_clk_get(wcss->dev,
 						"lcc_ahbfabric_cbc");
-	if (IS_ERR(wcss->ahbfabric_cbcr_clk))
-		return dev_err_probe(wcss->dev, PTR_ERR(wcss->ahbfabric_cbcr_clk),
-				     "failed to get ahbfabric clock\n");
+	if (IS_ERR(wcss->ahbfabric_cbcr_clk)) {
+		ret = PTR_ERR(wcss->ahbfabric_cbcr_clk);
+		if (ret != -EPROBE_DEFER)
+			dev_err(wcss->dev, "failed to get ahbfabric clock\n");
+		return ret;
+	}
 
 	wcss->lcc_csr_cbcr = devm_clk_get(wcss->dev, "tcsr_lcc_cbc");
-	if (IS_ERR(wcss->lcc_csr_cbcr))
-		return dev_err_probe(wcss->dev, PTR_ERR(wcss->lcc_csr_cbcr),
-				     "failed to get csr cbcr clk\n");
+	if (IS_ERR(wcss->lcc_csr_cbcr)) {
+		ret = PTR_ERR(wcss->lcc_csr_cbcr);
+		if (ret != -EPROBE_DEFER)
+			dev_err(wcss->dev, "failed to get csr cbcr clk\n");
+		return ret;
+	}
 
 	wcss->ahbs_cbcr = devm_clk_get(wcss->dev,
 				       "lcc_abhs_cbc");
-	if (IS_ERR(wcss->ahbs_cbcr))
-		return dev_err_probe(wcss->dev, PTR_ERR(wcss->ahbs_cbcr),
-				     "failed to get ahbs_cbcr clk\n");
+	if (IS_ERR(wcss->ahbs_cbcr)) {
+		ret = PTR_ERR(wcss->ahbs_cbcr);
+		if (ret != -EPROBE_DEFER)
+			dev_err(wcss->dev, "failed to get ahbs_cbcr clk\n");
+		return ret;
+	}
 
 	wcss->tcm_slave_cbcr = devm_clk_get(wcss->dev,
 					    "lcc_tcm_slave_cbc");
-	if (IS_ERR(wcss->tcm_slave_cbcr))
-		return dev_err_probe(wcss->dev, PTR_ERR(wcss->tcm_slave_cbcr),
-				     "failed to get tcm cbcr clk\n");
+	if (IS_ERR(wcss->tcm_slave_cbcr)) {
+		ret = PTR_ERR(wcss->tcm_slave_cbcr);
+		if (ret != -EPROBE_DEFER)
+			dev_err(wcss->dev, "failed to get tcm cbcr clk\n");
+		return ret;
+	}
 
 	wcss->qdsp6ss_abhm_cbcr = devm_clk_get(wcss->dev, "lcc_abhm_cbc");
-	if (IS_ERR(wcss->qdsp6ss_abhm_cbcr))
-		return dev_err_probe(wcss->dev, PTR_ERR(wcss->qdsp6ss_abhm_cbcr),
-				     "failed to get abhm cbcr clk\n");
+	if (IS_ERR(wcss->qdsp6ss_abhm_cbcr)) {
+		ret = PTR_ERR(wcss->qdsp6ss_abhm_cbcr);
+		if (ret != -EPROBE_DEFER)
+			dev_err(wcss->dev, "failed to get abhm cbcr clk\n");
+		return ret;
+	}
 
 	wcss->qdsp6ss_axim_cbcr = devm_clk_get(wcss->dev, "lcc_axim_cbc");
-	if (IS_ERR(wcss->qdsp6ss_axim_cbcr))
-		return dev_err_probe(wcss->dev, PTR_ERR(wcss->qdsp6ss_axim_cbcr),
-				     "failed to get axim cbcr clk\n");
+	if (IS_ERR(wcss->qdsp6ss_axim_cbcr)) {
+		ret = PTR_ERR(wcss->qdsp6ss_axim_cbcr);
+		if (ret != -EPROBE_DEFER)
+			dev_err(wcss->dev, "failed to get axim cbcr clk\n");
+		return ret;
+	}
 
 	wcss->lcc_bcr_sleep = devm_clk_get(wcss->dev, "lcc_bcr_sleep");
-	if (IS_ERR(wcss->lcc_bcr_sleep))
-		return dev_err_probe(wcss->dev, PTR_ERR(wcss->lcc_bcr_sleep),
-				     "failed to get bcr cbcr clk\n");
+	if (IS_ERR(wcss->lcc_bcr_sleep)) {
+		ret = PTR_ERR(wcss->lcc_bcr_sleep);
+		if (ret != -EPROBE_DEFER)
+			dev_err(wcss->dev, "failed to get bcr cbcr clk\n");
+		return ret;
+	}
 
 	return 0;
 }
@@ -989,6 +1021,7 @@ static int q6v5_wcss_probe(struct platform_device *pdev)
 
 	wcss = rproc->priv;
 	wcss->dev = &pdev->dev;
+	wcss->version = desc->version;
 
 	wcss->version = desc->version;
 	wcss->requires_force_stop = desc->requires_force_stop;
@@ -1023,33 +1056,18 @@ static int q6v5_wcss_probe(struct platform_device *pdev)
 	qcom_add_pdm_subdev(rproc, &wcss->pdm_subdev);
 	qcom_add_ssr_subdev(rproc, &wcss->ssr_subdev, "q6wcss");
 
-	if (desc->ssctl_id) {
+	if (desc->ssctl_id)
 		wcss->sysmon = qcom_add_sysmon_subdev(rproc,
 						      desc->sysmon_name,
 						      desc->ssctl_id);
-		if (IS_ERR(wcss->sysmon)) {
-			ret = PTR_ERR(wcss->sysmon);
-			goto deinit_remove_subdevs;
-		}
-	}
 
 	ret = rproc_add(rproc);
 	if (ret)
-		goto remove_sysmon_subdev;
+		return ret;
 
 	platform_set_drvdata(pdev, rproc);
 
 	return 0;
-
-remove_sysmon_subdev:
-	if (desc->ssctl_id)
-		qcom_remove_sysmon_subdev(wcss->sysmon);
-deinit_remove_subdevs:
-	qcom_q6v5_deinit(&wcss->q6v5);
-	qcom_remove_glink_subdev(rproc, &wcss->glink_subdev);
-	qcom_remove_pdm_subdev(rproc, &wcss->pdm_subdev);
-	qcom_remove_ssr_subdev(rproc, &wcss->ssr_subdev);
-	return ret;
 }
 
 static void q6v5_wcss_remove(struct platform_device *pdev)
@@ -1093,7 +1111,7 @@ MODULE_DEVICE_TABLE(of, q6v5_wcss_of_match);
 
 static struct platform_driver q6v5_wcss_driver = {
 	.probe = q6v5_wcss_probe,
-	.remove = q6v5_wcss_remove,
+	.remove_new = q6v5_wcss_remove,
 	.driver = {
 		.name = "qcom-q6v5-wcss-pil",
 		.of_match_table = q6v5_wcss_of_match,

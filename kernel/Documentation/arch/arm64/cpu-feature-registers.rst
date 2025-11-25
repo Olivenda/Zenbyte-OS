@@ -72,15 +72,14 @@ there are some issues with their usage.
     process could be migrated to another CPU by the time it uses the
     register value, unless the CPU affinity is set. Hence, there is no
     guarantee that the value reflects the processor that it is
-    currently executing on. REVIDR and AIDR are not exposed due to this
-    constraint, as these registers only make sense in conjunction with
-    the MIDR. Alternately, MIDR_EL1, REVIDR_EL1, and AIDR_EL1 are exposed
-    via sysfs at::
+    currently executing on. The REVIDR is not exposed due to this
+    constraint, as REVIDR makes sense only in conjunction with the
+    MIDR. Alternately, MIDR_EL1 and REVIDR_EL1 are exposed via sysfs
+    at::
 
 	/sys/devices/system/cpu/cpu$ID/regs/identification/
-	                                              \- midr_el1
-	                                              \- revidr_el1
-	                                              \- aidr_el1
+	                                              \- midr
+	                                              \- revidr
 
 3. Implementation
 --------------------
@@ -152,8 +151,6 @@ infrastructure:
      | Name                         |  bits   | visible |
      +------------------------------+---------+---------+
      | DIT                          | [51-48] |    y    |
-     +------------------------------+---------+---------+
-     | MPAM                         | [43-40] |    n    |
      +------------------------------+---------+---------+
      | SVE                          | [35-32] |    y    |
      +------------------------------+---------+---------+

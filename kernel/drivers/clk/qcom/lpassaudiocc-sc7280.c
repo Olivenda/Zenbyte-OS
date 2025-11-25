@@ -799,6 +799,7 @@ static int lpass_audio_cc_sc7280_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
+	pm_runtime_mark_last_busy(&pdev->dev);
 exit:
 	pm_runtime_put_autosuspend(&pdev->dev);
 
@@ -867,6 +868,7 @@ static int lpass_aon_cc_sc7280_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
+	pm_runtime_mark_last_busy(&pdev->dev);
 exit:
 	pm_runtime_put_autosuspend(&pdev->dev);
 

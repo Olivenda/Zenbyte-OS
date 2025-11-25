@@ -430,11 +430,6 @@
 	/* MAX34417 @ 0x1e */
 };
 
-&pon {
-	mode-bootloader = <0x2>;
-	mode-recovery = <0x1>;
-};
-
 &pon_pwrkey {
 	status = "okay";
 };
@@ -453,22 +448,22 @@
 
 &remoteproc_adsp {
 	status = "okay";
-	firmware-name = "qcom/sm8150/microsoft/adsp.mbn";
+	firmware-name = "qcom/sm8150/microsoft/adsp.mdt";
 };
 
 &remoteproc_cdsp {
 	status = "okay";
-	firmware-name = "qcom/sm8150/microsoft/cdsp.mbn";
+	firmware-name = "qcom/sm8150/microsoft/cdsp.mdt";
 };
 
 &remoteproc_mpss {
 	status = "okay";
-	firmware-name = "qcom/sm8150/microsoft/modem.mbn";
+	firmware-name = "qcom/sm8150/microsoft/modem.mdt";
 };
 
 &remoteproc_slpi {
 	status = "okay";
-	firmware-name = "qcom/sm8150/microsoft/slpi.mbn";
+	firmware-name = "qcom/sm8150/microsoft/slpi.mdt";
 };
 
 &pon_resin {

@@ -15,7 +15,6 @@ properties:
     enum:
       - rockchip,rk3288-dp
       - rockchip,rk3399-edp
-      - rockchip,rk3588-edp
 
   clocks:
     minItems: 2
@@ -32,22 +31,15 @@ properties:
     maxItems: 1
 
   resets:
-    minItems: 1
-    maxItems: 2
+    maxItems: 1
 
   reset-names:
-    minItems: 1
-    items:
-      - const: dp
-      - const: apb
+    const: dp
 
   rockchip,grf:
     $ref: /schemas/types.yaml#/definitions/phandle
     description:
       This SoC makes use of GRF regs.
-
-  aux-bus:
-    $ref: /schemas/display/dp-aux-bus.yaml#
 
 required:
   - compatible
@@ -59,19 +51,6 @@ required:
 
 allOf:
   - $ref: /schemas/display/bridge/analogix,dp.yaml#
-
-  - if:
-      properties:
-        compatible:
-          contains:
-            enum:
-              - rockchip,rk3588-edp
-    then:
-      properties:
-        resets:
-          minItems: 2
-        reset-names:
-          minItems: 2
 
 unevaluatedProperties: false
 

@@ -154,9 +154,11 @@ static efi_status_t mm_communicate(u8 *comm_buf, size_t payload_size)
  * @dptr:		pointer address to store allocated buffer
  * @payload_size:	payload size
  * @func:		standAloneMM function number
+ * @ret:		EFI return code
  * Return:		pointer to corresponding StandAloneMM function buffer or NULL
  */
-static void *setup_mm_hdr(u8 **dptr, size_t payload_size, size_t func)
+static void *setup_mm_hdr(u8 **dptr, size_t payload_size, size_t func,
+			  efi_status_t *ret)
 {
 	const efi_guid_t mm_var_guid = EFI_MM_VARIABLE_GUID;
 	struct efi_mm_communicate_header *mm_hdr;
@@ -171,13 +173,16 @@ static void *setup_mm_hdr(u8 **dptr, size_t payload_size, size_t func)
 	if (max_buffer_size &&
 	    max_buffer_size < (MM_COMMUNICATE_HEADER_SIZE +
 			       MM_VARIABLE_COMMUNICATE_SIZE + payload_size)) {
+		*ret = EFI_INVALID_PARAMETER;
 		return NULL;
 	}
 
 	comm_buf = alloc_pages_exact(COMM_BUF_SIZE(payload_size),
 				     GFP_KERNEL | __GFP_ZERO);
-	if (!comm_buf)
+	if (!comm_buf) {
+		*ret = EFI_OUT_OF_RESOURCES;
 		return NULL;
+	}
 
 	mm_hdr = (struct efi_mm_communicate_header *)comm_buf;
 	memcpy(&mm_hdr->header_guid, &mm_var_guid, sizeof(mm_hdr->header_guid));
@@ -185,7 +190,9 @@ static void *setup_mm_hdr(u8 **dptr, size_t payload_size, size_t func)
 
 	var_hdr = (struct smm_variable_communicate_header *)mm_hdr->data;
 	var_hdr->function = func;
-	*dptr = comm_buf;
+	if (dptr)
+		*dptr = comm_buf;
+	*ret = EFI_SUCCESS;
 
 	return var_hdr->data;
 }
@@ -208,9 +215,10 @@ static efi_status_t get_max_payload(size_t *size)
 
 	payload_size = sizeof(*var_payload);
 	var_payload = setup_mm_hdr(&comm_buf, payload_size,
-				   SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE);
+				   SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE,
+				   &ret);
 	if (!var_payload)
-		return EFI_DEVICE_ERROR;
+		return EFI_OUT_OF_RESOURCES;
 
 	ret = mm_communicate(comm_buf, payload_size);
 	if (ret != EFI_SUCCESS)
@@ -254,9 +262,9 @@ static efi_status_t get_property_int(u16 *name, size_t name_size,
 
 	smm_property = setup_mm_hdr(
 		&comm_buf, payload_size,
-		SMM_VARIABLE_FUNCTION_VAR_CHECK_VARIABLE_PROPERTY_GET);
+		SMM_VARIABLE_FUNCTION_VAR_CHECK_VARIABLE_PROPERTY_GET, &ret);
 	if (!smm_property)
-		return EFI_DEVICE_ERROR;
+		return EFI_OUT_OF_RESOURCES;
 
 	memcpy(&smm_property->guid, vendor, sizeof(smm_property->guid));
 	smm_property->name_size = name_size;
@@ -310,9 +318,9 @@ static efi_status_t tee_get_variable(u16 *name, efi_guid_t *vendor,
 
 	payload_size = MM_VARIABLE_ACCESS_HEADER_SIZE + name_size + tmp_dsize;
 	var_acc = setup_mm_hdr(&comm_buf, payload_size,
-			       SMM_VARIABLE_FUNCTION_GET_VARIABLE);
+			       SMM_VARIABLE_FUNCTION_GET_VARIABLE, &ret);
 	if (!var_acc)
-		return EFI_DEVICE_ERROR;
+		return EFI_OUT_OF_RESOURCES;
 
 	/* Fill in contents */
 	memcpy(&var_acc->guid, vendor, sizeof(var_acc->guid));
@@ -375,9 +383,10 @@ static efi_status_t tee_get_next_variable(unsigned long *name_size,
 
 	payload_size = MM_VARIABLE_GET_NEXT_HEADER_SIZE + out_name_size;
 	var_getnext = setup_mm_hdr(&comm_buf, payload_size,
-				SMM_VARIABLE_FUNCTION_GET_NEXT_VARIABLE_NAME);
+				   SMM_VARIABLE_FUNCTION_GET_NEXT_VARIABLE_NAME,
+				   &ret);
 	if (!var_getnext)
-		return EFI_DEVICE_ERROR;
+		return EFI_OUT_OF_RESOURCES;
 
 	/* Fill in contents */
 	memcpy(&var_getnext->guid, guid, sizeof(var_getnext->guid));
@@ -431,9 +440,9 @@ static efi_status_t tee_set_variable(efi_char16_t *name, efi_guid_t *vendor,
 	 * the properties, if the allocation fails
 	 */
 	var_acc = setup_mm_hdr(&comm_buf, payload_size,
-			       SMM_VARIABLE_FUNCTION_SET_VARIABLE);
+			       SMM_VARIABLE_FUNCTION_SET_VARIABLE, &ret);
 	if (!var_acc)
-		return EFI_DEVICE_ERROR;
+		return EFI_OUT_OF_RESOURCES;
 
 	/*
 	 * The API has the ability to override RO flags. If no RO check was
@@ -486,9 +495,10 @@ static efi_status_t tee_query_variable_info(u32 attributes,
 
 	payload_size = sizeof(*mm_query_info);
 	mm_query_info = setup_mm_hdr(&comm_buf, payload_size,
-				SMM_VARIABLE_FUNCTION_QUERY_VARIABLE_INFO);
+				SMM_VARIABLE_FUNCTION_QUERY_VARIABLE_INFO,
+				&ret);
 	if (!mm_query_info)
-		return EFI_DEVICE_ERROR;
+		return EFI_OUT_OF_RESOURCES;
 
 	mm_query_info->attr = attributes;
 	ret = mm_communicate(comm_buf, payload_size);

@@ -286,8 +286,6 @@ static int lockdep_stats_show(struct seq_file *m, void *v)
 #endif
 	seq_printf(m, " lock-classes:                  %11lu [max: %lu]\n",
 			nr_lock_classes, MAX_LOCKDEP_KEYS);
-	seq_printf(m, " dynamic-keys:                  %11lu\n",
-			nr_dynamic_keys);
 	seq_printf(m, " direct dependencies:           %11lu [max: %lu]\n",
 			nr_list_entries, MAX_LOCKDEP_ENTRIES);
 	seq_printf(m, " indirect dependencies:         %11lu\n",
@@ -657,7 +655,7 @@ static int lock_stat_open(struct inode *inode, struct file *file)
 			if (!test_bit(idx, lock_classes_in_use))
 				continue;
 			iter->class = class;
-			lock_stats(class, &iter->stats);
+			iter->stats = lock_stats(class);
 			iter++;
 		}
 

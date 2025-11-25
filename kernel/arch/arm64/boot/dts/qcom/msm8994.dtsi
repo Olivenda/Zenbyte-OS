@@ -43,114 +43,114 @@
 		#address-cells = <2>;
 		#size-cells = <0>;
 
-		cpu0: cpu@0 {
+		CPU0: cpu@0 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x0 0x0>;
 			enable-method = "psci";
-			next-level-cache = <&l2_0>;
-			l2_0: l2-cache {
+			next-level-cache = <&L2_0>;
+			L2_0: l2-cache {
 				compatible = "cache";
 				cache-level = <2>;
 				cache-unified;
 			};
 		};
 
-		cpu1: cpu@1 {
+		CPU1: cpu@1 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x0 0x1>;
 			enable-method = "psci";
-			next-level-cache = <&l2_0>;
+			next-level-cache = <&L2_0>;
 		};
 
-		cpu2: cpu@2 {
+		CPU2: cpu@2 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x0 0x2>;
 			enable-method = "psci";
-			next-level-cache = <&l2_0>;
+			next-level-cache = <&L2_0>;
 		};
 
-		cpu3: cpu@3 {
+		CPU3: cpu@3 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a53";
 			reg = <0x0 0x3>;
 			enable-method = "psci";
-			next-level-cache = <&l2_0>;
+			next-level-cache = <&L2_0>;
 		};
 
-		cpu4: cpu@100 {
+		CPU4: cpu@100 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57";
 			reg = <0x0 0x100>;
 			enable-method = "psci";
-			next-level-cache = <&l2_1>;
-			l2_1: l2-cache {
+			next-level-cache = <&L2_1>;
+			L2_1: l2-cache {
 				compatible = "cache";
 				cache-level = <2>;
 				cache-unified;
 			};
 		};
 
-		cpu5: cpu@101 {
+		CPU5: cpu@101 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57";
 			reg = <0x0 0x101>;
 			enable-method = "psci";
-			next-level-cache = <&l2_1>;
+			next-level-cache = <&L2_1>;
 		};
 
-		cpu6: cpu@102 {
+		CPU6: cpu@102 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57";
 			reg = <0x0 0x102>;
 			enable-method = "psci";
-			next-level-cache = <&l2_1>;
+			next-level-cache = <&L2_1>;
 		};
 
-		cpu7: cpu@103 {
+		CPU7: cpu@103 {
 			device_type = "cpu";
 			compatible = "arm,cortex-a57";
 			reg = <0x0 0x103>;
 			enable-method = "psci";
-			next-level-cache = <&l2_1>;
+			next-level-cache = <&L2_1>;
 		};
 
 		cpu-map {
 			cluster0 {
 				core0 {
-					cpu = <&cpu0>;
+					cpu = <&CPU0>;
 				};
 
 				core1 {
-					cpu = <&cpu1>;
+					cpu = <&CPU1>;
 				};
 
 				core2 {
-					cpu = <&cpu2>;
+					cpu = <&CPU2>;
 				};
 
 				core3 {
-					cpu = <&cpu3>;
+					cpu = <&CPU3>;
 				};
 			};
 
 			cluster1 {
 				core0 {
-					cpu = <&cpu4>;
+					cpu = <&CPU4>;
 				};
 
 				core1 {
-					cpu = <&cpu5>;
+					cpu = <&CPU5>;
 				};
 
 				cpu6_map: core2 {
-					cpu = <&cpu6>;
+					cpu = <&CPU6>;
 				};
 
 				cpu7_map: core3 {
-					cpu = <&cpu7>;
+					cpu = <&CPU7>;
 				};
 			};
 		};

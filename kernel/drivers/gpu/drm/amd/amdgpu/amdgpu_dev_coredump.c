@@ -203,7 +203,6 @@ amdgpu_devcoredump_read(char *buffer, loff_t offset, size_t count,
 	struct amdgpu_coredump_info *coredump = data;
 	struct drm_print_iterator iter;
 	struct amdgpu_vm_fault_info *fault_info;
-	struct amdgpu_ip_block *ip_block;
 	int ver;
 
 	iter.data = buffer;
@@ -220,10 +219,10 @@ amdgpu_devcoredump_read(char *buffer, loff_t offset, size_t count,
 	drm_printf(&p, "time: %lld.%09ld\n", coredump->reset_time.tv_sec,
 		   coredump->reset_time.tv_nsec);
 
-	if (coredump->reset_task_info.task.pid)
+	if (coredump->reset_task_info.pid)
 		drm_printf(&p, "process_name: %s PID: %d\n",
 			   coredump->reset_task_info.process_name,
-			   coredump->reset_task_info.task.pid);
+			   coredump->reset_task_info.pid);
 
 	/* SOC Information */
 	drm_printf(&p, "\nSOC Information\n");
@@ -283,10 +282,13 @@ amdgpu_devcoredump_read(char *buffer, loff_t offset, size_t count,
 	/* dump the ip state for each ip */
 	drm_printf(&p, "IP Dump\n");
 	for (int i = 0; i < coredump->adev->num_ip_blocks; i++) {
-		ip_block = &coredump->adev->ip_blocks[i];
-		if (ip_block->version->funcs->print_ip_state) {
-			drm_printf(&p, "IP: %s\n", ip_block->version->funcs->name);
-			ip_block->version->funcs->print_ip_state(ip_block, &p);
+		if (coredump->adev->ip_blocks[i].version->funcs->print_ip_state) {
+			drm_printf(&p, "IP: %s\n",
+				   coredump->adev->ip_blocks[i]
+					   .version->funcs->name);
+			coredump->adev->ip_blocks[i]
+				.version->funcs->print_ip_state(
+					(void *)coredump->adev, &p);
 			drm_printf(&p, "\n");
 		}
 	}
@@ -364,9 +366,5 @@ void amdgpu_coredump(struct amdgpu_device *adev, bool skip_vram_check,
 
 	dev_coredumpm(dev->dev, THIS_MODULE, coredump, 0, GFP_NOWAIT,
 		      amdgpu_devcoredump_read, amdgpu_devcoredump_free);
-
-	drm_info(dev, "AMDGPU device coredump file has been created\n");
-	drm_info(dev, "Check your /sys/class/drm/card%d/device/devcoredump/data\n",
-		 dev->primary->index);
 }
 #endif

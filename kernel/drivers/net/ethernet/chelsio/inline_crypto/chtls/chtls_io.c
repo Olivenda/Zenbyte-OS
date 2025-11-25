@@ -1096,7 +1096,8 @@ new_buf:
 			copy = size;
 
 		if (msg->msg_flags & MSG_SPLICE_PAGES) {
-			err = skb_splice_from_iter(skb, &msg->msg_iter, copy);
+			err = skb_splice_from_iter(skb, &msg->msg_iter, copy,
+						   sk->sk_allocation);
 			if (err < 0) {
 				if (err == -EMSGSIZE)
 					goto new_buf;

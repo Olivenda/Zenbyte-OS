@@ -24,9 +24,9 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/srcu.h>
 #include <linux/string.h>
-#include <linux/string_choices.h>
 
 #include <linux/gpio.h>
 #include <linux/gpio/driver.h>
@@ -73,19 +73,6 @@ static const struct bus_type gpio_bus_type = {
 	.name = "gpio",
 	.match = gpio_bus_match,
 };
-
-/*
- * At the end we want all GPIOs to be dynamically allocated from 0.
- * However, some legacy drivers still perform fixed allocation.
- * Until they are all fixed, leave 0-512 space for them.
- */
-#define GPIO_DYNAMIC_BASE	512
-/*
- * Define the maximum of the possible GPIO in the global numberspace.
- * While the GPIO base and numbers are positive, we limit it with signed
- * maximum as a lot of code is using negative values for special cases.
- */
-#define GPIO_DYNAMIC_MAX	INT_MAX
 
 /*
  * Number of GPIOs to use for the fast path in set array
@@ -355,71 +342,6 @@ static int gpiochip_find_base_unlocked(u16 ngpio)
 	}
 }
 
-/*
- * This descriptor validation needs to be inserted verbatim into each
- * function taking a descriptor, so we need to use a preprocessor
- * macro to avoid endless duplication. If the desc is NULL it is an
- * optional GPIO and calls should just bail out.
- */
-static int validate_desc(const struct gpio_desc *desc, const char *func)
-{
-	if (!desc)
-		return 0;
-
-	if (IS_ERR(desc)) {
-		pr_warn("%s: invalid GPIO (errorpointer: %pe)\n", func, desc);
-		return PTR_ERR(desc);
-	}
-
-	return 1;
-}
-
-#define VALIDATE_DESC(desc) do { \
-	int __valid = validate_desc(desc, __func__); \
-	if (__valid <= 0) \
-		return __valid; \
-	} while (0)
-
-#define VALIDATE_DESC_VOID(desc) do { \
-	int __valid = validate_desc(desc, __func__); \
-	if (__valid <= 0) \
-		return; \
-	} while (0)
-
-/**
- * gpiod_is_equal() - Check if two GPIO descriptors refer to the same pin.
- * @desc: Descriptor to compare.
- * @other: The second descriptor to compare against.
- *
- * Returns:
- * True if the descriptors refer to the same physical pin. False otherwise.
- */
-bool gpiod_is_equal(const struct gpio_desc *desc, const struct gpio_desc *other)
-{
-	return validate_desc(desc, __func__) > 0 &&
-	       !IS_ERR_OR_NULL(other) && desc == other;
-}
-EXPORT_SYMBOL_GPL(gpiod_is_equal);
-
-static int gpiochip_get_direction(struct gpio_chip *gc, unsigned int offset)
-{
-	int ret;
-
-	lockdep_assert_held(&gc->gpiodev->srcu);
-
-	if (WARN_ON(!gc->get_direction))
-		return -EOPNOTSUPP;
-
-	ret = gc->get_direction(gc, offset);
-	if (ret < 0)
-		return ret;
-
-	if (ret != GPIO_LINE_DIRECTION_OUT && ret != GPIO_LINE_DIRECTION_IN)
-		ret = -EBADE;
-
-	return ret;
-}
-
 /**
  * gpiod_get_direction - return the current direction of a GPIO
  * @desc:	GPIO to get the direction of
@@ -435,8 +357,11 @@ int gpiod_get_direction(struct gpio_desc *desc)
 	unsigned int offset;
 	int ret;
 
-	ret = validate_desc(desc, __func__);
-	if (ret <= 0)
+	/*
+	 * We cannot use VALIDATE_DESC() as we must not return 0 for a NULL
+	 * descriptor like we usually do.
+	 */
+	if (IS_ERR_OR_NULL(desc))
 		return -EINVAL;
 
 	CLASS(gpio_chip_guard, guard)(desc);
@@ -457,7 +382,7 @@ int gpiod_get_direction(struct gpio_desc *desc)
 	if (!guard.gc->get_direction)
 		return -ENOTSUPP;
 
-	ret = gpiochip_get_direction(guard.gc, offset);
+	ret = guard.gc->get_direction(guard.gc, offset);
 	if (ret < 0)
 		return ret;
 
@@ -728,7 +653,7 @@ static int gpiochip_apply_reserved_ranges(struct gpio_chip *gc)
 		if (start >= gc->ngpio || start + count > gc->ngpio)
 			continue;
 
-		bitmap_clear(gc->gpiodev->valid_mask, start, count);
+		bitmap_clear(gc->valid_mask, start, count);
 	}
 
 	kfree(ranges);
@@ -742,8 +667,8 @@ static int gpiochip_init_valid_mask(struct gpio_chip *gc)
 	if (!(gpiochip_count_reserved_ranges(gc) || gc->init_valid_mask))
 		return 0;
 
-	gc->gpiodev->valid_mask = gpiochip_allocate_mask(gc);
-	if (!gc->gpiodev->valid_mask)
+	gc->valid_mask = gpiochip_allocate_mask(gc);
+	if (!gc->valid_mask)
 		return -ENOMEM;
 
 	ret = gpiochip_apply_reserved_ranges(gc);
@@ -752,7 +677,7 @@ static int gpiochip_init_valid_mask(struct gpio_chip *gc)
 
 	if (gc->init_valid_mask)
 		return gc->init_valid_mask(gc,
-					   gc->gpiodev->valid_mask,
+					   gc->valid_mask,
 					   gc->ngpio);
 
 	return 0;
@@ -760,7 +685,7 @@ static int gpiochip_init_valid_mask(struct gpio_chip *gc)
 
 static void gpiochip_free_valid_mask(struct gpio_chip *gc)
 {
-	gpiochip_free_mask(&gc->gpiodev->valid_mask);
+	gpiochip_free_mask(&gc->valid_mask);
 }
 
 static int gpiochip_add_pin_ranges(struct gpio_chip *gc)
@@ -779,35 +704,13 @@ static int gpiochip_add_pin_ranges(struct gpio_chip *gc)
 	return 0;
 }
 
-/**
- * gpiochip_query_valid_mask - return the GPIO validity information
- * @gc:	gpio chip which validity information is queried
- *
- * Returns: bitmap representing valid GPIOs or NULL if all GPIOs are valid
- *
- * Some GPIO chips may support configurations where some of the pins aren't
- * available. These chips can have valid_mask set to represent the valid
- * GPIOs. This function can be used to retrieve this information.
- */
-const unsigned long *gpiochip_query_valid_mask(const struct gpio_chip *gc)
-{
-	return gc->gpiodev->valid_mask;
-}
-EXPORT_SYMBOL_GPL(gpiochip_query_valid_mask);
-
 bool gpiochip_line_is_valid(const struct gpio_chip *gc,
 				unsigned int offset)
 {
-	/*
-	 * hog pins are requested before registering GPIO chip
-	 */
-	if (!gc->gpiodev)
-		return true;
-
 	/* No mask means all valid */
-	if (likely(!gc->gpiodev->valid_mask))
+	if (likely(!gc->valid_mask))
 		return true;
-	return test_bit(offset, gc->gpiodev->valid_mask);
+	return test_bit(offset, gc->valid_mask);
 }
 EXPORT_SYMBOL_GPL(gpiochip_line_is_valid);
 
@@ -936,12 +839,14 @@ static void machine_gpiochip_add(struct gpio_chip *gc)
 {
 	struct gpiod_hog *hog;
 
-	guard(mutex)(&gpio_machine_hogs_mutex);
+	mutex_lock(&gpio_machine_hogs_mutex);
 
 	list_for_each_entry(hog, &gpio_machine_hogs, list) {
 		if (!strcmp(gc->label, hog->chip_label))
 			gpiochip_machine_hog(gc, hog);
 	}
+
+	mutex_unlock(&gpio_machine_hogs_mutex);
 }
 
 static void gpiochip_setup_devs(void)
@@ -978,29 +883,13 @@ void *gpiochip_get_data(struct gpio_chip *gc)
 }
 EXPORT_SYMBOL_GPL(gpiochip_get_data);
 
-/*
- * If the calling driver provides the specific firmware node,
- * use it. Otherwise use the one from the parent device, if any.
- */
-static struct fwnode_handle *gpiochip_choose_fwnode(struct gpio_chip *gc)
-{
-	if (gc->fwnode)
-		return gc->fwnode;
-
-	if (gc->parent)
-		return dev_fwnode(gc->parent);
-
-	return NULL;
-}
-
 int gpiochip_get_ngpios(struct gpio_chip *gc, struct device *dev)
 {
-	struct fwnode_handle *fwnode = gpiochip_choose_fwnode(gc);
 	u32 ngpios = gc->ngpio;
 	int ret;
 
 	if (ngpios == 0) {
-		ret = fwnode_property_read_u32(fwnode, "ngpios", &ngpios);
+		ret = device_property_read_u32(dev, "ngpios", &ngpios);
 		if (ret == -ENODATA)
 			/*
 			 * -ENODATA means that there is no property found and
@@ -1035,7 +924,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	struct gpio_device *gdev;
 	unsigned int desc_index;
 	int base = 0;
-	int ret;
+	int ret = 0;
 
 	/*
 	 * First: allocate and populate the internal stat container, and
@@ -1053,12 +942,20 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	gc->gpiodev = gdev;
 	gpiochip_set_data(gc, data);
 
-	device_set_node(&gdev->dev, gpiochip_choose_fwnode(gc));
+	/*
+	 * If the calling driver did not initialize firmware node,
+	 * do it here using the parent device, if any.
+	 */
+	if (gc->fwnode)
+		device_set_node(&gdev->dev, gc->fwnode);
+	else if (gc->parent)
+		device_set_node(&gdev->dev, dev_fwnode(gc->parent));
 
-	ret = ida_alloc(&gpio_ida, GFP_KERNEL);
-	if (ret < 0)
+	gdev->id = ida_alloc(&gpio_ida, GFP_KERNEL);
+	if (gdev->id < 0) {
+		ret = gdev->id;
 		goto err_free_gdev;
-	gdev->id = ret;
+	}
 
 	ret = dev_set_name(&gdev->dev, GPIOCHIP_NAME "%d", gdev->id);
 	if (ret)
@@ -1129,8 +1026,10 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 		}
 	}
 
-	rwlock_init(&gdev->line_state_lock);
-	RAW_INIT_NOTIFIER_HEAD(&gdev->line_state_notifier);
+	for (desc_index = 0; desc_index < gc->ngpio; desc_index++)
+		gdev->descs[desc_index].gdev = gdev;
+
+	BLOCKING_INIT_NOTIFIER_HEAD(&gdev->line_state_notifier);
 	BLOCKING_INIT_NOTIFIER_HEAD(&gdev->device_notifier);
 
 	ret = init_srcu_struct(&gdev->srcu);
@@ -1159,21 +1058,13 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	for (desc_index = 0; desc_index < gc->ngpio; desc_index++) {
 		struct gpio_desc *desc = &gdev->descs[desc_index];
 
-		desc->gdev = gdev;
-
-		/*
-		 * We would typically want to use gpiochip_get_direction() here
-		 * but we must not check the return value and bail-out as pin
-		 * controllers can have pins configured to alternate functions
-		 * and return -EINVAL. Also: there's no need to take the SRCU
-		 * lock here.
-		 */
-		if (gc->get_direction && gpiochip_line_is_valid(gc, desc_index))
-			assign_bit(FLAG_IS_OUT, &desc->flags,
-				   !gc->get_direction(gc, desc_index));
-		else
+		if (gc->get_direction && gpiochip_line_is_valid(gc, desc_index)) {
+			assign_bit(FLAG_IS_OUT,
+				   &desc->flags, !gc->get_direction(gc, desc_index));
+		} else {
 			assign_bit(FLAG_IS_OUT,
 				   &desc->flags, !gc->direction_input);
+		}
 	}
 
 	ret = of_gpiochip_add(gc);
@@ -1333,6 +1224,11 @@ struct gpio_device *gpio_device_find(const void *data,
 	struct gpio_device *gdev;
 	struct gpio_chip *gc;
 
+	/*
+	 * Not yet but in the future the spinlock below will become a mutex.
+	 * Annotate this function before anyone tries to use it in interrupt
+	 * context like it happened with gpiochip_find().
+	 */
 	might_sleep();
 
 	guard(srcu)(&gpio_devices_srcu);
@@ -1561,8 +1457,9 @@ static int gpiochip_hierarchy_irq_domain_translate(struct irq_domain *d,
 						   unsigned int *type)
 {
 	/* We support standard DT translation */
-	if (is_of_node(fwspec->fwnode))
-		return irq_domain_translate_twothreecell(d, fwspec, hwirq, type);
+	if (is_of_node(fwspec->fwnode) && fwspec->param_count == 2) {
+		return irq_domain_translate_twocell(d, fwspec, hwirq, type);
+	}
 
 	/* This is for board files and others not using DT */
 	if (is_fwnode_irqchip(fwspec->fwnode)) {
@@ -1864,26 +1761,11 @@ static void gpiochip_irq_unmap(struct irq_domain *d, unsigned int irq)
 	irq_set_chip_data(irq, NULL);
 }
 
-static int gpiochip_irq_select(struct irq_domain *d, struct irq_fwspec *fwspec,
-			       enum irq_domain_bus_token bus_token)
-{
-	struct fwnode_handle *fwnode = fwspec->fwnode;
-	struct gpio_chip *gc = d->host_data;
-	unsigned int index = fwspec->param[0];
-
-	if (fwspec->param_count == 3 && is_of_node(fwnode))
-		return of_gpiochip_instance_match(gc, index);
-
-	/* Fallback for twocells */
-	return (fwnode && (d->fwnode == fwnode) && (d->bus_token == bus_token));
-}
-
 static const struct irq_domain_ops gpiochip_domain_ops = {
 	.map	= gpiochip_irq_map,
 	.unmap	= gpiochip_irq_unmap,
-	.select	= gpiochip_irq_select,
 	/* Virtually all GPIO irqchips are twocell:ed */
-	.xlate	= irq_domain_xlate_twothreecell,
+	.xlate	= irq_domain_xlate_twocell,
 };
 
 static struct irq_domain *gpiochip_simple_create_domain(struct gpio_chip *gc)
@@ -1903,6 +1785,7 @@ static int gpiochip_to_irq(struct gpio_chip *gc, unsigned int offset)
 {
 	struct irq_domain *domain = gc->irq.domain;
 
+#ifdef CONFIG_GPIOLIB_IRQCHIP
 	/*
 	 * Avoid race condition with other code, which tries to lookup
 	 * an IRQ before the irqchip has been properly registered,
@@ -1910,6 +1793,7 @@ static int gpiochip_to_irq(struct gpio_chip *gc, unsigned int offset)
 	 */
 	if (!gc->irq.initialized)
 		return -EPROBE_DEFER;
+#endif
 
 	if (!gpiochip_irqchip_irq_valid(gc, offset))
 		return -ENXIO;
@@ -2441,18 +2325,16 @@ static int gpiod_request_commit(struct gpio_desc *desc, const char *label)
 	if (test_and_set_bit(FLAG_REQUESTED, &desc->flags))
 		return -EBUSY;
 
-	offset = gpio_chip_hwgpio(desc);
-	if (!gpiochip_line_is_valid(guard.gc, offset))
-		return -EINVAL;
-
 	/* NOTE:  gpio_request() can be called in early boot,
 	 * before IRQs are enabled, for non-sleeping (SOC) GPIOs.
 	 */
 
 	if (guard.gc->request) {
-		ret = guard.gc->request(guard.gc, offset);
-		if (ret > 0)
-			ret = -EBADE;
+		offset = gpio_chip_hwgpio(desc);
+		if (gpiochip_line_is_valid(guard.gc, offset))
+			ret = guard.gc->request(guard.gc, offset);
+		else
+			ret = -EINVAL;
 		if (ret)
 			goto out_clear_bit;
 	}
@@ -2470,6 +2352,37 @@ out_clear_bit:
 	clear_bit(FLAG_REQUESTED, &desc->flags);
 	return ret;
 }
+
+/*
+ * This descriptor validation needs to be inserted verbatim into each
+ * function taking a descriptor, so we need to use a preprocessor
+ * macro to avoid endless duplication. If the desc is NULL it is an
+ * optional GPIO and calls should just bail out.
+ */
+static int validate_desc(const struct gpio_desc *desc, const char *func)
+{
+	if (!desc)
+		return 0;
+
+	if (IS_ERR(desc)) {
+		pr_warn("%s: invalid GPIO (errorpointer)\n", func);
+		return PTR_ERR(desc);
+	}
+
+	return 1;
+}
+
+#define VALIDATE_DESC(desc) do { \
+	int __valid = validate_desc(desc, __func__); \
+	if (__valid <= 0) \
+		return __valid; \
+	} while (0)
+
+#define VALIDATE_DESC_VOID(desc) do { \
+	int __valid = validate_desc(desc, __func__); \
+	if (__valid <= 0) \
+		return; \
+	} while (0)
 
 int gpiod_request(struct gpio_desc *desc, const char *label)
 {
@@ -2520,10 +2433,8 @@ static void gpiod_free_commit(struct gpio_desc *desc)
 #endif
 		desc_set_label(desc, NULL);
 		WRITE_ONCE(desc->flags, flags);
-#ifdef CONFIG_GPIO_CDEV
-		WRITE_ONCE(desc->debounce_period_us, 0);
-#endif
-		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_RELEASED);
+
+		gpiod_line_state_notify(desc, GPIOLINE_CHANGED_RELEASED);
 	}
 }
 
@@ -2622,8 +2533,6 @@ struct gpio_desc *gpiochip_request_own_desc(struct gpio_chip *gc,
 		return ERR_PTR(ret);
 	}
 
-	gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_REQUESTED);
-
 	return desc;
 }
 EXPORT_SYMBOL_GPL(gpiochip_request_own_desc);
@@ -2652,31 +2561,13 @@ EXPORT_SYMBOL_GPL(gpiochip_free_own_desc);
  * rely on gpio_request() having been called beforehand.
  */
 
-int gpio_do_set_config(struct gpio_desc *desc, unsigned long config)
+static int gpio_do_set_config(struct gpio_chip *gc, unsigned int offset,
+			      unsigned long config)
 {
-	int ret;
-
-	CLASS(gpio_chip_guard, guard)(desc);
-	if (!guard.gc)
-		return -ENODEV;
-
-	if (!guard.gc->set_config)
+	if (!gc->set_config)
 		return -ENOTSUPP;
 
-	ret = guard.gc->set_config(guard.gc, gpio_chip_hwgpio(desc), config);
-	if (ret > 0)
-		ret = -EBADE;
-
-#ifdef CONFIG_GPIO_CDEV
-	/*
-	 * Special case - if we're setting debounce period, we need to store
-	 * it in the descriptor in case user-space wants to know it.
-	 */
-	if (!ret && pinconf_to_config_param(config) == PIN_CONFIG_INPUT_DEBOUNCE)
-		WRITE_ONCE(desc->debounce_period_us,
-			   pinconf_to_config_argument(config));
-#endif
-	return ret;
+	return gc->set_config(gc, offset, config);
 }
 
 static int gpio_set_config_with_argument(struct gpio_desc *desc,
@@ -2685,8 +2576,12 @@ static int gpio_set_config_with_argument(struct gpio_desc *desc,
 {
 	unsigned long config;
 
+	CLASS(gpio_chip_guard, guard)(desc);
+	if (!guard.gc)
+		return -ENODEV;
+
 	config = pinconf_to_config_packed(mode, argument);
-	return gpio_do_set_config(desc, config);
+	return gpio_do_set_config(guard.gc, gpio_chip_hwgpio(desc), config);
 }
 
 static int gpio_set_config_with_argument_optional(struct gpio_desc *desc,
@@ -2761,48 +2656,9 @@ static int gpio_set_bias(struct gpio_desc *desc)
  */
 int gpio_set_debounce_timeout(struct gpio_desc *desc, unsigned int debounce)
 {
-	int ret;
-
-	ret = gpio_set_config_with_argument_optional(desc,
-						     PIN_CONFIG_INPUT_DEBOUNCE,
-						     debounce);
-	if (!ret)
-		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
-
-	return ret;
-}
-
-static int gpiochip_direction_input(struct gpio_chip *gc, unsigned int offset)
-{
-	int ret;
-
-	lockdep_assert_held(&gc->gpiodev->srcu);
-
-	if (WARN_ON(!gc->direction_input))
-		return -EOPNOTSUPP;
-
-	ret = gc->direction_input(gc, offset);
-	if (ret > 0)
-		ret = -EBADE;
-
-	return ret;
-}
-
-static int gpiochip_direction_output(struct gpio_chip *gc, unsigned int offset,
-				     int value)
-{
-	int ret;
-
-	lockdep_assert_held(&gc->gpiodev->srcu);
-
-	if (WARN_ON(!gc->direction_output))
-		return -EOPNOTSUPP;
-
-	ret = gc->direction_output(gc, offset, value);
-	if (ret > 0)
-		ret = -EBADE;
-
-	return ret;
+	return gpio_set_config_with_argument_optional(desc,
+						      PIN_CONFIG_INPUT_DEBOUNCE,
+						      debounce);
 }
 
 /**
@@ -2817,21 +2673,9 @@ static int gpiochip_direction_output(struct gpio_chip *gc, unsigned int offset,
  */
 int gpiod_direction_input(struct gpio_desc *desc)
 {
-	int ret;
+	int ret = 0;
 
 	VALIDATE_DESC(desc);
-
-	ret = gpiod_direction_input_nonotify(desc);
-	if (ret == 0)
-		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(gpiod_direction_input);
-
-int gpiod_direction_input_nonotify(struct gpio_desc *desc)
-{
-	int ret = 0, dir;
 
 	CLASS(gpio_chip_guard, guard)(desc);
 	if (!guard.gc)
@@ -2856,19 +2700,15 @@ int gpiod_direction_input_nonotify(struct gpio_desc *desc)
 	 * assume we are in input mode after this.
 	 */
 	if (guard.gc->direction_input) {
-		ret = gpiochip_direction_input(guard.gc,
-					       gpio_chip_hwgpio(desc));
-	} else if (guard.gc->get_direction) {
-		dir = gpiochip_get_direction(guard.gc, gpio_chip_hwgpio(desc));
-		if (dir < 0)
-			return dir;
-
-		if (dir != GPIO_LINE_DIRECTION_IN) {
-			gpiod_warn(desc,
-				   "%s: missing direction_input() operation and line is output\n",
-				    __func__);
-			return -EIO;
-		}
+		ret = guard.gc->direction_input(guard.gc,
+						gpio_chip_hwgpio(desc));
+	} else if (guard.gc->get_direction &&
+		  (guard.gc->get_direction(guard.gc,
+					   gpio_chip_hwgpio(desc)) != 1)) {
+		gpiod_warn(desc,
+			   "%s: missing direction_input() operation and line is output\n",
+			   __func__);
+		return -EIO;
 	}
 	if (ret == 0) {
 		clear_bit(FLAG_IS_OUT, &desc->flags);
@@ -2879,26 +2719,11 @@ int gpiod_direction_input_nonotify(struct gpio_desc *desc)
 
 	return ret;
 }
-
-static int gpiochip_set(struct gpio_chip *gc, unsigned int offset, int value)
-{
-	int ret;
-
-	lockdep_assert_held(&gc->gpiodev->srcu);
-
-	if (WARN_ON(unlikely(!gc->set)))
-		return -EOPNOTSUPP;
-
-	ret = gc->set(gc, offset, value);
-	if (ret > 0)
-		ret = -EBADE;
-
-	return ret;
-}
+EXPORT_SYMBOL_GPL(gpiod_direction_input);
 
 static int gpiod_direction_output_raw_commit(struct gpio_desc *desc, int value)
 {
-	int val = !!value, ret = 0, dir;
+	int val = !!value, ret = 0;
 
 	CLASS(gpio_chip_guard, guard)(desc);
 	if (!guard.gc)
@@ -2917,30 +2742,22 @@ static int gpiod_direction_output_raw_commit(struct gpio_desc *desc, int value)
 	}
 
 	if (guard.gc->direction_output) {
-		ret = gpiochip_direction_output(guard.gc,
-						gpio_chip_hwgpio(desc), val);
+		ret = guard.gc->direction_output(guard.gc,
+						 gpio_chip_hwgpio(desc), val);
 	} else {
 		/* Check that we are in output mode if we can */
-		if (guard.gc->get_direction) {
-			dir = gpiochip_get_direction(guard.gc,
-						     gpio_chip_hwgpio(desc));
-			if (dir < 0)
-				return dir;
-
-			if (dir != GPIO_LINE_DIRECTION_OUT) {
-				gpiod_warn(desc,
-					   "%s: missing direction_output() operation\n",
-					   __func__);
-				return -EIO;
-			}
+		if (guard.gc->get_direction &&
+		    guard.gc->get_direction(guard.gc, gpio_chip_hwgpio(desc))) {
+			gpiod_warn(desc,
+				"%s: missing direction_output() operation\n",
+				__func__);
+			return -EIO;
 		}
 		/*
 		 * If we can't actively set the direction, we are some
 		 * output-only chip, so just drive the output as desired.
 		 */
-		ret = gpiochip_set(guard.gc, gpio_chip_hwgpio(desc), val);
-		if (ret)
-			return ret;
+		guard.gc->set(guard.gc, gpio_chip_hwgpio(desc), val);
 	}
 
 	if (!ret)
@@ -2964,15 +2781,8 @@ static int gpiod_direction_output_raw_commit(struct gpio_desc *desc, int value)
  */
 int gpiod_direction_output_raw(struct gpio_desc *desc, int value)
 {
-	int ret;
-
 	VALIDATE_DESC(desc);
-
-	ret = gpiod_direction_output_raw_commit(desc, value);
-	if (ret == 0)
-		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
-
-	return ret;
+	return gpiod_direction_output_raw_commit(desc, value);
 }
 EXPORT_SYMBOL_GPL(gpiod_direction_output_raw);
 
@@ -2991,22 +2801,10 @@ EXPORT_SYMBOL_GPL(gpiod_direction_output_raw);
  */
 int gpiod_direction_output(struct gpio_desc *desc, int value)
 {
+	unsigned long flags;
 	int ret;
 
 	VALIDATE_DESC(desc);
-
-	ret = gpiod_direction_output_nonotify(desc, value);
-	if (ret == 0)
-		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(gpiod_direction_output);
-
-int gpiod_direction_output_nonotify(struct gpio_desc *desc, int value)
-{
-	unsigned long flags;
-	int ret;
 
 	flags = READ_ONCE(desc->flags);
 
@@ -3030,15 +2828,19 @@ int gpiod_direction_output_nonotify(struct gpio_desc *desc, int value)
 		if (!ret)
 			goto set_output_value;
 		/* Emulate open drain by not actively driving the line high */
-		if (value)
+		if (value) {
+			ret = gpiod_direction_input(desc);
 			goto set_output_flag;
+		}
 	} else if (test_bit(FLAG_OPEN_SOURCE, &flags)) {
 		ret = gpio_set_config(desc, PIN_CONFIG_DRIVE_OPEN_SOURCE);
 		if (!ret)
 			goto set_output_value;
 		/* Emulate open source by not actively driving the line low */
-		if (!value)
+		if (!value) {
+			ret = gpiod_direction_input(desc);
 			goto set_output_flag;
+		}
 	} else {
 		gpio_set_config(desc, PIN_CONFIG_DRIVE_PUSH_PULL);
 	}
@@ -3050,20 +2852,18 @@ set_output_value:
 	return gpiod_direction_output_raw_commit(desc, value);
 
 set_output_flag:
-	ret = gpiod_direction_input_nonotify(desc);
-	if (ret)
-		return ret;
 	/*
 	 * When emulating open-source or open-drain functionalities by not
 	 * actively driving the line (setting mode to input) we still need to
 	 * set the IS_OUT flag or otherwise we won't be able to set the line
 	 * value anymore.
 	 */
-	set_bit(FLAG_IS_OUT, &desc->flags);
-	return 0;
+	if (ret == 0)
+		set_bit(FLAG_IS_OUT, &desc->flags);
+	return ret;
 }
+EXPORT_SYMBOL_GPL(gpiod_direction_output);
 
-#if IS_ENABLED(CONFIG_HTE)
 /**
  * gpiod_enable_hw_timestamp_ns - Enable hardware timestamp in nanoseconds.
  *
@@ -3075,7 +2875,7 @@ set_output_flag:
  */
 int gpiod_enable_hw_timestamp_ns(struct gpio_desc *desc, unsigned long flags)
 {
-	int ret;
+	int ret = 0;
 
 	VALIDATE_DESC(desc);
 
@@ -3108,7 +2908,7 @@ EXPORT_SYMBOL_GPL(gpiod_enable_hw_timestamp_ns);
  */
 int gpiod_disable_hw_timestamp_ns(struct gpio_desc *desc, unsigned long flags)
 {
-	int ret;
+	int ret = 0;
 
 	VALIDATE_DESC(desc);
 
@@ -3129,7 +2929,6 @@ int gpiod_disable_hw_timestamp_ns(struct gpio_desc *desc, unsigned long flags)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(gpiod_disable_hw_timestamp_ns);
-#endif /* CONFIG_HTE */
 
 /**
  * gpiod_set_config - sets @config for a GPIO
@@ -3142,30 +2941,13 @@ EXPORT_SYMBOL_GPL(gpiod_disable_hw_timestamp_ns);
  */
 int gpiod_set_config(struct gpio_desc *desc, unsigned long config)
 {
-	int ret;
-
 	VALIDATE_DESC(desc);
 
-	ret = gpio_do_set_config(desc, config);
-	if (!ret) {
-		/* These are the only options we notify the userspace about. */
-		switch (pinconf_to_config_param(config)) {
-		case PIN_CONFIG_BIAS_DISABLE:
-		case PIN_CONFIG_BIAS_PULL_DOWN:
-		case PIN_CONFIG_BIAS_PULL_UP:
-		case PIN_CONFIG_DRIVE_OPEN_DRAIN:
-		case PIN_CONFIG_DRIVE_OPEN_SOURCE:
-		case PIN_CONFIG_DRIVE_PUSH_PULL:
-		case PIN_CONFIG_INPUT_DEBOUNCE:
-			gpiod_line_state_notify(desc,
-						GPIO_V2_LINE_CHANGED_CONFIG);
-			break;
-		default:
-			break;
-		}
-	}
+	CLASS(gpio_chip_guard, guard)(desc);
+	if (!guard.gc)
+		return -ENODEV;
 
-	return ret;
+	return gpio_do_set_config(guard.gc, gpio_chip_hwgpio(desc), config);
 }
 EXPORT_SYMBOL_GPL(gpiod_set_config);
 
@@ -3232,27 +3014,12 @@ void gpiod_toggle_active_low(struct gpio_desc *desc)
 {
 	VALIDATE_DESC_VOID(desc);
 	change_bit(FLAG_ACTIVE_LOW, &desc->flags);
-	gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
 }
 EXPORT_SYMBOL_GPL(gpiod_toggle_active_low);
 
-static int gpiochip_get(struct gpio_chip *gc, unsigned int offset)
-{
-	int ret;
-
-	lockdep_assert_held(&gc->gpiodev->srcu);
-
-	/* Make sure this is called after checking for gc->get(). */
-	ret = gc->get(gc, offset);
-	if (ret > 1)
-		ret = -EBADE;
-
-	return ret;
-}
-
 static int gpio_chip_get_value(struct gpio_chip *gc, const struct gpio_desc *desc)
 {
-	return gc->get ? gpiochip_get(gc, gpio_chip_hwgpio(desc)) : -EIO;
+	return gc->get ? gc->get(gc, gpio_chip_hwgpio(desc)) : -EIO;
 }
 
 /* I/O calls are only valid after configuration completed; the relevant
@@ -3303,20 +3070,13 @@ static int gpio_chip_get_multiple(struct gpio_chip *gc,
 {
 	lockdep_assert_held(&gc->gpiodev->srcu);
 
-	if (gc->get_multiple) {
-		int ret;
-
-		ret = gc->get_multiple(gc, mask, bits);
-		if (ret > 0)
-			return -EBADE;
-		return ret;
-	}
-
+	if (gc->get_multiple)
+		return gc->get_multiple(gc, mask, bits);
 	if (gc->get) {
 		int i, value;
 
 		for_each_set_bit(i, mask, gc->ngpio) {
-			value = gpiochip_get(gc, i);
+			value = gc->get(gc, i);
 			if (value < 0)
 				return value;
 			__assign_bit(i, bits, value);
@@ -3569,18 +3329,18 @@ EXPORT_SYMBOL_GPL(gpiod_get_array_value);
  * @desc: gpio descriptor whose state need to be set.
  * @value: Non-zero for setting it HIGH otherwise it will set to LOW.
  */
-static int gpio_set_open_drain_value_commit(struct gpio_desc *desc, bool value)
+static void gpio_set_open_drain_value_commit(struct gpio_desc *desc, bool value)
 {
 	int ret = 0, offset = gpio_chip_hwgpio(desc);
 
 	CLASS(gpio_chip_guard, guard)(desc);
 	if (!guard.gc)
-		return -ENODEV;
+		return;
 
 	if (value) {
-		ret = gpiochip_direction_input(guard.gc, offset);
+		ret = guard.gc->direction_input(guard.gc, offset);
 	} else {
-		ret = gpiochip_direction_output(guard.gc, offset, 0);
+		ret = guard.gc->direction_output(guard.gc, offset, 0);
 		if (!ret)
 			set_bit(FLAG_IS_OUT, &desc->flags);
 	}
@@ -3589,8 +3349,6 @@ static int gpio_set_open_drain_value_commit(struct gpio_desc *desc, bool value)
 		gpiod_err(desc,
 			  "%s: Error in set_value for open drain err %d\n",
 			  __func__, ret);
-
-	return ret;
 }
 
 /*
@@ -3598,41 +3356,36 @@ static int gpio_set_open_drain_value_commit(struct gpio_desc *desc, bool value)
  * @desc: gpio descriptor whose state need to be set.
  * @value: Non-zero for setting it HIGH otherwise it will set to LOW.
  */
-static int gpio_set_open_source_value_commit(struct gpio_desc *desc, bool value)
+static void gpio_set_open_source_value_commit(struct gpio_desc *desc, bool value)
 {
 	int ret = 0, offset = gpio_chip_hwgpio(desc);
 
 	CLASS(gpio_chip_guard, guard)(desc);
 	if (!guard.gc)
-		return -ENODEV;
+		return;
 
 	if (value) {
-		ret = gpiochip_direction_output(guard.gc, offset, 1);
+		ret = guard.gc->direction_output(guard.gc, offset, 1);
 		if (!ret)
 			set_bit(FLAG_IS_OUT, &desc->flags);
 	} else {
-		ret = gpiochip_direction_input(guard.gc, offset);
+		ret = guard.gc->direction_input(guard.gc, offset);
 	}
 	trace_gpio_direction(desc_to_gpio(desc), !value, ret);
 	if (ret < 0)
 		gpiod_err(desc,
 			  "%s: Error in set_value for open source err %d\n",
 			  __func__, ret);
-
-	return ret;
 }
 
-static int gpiod_set_raw_value_commit(struct gpio_desc *desc, bool value)
+static void gpiod_set_raw_value_commit(struct gpio_desc *desc, bool value)
 {
-	if (unlikely(!test_bit(FLAG_IS_OUT, &desc->flags)))
-		return -EPERM;
-
 	CLASS(gpio_chip_guard, guard)(desc);
 	if (!guard.gc)
-		return -ENODEV;
+		return;
 
 	trace_gpio_value(desc_to_gpio(desc), 0, value);
-	return gpiochip_set(guard.gc, gpio_chip_hwgpio(desc), value);
+	guard.gc->set(guard.gc, gpio_chip_hwgpio(desc), value);
 }
 
 /*
@@ -3644,33 +3397,21 @@ static int gpiod_set_raw_value_commit(struct gpio_desc *desc, bool value)
  *        defines which outputs are to be changed
  * @bits: bit value array; one bit per output; BITS_PER_LONG bits per word
  *        defines the values the outputs specified by mask are to be set to
- *
- * Returns: 0 on success, negative error number on failure.
  */
-static int gpiochip_set_multiple(struct gpio_chip *gc,
-				 unsigned long *mask, unsigned long *bits)
+static void gpio_chip_set_multiple(struct gpio_chip *gc,
+				   unsigned long *mask, unsigned long *bits)
 {
-	unsigned int i;
-	int ret;
-
 	lockdep_assert_held(&gc->gpiodev->srcu);
 
 	if (gc->set_multiple) {
-		ret = gc->set_multiple(gc, mask, bits);
-		if (ret > 0)
-			ret = -EBADE;
+		gc->set_multiple(gc, mask, bits);
+	} else {
+		unsigned int i;
 
-		return ret;
+		/* set outputs if the corresponding mask bit is set */
+		for_each_set_bit(i, mask, gc->ngpio)
+			gc->set(gc, i, test_bit(i, bits));
 	}
-
-	/* set outputs if the corresponding mask bit is set */
-	for_each_set_bit(i, mask, gc->ngpio) {
-		ret = gpiochip_set(gc, i, test_bit(i, bits));
-		if (ret)
-			break;
-	}
-
-	return ret;
 }
 
 int gpiod_set_array_value_complex(bool raw, bool can_sleep,
@@ -3680,7 +3421,7 @@ int gpiod_set_array_value_complex(bool raw, bool can_sleep,
 				  unsigned long *value_bitmap)
 {
 	struct gpio_chip *gc;
-	int i = 0, ret;
+	int i = 0;
 
 	/*
 	 * Validate array_info against desc_array and its size.
@@ -3693,12 +3434,6 @@ int gpiod_set_array_value_complex(bool raw, bool can_sleep,
 		if (!can_sleep)
 			WARN_ON(array_info->gdev->can_sleep);
 
-		for (i = 0; i < array_size; i++) {
-			if (unlikely(!test_bit(FLAG_IS_OUT,
-					       &desc_array[i]->flags)))
-				return -EPERM;
-		}
-
 		guard(srcu)(&array_info->gdev->srcu);
 		gc = srcu_dereference(array_info->gdev->chip,
 				      &array_info->gdev->srcu);
@@ -3709,10 +3444,7 @@ int gpiod_set_array_value_complex(bool raw, bool can_sleep,
 			bitmap_xor(value_bitmap, value_bitmap,
 				   array_info->invert_mask, array_size);
 
-		ret = gpiochip_set_multiple(gc, array_info->set_mask,
-					    value_bitmap);
-		if (ret)
-			return ret;
+		gpio_chip_set_multiple(gc, array_info->set_mask, value_bitmap);
 
 		i = find_first_zero_bit(array_info->set_mask, array_size);
 		if (i == array_size)
@@ -3758,9 +3490,6 @@ int gpiod_set_array_value_complex(bool raw, bool can_sleep,
 			int hwgpio = gpio_chip_hwgpio(desc);
 			int value = test_bit(i, value_bitmap);
 
-			if (unlikely(!test_bit(FLAG_IS_OUT, &desc->flags)))
-				return -EPERM;
-
 			/*
 			 * Pins applicable for fast input but not for
 			 * fast output processing may have been already
@@ -3792,11 +3521,8 @@ int gpiod_set_array_value_complex(bool raw, bool can_sleep,
 		} while ((i < array_size) &&
 			 gpio_device_chip_cmp(desc_array[i]->gdev, guard.gc));
 		/* push collected bits to outputs */
-		if (count != 0) {
-			ret = gpiochip_set_multiple(guard.gc, mask, bits);
-			if (ret)
-				return ret;
-		}
+		if (count != 0)
+			gpio_chip_set_multiple(guard.gc, mask, bits);
 
 		if (mask != fastpath_mask)
 			bitmap_free(mask);
@@ -3816,16 +3542,13 @@ int gpiod_set_array_value_complex(bool raw, bool can_sleep,
  *
  * This function can be called from contexts where we cannot sleep, and will
  * complain if the GPIO chip functions potentially sleep.
- *
- * Returns:
- * 0 on success, negative error number on failure.
  */
-int gpiod_set_raw_value(struct gpio_desc *desc, int value)
+void gpiod_set_raw_value(struct gpio_desc *desc, int value)
 {
-	VALIDATE_DESC(desc);
+	VALIDATE_DESC_VOID(desc);
 	/* Should be using gpiod_set_raw_value_cansleep() */
 	WARN_ON(desc->gdev->can_sleep);
-	return gpiod_set_raw_value_commit(desc, value);
+	gpiod_set_raw_value_commit(desc, value);
 }
 EXPORT_SYMBOL_GPL(gpiod_set_raw_value);
 
@@ -3837,21 +3560,17 @@ EXPORT_SYMBOL_GPL(gpiod_set_raw_value);
  * This sets the value of a GPIO line backing a descriptor, applying
  * different semantic quirks like active low and open drain/source
  * handling.
- *
- * Returns:
- * 0 on success, negative error number on failure.
  */
-static int gpiod_set_value_nocheck(struct gpio_desc *desc, int value)
+static void gpiod_set_value_nocheck(struct gpio_desc *desc, int value)
 {
 	if (test_bit(FLAG_ACTIVE_LOW, &desc->flags))
 		value = !value;
-
 	if (test_bit(FLAG_OPEN_DRAIN, &desc->flags))
-		return gpio_set_open_drain_value_commit(desc, value);
+		gpio_set_open_drain_value_commit(desc, value);
 	else if (test_bit(FLAG_OPEN_SOURCE, &desc->flags))
-		return gpio_set_open_source_value_commit(desc, value);
-
-	return gpiod_set_raw_value_commit(desc, value);
+		gpio_set_open_source_value_commit(desc, value);
+	else
+		gpiod_set_raw_value_commit(desc, value);
 }
 
 /**
@@ -3864,16 +3583,13 @@ static int gpiod_set_value_nocheck(struct gpio_desc *desc, int value)
  *
  * This function can be called from contexts where we cannot sleep, and will
  * complain if the GPIO chip functions potentially sleep.
- *
- * Returns:
- * 0 on success, negative error number on failure.
  */
-int gpiod_set_value(struct gpio_desc *desc, int value)
+void gpiod_set_value(struct gpio_desc *desc, int value)
 {
-	VALIDATE_DESC(desc);
+	VALIDATE_DESC_VOID(desc);
 	/* Should be using gpiod_set_value_cansleep() */
 	WARN_ON(desc->gdev->can_sleep);
-	return gpiod_set_value_nocheck(desc, value);
+	gpiod_set_value_nocheck(desc, value);
 }
 EXPORT_SYMBOL_GPL(gpiod_set_value);
 
@@ -3958,15 +3674,9 @@ EXPORT_SYMBOL_GPL(gpiod_cansleep);
  */
 int gpiod_set_consumer_name(struct gpio_desc *desc, const char *name)
 {
-	int ret;
-
 	VALIDATE_DESC(desc);
 
-	ret = desc_set_label(desc, name);
-	if (ret == 0)
-		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
-
-	return ret;
+	return desc_set_label(desc, name);
 }
 EXPORT_SYMBOL_GPL(gpiod_set_consumer_name);
 
@@ -3982,10 +3692,13 @@ int gpiod_to_irq(const struct gpio_desc *desc)
 	struct gpio_device *gdev;
 	struct gpio_chip *gc;
 	int offset;
-	int ret;
 
-	ret = validate_desc(desc, __func__);
-	if (ret <= 0)
+	/*
+	 * Cannot VALIDATE_DESC() here as gpiod_to_irq() consumer semantics
+	 * requires this function to not return zero on an invalid descriptor
+	 * but rather a negative error number.
+	 */
+	if (IS_ERR_OR_NULL(desc))
 		return -EINVAL;
 
 	gdev = desc->gdev;
@@ -3997,12 +3710,13 @@ int gpiod_to_irq(const struct gpio_desc *desc)
 
 	offset = gpio_chip_hwgpio(desc);
 	if (gc->to_irq) {
-		ret = gc->to_irq(gc, offset);
-		if (ret)
-			return ret;
+		int retirq = gc->to_irq(gc, offset);
 
 		/* Zero means NO_IRQ */
-		return -ENXIO;
+		if (!retirq)
+			return -ENXIO;
+
+		return retirq;
 	}
 #ifdef CONFIG_GPIOLIB_IRQCHIP
 	if (gc->irq.chip) {
@@ -4287,15 +4001,12 @@ EXPORT_SYMBOL_GPL(gpiod_get_array_value_cansleep);
  * regard for its ACTIVE_LOW status.
  *
  * This function is to be called from contexts that can sleep.
- *
- * Returns:
- * 0 on success, negative error number on failure.
  */
-int gpiod_set_raw_value_cansleep(struct gpio_desc *desc, int value)
+void gpiod_set_raw_value_cansleep(struct gpio_desc *desc, int value)
 {
 	might_sleep();
-	VALIDATE_DESC(desc);
-	return gpiod_set_raw_value_commit(desc, value);
+	VALIDATE_DESC_VOID(desc);
+	gpiod_set_raw_value_commit(desc, value);
 }
 EXPORT_SYMBOL_GPL(gpiod_set_raw_value_cansleep);
 
@@ -4308,15 +4019,12 @@ EXPORT_SYMBOL_GPL(gpiod_set_raw_value_cansleep);
  * account
  *
  * This function is to be called from contexts that can sleep.
- *
- * Returns:
- * 0 on success, negative error number on failure.
  */
-int gpiod_set_value_cansleep(struct gpio_desc *desc, int value)
+void gpiod_set_value_cansleep(struct gpio_desc *desc, int value)
 {
 	might_sleep();
-	VALIDATE_DESC(desc);
-	return gpiod_set_value_nocheck(desc, value);
+	VALIDATE_DESC_VOID(desc);
+	gpiod_set_value_nocheck(desc, value);
 }
 EXPORT_SYMBOL_GPL(gpiod_set_value_cansleep);
 
@@ -4357,10 +4065,12 @@ void gpiod_add_lookup_tables(struct gpiod_lookup_table **tables, size_t n)
 {
 	unsigned int i;
 
-	guard(mutex)(&gpio_lookup_lock);
+	mutex_lock(&gpio_lookup_lock);
 
 	for (i = 0; i < n; i++)
 		list_add_tail(&tables[i]->list, &gpio_lookup_list);
+
+	mutex_unlock(&gpio_lookup_lock);
 }
 
 /**
@@ -4394,9 +4104,8 @@ EXPORT_SYMBOL_GPL(gpiod_set_array_value_cansleep);
 
 void gpiod_line_state_notify(struct gpio_desc *desc, unsigned long action)
 {
-	guard(read_lock_irqsave)(&desc->gdev->line_state_lock);
-
-	raw_notifier_call_chain(&desc->gdev->line_state_notifier, action, desc);
+	blocking_notifier_call_chain(&desc->gdev->line_state_notifier,
+				     action, desc);
 }
 
 /**
@@ -4419,9 +4128,11 @@ void gpiod_remove_lookup_table(struct gpiod_lookup_table *table)
 	if (!table)
 		return;
 
-	guard(mutex)(&gpio_lookup_lock);
+	mutex_lock(&gpio_lookup_lock);
 
 	list_del(&table->list);
+
+	mutex_unlock(&gpio_lookup_lock);
 }
 EXPORT_SYMBOL_GPL(gpiod_remove_lookup_table);
 
@@ -4433,7 +4144,7 @@ void gpiod_add_hogs(struct gpiod_hog *hogs)
 {
 	struct gpiod_hog *hog;
 
-	guard(mutex)(&gpio_machine_hogs_mutex);
+	mutex_lock(&gpio_machine_hogs_mutex);
 
 	for (hog = &hogs[0]; hog->chip_label; hog++) {
 		list_add_tail(&hog->list, &gpio_machine_hogs);
@@ -4447,6 +4158,8 @@ void gpiod_add_hogs(struct gpiod_hog *hogs)
 		if (gdev)
 			gpiochip_machine_hog(gpio_device_get_chip(gdev), hog);
 	}
+
+	mutex_unlock(&gpio_machine_hogs_mutex);
 }
 EXPORT_SYMBOL_GPL(gpiod_add_hogs);
 
@@ -4454,10 +4167,10 @@ void gpiod_remove_hogs(struct gpiod_hog *hogs)
 {
 	struct gpiod_hog *hog;
 
-	guard(mutex)(&gpio_machine_hogs_mutex);
-
+	mutex_lock(&gpio_machine_hogs_mutex);
 	for (hog = &hogs[0]; hog->chip_label; hog++)
 		list_del(&hog->list);
+	mutex_unlock(&gpio_machine_hogs_mutex);
 }
 EXPORT_SYMBOL_GPL(gpiod_remove_hogs);
 
@@ -4686,7 +4399,7 @@ struct gpio_desc *gpiod_find_and_request(struct device *consumer,
 		return ERR_PTR(ret);
 	}
 
-	gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_REQUESTED);
+	gpiod_line_state_notify(desc, GPIOLINE_CHANGED_REQUESTED);
 
 	return desc;
 }
@@ -4858,10 +4571,10 @@ int gpiod_configure_flags(struct gpio_desc *desc, const char *con_id,
 
 	/* Process flags */
 	if (dflags & GPIOD_FLAGS_BIT_DIR_OUT)
-		ret = gpiod_direction_output_nonotify(desc,
+		ret = gpiod_direction_output(desc,
 				!!(dflags & GPIOD_FLAGS_BIT_DIR_VAL));
 	else
-		ret = gpiod_direction_input_nonotify(desc);
+		ret = gpiod_direction_input(desc);
 
 	return ret;
 }
@@ -4964,10 +4677,10 @@ int gpiod_hog(struct gpio_desc *desc, const char *name,
 		return ret;
 	}
 
-	gpiod_dbg(desc, "hogged as %s/%s\n",
+	gpiod_dbg(desc, "hogged as %s%s\n",
 		(dflags & GPIOD_FLAGS_BIT_DIR_OUT) ? "output" : "input",
 		(dflags & GPIOD_FLAGS_BIT_DIR_OUT) ?
-		  str_high_low(dflags & GPIOD_FLAGS_BIT_DIR_VAL) : "?");
+		  (dflags & GPIOD_FLAGS_BIT_DIR_VAL) ? "/high" : "/low" : "");
 
 	return 0;
 }
@@ -5153,7 +4866,8 @@ EXPORT_SYMBOL_GPL(gpiod_get_array_optional);
  */
 void gpiod_put(struct gpio_desc *desc)
 {
-	gpiod_free(desc);
+	if (desc)
+		gpiod_free(desc);
 }
 EXPORT_SYMBOL_GPL(gpiod_put);
 
@@ -5237,10 +4951,9 @@ core_initcall(gpiolib_dev_init);
 static void gpiolib_dbg_show(struct seq_file *s, struct gpio_device *gdev)
 {
 	bool active_low, is_irq, is_out;
+	unsigned int gpio = gdev->base;
 	struct gpio_desc *desc;
-	unsigned int gpio = 0;
 	struct gpio_chip *gc;
-	unsigned long flags;
 	int value;
 
 	guard(srcu)(&gdev->srcu);
@@ -5253,17 +4966,16 @@ static void gpiolib_dbg_show(struct seq_file *s, struct gpio_device *gdev)
 
 	for_each_gpio_desc(gc, desc) {
 		guard(srcu)(&desc->gdev->desc_srcu);
-		flags = READ_ONCE(desc->flags);
-		is_irq = test_bit(FLAG_USED_AS_IRQ, &flags);
-		if (is_irq || test_bit(FLAG_REQUESTED, &flags)) {
+		is_irq = test_bit(FLAG_USED_AS_IRQ, &desc->flags);
+		if (is_irq || test_bit(FLAG_REQUESTED, &desc->flags)) {
 			gpiod_get_direction(desc);
-			is_out = test_bit(FLAG_IS_OUT, &flags);
+			is_out = test_bit(FLAG_IS_OUT, &desc->flags);
 			value = gpio_chip_get_value(gc, desc);
-			active_low = test_bit(FLAG_ACTIVE_LOW, &flags);
+			active_low = test_bit(FLAG_ACTIVE_LOW, &desc->flags);
 			seq_printf(s, " gpio-%-3u (%-20.20s|%-20.20s) %s %s %s%s\n",
 				   gpio, desc->name ?: "", gpiod_get_label(desc),
 				   is_out ? "out" : "in ",
-				   value >= 0 ? str_hi_lo(value) : "?  ",
+				   value >= 0 ? (value ? "hi" : "lo") : "?  ",
 				   is_irq ? "IRQ " : "",
 				   active_low ? "ACTIVE LOW" : "");
 		} else if (desc->name) {
@@ -5337,18 +5049,19 @@ static int gpiolib_seq_show(struct seq_file *s, void *v)
 	struct gpio_chip *gc;
 	struct device *parent;
 
-	if (priv->newline)
-		seq_putc(s, '\n');
-
 	guard(srcu)(&gdev->srcu);
 
 	gc = srcu_dereference(gdev->chip, &gdev->srcu);
 	if (!gc) {
-		seq_printf(s, "%s: (dangling chip)\n", dev_name(&gdev->dev));
+		seq_printf(s, "%s%s: (dangling chip)\n",
+			   priv->newline ? "\n" : "",
+			   dev_name(&gdev->dev));
 		return 0;
 	}
 
-	seq_printf(s, "%s: %u GPIOs", dev_name(&gdev->dev), gdev->ngpio);
+	seq_printf(s, "%s%s: GPIOs %u-%u", priv->newline ? "\n" : "",
+		   dev_name(&gdev->dev),
+		   gdev->base, gdev->base + gdev->ngpio - 1);
 	parent = gc->parent;
 	if (parent)
 		seq_printf(s, ", parent: %s/%s",

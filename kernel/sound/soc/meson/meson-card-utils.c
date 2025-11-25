@@ -119,10 +119,10 @@ unsigned int meson_card_parse_daifmt(struct device_node *node,
 	/* If no master is provided, default to cpu master */
 	if (!bitclkmaster || bitclkmaster == cpu_node) {
 		daifmt |= (!framemaster || framemaster == cpu_node) ?
-			SND_SOC_DAIFMT_CBC_CFC : SND_SOC_DAIFMT_CBC_CFP;
+			SND_SOC_DAIFMT_CBS_CFS : SND_SOC_DAIFMT_CBS_CFM;
 	} else {
 		daifmt |= (!framemaster || framemaster == cpu_node) ?
-			SND_SOC_DAIFMT_CBP_CFC : SND_SOC_DAIFMT_CBP_CFP;
+			SND_SOC_DAIFMT_CBM_CFS : SND_SOC_DAIFMT_CBM_CFM;
 	}
 
 	of_node_put(bitclkmaster);
@@ -137,6 +137,7 @@ int meson_card_set_be_link(struct snd_soc_card *card,
 			   struct device_node *node)
 {
 	struct snd_soc_dai_link_component *codec;
+	struct device_node *np;
 	int ret, num_codecs;
 
 	num_codecs = of_get_child_count(node);
@@ -153,17 +154,19 @@ int meson_card_set_be_link(struct snd_soc_card *card,
 	link->codecs = codec;
 	link->num_codecs = num_codecs;
 
-	for_each_child_of_node_scoped(node, np) {
+	for_each_child_of_node(node, np) {
 		ret = meson_card_parse_dai(card, np, codec);
-		if (ret)
+		if (ret) {
+			of_node_put(np);
 			return ret;
+		}
 
 		codec++;
 	}
 
 	ret = meson_card_set_link_name(card, link, node, "be");
 	if (ret)
-		dev_err(card->dev, "error setting %pOFn link name\n", node);
+		dev_err(card->dev, "error setting %pOFn link name\n", np);
 
 	return ret;
 }
@@ -195,6 +198,7 @@ static int meson_card_add_links(struct snd_soc_card *card)
 {
 	struct meson_card *priv = snd_soc_card_get_drvdata(card);
 	struct device_node *node = card->dev->of_node;
+	struct device_node *np;
 	int num, i, ret;
 
 	num = of_get_child_count(node);
@@ -208,10 +212,12 @@ static int meson_card_add_links(struct snd_soc_card *card)
 		return ret;
 
 	i = 0;
-	for_each_child_of_node_scoped(node, np) {
+	for_each_child_of_node(node, np) {
 		ret = priv->match_data->add_link(card, np, &i);
-		if (ret)
+		if (ret) {
+			of_node_put(np);
 			return ret;
+		}
 
 		i++;
 	}

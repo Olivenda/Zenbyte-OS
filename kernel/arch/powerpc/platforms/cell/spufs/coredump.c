@@ -73,7 +73,9 @@ static struct spu_context *coredump_next_context(int *fd)
 		return NULL;
 	*fd = n - 1;
 
-	file = fget_raw(*fd);
+	rcu_read_lock();
+	file = lookup_fdget_rcu(*fd);
+	rcu_read_unlock();
 	if (file) {
 		ctx = SPUFS_I(file_inode(file))->i_ctx;
 		get_spu_context(ctx);

@@ -13,7 +13,6 @@
 
 #include <linux/bitfield.h>
 #include <linux/bits.h>
-#include <linux/cleanup.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/hwmon.h>
@@ -557,40 +556,55 @@ static int cc2_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		    int channel, long *val)
 {
 	struct cc2_data *data = dev_get_drvdata(dev);
+	int ret = 0;
 
-	guard(mutex)(&data->dev_access_lock);
+	mutex_lock(&data->dev_access_lock);
 
 	switch (type) {
 	case hwmon_temp:
-		return cc2_measurement(data, type, val);
+		ret = cc2_measurement(data, type, val);
+		break;
 	case hwmon_humidity:
 		switch (attr) {
 		case hwmon_humidity_input:
-			return cc2_measurement(data, type, val);
+			ret = cc2_measurement(data, type, val);
+			break;
 		case hwmon_humidity_min:
-			return cc2_get_reg_val(data, CC2_R_ALARM_L_ON, val);
+			ret = cc2_get_reg_val(data, CC2_R_ALARM_L_ON, val);
+			break;
 		case hwmon_humidity_min_hyst:
-			return cc2_get_reg_val(data, CC2_R_ALARM_L_OFF, val);
+			ret = cc2_get_reg_val(data, CC2_R_ALARM_L_OFF, val);
+			break;
 		case hwmon_humidity_max:
-			return cc2_get_reg_val(data, CC2_R_ALARM_H_ON, val);
+			ret = cc2_get_reg_val(data, CC2_R_ALARM_H_ON, val);
+			break;
 		case hwmon_humidity_max_hyst:
-			return cc2_get_reg_val(data, CC2_R_ALARM_H_OFF, val);
+			ret = cc2_get_reg_val(data, CC2_R_ALARM_H_OFF, val);
+			break;
 		case hwmon_humidity_min_alarm:
-			return cc2_humidity_min_alarm_status(data, val);
+			ret = cc2_humidity_min_alarm_status(data, val);
+			break;
 		case hwmon_humidity_max_alarm:
-			return cc2_humidity_max_alarm_status(data, val);
+			ret = cc2_humidity_max_alarm_status(data, val);
+			break;
 		default:
-			return -EOPNOTSUPP;
+			ret = -EOPNOTSUPP;
 		}
+		break;
 	default:
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
 	}
+
+	mutex_unlock(&data->dev_access_lock);
+
+	return ret;
 }
 
 static int cc2_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		     int channel, long val)
 {
 	struct cc2_data *data = dev_get_drvdata(dev);
+	int ret;
 	u16 arg;
 	u8 cmd;
 
@@ -600,28 +614,41 @@ static int cc2_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	if (val < 0 || val > CC2_RH_MAX)
 		return -EINVAL;
 
-	guard(mutex)(&data->dev_access_lock);
+	mutex_lock(&data->dev_access_lock);
 
 	switch (attr) {
 	case hwmon_humidity_min:
 		cmd = CC2_W_ALARM_L_ON;
 		arg = cc2_rh_to_reg(val);
-		return cc2_write_reg(data, cmd, arg);
+		ret = cc2_write_reg(data, cmd, arg);
+		break;
+
 	case hwmon_humidity_min_hyst:
 		cmd = CC2_W_ALARM_L_OFF;
 		arg = cc2_rh_to_reg(val);
-		return cc2_write_reg(data, cmd, arg);
+		ret = cc2_write_reg(data, cmd, arg);
+		break;
+
 	case hwmon_humidity_max:
 		cmd = CC2_W_ALARM_H_ON;
 		arg = cc2_rh_to_reg(val);
-		return cc2_write_reg(data, cmd, arg);
+		ret = cc2_write_reg(data, cmd, arg);
+		break;
+
 	case hwmon_humidity_max_hyst:
 		cmd = CC2_W_ALARM_H_OFF;
 		arg = cc2_rh_to_reg(val);
-		return cc2_write_reg(data, cmd, arg);
+		ret = cc2_write_reg(data, cmd, arg);
+		break;
+
 	default:
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
+		break;
 	}
+
+	mutex_unlock(&data->dev_access_lock);
+
+	return ret;
 }
 
 static int cc2_request_ready_irq(struct cc2_data *data, struct device *dev)

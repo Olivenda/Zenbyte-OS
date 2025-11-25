@@ -22,7 +22,6 @@
 #include <linux/errno.h>
 #include <linux/err.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>
@@ -1182,7 +1181,7 @@ static int fsl_vbus_session(struct usb_gadget *gadget, int is_active)
 
 	udc = container_of(gadget, struct fsl_udc, gadget);
 	spin_lock_irqsave(&udc->lock, flags);
-	dev_vdbg(&gadget->dev, "VBUS %s\n", str_on_off(is_active));
+	dev_vdbg(&gadget->dev, "VBUS %s\n", is_active ? "on" : "off");
 	udc->vbus_active = (is_active != 0);
 	if (can_pullup(udc))
 		fsl_writel((fsl_readl(&dr_regs->usbcmd) | USB_CMD_RUN_STOP),
@@ -2686,7 +2685,7 @@ MODULE_DEVICE_TABLE(of, fsl_udc_dt_ids);
 
 static struct platform_driver udc_driver = {
 	.probe		= fsl_udc_probe,
-	.remove		= fsl_udc_remove,
+	.remove_new	= fsl_udc_remove,
 	.id_table	= fsl_udc_devtype,
 	/* these suspend and resume are not usb suspend and resume */
 	.suspend	= fsl_udc_suspend,

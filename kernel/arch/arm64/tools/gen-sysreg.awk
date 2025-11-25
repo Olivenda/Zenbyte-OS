@@ -111,7 +111,7 @@ END {
 /^$/ { next }
 /^[\t ]*#/ { next }
 
-$1 == "SysregFields" && block_current() == "Root" {
+/^SysregFields/ && block_current() == "Root" {
 	block_push("SysregFields")
 
 	expect_fields(2)
@@ -127,8 +127,7 @@ $1 == "SysregFields" && block_current() == "Root" {
 	next
 }
 
-$1 == "EndSysregFields" && block_current() == "SysregFields" {
-	expect_fields(1)
+/^EndSysregFields/ && block_current() == "SysregFields" {
 	if (next_bit > 0)
 		fatal("Unspecified bits in " reg)
 
@@ -146,7 +145,7 @@ $1 == "EndSysregFields" && block_current() == "SysregFields" {
 	next
 }
 
-$1 == "Sysreg" && block_current() == "Root" {
+/^Sysreg/ && block_current() == "Root" {
 	block_push("Sysreg")
 
 	expect_fields(7)
@@ -178,8 +177,7 @@ $1 == "Sysreg" && block_current() == "Root" {
 	next
 }
 
-$1 == "EndSysreg" && block_current() == "Sysreg" {
-	expect_fields(1)
+/^EndSysreg/ && block_current() == "Sysreg" {
 	if (next_bit > 0)
 		fatal("Unspecified bits in " reg)
 
@@ -208,7 +206,7 @@ $1 == "EndSysreg" && block_current() == "Sysreg" {
 
 # Currently this is effectivey a comment, in future we may want to emit
 # defines for the fields.
-($1 == "Fields" || $1 == "Mapping") && block_current() == "Sysreg" {
+/^Fields/ && block_current() == "Sysreg" {
 	expect_fields(2)
 
 	if (next_bit != 63)
@@ -226,7 +224,7 @@ $1 == "EndSysreg" && block_current() == "Sysreg" {
 }
 
 
-$1 == "Res0" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+/^Res0/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(2)
 	parse_bitdef(reg, "RES0", $2)
 	field = "RES0_" msb "_" lsb
@@ -236,7 +234,7 @@ $1 == "Res0" && (block_current() == "Sysreg" || block_current() == "SysregFields
 	next
 }
 
-$1 == "Res1" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+/^Res1/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(2)
 	parse_bitdef(reg, "RES1", $2)
 	field = "RES1_" msb "_" lsb
@@ -246,7 +244,7 @@ $1 == "Res1" && (block_current() == "Sysreg" || block_current() == "SysregFields
 	next
 }
 
-$1 == "Unkn" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+/^Unkn/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(2)
 	parse_bitdef(reg, "UNKN", $2)
 	field = "UNKN_" msb "_" lsb
@@ -256,7 +254,7 @@ $1 == "Unkn" && (block_current() == "Sysreg" || block_current() == "SysregFields
 	next
 }
 
-$1 == "Field" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+/^Field/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(3)
 	field = $3
 	parse_bitdef(reg, field, $2)
@@ -267,14 +265,14 @@ $1 == "Field" && (block_current() == "Sysreg" || block_current() == "SysregField
 	next
 }
 
-$1 == "Raz" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+/^Raz/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(2)
 	parse_bitdef(reg, field, $2)
 
 	next
 }
 
-$1 == "SignedEnum" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+/^SignedEnum/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	block_push("Enum")
 
 	expect_fields(3)
@@ -287,7 +285,7 @@ $1 == "SignedEnum" && (block_current() == "Sysreg" || block_current() == "Sysreg
 	next
 }
 
-$1 == "UnsignedEnum" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+/^UnsignedEnum/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	block_push("Enum")
 
 	expect_fields(3)
@@ -300,7 +298,7 @@ $1 == "UnsignedEnum" && (block_current() == "Sysreg" || block_current() == "Sysr
 	next
 }
 
-$1 == "Enum" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+/^Enum/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	block_push("Enum")
 
 	expect_fields(3)
@@ -312,8 +310,7 @@ $1 == "Enum" && (block_current() == "Sysreg" || block_current() == "SysregFields
 	next
 }
 
-$1 == "EndEnum" && block_current() == "Enum" {
-	expect_fields(1)
+/^EndEnum/ && block_current() == "Enum" {
 
 	field = null
 	msb = null

@@ -7,6 +7,7 @@
 #ifndef PAGE_STATES_H
 #define PAGE_STATES_H
 
+#include <asm/sections.h>
 #include <asm/page.h>
 
 #define ESSA_GET_STATE			0
@@ -20,7 +21,7 @@
 
 #define ESSA_MAX	ESSA_SET_STABLE_NODAT
 
-extern int cmma_flag;
+extern int __bootdata_preserved(cmma_flag);
 
 static __always_inline unsigned long essa(unsigned long paddr, unsigned char cmd)
 {

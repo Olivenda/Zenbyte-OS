@@ -3,7 +3,6 @@
  * Copyright IBM Corp. 2023
  */
 
-#include <linux/export.h>
 #include <asm/facility.h>
 
 unsigned int stfle_size(void)

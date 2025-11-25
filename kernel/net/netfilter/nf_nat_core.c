@@ -69,6 +69,7 @@ static void nf_nat_ipv4_decode_session(struct sk_buff *skb,
 		if (t->dst.protonum == IPPROTO_TCP ||
 		    t->dst.protonum == IPPROTO_UDP ||
 		    t->dst.protonum == IPPROTO_UDPLITE ||
+		    t->dst.protonum == IPPROTO_DCCP ||
 		    t->dst.protonum == IPPROTO_SCTP)
 			fl4->fl4_dport = t->dst.u.all;
 	}
@@ -80,6 +81,7 @@ static void nf_nat_ipv4_decode_session(struct sk_buff *skb,
 		if (t->dst.protonum == IPPROTO_TCP ||
 		    t->dst.protonum == IPPROTO_UDP ||
 		    t->dst.protonum == IPPROTO_UDPLITE ||
+		    t->dst.protonum == IPPROTO_DCCP ||
 		    t->dst.protonum == IPPROTO_SCTP)
 			fl4->fl4_sport = t->src.u.all;
 	}
@@ -100,6 +102,7 @@ static void nf_nat_ipv6_decode_session(struct sk_buff *skb,
 		if (t->dst.protonum == IPPROTO_TCP ||
 		    t->dst.protonum == IPPROTO_UDP ||
 		    t->dst.protonum == IPPROTO_UDPLITE ||
+		    t->dst.protonum == IPPROTO_DCCP ||
 		    t->dst.protonum == IPPROTO_SCTP)
 			fl6->fl6_dport = t->dst.u.all;
 	}
@@ -111,6 +114,7 @@ static void nf_nat_ipv6_decode_session(struct sk_buff *skb,
 		if (t->dst.protonum == IPPROTO_TCP ||
 		    t->dst.protonum == IPPROTO_UDP ||
 		    t->dst.protonum == IPPROTO_UDPLITE ||
+		    t->dst.protonum == IPPROTO_DCCP ||
 		    t->dst.protonum == IPPROTO_SCTP)
 			fl6->fl6_sport = t->src.u.all;
 	}
@@ -428,6 +432,7 @@ static bool l4proto_in_range(const struct nf_conntrack_tuple *tuple,
 	case IPPROTO_TCP:
 	case IPPROTO_UDP:
 	case IPPROTO_UDPLITE:
+	case IPPROTO_DCCP:
 	case IPPROTO_SCTP:
 		if (maniptype == NF_NAT_MANIP_SRC)
 			port = tuple->src.u.all;
@@ -627,6 +632,7 @@ static void nf_nat_l4proto_unique_tuple(struct nf_conntrack_tuple *tuple,
 	case IPPROTO_UDPLITE:
 	case IPPROTO_TCP:
 	case IPPROTO_SCTP:
+	case IPPROTO_DCCP:
 		if (maniptype == NF_NAT_MANIP_SRC)
 			keyptr = &tuple->src.u.all;
 		else
@@ -1090,8 +1096,10 @@ static int nf_nat_ipv4_nlattr_to_range(struct nlattr *tb[],
 		range->flags |= NF_NAT_RANGE_MAP_IPS;
 	}
 
-	range->max_addr.ip = nla_get_be32_default(tb[CTA_NAT_V4_MAXIP],
-						  range->min_addr.ip);
+	if (tb[CTA_NAT_V4_MAXIP])
+		range->max_addr.ip = nla_get_be32(tb[CTA_NAT_V4_MAXIP]);
+	else
+		range->max_addr.ip = range->min_addr.ip;
 
 	return 0;
 }

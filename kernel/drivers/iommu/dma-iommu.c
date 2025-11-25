@@ -24,10 +24,8 @@
 #include <linux/memremap.h>
 #include <linux/mm.h>
 #include <linux/mutex.h>
-#include <linux/msi.h>
 #include <linux/of_iommu.h>
 #include <linux/pci.h>
-#include <linux/pci-p2pdma.h>
 #include <linux/scatterlist.h>
 #include <linux/spinlock.h>
 #include <linux/swiotlb.h>
@@ -43,6 +41,11 @@ struct iommu_dma_msi_page {
 	phys_addr_t		phys;
 };
 
+enum iommu_dma_cookie_type {
+	IOMMU_DMA_IOVA_COOKIE,
+	IOMMU_DMA_MSI_COOKIE,
+};
+
 enum iommu_dma_queue_type {
 	IOMMU_DMA_OPTS_PER_CPU_QUEUE,
 	IOMMU_DMA_OPTS_SINGLE_QUEUE,
@@ -55,30 +58,35 @@ struct iommu_dma_options {
 };
 
 struct iommu_dma_cookie {
-	struct iova_domain iovad;
-	struct list_head msi_page_list;
-	/* Flush queue */
+	enum iommu_dma_cookie_type	type;
 	union {
-		struct iova_fq *single_fq;
-		struct iova_fq __percpu *percpu_fq;
+		/* Full allocator for IOMMU_DMA_IOVA_COOKIE */
+		struct {
+			struct iova_domain	iovad;
+			/* Flush queue */
+			union {
+				struct iova_fq	*single_fq;
+				struct iova_fq	__percpu *percpu_fq;
+			};
+			/* Number of TLB flushes that have been started */
+			atomic64_t		fq_flush_start_cnt;
+			/* Number of TLB flushes that have been finished */
+			atomic64_t		fq_flush_finish_cnt;
+			/* Timer to regularily empty the flush queues */
+			struct timer_list	fq_timer;
+			/* 1 when timer is active, 0 when not */
+			atomic_t		fq_timer_on;
+		};
+		/* Trivial linear page allocator for IOMMU_DMA_MSI_COOKIE */
+		dma_addr_t		msi_iova;
 	};
-	/* Number of TLB flushes that have been started */
-	atomic64_t fq_flush_start_cnt;
-	/* Number of TLB flushes that have been finished */
-	atomic64_t fq_flush_finish_cnt;
-	/* Timer to regularily empty the flush queues */
-	struct timer_list fq_timer;
-	/* 1 when timer is active, 0 when not */
-	atomic_t fq_timer_on;
-	/* Domain for flush queue callback; NULL if flush queue not in use */
-	struct iommu_domain *fq_domain;
-	/* Options for dma-iommu use */
-	struct iommu_dma_options options;
-};
+	struct list_head		msi_page_list;
 
-struct iommu_dma_msi_cookie {
-	dma_addr_t msi_iova;
-	struct list_head msi_page_list;
+	/* Domain for flush queue callback; NULL if flush queue not in use */
+	struct iommu_domain		*fq_domain;
+	/* Options for dma-iommu use */
+	struct iommu_dma_options	options;
+	struct mutex			mutex;
 };
 
 static DEFINE_STATIC_KEY_FALSE(iommu_deferred_attach_enabled);
@@ -106,7 +114,7 @@ early_param("iommu.forcedac", iommu_dma_forcedac_setup);
 struct iova_fq_entry {
 	unsigned long iova_pfn;
 	unsigned long pages;
-	struct iommu_pages_list freelist;
+	struct list_head freelist;
 	u64 counter; /* Flush counter when this entry was added */
 };
 
@@ -155,8 +163,6 @@ static void fq_ring_free_locked(struct iommu_dma_cookie *cookie, struct iova_fq 
 			       fq->entries[idx].iova_pfn,
 			       fq->entries[idx].pages);
 
-		fq->entries[idx].freelist =
-			IOMMU_PAGES_LIST_INIT(fq->entries[idx].freelist);
 		fq->head = (fq->head + 1) & fq->mod_mask;
 	}
 }
@@ -179,8 +185,7 @@ static void fq_flush_iotlb(struct iommu_dma_cookie *cookie)
 
 static void fq_flush_timeout(struct timer_list *t)
 {
-	struct iommu_dma_cookie *cookie = timer_container_of(cookie, t,
-							     fq_timer);
+	struct iommu_dma_cookie *cookie = from_timer(cookie, t, fq_timer);
 	int cpu;
 
 	atomic_set(&cookie->fq_timer_on, 0);
@@ -196,7 +201,7 @@ static void fq_flush_timeout(struct timer_list *t)
 
 static void queue_iova(struct iommu_dma_cookie *cookie,
 		unsigned long pfn, unsigned long pages,
-		struct iommu_pages_list *freelist)
+		struct list_head *freelist)
 {
 	struct iova_fq *fq;
 	unsigned long flags;
@@ -235,7 +240,7 @@ static void queue_iova(struct iommu_dma_cookie *cookie,
 	fq->entries[idx].iova_pfn = pfn;
 	fq->entries[idx].pages    = pages;
 	fq->entries[idx].counter  = atomic64_read(&cookie->fq_flush_start_cnt);
-	iommu_pages_list_splice(freelist, &fq->entries[idx].freelist);
+	list_splice(freelist, &fq->entries[idx].freelist);
 
 	spin_unlock_irqrestore(&fq->lock, flags);
 
@@ -275,7 +280,7 @@ static void iommu_dma_free_fq(struct iommu_dma_cookie *cookie)
 	if (!cookie->fq_domain)
 		return;
 
-	timer_delete_sync(&cookie->fq_timer);
+	del_timer_sync(&cookie->fq_timer);
 	if (cookie->options.qt == IOMMU_DMA_OPTS_SINGLE_QUEUE)
 		iommu_dma_free_fq_single(cookie->single_fq);
 	else
@@ -293,8 +298,7 @@ static void iommu_dma_init_one_fq(struct iova_fq *fq, size_t fq_size)
 	spin_lock_init(&fq->lock);
 
 	for (i = 0; i < fq_size; i++)
-		fq->entries[i].freelist =
-			IOMMU_PAGES_LIST_INIT(fq->entries[i].freelist);
+		INIT_LIST_HEAD(&fq->entries[i].freelist);
 }
 
 static int iommu_dma_init_fq_single(struct iommu_dma_cookie *cookie)
@@ -361,24 +365,39 @@ int iommu_dma_init_fq(struct iommu_domain *domain)
 	return 0;
 }
 
+static inline size_t cookie_msi_granule(struct iommu_dma_cookie *cookie)
+{
+	if (cookie->type == IOMMU_DMA_IOVA_COOKIE)
+		return cookie->iovad.granule;
+	return PAGE_SIZE;
+}
+
+static struct iommu_dma_cookie *cookie_alloc(enum iommu_dma_cookie_type type)
+{
+	struct iommu_dma_cookie *cookie;
+
+	cookie = kzalloc(sizeof(*cookie), GFP_KERNEL);
+	if (cookie) {
+		INIT_LIST_HEAD(&cookie->msi_page_list);
+		cookie->type = type;
+	}
+	return cookie;
+}
+
 /**
  * iommu_get_dma_cookie - Acquire DMA-API resources for a domain
  * @domain: IOMMU domain to prepare for DMA-API usage
  */
 int iommu_get_dma_cookie(struct iommu_domain *domain)
 {
-	struct iommu_dma_cookie *cookie;
-
-	if (domain->cookie_type != IOMMU_COOKIE_NONE)
+	if (domain->iova_cookie)
 		return -EEXIST;
 
-	cookie = kzalloc(sizeof(*cookie), GFP_KERNEL);
-	if (!cookie)
+	domain->iova_cookie = cookie_alloc(IOMMU_DMA_IOVA_COOKIE);
+	if (!domain->iova_cookie)
 		return -ENOMEM;
 
-	INIT_LIST_HEAD(&cookie->msi_page_list);
-	domain->cookie_type = IOMMU_COOKIE_DMA_IOVA;
-	domain->iova_cookie = cookie;
+	mutex_init(&domain->iova_cookie->mutex);
 	return 0;
 }
 
@@ -396,56 +415,48 @@ int iommu_get_dma_cookie(struct iommu_domain *domain)
  */
 int iommu_get_msi_cookie(struct iommu_domain *domain, dma_addr_t base)
 {
-	struct iommu_dma_msi_cookie *cookie;
+	struct iommu_dma_cookie *cookie;
 
 	if (domain->type != IOMMU_DOMAIN_UNMANAGED)
 		return -EINVAL;
 
-	if (domain->cookie_type != IOMMU_COOKIE_NONE)
+	if (domain->iova_cookie)
 		return -EEXIST;
 
-	cookie = kzalloc(sizeof(*cookie), GFP_KERNEL);
+	cookie = cookie_alloc(IOMMU_DMA_MSI_COOKIE);
 	if (!cookie)
 		return -ENOMEM;
 
 	cookie->msi_iova = base;
-	INIT_LIST_HEAD(&cookie->msi_page_list);
-	domain->cookie_type = IOMMU_COOKIE_DMA_MSI;
-	domain->msi_cookie = cookie;
+	domain->iova_cookie = cookie;
 	return 0;
 }
 EXPORT_SYMBOL(iommu_get_msi_cookie);
 
 /**
  * iommu_put_dma_cookie - Release a domain's DMA mapping resources
- * @domain: IOMMU domain previously prepared by iommu_get_dma_cookie()
+ * @domain: IOMMU domain previously prepared by iommu_get_dma_cookie() or
+ *          iommu_get_msi_cookie()
  */
 void iommu_put_dma_cookie(struct iommu_domain *domain)
 {
 	struct iommu_dma_cookie *cookie = domain->iova_cookie;
 	struct iommu_dma_msi_page *msi, *tmp;
 
-	if (cookie->iovad.granule) {
+	if (!cookie)
+		return;
+
+	if (cookie->type == IOMMU_DMA_IOVA_COOKIE && cookie->iovad.granule) {
 		iommu_dma_free_fq(cookie);
 		put_iova_domain(&cookie->iovad);
 	}
-	list_for_each_entry_safe(msi, tmp, &cookie->msi_page_list, list)
-		kfree(msi);
-	kfree(cookie);
-}
 
-/**
- * iommu_put_msi_cookie - Release a domain's MSI mapping resources
- * @domain: IOMMU domain previously prepared by iommu_get_msi_cookie()
- */
-void iommu_put_msi_cookie(struct iommu_domain *domain)
-{
-	struct iommu_dma_msi_cookie *cookie = domain->msi_cookie;
-	struct iommu_dma_msi_page *msi, *tmp;
-
-	list_for_each_entry_safe(msi, tmp, &cookie->msi_page_list, list)
+	list_for_each_entry_safe(msi, tmp, &cookie->msi_page_list, list) {
+		list_del(&msi->list);
 		kfree(msi);
+	}
 	kfree(cookie);
+	domain->iova_cookie = NULL;
 }
 
 /**
@@ -665,7 +676,7 @@ static int iommu_dma_init_domain(struct iommu_domain *domain, struct device *dev
 	struct iova_domain *iovad;
 	int ret;
 
-	if (!cookie || domain->cookie_type != IOMMU_COOKIE_DMA_IOVA)
+	if (!cookie || cookie->type != IOMMU_DMA_IOVA_COOKIE)
 		return -EINVAL;
 
 	iovad = &cookie->iovad;
@@ -687,20 +698,23 @@ static int iommu_dma_init_domain(struct iommu_domain *domain, struct device *dev
 			 domain->geometry.aperture_start >> order);
 
 	/* start_pfn is always nonzero for an already-initialised domain */
+	mutex_lock(&cookie->mutex);
 	if (iovad->start_pfn) {
 		if (1UL << order != iovad->granule ||
 		    base_pfn != iovad->start_pfn) {
 			pr_warn("Incompatible range for DMA domain\n");
-			return -EFAULT;
+			ret = -EFAULT;
+			goto done_unlock;
 		}
 
-		return 0;
+		ret = 0;
+		goto done_unlock;
 	}
 
 	init_iova_domain(iovad, 1UL << order, base_pfn);
 	ret = iova_domain_init_rcaches(iovad);
 	if (ret)
-		return ret;
+		goto done_unlock;
 
 	iommu_dma_init_options(&cookie->options, dev);
 
@@ -709,7 +723,11 @@ static int iommu_dma_init_domain(struct iommu_domain *domain, struct device *dev
 	    (!device_iommu_capable(dev, IOMMU_CAP_DEFERRED_FLUSH) || iommu_dma_init_fq(domain)))
 		domain->type = IOMMU_DOMAIN_DMA;
 
-	return iova_reserve_iommu_regions(dev, domain);
+	ret = iova_reserve_iommu_regions(dev, domain);
+
+done_unlock:
+	mutex_unlock(&cookie->mutex);
+	return ret;
 }
 
 /**
@@ -748,9 +766,9 @@ static dma_addr_t iommu_dma_alloc_iova(struct iommu_domain *domain,
 	struct iova_domain *iovad = &cookie->iovad;
 	unsigned long shift, iova_len, iova;
 
-	if (domain->cookie_type == IOMMU_COOKIE_DMA_MSI) {
-		domain->msi_cookie->msi_iova += size;
-		return domain->msi_cookie->msi_iova - size;
+	if (cookie->type == IOMMU_DMA_MSI_COOKIE) {
+		cookie->msi_iova += size;
+		return cookie->msi_iova - size;
 	}
 
 	shift = iova_shift(iovad);
@@ -787,16 +805,16 @@ done:
 	return (dma_addr_t)iova << shift;
 }
 
-static void iommu_dma_free_iova(struct iommu_domain *domain, dma_addr_t iova,
-				size_t size, struct iommu_iotlb_gather *gather)
+static void iommu_dma_free_iova(struct iommu_dma_cookie *cookie,
+		dma_addr_t iova, size_t size, struct iommu_iotlb_gather *gather)
 {
-	struct iova_domain *iovad = &domain->iova_cookie->iovad;
+	struct iova_domain *iovad = &cookie->iovad;
 
 	/* The MSI case is only ever cleaning up its most recent allocation */
-	if (domain->cookie_type == IOMMU_COOKIE_DMA_MSI)
-		domain->msi_cookie->msi_iova -= size;
+	if (cookie->type == IOMMU_DMA_MSI_COOKIE)
+		cookie->msi_iova -= size;
 	else if (gather && gather->queued)
-		queue_iova(domain->iova_cookie, iova_pfn(iovad, iova),
+		queue_iova(cookie, iova_pfn(iovad, iova),
 				size >> iova_shift(iovad),
 				&gather->freelist);
 	else
@@ -824,7 +842,7 @@ static void __iommu_dma_unmap(struct device *dev, dma_addr_t dma_addr,
 
 	if (!iotlb_gather.queued)
 		iommu_iotlb_sync(domain, &iotlb_gather);
-	iommu_dma_free_iova(domain, dma_addr, size, &iotlb_gather);
+	iommu_dma_free_iova(cookie, dma_addr, size, &iotlb_gather);
 }
 
 static dma_addr_t __iommu_dma_map(struct device *dev, phys_addr_t phys,
@@ -852,7 +870,7 @@ static dma_addr_t __iommu_dma_map(struct device *dev, phys_addr_t phys,
 		return DMA_MAPPING_ERROR;
 
 	if (iommu_map(domain, iova, phys - iova_off, size, prot, GFP_ATOMIC)) {
-		iommu_dma_free_iova(domain, iova, size, NULL);
+		iommu_dma_free_iova(cookie, iova, size, NULL);
 		return DMA_MAPPING_ERROR;
 	}
 	return iova + iova_off;
@@ -989,7 +1007,7 @@ static struct page **__iommu_dma_alloc_noncontiguous(struct device *dev,
 out_free_sg:
 	sg_free_table(sgt);
 out_free_iova:
-	iommu_dma_free_iova(domain, iova, size, NULL);
+	iommu_dma_free_iova(cookie, iova, size, NULL);
 out_free_pages:
 	__iommu_dma_free_pages(pages, count);
 	return NULL;
@@ -1142,54 +1160,6 @@ void iommu_dma_sync_sg_for_device(struct device *dev, struct scatterlist *sgl,
 			arch_sync_dma_for_device(sg_phys(sg), sg->length, dir);
 }
 
-static phys_addr_t iommu_dma_map_swiotlb(struct device *dev, phys_addr_t phys,
-		size_t size, enum dma_data_direction dir, unsigned long attrs)
-{
-	struct iommu_domain *domain = iommu_get_dma_domain(dev);
-	struct iova_domain *iovad = &domain->iova_cookie->iovad;
-
-	if (!is_swiotlb_active(dev)) {
-		dev_warn_once(dev, "DMA bounce buffers are inactive, unable to map unaligned transaction.\n");
-		return (phys_addr_t)DMA_MAPPING_ERROR;
-	}
-
-	trace_swiotlb_bounced(dev, phys, size);
-
-	phys = swiotlb_tbl_map_single(dev, phys, size, iova_mask(iovad), dir,
-			attrs);
-
-	/*
-	 * Untrusted devices should not see padding areas with random leftover
-	 * kernel data, so zero the pre- and post-padding.
-	 * swiotlb_tbl_map_single() has initialized the bounce buffer proper to
-	 * the contents of the original memory buffer.
-	 */
-	if (phys != (phys_addr_t)DMA_MAPPING_ERROR && dev_is_untrusted(dev)) {
-		size_t start, virt = (size_t)phys_to_virt(phys);
-
-		/* Pre-padding */
-		start = iova_align_down(iovad, virt);
-		memset((void *)start, 0, virt - start);
-
-		/* Post-padding */
-		start = virt + size;
-		memset((void *)start, 0, iova_align(iovad, start) - start);
-	}
-
-	return phys;
-}
-
-/*
- * Checks if a physical buffer has unaligned boundaries with respect to
- * the IOMMU granule. Returns non-zero if either the start or end
- * address is not aligned to the granule boundary.
- */
-static inline size_t iova_unaligned(struct iova_domain *iovad, phys_addr_t phys,
-				    size_t size)
-{
-	return iova_offset(iovad, phys | size);
-}
-
 dma_addr_t iommu_dma_map_page(struct device *dev, struct page *page,
 	      unsigned long offset, size_t size, enum dma_data_direction dir,
 	      unsigned long attrs)
@@ -1203,14 +1173,42 @@ dma_addr_t iommu_dma_map_page(struct device *dev, struct page *page,
 	dma_addr_t iova, dma_mask = dma_get_mask(dev);
 
 	/*
-	 * If both the physical buffer start address and size are page aligned,
-	 * we don't need to use a bounce page.
+	 * If both the physical buffer start address and size are
+	 * page aligned, we don't need to use a bounce page.
 	 */
 	if (dev_use_swiotlb(dev, size, dir) &&
-	    iova_unaligned(iovad, phys, size)) {
-		phys = iommu_dma_map_swiotlb(dev, phys, size, dir, attrs);
-		if (phys == (phys_addr_t)DMA_MAPPING_ERROR)
+	    iova_offset(iovad, phys | size)) {
+		if (!is_swiotlb_active(dev)) {
+			dev_warn_once(dev, "DMA bounce buffers are inactive, unable to map unaligned transaction.\n");
 			return DMA_MAPPING_ERROR;
+		}
+
+		trace_swiotlb_bounced(dev, phys, size);
+
+		phys = swiotlb_tbl_map_single(dev, phys, size,
+					      iova_mask(iovad), dir, attrs);
+
+		if (phys == DMA_MAPPING_ERROR)
+			return DMA_MAPPING_ERROR;
+
+		/*
+		 * Untrusted devices should not see padding areas with random
+		 * leftover kernel data, so zero the pre- and post-padding.
+		 * swiotlb_tbl_map_single() has initialized the bounce buffer
+		 * proper to the contents of the original memory buffer.
+		 */
+		if (dev_is_untrusted(dev)) {
+			size_t start, virt = (size_t)phys_to_virt(phys);
+
+			/* Pre-padding */
+			start = iova_align_down(iovad, virt);
+			memset((void *)start, 0, virt - start);
+
+			/* Post-padding */
+			start = virt + size;
+			memset((void *)start, 0,
+			       iova_align(iovad, start) - start);
+		}
 	}
 
 	if (!coherent && !(attrs & DMA_ATTR_SKIP_CPU_SYNC))
@@ -1384,6 +1382,7 @@ int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 	struct scatterlist *s, *prev = NULL;
 	int prot = dma_info_to_prot(dir, dev_is_dma_coherent(dev), attrs);
 	struct pci_p2pdma_map_state p2pdma_state = {};
+	enum pci_p2pdma_map_type map;
 	dma_addr_t iova;
 	size_t iova_len = 0;
 	unsigned long mask = dma_get_seg_boundary(dev);
@@ -1413,30 +1412,28 @@ int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 		size_t s_length = s->length;
 		size_t pad_len = (mask - iova_len + 1) & mask;
 
-		switch (pci_p2pdma_state(&p2pdma_state, dev, sg_page(s))) {
-		case PCI_P2PDMA_MAP_THRU_HOST_BRIDGE:
-			/*
-			 * Mapping through host bridge should be mapped with
-			 * regular IOVAs, thus we do nothing here and continue
-			 * below.
-			 */
-			break;
-		case PCI_P2PDMA_MAP_NONE:
-			break;
-		case PCI_P2PDMA_MAP_BUS_ADDR:
-			/*
-			 * iommu_map_sg() will skip this segment as it is marked
-			 * as a bus address, __finalise_sg() will copy the dma
-			 * address into the output segment.
-			 */
-			s->dma_address = pci_p2pdma_bus_addr_map(&p2pdma_state,
-						sg_phys(s));
-			sg_dma_len(s) = sg->length;
-			sg_dma_mark_bus_address(s);
-			continue;
-		default:
-			ret = -EREMOTEIO;
-			goto out_restore_sg;
+		if (is_pci_p2pdma_page(sg_page(s))) {
+			map = pci_p2pdma_map_segment(&p2pdma_state, dev, s);
+			switch (map) {
+			case PCI_P2PDMA_MAP_BUS_ADDR:
+				/*
+				 * iommu_map_sg() will skip this segment as
+				 * it is marked as a bus address,
+				 * __finalise_sg() will copy the dma address
+				 * into the output segment.
+				 */
+				continue;
+			case PCI_P2PDMA_MAP_THRU_HOST_BRIDGE:
+				/*
+				 * Mapping through host bridge should be
+				 * mapped with regular IOVAs, thus we
+				 * do nothing here and continue below.
+				 */
+				break;
+			default:
+				ret = -EREMOTEIO;
+				goto out_restore_sg;
+			}
 		}
 
 		sg_dma_address(s) = s_iova_off;
@@ -1487,7 +1484,7 @@ int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 	return __finalise_sg(dev, sg, nents, iova);
 
 out_free_iova:
-	iommu_dma_free_iova(domain, iova, iova_len, NULL);
+	iommu_dma_free_iova(cookie, iova, iova_len, NULL);
 out_restore_sg:
 	__invalidate_sg(sg, nents);
 out:
@@ -1747,354 +1744,6 @@ size_t iommu_dma_max_mapping_size(struct device *dev)
 	return SIZE_MAX;
 }
 
-/**
- * dma_iova_try_alloc - Try to allocate an IOVA space
- * @dev: Device to allocate the IOVA space for
- * @state: IOVA state
- * @phys: physical address
- * @size: IOVA size
- *
- * Check if @dev supports the IOVA-based DMA API, and if yes allocate IOVA space
- * for the given base address and size.
- *
- * Note: @phys is only used to calculate the IOVA alignment. Callers that always
- * do PAGE_SIZE aligned transfers can safely pass 0 here.
- *
- * Returns %true if the IOVA-based DMA API can be used and IOVA space has been
- * allocated, or %false if the regular DMA API should be used.
- */
-bool dma_iova_try_alloc(struct device *dev, struct dma_iova_state *state,
-		phys_addr_t phys, size_t size)
-{
-	struct iommu_dma_cookie *cookie;
-	struct iommu_domain *domain;
-	struct iova_domain *iovad;
-	size_t iova_off;
-	dma_addr_t addr;
-
-	memset(state, 0, sizeof(*state));
-	if (!use_dma_iommu(dev))
-		return false;
-
-	domain = iommu_get_dma_domain(dev);
-	cookie = domain->iova_cookie;
-	iovad = &cookie->iovad;
-	iova_off = iova_offset(iovad, phys);
-
-	if (static_branch_unlikely(&iommu_deferred_attach_enabled) &&
-	    iommu_deferred_attach(dev, iommu_get_domain_for_dev(dev)))
-		return false;
-
-	if (WARN_ON_ONCE(!size))
-		return false;
-
-	/*
-	 * DMA_IOVA_USE_SWIOTLB is flag which is set by dma-iommu
-	 * internals, make sure that caller didn't set it and/or
-	 * didn't use this interface to map SIZE_MAX.
-	 */
-	if (WARN_ON_ONCE((u64)size & DMA_IOVA_USE_SWIOTLB))
-		return false;
-
-	addr = iommu_dma_alloc_iova(domain,
-			iova_align(iovad, size + iova_off),
-			dma_get_mask(dev), dev);
-	if (!addr)
-		return false;
-
-	state->addr = addr + iova_off;
-	state->__size = size;
-	return true;
-}
-EXPORT_SYMBOL_GPL(dma_iova_try_alloc);
-
-/**
- * dma_iova_free - Free an IOVA space
- * @dev: Device to free the IOVA space for
- * @state: IOVA state
- *
- * Undoes a successful dma_try_iova_alloc().
- *
- * Note that all dma_iova_link() calls need to be undone first.  For callers
- * that never call dma_iova_unlink(), dma_iova_destroy() can be used instead
- * which unlinks all ranges and frees the IOVA space in a single efficient
- * operation.
- */
-void dma_iova_free(struct device *dev, struct dma_iova_state *state)
-{
-	struct iommu_domain *domain = iommu_get_dma_domain(dev);
-	struct iommu_dma_cookie *cookie = domain->iova_cookie;
-	struct iova_domain *iovad = &cookie->iovad;
-	size_t iova_start_pad = iova_offset(iovad, state->addr);
-	size_t size = dma_iova_size(state);
-
-	iommu_dma_free_iova(domain, state->addr - iova_start_pad,
-			iova_align(iovad, size + iova_start_pad), NULL);
-}
-EXPORT_SYMBOL_GPL(dma_iova_free);
-
-static int __dma_iova_link(struct device *dev, dma_addr_t addr,
-		phys_addr_t phys, size_t size, enum dma_data_direction dir,
-		unsigned long attrs)
-{
-	bool coherent = dev_is_dma_coherent(dev);
-
-	if (!coherent && !(attrs & DMA_ATTR_SKIP_CPU_SYNC))
-		arch_sync_dma_for_device(phys, size, dir);
-
-	return iommu_map_nosync(iommu_get_dma_domain(dev), addr, phys, size,
-			dma_info_to_prot(dir, coherent, attrs), GFP_ATOMIC);
-}
-
-static int iommu_dma_iova_bounce_and_link(struct device *dev, dma_addr_t addr,
-		phys_addr_t phys, size_t bounce_len,
-		enum dma_data_direction dir, unsigned long attrs,
-		size_t iova_start_pad)
-{
-	struct iommu_domain *domain = iommu_get_dma_domain(dev);
-	struct iova_domain *iovad = &domain->iova_cookie->iovad;
-	phys_addr_t bounce_phys;
-	int error;
-
-	bounce_phys = iommu_dma_map_swiotlb(dev, phys, bounce_len, dir, attrs);
-	if (bounce_phys == DMA_MAPPING_ERROR)
-		return -ENOMEM;
-
-	error = __dma_iova_link(dev, addr - iova_start_pad,
-			bounce_phys - iova_start_pad,
-			iova_align(iovad, bounce_len), dir, attrs);
-	if (error)
-		swiotlb_tbl_unmap_single(dev, bounce_phys, bounce_len, dir,
-				attrs);
-	return error;
-}
-
-static int iommu_dma_iova_link_swiotlb(struct device *dev,
-		struct dma_iova_state *state, phys_addr_t phys, size_t offset,
-		size_t size, enum dma_data_direction dir, unsigned long attrs)
-{
-	struct iommu_domain *domain = iommu_get_dma_domain(dev);
-	struct iommu_dma_cookie *cookie = domain->iova_cookie;
-	struct iova_domain *iovad = &cookie->iovad;
-	size_t iova_start_pad = iova_offset(iovad, phys);
-	size_t iova_end_pad = iova_offset(iovad, phys + size);
-	dma_addr_t addr = state->addr + offset;
-	size_t mapped = 0;
-	int error;
-
-	if (iova_start_pad) {
-		size_t bounce_len = min(size, iovad->granule - iova_start_pad);
-
-		error = iommu_dma_iova_bounce_and_link(dev, addr, phys,
-				bounce_len, dir, attrs, iova_start_pad);
-		if (error)
-			return error;
-		state->__size |= DMA_IOVA_USE_SWIOTLB;
-
-		mapped += bounce_len;
-		size -= bounce_len;
-		if (!size)
-			return 0;
-	}
-
-	size -= iova_end_pad;
-	error = __dma_iova_link(dev, addr + mapped, phys + mapped, size, dir,
-			attrs);
-	if (error)
-		goto out_unmap;
-	mapped += size;
-
-	if (iova_end_pad) {
-		error = iommu_dma_iova_bounce_and_link(dev, addr + mapped,
-				phys + mapped, iova_end_pad, dir, attrs, 0);
-		if (error)
-			goto out_unmap;
-		state->__size |= DMA_IOVA_USE_SWIOTLB;
-	}
-
-	return 0;
-
-out_unmap:
-	dma_iova_unlink(dev, state, 0, mapped, dir, attrs);
-	return error;
-}
-
-/**
- * dma_iova_link - Link a range of IOVA space
- * @dev: DMA device
- * @state: IOVA state
- * @phys: physical address to link
- * @offset: offset into the IOVA state to map into
- * @size: size of the buffer
- * @dir: DMA direction
- * @attrs: attributes of mapping properties
- *
- * Link a range of IOVA space for the given IOVA state without IOTLB sync.
- * This function is used to link multiple physical addresses in contiguous
- * IOVA space without performing costly IOTLB sync.
- *
- * The caller is responsible to call to dma_iova_sync() to sync IOTLB at
- * the end of linkage.
- */
-int dma_iova_link(struct device *dev, struct dma_iova_state *state,
-		phys_addr_t phys, size_t offset, size_t size,
-		enum dma_data_direction dir, unsigned long attrs)
-{
-	struct iommu_domain *domain = iommu_get_dma_domain(dev);
-	struct iommu_dma_cookie *cookie = domain->iova_cookie;
-	struct iova_domain *iovad = &cookie->iovad;
-	size_t iova_start_pad = iova_offset(iovad, phys);
-
-	if (WARN_ON_ONCE(iova_start_pad && offset > 0))
-		return -EIO;
-
-	if (dev_use_swiotlb(dev, size, dir) &&
-	    iova_unaligned(iovad, phys, size))
-		return iommu_dma_iova_link_swiotlb(dev, state, phys, offset,
-				size, dir, attrs);
-
-	return __dma_iova_link(dev, state->addr + offset - iova_start_pad,
-			phys - iova_start_pad,
-			iova_align(iovad, size + iova_start_pad), dir, attrs);
-}
-EXPORT_SYMBOL_GPL(dma_iova_link);
-
-/**
- * dma_iova_sync - Sync IOTLB
- * @dev: DMA device
- * @state: IOVA state
- * @offset: offset into the IOVA state to sync
- * @size: size of the buffer
- *
- * Sync IOTLB for the given IOVA state. This function should be called on
- * the IOVA-contiguous range created by one ore more dma_iova_link() calls
- * to sync the IOTLB.
- */
-int dma_iova_sync(struct device *dev, struct dma_iova_state *state,
-		size_t offset, size_t size)
-{
-	struct iommu_domain *domain = iommu_get_dma_domain(dev);
-	struct iommu_dma_cookie *cookie = domain->iova_cookie;
-	struct iova_domain *iovad = &cookie->iovad;
-	dma_addr_t addr = state->addr + offset;
-	size_t iova_start_pad = iova_offset(iovad, addr);
-
-	return iommu_sync_map(domain, addr - iova_start_pad,
-		      iova_align(iovad, size + iova_start_pad));
-}
-EXPORT_SYMBOL_GPL(dma_iova_sync);
-
-static void iommu_dma_iova_unlink_range_slow(struct device *dev,
-		dma_addr_t addr, size_t size, enum dma_data_direction dir,
-		unsigned long attrs)
-{
-	struct iommu_domain *domain = iommu_get_dma_domain(dev);
-	struct iommu_dma_cookie *cookie = domain->iova_cookie;
-	struct iova_domain *iovad = &cookie->iovad;
-	size_t iova_start_pad = iova_offset(iovad, addr);
-	dma_addr_t end = addr + size;
-
-	do {
-		phys_addr_t phys;
-		size_t len;
-
-		phys = iommu_iova_to_phys(domain, addr);
-		if (WARN_ON(!phys))
-			/* Something very horrible happen here */
-			return;
-
-		len = min_t(size_t,
-			end - addr, iovad->granule - iova_start_pad);
-
-		if (!dev_is_dma_coherent(dev) &&
-		    !(attrs & DMA_ATTR_SKIP_CPU_SYNC))
-			arch_sync_dma_for_cpu(phys, len, dir);
-
-		swiotlb_tbl_unmap_single(dev, phys, len, dir, attrs);
-
-		addr += len;
-		iova_start_pad = 0;
-	} while (addr < end);
-}
-
-static void __iommu_dma_iova_unlink(struct device *dev,
-		struct dma_iova_state *state, size_t offset, size_t size,
-		enum dma_data_direction dir, unsigned long attrs,
-		bool free_iova)
-{
-	struct iommu_domain *domain = iommu_get_dma_domain(dev);
-	struct iommu_dma_cookie *cookie = domain->iova_cookie;
-	struct iova_domain *iovad = &cookie->iovad;
-	dma_addr_t addr = state->addr + offset;
-	size_t iova_start_pad = iova_offset(iovad, addr);
-	struct iommu_iotlb_gather iotlb_gather;
-	size_t unmapped;
-
-	if ((state->__size & DMA_IOVA_USE_SWIOTLB) ||
-	    (!dev_is_dma_coherent(dev) && !(attrs & DMA_ATTR_SKIP_CPU_SYNC)))
-		iommu_dma_iova_unlink_range_slow(dev, addr, size, dir, attrs);
-
-	iommu_iotlb_gather_init(&iotlb_gather);
-	iotlb_gather.queued = free_iova && READ_ONCE(cookie->fq_domain);
-
-	size = iova_align(iovad, size + iova_start_pad);
-	addr -= iova_start_pad;
-	unmapped = iommu_unmap_fast(domain, addr, size, &iotlb_gather);
-	WARN_ON(unmapped != size);
-
-	if (!iotlb_gather.queued)
-		iommu_iotlb_sync(domain, &iotlb_gather);
-	if (free_iova)
-		iommu_dma_free_iova(domain, addr, size, &iotlb_gather);
-}
-
-/**
- * dma_iova_unlink - Unlink a range of IOVA space
- * @dev: DMA device
- * @state: IOVA state
- * @offset: offset into the IOVA state to unlink
- * @size: size of the buffer
- * @dir: DMA direction
- * @attrs: attributes of mapping properties
- *
- * Unlink a range of IOVA space for the given IOVA state.
- */
-void dma_iova_unlink(struct device *dev, struct dma_iova_state *state,
-		size_t offset, size_t size, enum dma_data_direction dir,
-		unsigned long attrs)
-{
-	 __iommu_dma_iova_unlink(dev, state, offset, size, dir, attrs, false);
-}
-EXPORT_SYMBOL_GPL(dma_iova_unlink);
-
-/**
- * dma_iova_destroy - Finish a DMA mapping transaction
- * @dev: DMA device
- * @state: IOVA state
- * @mapped_len: number of bytes to unmap
- * @dir: DMA direction
- * @attrs: attributes of mapping properties
- *
- * Unlink the IOVA range up to @mapped_len and free the entire IOVA space. The
- * range of IOVA from dma_addr to @mapped_len must all be linked, and be the
- * only linked IOVA in state.
- */
-void dma_iova_destroy(struct device *dev, struct dma_iova_state *state,
-		size_t mapped_len, enum dma_data_direction dir,
-		unsigned long attrs)
-{
-	if (mapped_len)
-		__iommu_dma_iova_unlink(dev, state, 0, mapped_len, dir, attrs,
-				true);
-	else
-		/*
-		 * We can be here if first call to dma_iova_link() failed and
-		 * there is nothing to unlink, so let's be more clear.
-		 */
-		dma_iova_free(dev, state);
-}
-EXPORT_SYMBOL_GPL(dma_iova_destroy);
-
 void iommu_setup_dma_ops(struct device *dev)
 {
 	struct iommu_domain *domain = iommu_get_domain_for_dev(dev);
@@ -2113,47 +1762,17 @@ out_err:
 	dev->dma_iommu = false;
 }
 
-static bool has_msi_cookie(const struct iommu_domain *domain)
-{
-	return domain && (domain->cookie_type == IOMMU_COOKIE_DMA_IOVA ||
-			  domain->cookie_type == IOMMU_COOKIE_DMA_MSI);
-}
-
-static size_t cookie_msi_granule(const struct iommu_domain *domain)
-{
-	switch (domain->cookie_type) {
-	case IOMMU_COOKIE_DMA_IOVA:
-		return domain->iova_cookie->iovad.granule;
-	case IOMMU_COOKIE_DMA_MSI:
-		return PAGE_SIZE;
-	default:
-		BUG();
-	}
-}
-
-static struct list_head *cookie_msi_pages(const struct iommu_domain *domain)
-{
-	switch (domain->cookie_type) {
-	case IOMMU_COOKIE_DMA_IOVA:
-		return &domain->iova_cookie->msi_page_list;
-	case IOMMU_COOKIE_DMA_MSI:
-		return &domain->msi_cookie->msi_page_list;
-	default:
-		BUG();
-	}
-}
-
 static struct iommu_dma_msi_page *iommu_dma_get_msi_page(struct device *dev,
 		phys_addr_t msi_addr, struct iommu_domain *domain)
 {
-	struct list_head *msi_page_list = cookie_msi_pages(domain);
+	struct iommu_dma_cookie *cookie = domain->iova_cookie;
 	struct iommu_dma_msi_page *msi_page;
 	dma_addr_t iova;
 	int prot = IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO;
-	size_t size = cookie_msi_granule(domain);
+	size_t size = cookie_msi_granule(cookie);
 
 	msi_addr &= ~(phys_addr_t)(size - 1);
-	list_for_each_entry(msi_page, msi_page_list, list)
+	list_for_each_entry(msi_page, &cookie->msi_page_list, list)
 		if (msi_page->phys == msi_addr)
 			return msi_page;
 
@@ -2171,35 +1790,68 @@ static struct iommu_dma_msi_page *iommu_dma_get_msi_page(struct device *dev,
 	INIT_LIST_HEAD(&msi_page->list);
 	msi_page->phys = msi_addr;
 	msi_page->iova = iova;
-	list_add(&msi_page->list, msi_page_list);
+	list_add(&msi_page->list, &cookie->msi_page_list);
 	return msi_page;
 
 out_free_iova:
-	iommu_dma_free_iova(domain, iova, size, NULL);
+	iommu_dma_free_iova(cookie, iova, size, NULL);
 out_free_page:
 	kfree(msi_page);
 	return NULL;
 }
 
-int iommu_dma_sw_msi(struct iommu_domain *domain, struct msi_desc *desc,
-		     phys_addr_t msi_addr)
+/**
+ * iommu_dma_prepare_msi() - Map the MSI page in the IOMMU domain
+ * @desc: MSI descriptor, will store the MSI page
+ * @msi_addr: MSI target address to be mapped
+ *
+ * Return: 0 on success or negative error code if the mapping failed.
+ */
+int iommu_dma_prepare_msi(struct msi_desc *desc, phys_addr_t msi_addr)
 {
 	struct device *dev = msi_desc_to_dev(desc);
-	const struct iommu_dma_msi_page *msi_page;
+	struct iommu_domain *domain = iommu_get_domain_for_dev(dev);
+	struct iommu_dma_msi_page *msi_page;
+	static DEFINE_MUTEX(msi_prepare_lock); /* see below */
 
-	if (!has_msi_cookie(domain)) {
+	if (!domain || !domain->iova_cookie) {
 		msi_desc_set_iommu_msi_iova(desc, 0, 0);
 		return 0;
 	}
 
-	iommu_group_mutex_assert(dev);
+	/*
+	 * In fact the whole prepare operation should already be serialised by
+	 * irq_domain_mutex further up the callchain, but that's pretty subtle
+	 * on its own, so consider this locking as failsafe documentation...
+	 */
+	mutex_lock(&msi_prepare_lock);
 	msi_page = iommu_dma_get_msi_page(dev, msi_addr, domain);
+	mutex_unlock(&msi_prepare_lock);
 	if (!msi_page)
 		return -ENOMEM;
 
-	msi_desc_set_iommu_msi_iova(desc, msi_page->iova,
-				    ilog2(cookie_msi_granule(domain)));
+	msi_desc_set_iommu_msi_iova(
+		desc, msi_page->iova,
+		ilog2(cookie_msi_granule(domain->iova_cookie)));
 	return 0;
+}
+
+/**
+ * iommu_dma_compose_msi_msg() - Apply translation to an MSI message
+ * @desc: MSI descriptor prepared by iommu_dma_prepare_msi()
+ * @msg: MSI message containing target physical address
+ */
+void iommu_dma_compose_msi_msg(struct msi_desc *desc, struct msi_msg *msg)
+{
+#ifdef CONFIG_IRQ_MSI_IOMMU
+	if (desc->iommu_msi_shift) {
+		u64 msi_iova = desc->iommu_msi_iova << desc->iommu_msi_shift;
+
+		msg->address_hi = upper_32_bits(msi_iova);
+		msg->address_lo = lower_32_bits(msi_iova) |
+				  (msg->address_lo & ((1 << desc->iommu_msi_shift) - 1));
+	}
+#endif
 }
 
 static int iommu_dma_init(void)

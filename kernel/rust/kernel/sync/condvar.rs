@@ -8,15 +8,16 @@
 use super::{lock::Backend, lock::Guard, LockClassKey};
 use crate::{
     ffi::{c_int, c_long},
+    init::PinInit,
+    pin_init,
     str::CStr,
-    task::{
-        MAX_SCHEDULE_TIMEOUT, TASK_FREEZABLE, TASK_INTERRUPTIBLE, TASK_NORMAL, TASK_UNINTERRUPTIBLE,
-    },
+    task::{MAX_SCHEDULE_TIMEOUT, TASK_INTERRUPTIBLE, TASK_NORMAL, TASK_UNINTERRUPTIBLE},
     time::Jiffies,
     types::Opaque,
 };
-use core::{marker::PhantomPinned, pin::Pin, ptr};
-use pin_init::{pin_data, pin_init, PinInit};
+use core::marker::PhantomPinned;
+use core::ptr;
+use macros::pin_data;
 
 /// Creates a [`CondVar`] initialiser with the given name and a newly-created lock class.
 #[macro_export]
@@ -36,7 +37,7 @@ pub use new_condvar;
 /// spuriously.
 ///
 /// Instances of [`CondVar`] need a lock class and to be pinned. The recommended way to create such
-/// instances is with the [`pin_init`](pin_init::pin_init!) and [`new_condvar`] macros.
+/// instances is with the [`pin_init`](crate::pin_init) and [`new_condvar`] macros.
 ///
 /// # Examples
 ///
@@ -100,7 +101,7 @@ unsafe impl Sync for CondVar {}
 
 impl CondVar {
     /// Constructs a new condvar initialiser.
-    pub fn new(name: &'static CStr, key: Pin<&'static LockClassKey>) -> impl PinInit<Self> {
+    pub fn new(name: &'static CStr, key: &'static LockClassKey) -> impl PinInit<Self> {
         pin_init!(Self {
             _pin: PhantomPinned,
             // SAFETY: `slot` is valid while the closure is called and both `name` and `key` have
@@ -158,25 +159,6 @@ impl CondVar {
         crate::current!().signal_pending()
     }
 
-    /// Releases the lock and waits for a notification in interruptible and freezable mode.
-    ///
-    /// The process is allowed to be frozen during this sleep. No lock should be held when calling
-    /// this function, and there is a lockdep assertion for this. Freezing a task that holds a lock
-    /// can trivially deadlock vs another task that needs that lock to complete before it too can
-    /// hit freezable.
-    #[must_use = "wait_interruptible_freezable returns if a signal is pending, so the caller must check the return value"]
-    pub fn wait_interruptible_freezable<T: ?Sized, B: Backend>(
-        &self,
-        guard: &mut Guard<'_, T, B>,
-    ) -> bool {
-        self.wait_internal(
-            TASK_INTERRUPTIBLE | TASK_FREEZABLE,
-            guard,
-            MAX_SCHEDULE_TIMEOUT,
-        );
-        crate::current!().signal_pending()
-    }
-
     /// Releases the lock and waits for a notification in interruptible mode.
     ///
     /// Atomically releases the given lock (whose ownership is proven by the guard) and puts the
@@ -216,7 +198,6 @@ impl CondVar {
     /// This method behaves like `notify_one`, except that it hints to the scheduler that the
     /// current thread is about to go to sleep, so it should schedule the target thread on the same
     /// CPU.
-    #[inline]
     pub fn notify_sync(&self) {
         // SAFETY: `wait_queue_head` points to valid memory.
         unsafe { bindings::__wake_up_sync(self.wait_queue_head.get(), TASK_NORMAL) };
@@ -226,7 +207,6 @@ impl CondVar {
     ///
     /// This is not 'sticky' in the sense that if no thread is waiting, the notification is lost
     /// completely (as opposed to automatically waking up the next waiter).
-    #[inline]
     pub fn notify_one(&self) {
         self.notify(1);
     }
@@ -235,7 +215,6 @@ impl CondVar {
     ///
     /// This is not 'sticky' in the sense that if no thread is waiting, the notification is lost
     /// completely (as opposed to automatically waking up the next waiter).
-    #[inline]
     pub fn notify_all(&self) {
         self.notify(0);
     }

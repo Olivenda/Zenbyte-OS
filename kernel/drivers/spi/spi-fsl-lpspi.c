@@ -86,8 +86,7 @@
 #define SR_CLEAR_MASK	GENMASK(13, 8)
 
 struct fsl_lpspi_devtype_data {
-	u8 prescale_max : 3; /* 0 == no limit */
-	bool query_hw_for_num_cs : 1;
+	u8 prescale_max;
 };
 
 struct lpspi_config {
@@ -96,7 +95,6 @@ struct lpspi_config {
 	u8 prescale;
 	u16 mode;
 	u32 speed_hz;
-	u32 effective_speed_hz;
 };
 
 struct fsl_lpspi_data {
@@ -133,26 +131,20 @@ struct fsl_lpspi_data {
 };
 
 /*
- * Devices with ERR051608 have a max TCR_PRESCALE value of 1, otherwise there is
- * no prescale limit: https://www.nxp.com/docs/en/errata/i.MX93_1P87f.pdf
+ * ERR051608 fixed or not:
+ * https://www.nxp.com/docs/en/errata/i.MX93_1P87f.pdf
  */
-static const struct fsl_lpspi_devtype_data imx93_lpspi_devtype_data = {
+static struct fsl_lpspi_devtype_data imx93_lpspi_devtype_data = {
 	.prescale_max = 1,
-	.query_hw_for_num_cs = true,
 };
 
-static const struct fsl_lpspi_devtype_data imx7ulp_lpspi_devtype_data = {
-	/* All defaults */
-};
-
-static const struct fsl_lpspi_devtype_data s32g_lpspi_devtype_data = {
-	.query_hw_for_num_cs = true,
+static struct fsl_lpspi_devtype_data imx7ulp_lpspi_devtype_data = {
+	.prescale_max = 7,
 };
 
 static const struct of_device_id fsl_lpspi_dt_ids[] = {
 	{ .compatible = "fsl,imx7ulp-spi", .data = &imx7ulp_lpspi_devtype_data,},
 	{ .compatible = "fsl,imx93-spi", .data = &imx93_lpspi_devtype_data,},
-	{ .compatible = "nxp,s32g2-lpspi", .data = &s32g_lpspi_devtype_data,},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, fsl_lpspi_dt_ids);
@@ -243,6 +235,7 @@ static int lpspi_unprepare_xfer_hardware(struct spi_controller *controller)
 	struct fsl_lpspi_data *fsl_lpspi =
 				spi_controller_get_devdata(controller);
 
+	pm_runtime_mark_last_busy(fsl_lpspi->dev);
 	pm_runtime_put_autosuspend(fsl_lpspi->dev);
 
 	return 0;
@@ -331,7 +324,7 @@ static int fsl_lpspi_set_bitrate(struct fsl_lpspi_data *fsl_lpspi)
 	int scldiv;
 
 	perclk_rate = clk_get_rate(fsl_lpspi->clk_per);
-	prescale_max = fsl_lpspi->devtype_data->prescale_max ?: 7;
+	prescale_max = fsl_lpspi->devtype_data->prescale_max;
 
 	if (!config.speed_hz) {
 		dev_err(fsl_lpspi->dev,
@@ -359,10 +352,7 @@ static int fsl_lpspi_set_bitrate(struct fsl_lpspi_data *fsl_lpspi)
 	writel(scldiv | (scldiv << 8) | ((scldiv >> 1) << 16),
 					fsl_lpspi->base + IMX7ULP_CCR);
 
-	fsl_lpspi->config.effective_speed_hz = perclk_rate / (scldiv + 2) *
-					       (1 << prescale);
-
-	dev_dbg(fsl_lpspi->dev, "perclk=%u, speed=%u, prescale=%u, scldiv=%d\n",
+	dev_dbg(fsl_lpspi->dev, "perclk=%d, speed=%d, prescale=%d, scldiv=%d\n",
 		perclk_rate, config.speed_hz, prescale, scldiv);
 
 	return 0;
@@ -580,7 +570,7 @@ static int fsl_lpspi_calculate_timeout(struct fsl_lpspi_data *fsl_lpspi,
 	timeout += 1;
 
 	/* Double calculated timeout */
-	return secs_to_jiffies(2 * timeout);
+	return msecs_to_jiffies(2 * timeout * MSEC_PER_SEC);
 }
 
 static int fsl_lpspi_dma_transfer(struct spi_controller *controller,
@@ -760,8 +750,6 @@ static int fsl_lpspi_transfer_one(struct spi_controller *controller,
 	if (ret < 0)
 		return ret;
 
-	t->effective_speed_hz = fsl_lpspi->config.effective_speed_hz;
-
 	fsl_lpspi_set_cmd(fsl_lpspi);
 	fsl_lpspi->is_first_byte = false;
 
@@ -939,7 +927,7 @@ static int fsl_lpspi_probe(struct platform_device *pdev)
 	fsl_lpspi->rxfifosize = 1 << ((temp >> 8) & 0x0f);
 	if (of_property_read_u32((&pdev->dev)->of_node, "num-cs",
 				 &num_cs)) {
-		if (devtype_data->query_hw_for_num_cs)
+		if (of_device_is_compatible(pdev->dev.of_node, "fsl,imx93-spi"))
 			num_cs = ((temp >> 16) & 0xf);
 		else
 			num_cs = 1;
@@ -972,6 +960,7 @@ static int fsl_lpspi_probe(struct platform_device *pdev)
 		goto free_dma;
 	}
 
+	pm_runtime_mark_last_busy(fsl_lpspi->dev);
 	pm_runtime_put_autosuspend(fsl_lpspi->dev);
 
 	return 0;
@@ -1032,7 +1021,7 @@ static struct platform_driver fsl_lpspi_driver = {
 		.pm = pm_ptr(&fsl_lpspi_pm_ops),
 	},
 	.probe = fsl_lpspi_probe,
-	.remove = fsl_lpspi_remove,
+	.remove_new = fsl_lpspi_remove,
 };
 module_platform_driver(fsl_lpspi_driver);
 

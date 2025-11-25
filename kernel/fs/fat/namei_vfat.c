@@ -43,13 +43,17 @@ static inline void vfat_d_version_set(struct dentry *dentry,
  * If it happened, the negative dentry isn't actually negative
  * anymore.  So, drop it.
  */
-static bool vfat_revalidate_shortname(struct dentry *dentry, struct inode *dir)
+static int vfat_revalidate_shortname(struct dentry *dentry)
 {
-	return inode_eq_iversion(dir, vfat_d_version(dentry));
+	int ret = 1;
+	spin_lock(&dentry->d_lock);
+	if (!inode_eq_iversion(d_inode(dentry->d_parent), vfat_d_version(dentry)))
+		ret = 0;
+	spin_unlock(&dentry->d_lock);
+	return ret;
 }
 
-static int vfat_revalidate(struct inode *dir, const struct qstr *name,
-			   struct dentry *dentry, unsigned int flags)
+static int vfat_revalidate(struct dentry *dentry, unsigned int flags)
 {
 	if (flags & LOOKUP_RCU)
 		return -ECHILD;
@@ -57,11 +61,10 @@ static int vfat_revalidate(struct inode *dir, const struct qstr *name,
 	/* This is not negative dentry. Always valid. */
 	if (d_really_is_positive(dentry))
 		return 1;
-	return vfat_revalidate_shortname(dentry, dir);
+	return vfat_revalidate_shortname(dentry);
 }
 
-static int vfat_revalidate_ci(struct inode *dir, const struct qstr *name,
-			      struct dentry *dentry, unsigned int flags)
+static int vfat_revalidate_ci(struct dentry *dentry, unsigned int flags)
 {
 	if (flags & LOOKUP_RCU)
 		return -ECHILD;
@@ -94,7 +97,7 @@ static int vfat_revalidate_ci(struct inode *dir, const struct qstr *name,
 	if (flags & (LOOKUP_CREATE | LOOKUP_RENAME_TARGET))
 		return 0;
 
-	return vfat_revalidate_shortname(dentry, dir);
+	return vfat_revalidate_shortname(dentry);
 }
 
 /* returns the length of a struct qstr, ignoring trailing dots */
@@ -841,8 +844,8 @@ out:
 	return err;
 }
 
-static struct dentry *vfat_mkdir(struct mnt_idmap *idmap, struct inode *dir,
-				  struct dentry *dentry, umode_t mode)
+static int vfat_mkdir(struct mnt_idmap *idmap, struct inode *dir,
+		      struct dentry *dentry, umode_t mode)
 {
 	struct super_block *sb = dir->i_sb;
 	struct inode *inode;
@@ -877,13 +880,13 @@ static struct dentry *vfat_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	d_instantiate(dentry, inode);
 
 	mutex_unlock(&MSDOS_SB(sb)->s_lock);
-	return NULL;
+	return 0;
 
 out_free:
 	fat_free_clusters(dir, cluster);
 out:
 	mutex_unlock(&MSDOS_SB(sb)->s_lock);
-	return ERR_PTR(err);
+	return err;
 }
 
 static int vfat_get_dotdot_de(struct inode *inode, struct buffer_head **bh,
@@ -1187,9 +1190,9 @@ static void setup(struct super_block *sb)
 {
 	MSDOS_SB(sb)->dir_ops = &vfat_dir_inode_operations;
 	if (MSDOS_SB(sb)->options.name_check != 's')
-		set_default_d_op(sb, &vfat_ci_dentry_ops);
+		sb->s_d_op = &vfat_ci_dentry_ops;
 	else
-		set_default_d_op(sb, &vfat_dentry_ops);
+		sb->s_d_op = &vfat_dentry_ops;
 }
 
 static int vfat_fill_super(struct super_block *sb, struct fs_context *fc)

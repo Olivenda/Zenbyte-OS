@@ -202,7 +202,6 @@ int hsr_add_port(struct hsr_priv *hsr, struct net_device *dev,
 	port->hsr = hsr;
 	port->dev = dev;
 	port->type = type;
-	ether_addr_copy(port->original_macaddress, dev->dev_addr);
 
 	if (type != HSR_PT_MASTER) {
 		res = hsr_portdev_setup(hsr, dev, port, extack);
@@ -211,6 +210,7 @@ int hsr_add_port(struct hsr_priv *hsr, struct net_device *dev,
 	}
 
 	list_add_tail_rcu(&port->port_list, &hsr->ports);
+	synchronize_rcu();
 
 	master = hsr_port_get_hsr(hsr, HSR_PT_MASTER);
 	netdev_update_features(master->dev);
@@ -239,8 +239,9 @@ void hsr_del_port(struct hsr_port *port)
 		if (!port->hsr->fwd_offloaded)
 			dev_set_promiscuity(port->dev, -1);
 		netdev_upper_dev_unlink(port->dev, master->dev);
-		eth_hw_addr_set(port->dev, port->original_macaddress);
 	}
 
-	kfree_rcu(port, rcu);
+	synchronize_rcu();
+
+	kfree(port);
 }

@@ -12,12 +12,13 @@
 
 check_vmlinux()
 {
-	if file "$1" | grep -q 'Linux kernel.*boot executable' ||
-		readelf -h "$1" > /dev/null 2>&1
-	then
-		cat "$1"
-		exit 0
-	fi
+	# Use readelf to check if it's a valid ELF
+	# TODO: find a better to way to check that it's really vmlinux
+	#       and not just an elf
+	readelf -h $1 > /dev/null 2>&1 || return 1
+
+	cat $1
+	exit 0
 }
 
 try_decompress()

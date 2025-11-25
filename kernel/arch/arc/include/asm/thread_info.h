@@ -24,7 +24,7 @@
 #define THREAD_SIZE     (PAGE_SIZE << THREAD_SIZE_ORDER)
 #define THREAD_SHIFT	(PAGE_SHIFT << THREAD_SIZE_ORDER)
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/thread_info.h>
 
@@ -62,7 +62,7 @@ static inline __attribute_const__ struct thread_info *current_thread_info(void)
 	return (struct thread_info *)(sp & ~(THREAD_SIZE - 1));
 }
 
-#endif /* !__ASSEMBLER__ */
+#endif /* !__ASSEMBLY__ */
 
 /*
  * thread information flags

@@ -21,7 +21,6 @@
 #include <linux/of_platform.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
-#include <linux/string_choices.h>
 #include <linux/dma-mapping.h>
 #include <linux/usb/usb_phy_generic.h>
 
@@ -123,8 +122,7 @@ static void da8xx_musb_set_vbus(struct musb *musb, int is_on)
 
 static void otg_timer(struct timer_list *t)
 {
-	struct musb		*musb = timer_container_of(musb, t,
-							      dev_timer);
+	struct musb		*musb = from_timer(musb, t, dev_timer);
 	void __iomem		*mregs = musb->mregs;
 	u8			devctl;
 	unsigned long		flags;
@@ -205,7 +203,7 @@ static void __maybe_unused da8xx_musb_try_idle(struct musb *musb, unsigned long 
 				musb->xceiv->otg->state == OTG_STATE_A_WAIT_BCON)) {
 		dev_dbg(musb->controller, "%s active, deleting timer\n",
 			usb_otg_state_string(musb->xceiv->otg->state));
-		timer_delete(&musb->dev_timer);
+		del_timer(&musb->dev_timer);
 		last_timer = jiffies;
 		return;
 	}
@@ -291,7 +289,7 @@ static irqreturn_t da8xx_musb_interrupt(int irq, void *hci)
 			MUSB_HST_MODE(musb);
 			musb->xceiv->otg->state = OTG_STATE_A_WAIT_VRISE;
 			portstate(musb->port1_status |= USB_PORT_STAT_POWER);
-			timer_delete(&musb->dev_timer);
+			del_timer(&musb->dev_timer);
 		} else if (!(musb->int_usb & MUSB_INTR_BABBLE)) {
 			/*
 			 * When babble condition happens, drvvbus interrupt
@@ -308,7 +306,7 @@ static irqreturn_t da8xx_musb_interrupt(int irq, void *hci)
 		}
 
 		dev_dbg(musb->controller, "VBUS %s (%s)%s, devctl %02x\n",
-				str_on_off(drvvbus),
+				drvvbus ? "on" : "off",
 				usb_otg_state_string(musb->xceiv->otg->state),
 				err ? " ERROR" : "",
 				devctl);
@@ -420,7 +418,7 @@ static int da8xx_musb_exit(struct musb *musb)
 {
 	struct da8xx_glue *glue = dev_get_drvdata(musb->controller->parent);
 
-	timer_delete_sync(&musb->dev_timer);
+	del_timer_sync(&musb->dev_timer);
 
 	phy_power_off(glue->phy);
 	phy_exit(glue->phy);
@@ -635,7 +633,7 @@ MODULE_DEVICE_TABLE(of, da8xx_id_table);
 
 static struct platform_driver da8xx_driver = {
 	.probe		= da8xx_probe,
-	.remove		= da8xx_remove,
+	.remove_new	= da8xx_remove,
 	.driver		= {
 		.name	= "musb-da8xx",
 		.pm = &da8xx_pm_ops,

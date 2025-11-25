@@ -12,7 +12,7 @@ use crate::{
 };
 use core::{
     marker::PhantomData,
-    ptr::NonNull,
+    ptr::{addr_of_mut, NonNull},
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -69,7 +69,7 @@ impl<T: Operations> Request<T> {
         // INVARIANT: By the safety requirements of this function, invariants are upheld.
         // SAFETY: By the safety requirement of this function, we own a
         // reference count that we can pass to `ARef`.
-        unsafe { ARef::from_raw(NonNull::new_unchecked(ptr.cast())) }
+        unsafe { ARef::from_raw(NonNull::new_unchecked(ptr as *const Self as *mut Self)) }
     }
 
     /// Notify the block layer that a request is going to be processed now.
@@ -125,12 +125,7 @@ impl<T: Operations> Request<T> {
         // success of the call to `try_set_end` guarantees that there are no
         // `ARef`s pointing to this request. Therefore it is safe to hand it
         // back to the block layer.
-        unsafe {
-            bindings::blk_mq_end_request(
-                request_ptr,
-                bindings::BLK_STS_OK as bindings::blk_status_t,
-            )
-        };
+        unsafe { bindings::blk_mq_end_request(request_ptr, bindings::BLK_STS_OK as _) };
 
         Ok(())
     }
@@ -160,7 +155,7 @@ impl<T: Operations> Request<T> {
         // the private data associated with this request is initialized and
         // valid. The existence of `&self` guarantees that the private data is
         // valid as a shared reference.
-        unsafe { Self::wrapper_ptr(core::ptr::from_ref(self).cast_mut()).as_ref() }
+        unsafe { Self::wrapper_ptr(self as *const Self as *mut Self).as_ref() }
     }
 }
 
@@ -192,7 +187,7 @@ impl RequestDataWrapper {
     pub(crate) unsafe fn refcount_ptr(this: *mut Self) -> *mut AtomicU64 {
         // SAFETY: Because of the safety requirements of this function, the
         // field projection is safe.
-        unsafe { &raw mut (*this).refcount }
+        unsafe { addr_of_mut!((*this).refcount) }
     }
 }
 

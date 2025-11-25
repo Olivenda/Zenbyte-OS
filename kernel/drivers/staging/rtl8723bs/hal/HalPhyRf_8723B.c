@@ -142,6 +142,15 @@ static void setCCKFilterCoefficient(struct dm_odm_t *pDM_Odm, u8 CCKSwingIndex)
 	}
 }
 
+void DoIQK_8723B(
+	struct dm_odm_t *pDM_Odm,
+	u8 DeltaThermalIndex,
+	u8 ThermalValue,
+	u8 Threshold
+)
+{
+}
+
 /*-----------------------------------------------------------------------------
  * Function:	odm_TxPwrTrackSetPwr88E()
  *
@@ -344,6 +353,7 @@ void ConfigureTxpowerTrack_8723B(struct txpwrtrack_cfg *pConfig)
 	pConfig->ThermalRegAddr = RF_T_METER_8723B;
 
 	pConfig->ODM_TxPwrTrackSetPwr = ODM_TxPwrTrackSetPwr_8723B;
+	pConfig->DoIQK = DoIQK_8723B;
 	pConfig->PHY_LCCalibrate = PHY_LCCalibrate_8723B;
 	pConfig->GetDeltaSwingTable = GetDeltaSwingTable_8723B;
 }

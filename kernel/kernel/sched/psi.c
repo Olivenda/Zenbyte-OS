@@ -136,10 +136,6 @@
  * cost-wise, yet way more sensitive and accurate than periodic
  * sampling of the aggregate task states would be.
  */
-#include <linux/sched/clock.h>
-#include <linux/workqueue.h>
-#include <linux/psi.h>
-#include "sched.h"
 
 static int psi_bug __read_mostly;
 
@@ -755,7 +751,7 @@ static int psi_rtpoll_worker(void *data)
 
 static void poll_timer_fn(struct timer_list *t)
 {
-	struct psi_group *group = timer_container_of(group, t, rtpoll_timer);
+	struct psi_group *group = from_timer(group, t, rtpoll_timer);
 
 	atomic_set(&group->rtpoll_wakeup, 1);
 	wake_up_interruptible(&group->rtpoll_wait);
@@ -1011,7 +1007,7 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
 	u64 irq;
 	u64 now;
 
-	if (static_branch_likely(&psi_disabled) || !irqtime_enabled())
+	if (static_branch_likely(&psi_disabled))
 		return;
 
 	if (!curr->pid)
@@ -1044,7 +1040,7 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
 	}
 	psi_write_end(cpu);
 }
-#endif /* CONFIG_IRQ_TIME_ACCOUNTING */
+#endif
 
 /**
  * psi_memstall_enter - mark the beginning of a memory stall section
@@ -1251,11 +1247,6 @@ int psi_show(struct seq_file *m, struct psi_group *group, enum psi_res res)
 	if (static_branch_likely(&psi_disabled))
 		return -EOPNOTSUPP;
 
-#ifdef CONFIG_IRQ_TIME_ACCOUNTING
-	if (!irqtime_enabled() && res == PSI_IRQ)
-		return -EOPNOTSUPP;
-#endif
-
 	/* Update averages before reporting them */
 	mutex_lock(&group->avgs_lock);
 	now = sched_clock();
@@ -1451,7 +1442,7 @@ void psi_trigger_destroy(struct psi_trigger *t)
 						group->rtpoll_task,
 						lockdep_is_held(&group->rtpoll_trigger_lock));
 				rcu_assign_pointer(group->rtpoll_task, NULL);
-				timer_delete(&group->rtpoll_timer);
+				del_timer(&group->rtpoll_timer);
 			}
 		}
 		mutex_unlock(&group->rtpoll_trigger_lock);
@@ -1662,7 +1653,7 @@ static const struct proc_ops psi_irq_proc_ops = {
 	.proc_poll	= psi_fop_poll,
 	.proc_release	= psi_fop_release,
 };
-#endif /* CONFIG_IRQ_TIME_ACCOUNTING */
+#endif
 
 static int __init psi_proc_init(void)
 {

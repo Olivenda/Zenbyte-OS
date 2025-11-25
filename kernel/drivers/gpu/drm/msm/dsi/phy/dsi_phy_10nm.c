@@ -3,7 +3,6 @@
  * Copyright (c) 2018, The Linux Foundation
  */
 
-#include <dt-bindings/clock/qcom,dsi-phy-28nm.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/iopoll.h>

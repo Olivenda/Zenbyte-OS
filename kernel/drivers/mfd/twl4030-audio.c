@@ -276,7 +276,7 @@ static struct platform_driver twl4030_audio_driver = {
 		.of_match_table = twl4030_audio_of_match,
 	},
 	.probe		= twl4030_audio_probe,
-	.remove		= twl4030_audio_remove,
+	.remove_new	= twl4030_audio_remove,
 };
 
 module_platform_driver(twl4030_audio_driver);

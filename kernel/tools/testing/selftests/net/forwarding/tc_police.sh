@@ -148,7 +148,7 @@ police_common_test()
 
 	log_test "$test_name"
 
-	kill_process %%
+	{ kill %% && wait %%; } 2>/dev/null
 	tc filter del dev $h2 ingress protocol ip pref 1 handle 101 flower
 }
 
@@ -198,7 +198,7 @@ police_shared_common_test()
 
 	log_test "$test_name"
 
-	kill_process %%
+	{ kill %% && wait %%; } 2>/dev/null
 }
 
 police_shared_test()
@@ -278,7 +278,7 @@ police_mirror_common_test()
 
 	log_test "$test_name"
 
-	kill_process %%
+	{ kill %% && wait %%; } 2>/dev/null
 	tc filter del dev $pol_if $dir protocol ip pref 1 handle 101 flower
 	tc filter del dev $h3 ingress protocol ip pref 1 handle 101 flower
 	tc filter del dev $h2 ingress protocol ip pref 1 handle 101 flower
@@ -320,7 +320,7 @@ police_pps_common_test()
 
 	log_test "$test_name"
 
-	kill_process %%
+	{ kill %% && wait %%; } 2>/dev/null
 	tc filter del dev $h2 ingress protocol ip pref 1 handle 101 flower
 }
 

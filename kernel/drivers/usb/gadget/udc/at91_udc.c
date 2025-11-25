@@ -16,7 +16,6 @@
 #include <linux/delay.h>
 #include <linux/ioport.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 #include <linux/errno.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>
@@ -132,7 +131,7 @@ static void proc_ep_show(struct seq_file *s, struct at91_ep *ep)
 	seq_printf(s, "csr %08x rxbytes=%d %s %s %s" EIGHTBITS "\n",
 		csr,
 		(csr & 0x07ff0000) >> 16,
-		str_enabled_disabled(csr & (1 << 15)),
+		(csr & (1 << 15)) ? "enabled" : "disabled",
 		(csr & (1 << 11)) ? "DATA1" : "DATA0",
 		types[(csr & 0x700) >> 8],
 
@@ -1541,7 +1540,7 @@ static void at91_vbus_timer_work(struct work_struct *work)
 
 static void at91_vbus_timer(struct timer_list *t)
 {
-	struct at91_udc *udc = timer_container_of(udc, t, vbus_timer);
+	struct at91_udc *udc = from_timer(udc, t, vbus_timer);
 
 	/*
 	 * If we are polling vbus it is likely that the gpio is on an
@@ -2003,7 +2002,7 @@ static int at91udc_resume(struct platform_device *pdev)
 
 static struct platform_driver at91_udc_driver = {
 	.probe		= at91udc_probe,
-	.remove		= at91udc_remove,
+	.remove_new	= at91udc_remove,
 	.shutdown	= at91udc_shutdown,
 	.suspend	= at91udc_suspend,
 	.resume		= at91udc_resume,

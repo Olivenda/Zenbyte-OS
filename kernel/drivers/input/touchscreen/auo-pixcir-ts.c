@@ -72,7 +72,7 @@
 
 /*
  * Interrupt modes:
- * periodical:		interrupt is asserted periodically
+ * periodical:		interrupt is asserted periodicaly
  * compare coordinates:	interrupt is asserted when coordinates change
  * indicate touch:	interrupt is asserted during touch
  */

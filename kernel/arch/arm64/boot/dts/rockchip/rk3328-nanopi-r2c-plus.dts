@@ -7,8 +7,7 @@
  */
 
 /dts-v1/;
-
-#include "rk3328-nanopi-r2c.dtsi"
+#include "rk3328-nanopi-r2c.dts"
 
 / {
 	model = "FriendlyElec NanoPi R2C Plus";

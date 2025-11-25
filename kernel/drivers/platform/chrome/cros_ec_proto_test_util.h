@@ -13,6 +13,7 @@ struct ec_xfer_mock {
 	struct kunit *test;
 
 	/* input */
+	struct cros_ec_command msg;
 	void *i_data;
 
 	/* output */
@@ -20,10 +21,6 @@ struct ec_xfer_mock {
 	int result;
 	void *o_data;
 	u32 o_data_len;
-
-	/* input */
-	/* Must be last -ends in a flexible-array member. */
-	struct cros_ec_command msg;
 };
 
 extern int cros_kunit_ec_xfer_mock_default_result;

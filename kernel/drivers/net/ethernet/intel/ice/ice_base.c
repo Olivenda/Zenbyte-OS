@@ -147,13 +147,16 @@ skip_alloc:
 	q_vector->reg_idx = q_vector->irq.index;
 	q_vector->vf_reg_idx = q_vector->irq.index;
 
+	/* only set affinity_mask if the CPU is online */
+	if (cpu_online(v_idx))
+		cpumask_set_cpu(v_idx, &q_vector->affinity_mask);
+
 	/* This will not be called in the driver load path because the netdev
 	 * will not be created yet. All other cases with register the NAPI
 	 * handler here (i.e. resume, reset/rebuild, etc.)
 	 */
 	if (vsi->netdev)
-		netif_napi_add_config(vsi->netdev, &q_vector->napi,
-				      ice_napi_poll, v_idx);
+		netif_napi_add(vsi->netdev, &q_vector->napi, ice_napi_poll);
 
 out:
 	/* tie q_vector and VSI together */
@@ -250,7 +253,7 @@ static u16 ice_calc_txq_handle(struct ice_vsi *vsi, struct ice_tx_ring *ring, u8
 		return ring->q_index - ring->ch->base_q;
 
 	/* Idea here for calculation is that we subtract the number of queue
-	 * count from TC that ring belongs to from its absolute queue index
+	 * count from TC that ring belongs to from it's absolute queue index
 	 * and as a result we get the queue's index within TC.
 	 */
 	return ring->q_index - vsi->tc_cfg.tc_info[tc].qoffset;
@@ -272,8 +275,7 @@ static void ice_cfg_xps_tx_ring(struct ice_tx_ring *ring)
 	if (test_and_set_bit(ICE_TX_XPS_INIT_DONE, ring->xps_state))
 		return;
 
-	netif_set_xps_queue(ring->netdev,
-			    &ring->q_vector->napi.config->affinity_mask,
+	netif_set_xps_queue(ring->netdev, &ring->q_vector->affinity_mask,
 			    ring->q_index);
 }
 
@@ -344,8 +346,6 @@ ice_setup_tx_ctx(struct ice_tx_ring *ring, struct ice_tlan_ctx *tlan_ctx, u16 pf
 	default:
 		break;
 	}
-
-	tlan_ctx->quanta_prof_idx = ring->quanta_prof_id;
 
 	tlan_ctx->tso_ena = ICE_TX_LEGACY;
 	tlan_ctx->tso_qnum = pf_q;
@@ -451,9 +451,6 @@ static int ice_setup_rx_ctx(struct ice_rx_ring *ring)
 	/* Rx queue threshold in units of 64 */
 	rlan_ctx.lrxqthresh = 1;
 
-	/* Enable descriptor prefetch */
-	rlan_ctx.prefena = 1;
-
 	/* PF acts as uplink for switchdev; set flex descriptor with src_vsi
 	 * metadata and flags to allow redirecting to PR netdev
 	 */
@@ -470,6 +467,9 @@ static int ice_setup_rx_ctx(struct ice_rx_ring *ring)
 	 */
 	if (vsi->type != ICE_VSI_VF)
 		ice_write_qrxflxp_cntxt(hw, pf_q, rxdid, 0x3, true);
+	else
+		ice_write_qrxflxp_cntxt(hw, pf_q, ICE_RXDID_LEGACY_1, 0x3,
+					false);
 
 	/* Absolute queue number out of 2K needs to be passed */
 	err = ice_write_rxq_ctx(hw, &rlan_ctx, pf_q);
@@ -623,10 +623,7 @@ static int ice_vsi_cfg_rxq(struct ice_rx_ring *ring)
 		return 0;
 	}
 
-	if (ring->vsi->type == ICE_VSI_CTRL)
-		ice_init_ctrl_rx_descs(ring, num_bufs);
-	else
-		ice_alloc_rx_bufs(ring, num_bufs);
+	ice_alloc_rx_bufs(ring, num_bufs);
 
 	return 0;
 }
@@ -798,11 +795,13 @@ int ice_vsi_alloc_q_vectors(struct ice_vsi *vsi)
 	return 0;
 
 err_out:
+	while (v_idx--)
+		ice_free_q_vector(vsi, v_idx);
 
-	dev_info(dev, "Failed to allocate %d q_vectors for VSI %d, new value %d",
-		 vsi->num_q_vectors, vsi->vsi_num, v_idx);
-	vsi->num_q_vectors = v_idx;
-	return v_idx ? 0 : err;
+	dev_err(dev, "Failed to allocate %d q_vector for VSI %d, ret=%d\n",
+		vsi->num_q_vectors, vsi->vsi_num, err);
+	vsi->num_q_vectors = 0;
+	return err;
 }
 
 /**
@@ -908,7 +907,8 @@ ice_vsi_cfg_txq(struct ice_vsi *vsi, struct ice_tx_ring *ring,
 	ice_setup_tx_ctx(ring, &tlan_ctx, pf_q);
 	/* copy context contents into the qg_buf */
 	qg_buf->txqs[0].txq_id = cpu_to_le16(pf_q);
-	ice_pack_txq_ctx(&tlan_ctx, &qg_buf->txqs[0].txq_ctx);
+	ice_set_ctx(hw, (u8 *)&tlan_ctx, qg_buf->txqs[0].txq_ctx,
+		    ice_tlan_ctx_info);
 
 	/* init queue specific tail reg. It is referred as
 	 * transmit comm scheduler queue doorbell.

@@ -32,7 +32,7 @@ ns1=""
 err=$(mktemp)
 
 # This function is used in the cleanup trap
-#shellcheck disable=SC2317,SC2329
+#shellcheck disable=SC2317
 cleanup()
 {
 	rm -f "${err}"
@@ -70,9 +70,8 @@ format_endpoints() {
 	mptcp_lib_pm_nl_format_endpoints "${@}"
 }
 
-# This function is invoked indirectly
-#shellcheck disable=SC2317,SC2329
 get_endpoint() {
+	# shellcheck disable=SC2317 # invoked indirectly
 	mptcp_lib_pm_nl_get_endpoint "${ns1}" "${@}"
 }
 

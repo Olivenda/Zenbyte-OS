@@ -15,7 +15,6 @@
 #include <linux/platform_device.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 
 /*
  * These registers are modified under the irq bus lock and cached to avoid
@@ -54,7 +53,7 @@ static int stmpe_gpio_get(struct gpio_chip *chip, unsigned offset)
 	return !!(ret & mask);
 }
 
-static int stmpe_gpio_set(struct gpio_chip *chip, unsigned int offset, int val)
+static void stmpe_gpio_set(struct gpio_chip *chip, unsigned offset, int val)
 {
 	struct stmpe_gpio *stmpe_gpio = gpiochip_get_data(chip);
 	struct stmpe *stmpe = stmpe_gpio->stmpe;
@@ -67,9 +66,9 @@ static int stmpe_gpio_set(struct gpio_chip *chip, unsigned int offset, int val)
 	 * For them we need to write 0 to clear and 1 to set.
 	 */
 	if (stmpe->regs[STMPE_IDX_GPSR_LSB] == stmpe->regs[STMPE_IDX_GPCR_LSB])
-		return stmpe_set_bits(stmpe, reg, mask, val ? mask : 0);
-
-	return stmpe_reg_write(stmpe, reg, mask);
+		stmpe_set_bits(stmpe, reg, mask, val ? mask : 0);
+	else
+		stmpe_reg_write(stmpe, reg, mask);
 }
 
 static int stmpe_gpio_get_direction(struct gpio_chip *chip,
@@ -98,11 +97,8 @@ static int stmpe_gpio_direction_output(struct gpio_chip *chip,
 	struct stmpe *stmpe = stmpe_gpio->stmpe;
 	u8 reg = stmpe->regs[STMPE_IDX_GPDR_LSB + (offset / 8)];
 	u8 mask = BIT(offset % 8);
-	int ret;
 
-	ret = stmpe_gpio_set(chip, offset, val);
-	if (ret)
-		return ret;
+	stmpe_gpio_set(chip, offset, val);
 
 	return stmpe_set_bits(stmpe, reg, mask, mask);
 }
@@ -286,7 +282,8 @@ static void stmpe_dbg_show_one(struct seq_file *s,
 
 	if (dir) {
 		seq_printf(s, " gpio-%-3d (%-20.20s) out %s",
-			   gpio, label ?: "(none)", str_hi_lo(val));
+			   gpio, label ?: "(none)",
+			   val ? "hi" : "lo");
 	} else {
 		u8 edge_det_reg;
 		u8 rise_reg;
@@ -355,7 +352,7 @@ static void stmpe_dbg_show_one(struct seq_file *s,
 
 		seq_printf(s, " gpio-%-3d (%-20.20s) in  %s %13s %13s %25s %25s",
 			   gpio, label ?: "(none)",
-			   str_hi_lo(val),
+			   val ? "hi" : "lo",
 			   edge_det_values[edge_det],
 			   irqen ? "IRQ-enabled" : "IRQ-disabled",
 			   rise_values[rise],

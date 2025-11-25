@@ -21,7 +21,6 @@
 #include "cmd.h"
 #include "port.h"
 #include "resources.h"
-#include "txheader.h"
 
 #define mlxsw_pci_write32(mlxsw_pci, reg, val) \
 	iowrite32be(val, (mlxsw_pci)->hw_addr + (MLXSW_PCI_ ## reg))
@@ -156,7 +155,7 @@ static int mlxsw_pci_napi_devs_init(struct mlxsw_pci *mlxsw_pci)
 	}
 	strscpy(mlxsw_pci->napi_dev_rx->name, "mlxsw_rx",
 		sizeof(mlxsw_pci->napi_dev_rx->name));
-	netif_threaded_enable(mlxsw_pci->napi_dev_rx);
+	dev_set_threaded(mlxsw_pci->napi_dev_rx, true);
 
 	return 0;
 
@@ -738,7 +737,6 @@ static void mlxsw_pci_cqe_rdq_md_init(struct sk_buff *skb, const char *cqe)
 }
 
 static void mlxsw_pci_cqe_rdq_handle(struct mlxsw_pci *mlxsw_pci,
-				     struct napi_struct *napi,
 				     struct mlxsw_pci_queue *q,
 				     u16 consumer_counter_limit,
 				     enum mlxsw_pci_cqe_v cqe_v, char *cqe)
@@ -809,7 +807,6 @@ static void mlxsw_pci_cqe_rdq_handle(struct mlxsw_pci *mlxsw_pci,
 	}
 
 	mlxsw_pci_skb_cb_ts_set(mlxsw_pci, skb, cqe_v, cqe);
-	mlxsw_skb_cb(skb)->rx_md_info.napi = napi;
 
 	mlxsw_core_skb_receive(mlxsw_pci->core, skb, &rx_info);
 
@@ -872,7 +869,7 @@ static int mlxsw_pci_napi_poll_cq_rx(struct napi_struct *napi, int budget)
 			continue;
 		}
 
-		mlxsw_pci_cqe_rdq_handle(mlxsw_pci, napi, rdq,
+		mlxsw_pci_cqe_rdq_handle(mlxsw_pci, rdq,
 					 wqe_counter, q->u.cq.v, cqe);
 
 		if (++work_done == budget)
@@ -2096,39 +2093,6 @@ static void mlxsw_pci_fini(void *bus_priv)
 	mlxsw_pci_free_irq_vectors(mlxsw_pci);
 }
 
-static int mlxsw_pci_txhdr_construct(struct sk_buff *skb,
-				     const struct mlxsw_txhdr_info *txhdr_info)
-{
-	const struct mlxsw_tx_info tx_info = txhdr_info->tx_info;
-	char *txhdr;
-
-	if (skb_cow_head(skb, MLXSW_TXHDR_LEN))
-		return -ENOMEM;
-
-	txhdr = skb_push(skb, MLXSW_TXHDR_LEN);
-	memset(txhdr, 0, MLXSW_TXHDR_LEN);
-
-	mlxsw_tx_hdr_version_set(txhdr, MLXSW_TXHDR_VERSION_1);
-	mlxsw_tx_hdr_proto_set(txhdr, MLXSW_TXHDR_PROTO_ETH);
-	mlxsw_tx_hdr_swid_set(txhdr, 0);
-
-	if (unlikely(txhdr_info->data)) {
-		u16 fid = txhdr_info->max_fid + tx_info.local_port - 1;
-
-		mlxsw_tx_hdr_rx_is_router_set(txhdr, true);
-		mlxsw_tx_hdr_fid_valid_set(txhdr, true);
-		mlxsw_tx_hdr_fid_set(txhdr, fid);
-		mlxsw_tx_hdr_type_set(txhdr, MLXSW_TXHDR_TYPE_DATA);
-	} else {
-		mlxsw_tx_hdr_ctl_set(txhdr, MLXSW_TXHDR_ETH_CTL);
-		mlxsw_tx_hdr_control_tclass_set(txhdr, 1);
-		mlxsw_tx_hdr_port_mid_set(txhdr, tx_info.local_port);
-		mlxsw_tx_hdr_type_set(txhdr, MLXSW_TXHDR_TYPE_CONTROL);
-	}
-
-	return 0;
-}
-
 static struct mlxsw_pci_queue *
 mlxsw_pci_sdq_pick(struct mlxsw_pci *mlxsw_pci,
 		   const struct mlxsw_tx_info *tx_info)
@@ -2156,7 +2120,7 @@ static bool mlxsw_pci_skb_transmit_busy(void *bus_priv,
 }
 
 static int mlxsw_pci_skb_transmit(void *bus_priv, struct sk_buff *skb,
-				  const struct mlxsw_txhdr_info *txhdr_info)
+				  const struct mlxsw_tx_info *tx_info)
 {
 	struct mlxsw_pci *mlxsw_pci = bus_priv;
 	struct mlxsw_pci_queue *q;
@@ -2165,17 +2129,13 @@ static int mlxsw_pci_skb_transmit(void *bus_priv, struct sk_buff *skb,
 	int i;
 	int err;
 
-	err = mlxsw_pci_txhdr_construct(skb, txhdr_info);
-	if (err)
-		return err;
-
 	if (skb_shinfo(skb)->nr_frags > MLXSW_PCI_WQE_SG_ENTRIES - 1) {
 		err = skb_linearize(skb);
 		if (err)
 			return err;
 	}
 
-	q = mlxsw_pci_sdq_pick(mlxsw_pci, &txhdr_info->tx_info);
+	q = mlxsw_pci_sdq_pick(mlxsw_pci, tx_info);
 	spin_lock_bh(&q->lock);
 	elem_info = mlxsw_pci_queue_elem_info_producer_get(q);
 	if (!elem_info) {
@@ -2183,7 +2143,7 @@ static int mlxsw_pci_skb_transmit(void *bus_priv, struct sk_buff *skb,
 		err = -EAGAIN;
 		goto unlock;
 	}
-	mlxsw_skb_cb(skb)->tx_info = txhdr_info->tx_info;
+	mlxsw_skb_cb(skb)->tx_info = *tx_info;
 	elem_info->sdq.skb = skb;
 
 	wqe = elem_info->elem;
@@ -2213,8 +2173,6 @@ static int mlxsw_pci_skb_transmit(void *bus_priv, struct sk_buff *skb,
 	/* Set unused sq entries byte count to zero. */
 	for (i++; i < MLXSW_PCI_WQE_SG_ENTRIES; i++)
 		mlxsw_pci_wqe_byte_count_set(wqe, i, 0);
-
-	mlxsw_pci_wqe_ipcs_set(wqe, skb->ip_summed == CHECKSUM_PARTIAL);
 
 	/* Everything is set up, ring producer doorbell to get HW going */
 	q->producer_counter++;

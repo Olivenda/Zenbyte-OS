@@ -537,62 +537,64 @@ static int drv260x_probe(struct i2c_client *client)
 static int drv260x_suspend(struct device *dev)
 {
 	struct drv260x_data *haptics = dev_get_drvdata(dev);
-	int error;
+	int ret = 0;
 
-	guard(mutex)(&haptics->input_dev->mutex);
+	mutex_lock(&haptics->input_dev->mutex);
 
 	if (input_device_enabled(haptics->input_dev)) {
-		error = regmap_update_bits(haptics->regmap,
-					   DRV260X_MODE,
-					   DRV260X_STANDBY_MASK,
-					   DRV260X_STANDBY);
-		if (error) {
+		ret = regmap_update_bits(haptics->regmap,
+					 DRV260X_MODE,
+					 DRV260X_STANDBY_MASK,
+					 DRV260X_STANDBY);
+		if (ret) {
 			dev_err(dev, "Failed to set standby mode\n");
-			return error;
+			goto out;
 		}
 
 		gpiod_set_value(haptics->enable_gpio, 0);
 
-		error = regulator_disable(haptics->regulator);
-		if (error) {
+		ret = regulator_disable(haptics->regulator);
+		if (ret) {
 			dev_err(dev, "Failed to disable regulator\n");
 			regmap_update_bits(haptics->regmap,
 					   DRV260X_MODE,
 					   DRV260X_STANDBY_MASK, 0);
-			return error;
 		}
 	}
-
-	return 0;
+out:
+	mutex_unlock(&haptics->input_dev->mutex);
+	return ret;
 }
 
 static int drv260x_resume(struct device *dev)
 {
 	struct drv260x_data *haptics = dev_get_drvdata(dev);
-	int error;
+	int ret = 0;
 
-	guard(mutex)(&haptics->input_dev->mutex);
+	mutex_lock(&haptics->input_dev->mutex);
 
 	if (input_device_enabled(haptics->input_dev)) {
-		error = regulator_enable(haptics->regulator);
-		if (error) {
+		ret = regulator_enable(haptics->regulator);
+		if (ret) {
 			dev_err(dev, "Failed to enable regulator\n");
-			return error;
+			goto out;
 		}
 
-		error = regmap_update_bits(haptics->regmap,
-					   DRV260X_MODE,
-					   DRV260X_STANDBY_MASK, 0);
-		if (error) {
+		ret = regmap_update_bits(haptics->regmap,
+					 DRV260X_MODE,
+					 DRV260X_STANDBY_MASK, 0);
+		if (ret) {
 			dev_err(dev, "Failed to unset standby mode\n");
 			regulator_disable(haptics->regulator);
-			return error;
+			goto out;
 		}
 
 		gpiod_set_value(haptics->enable_gpio, 1);
 	}
 
-	return 0;
+out:
+	mutex_unlock(&haptics->input_dev->mutex);
+	return ret;
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(drv260x_pm_ops, drv260x_suspend, drv260x_resume);

@@ -394,9 +394,7 @@ static int as3722_i2c_probe(struct i2c_client *i2c)
 		return ret;
 	}
 
-	ret = devm_device_init_wakeup(as3722->dev);
-	if (ret)
-		return dev_err_probe(as3722->dev, ret, "Failed to init wakeup\n");
+	device_init_wakeup(as3722->dev, true);
 
 	dev_dbg(as3722->dev, "AS3722 core driver initialized successfully\n");
 	return 0;

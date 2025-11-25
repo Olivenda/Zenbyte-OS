@@ -14,7 +14,6 @@ struct blk_crypto_mode {
 	const char *name; /* name of this mode, shown in sysfs */
 	const char *cipher_str; /* crypto API name (for fallback case) */
 	unsigned int keysize; /* key size in bytes */
-	unsigned int security_strength; /* security strength in bytes */
 	unsigned int ivsize; /* iv size in bytes */
 };
 
@@ -83,9 +82,6 @@ int __blk_crypto_evict_key(struct blk_crypto_profile *profile,
 bool __blk_crypto_cfg_supported(struct blk_crypto_profile *profile,
 				const struct blk_crypto_config *cfg);
 
-int blk_crypto_ioctl(struct block_device *bdev, unsigned int cmd,
-		     void __user *argp);
-
 #else /* CONFIG_BLK_INLINE_ENCRYPTION */
 
 static inline int blk_crypto_sysfs_register(struct gendisk *disk)
@@ -131,12 +127,6 @@ static inline bool blk_crypto_rq_is_encrypted(struct request *rq)
 static inline bool blk_crypto_rq_has_keyslot(struct request *rq)
 {
 	return false;
-}
-
-static inline int blk_crypto_ioctl(struct block_device *bdev, unsigned int cmd,
-				   void __user *argp)
-{
-	return -ENOTTY;
 }
 
 #endif /* CONFIG_BLK_INLINE_ENCRYPTION */

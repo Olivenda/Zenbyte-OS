@@ -30,7 +30,6 @@ if [[ "$KERNEL_ARCH" = "arm64" ]]; then
     DEVICE_TREES+=" arch/arm64/boot/dts/mediatek/mt8192-asurada-spherion-r0.dtb"
     DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sc7180-trogdor-lazor-limozeen-nots-r5.dtb"
     DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sc7180-trogdor-kingoftown.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sm8350-hdk.dtb"
 elif [[ "$KERNEL_ARCH" = "arm" ]]; then
     GCC_ARCH="arm-linux-gnueabihf"
     DEBIAN_ARCH="armhf"
@@ -98,14 +97,14 @@ done
 
 make ${KERNEL_IMAGE_NAME}
 
-mkdir -p /kernel/
+mkdir -p /lava-files/
 for image in ${KERNEL_IMAGE_NAME}; do
-    cp arch/${KERNEL_ARCH}/boot/${image} /kernel/.
+    cp arch/${KERNEL_ARCH}/boot/${image} /lava-files/.
 done
 
 if [[ -n ${DEVICE_TREES} ]]; then
     make dtbs
-    cp ${DEVICE_TREES} /kernel/.
+    cp ${DEVICE_TREES} /lava-files/.
 fi
 
 make modules
@@ -113,22 +112,33 @@ mkdir -p install/modules/
 INSTALL_MOD_PATH=install/modules/ make modules_install
 
 if [[ ${DEBIAN_ARCH} = "arm64" ]]; then
+    make Image.lzma
+    mkimage \
+        -f auto \
+        -A arm \
+        -O linux \
+        -d arch/arm64/boot/Image.lzma \
+        -C lzma\
+        -b arch/arm64/boot/dts/qcom/sdm845-cheza-r3.dtb \
+        /lava-files/cheza-kernel
+    KERNEL_IMAGE_NAME+=" cheza-kernel"
+
     # Make a gzipped copy of the Image for db410c.
-    gzip -k /kernel/Image
+    gzip -k /lava-files/Image
     KERNEL_IMAGE_NAME+=" Image.gz"
 fi
 
 # Pass needed files to the test stage
 mkdir -p install
 cp -rfv .gitlab-ci/* install/.
-cp -rfv bin/ci/*  install/.
+cp -rfv ci/*  install/.
 cp -rfv install/common install/ci-common
 cp -rfv drivers/gpu/drm/ci/* install/.
 
 . .gitlab-ci/container/container_post_build.sh
 
 if [[ "$UPLOAD_TO_MINIO" = "1" ]]; then
-    xz -7 -c -T${FDO_CI_CONCURRENT:-4} vmlinux > /kernel/vmlinux.xz
+    xz -7 -c -T${FDO_CI_CONCURRENT:-4} vmlinux > /lava-files/vmlinux.xz
     FILES_TO_UPLOAD="$KERNEL_IMAGE_NAME vmlinux.xz"
 
     if [[ -n $DEVICE_TREES ]]; then
@@ -137,7 +147,7 @@ if [[ "$UPLOAD_TO_MINIO" = "1" ]]; then
 
     ls -l "${S3_JWT_FILE}"
     for f in $FILES_TO_UPLOAD; do
-        ci-fairy s3cp --token-file "${S3_JWT_FILE}" /kernel/$f \
+        ci-fairy s3cp --token-file "${S3_JWT_FILE}" /lava-files/$f \
                 https://${PIPELINE_ARTIFACTS_BASE}/${DEBIAN_ARCH}/$f
     done
 
@@ -154,7 +164,7 @@ ln -s common artifacts/install/ci-common
 cp .config artifacts/${CI_JOB_NAME}_config
 
 for image in ${KERNEL_IMAGE_NAME}; do
-    cp /kernel/$image artifacts/install/.
+    cp /lava-files/$image artifacts/install/.
 done
 
 tar -C artifacts -cf artifacts/install.tar install

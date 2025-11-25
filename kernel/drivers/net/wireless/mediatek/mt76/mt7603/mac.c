@@ -487,7 +487,10 @@ mt7603_rx_get_wcid(struct mt7603_dev *dev, u8 idx, bool unicast)
 	struct mt7603_sta *sta;
 	struct mt76_wcid *wcid;
 
-	wcid = mt76_wcid_ptr(dev, idx);
+	if (idx >= MT7603_WTBL_SIZE)
+		return NULL;
+
+	wcid = rcu_dereference(dev->mt76.wcid[idx]);
 	if (unicast || !wcid)
 		return wcid;
 
@@ -1263,15 +1266,23 @@ void mt7603_mac_add_txs(struct mt7603_dev *dev, void *data)
 	if (pid == MT_PACKET_ID_NO_ACK)
 		return;
 
+	if (wcidx >= MT7603_WTBL_SIZE)
+		return;
+
 	rcu_read_lock();
 
-	wcid = mt76_wcid_ptr(dev, wcidx);
+	wcid = rcu_dereference(dev->mt76.wcid[wcidx]);
 	if (!wcid)
 		goto out;
 
 	msta = container_of(wcid, struct mt7603_sta, wcid);
 	sta = wcid_to_sta(wcid);
-	mt76_wcid_add_poll(&dev->mt76, &msta->wcid);
+
+	if (list_empty(&msta->wcid.poll_list)) {
+		spin_lock_bh(&dev->mt76.sta_poll_lock);
+		list_add_tail(&msta->wcid.poll_list, &dev->mt76.sta_poll_list);
+		spin_unlock_bh(&dev->mt76.sta_poll_lock);
+	}
 
 	if (mt7603_mac_add_txs_skb(dev, msta, pid, txs_data))
 		goto out;
@@ -1473,13 +1484,14 @@ static void mt7603_mac_watchdog_reset(struct mt7603_dev *dev)
 	tasklet_enable(&dev->mt76.pre_tbtt_tasklet);
 	mt7603_beacon_set_timer(dev, -1, beacon_int);
 
-	napi_enable(&dev->mt76.tx_napi);
-	napi_enable(&dev->mt76.napi[0]);
-	napi_enable(&dev->mt76.napi[1]);
-
 	local_bh_disable();
+	napi_enable(&dev->mt76.tx_napi);
 	napi_schedule(&dev->mt76.tx_napi);
+
+	napi_enable(&dev->mt76.napi[0]);
 	napi_schedule(&dev->mt76.napi[0]);
+
+	napi_enable(&dev->mt76.napi[1]);
 	napi_schedule(&dev->mt76.napi[1]);
 	local_bh_enable();
 
@@ -1781,7 +1793,7 @@ mt7603_false_cca_check(struct mt7603_dev *dev)
 
 	mt7603_cca_stats_reset(dev);
 
-	min_signal = mt76_get_min_avg_rssi(&dev->mt76, 0);
+	min_signal = mt76_get_min_avg_rssi(&dev->mt76, false);
 	if (!min_signal) {
 		dev->sensitivity = 0;
 		dev->last_cca_adj = jiffies;

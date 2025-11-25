@@ -3,8 +3,6 @@
 #define __PERF_SYMBOL_CONF 1
 
 #include <stdbool.h>
-#include <linux/bitmap.h>
-#include "perf.h"
 
 struct strlist;
 struct intlist;
@@ -43,15 +41,13 @@ struct symbol_conf {
 			report_individual_block,
 			inline_name,
 			disable_add2line_warn,
-			no_buildid_mmap2,
+			buildid_mmap2,
 			guest_code,
 			lazy_load_kernel_maps,
 			keep_exited_threads,
 			annotate_data_member,
 			annotate_data_sample,
-			skip_empty,
-			enable_latency,
-			prefer_latency;
+			skip_empty;
 	const char	*vmlinux_name,
 			*kallsyms_name,
 			*source_prefix,
@@ -66,7 +62,6 @@ struct symbol_conf {
 			*pid_list_str,
 			*tid_list_str,
 			*sym_list_str,
-			*parallelism_list_str,
 			*col_width_list_str,
 			*bt_stop_list_str;
 	const char		*addr2line_path;
@@ -87,7 +82,6 @@ struct symbol_conf {
 	int		pad_output_len_dso;
 	int		group_sort_idx;
 	int		addr_range;
-	DECLARE_BITMAP(parallelism_filter, MAX_NR_CPUS + 1);
 };
 
 extern struct symbol_conf symbol_conf;

@@ -207,7 +207,6 @@ static struct mtmips_clk mt7620_pherip_clks[] = {
 	{ CLK_PERIPH("10000b00.spi", "bus") },
 	{ CLK_PERIPH("10000b40.spi", "bus") },
 	{ CLK_PERIPH("10000c00.uartlite", "periph") },
-	{ CLK_PERIPH("10130000.mmc", "sdhc") },
 	{ CLK_PERIPH("10180000.wmac", "xtal") }
 };
 
@@ -221,7 +220,6 @@ static struct mtmips_clk mt76x8_pherip_clks[] = {
 	{ CLK_PERIPH("10000c00.uart0", "periph") },
 	{ CLK_PERIPH("10000d00.uart1", "periph") },
 	{ CLK_PERIPH("10000e00.uart2", "periph") },
-	{ CLK_PERIPH("10130000.mmc", "sdhc") },
 	{ CLK_PERIPH("10300000.wmac", "xtal") }
 };
 
@@ -273,13 +271,8 @@ static struct mtmips_clk_fixed rt3352_fixed_clocks[] = {
 	CLK_FIXED("periph", "xtal", 40000000)
 };
 
-static struct mtmips_clk_fixed mt7620_fixed_clocks[] = {
-	CLK_FIXED("bbppll", "xtal", 480000000)
-};
-
 static struct mtmips_clk_fixed mt76x8_fixed_clocks[] = {
-	CLK_FIXED("bbppll", "xtal", 480000000),
-	CLK_FIXED("pcmi2s", "bbppll", 480000000),
+	CLK_FIXED("pcmi2s", "xtal", 480000000),
 	CLK_FIXED("periph", "xtal", 40000000)
 };
 
@@ -332,15 +325,6 @@ static struct mtmips_clk_factor rt2880_factor_clocks[] = {
 
 static struct mtmips_clk_factor rt305x_factor_clocks[] = {
 	CLK_FACTOR("bus", "cpu", 1, 3)
-};
-
-static struct mtmips_clk_factor mt7620_factor_clocks[] = {
-	CLK_FACTOR("sdhc", "bbppll", 1, 10)
-};
-
-static struct mtmips_clk_factor mt76x8_factor_clocks[] = {
-	CLK_FACTOR("bus", "cpu", 1, 3),
-	CLK_FACTOR("sdhc", "bbppll", 1, 10)
 };
 
 static int mtmips_register_factor_clocks(struct clk_hw_onecell_data *clk_data,
@@ -826,10 +810,10 @@ static const struct mtmips_clk_data rt5350_clk_data = {
 static const struct mtmips_clk_data mt7620_clk_data = {
 	.clk_base = mt7620_clks_base,
 	.num_clk_base = ARRAY_SIZE(mt7620_clks_base),
-	.clk_fixed = mt7620_fixed_clocks,
-	.num_clk_fixed = ARRAY_SIZE(mt7620_fixed_clocks),
-	.clk_factor = mt7620_factor_clocks,
-	.num_clk_factor = ARRAY_SIZE(mt7620_factor_clocks),
+	.clk_fixed = NULL,
+	.num_clk_fixed = 0,
+	.clk_factor = NULL,
+	.num_clk_factor = 0,
 	.clk_periph = mt7620_pherip_clks,
 	.num_clk_periph = ARRAY_SIZE(mt7620_pherip_clks),
 };
@@ -839,8 +823,8 @@ static const struct mtmips_clk_data mt76x8_clk_data = {
 	.num_clk_base = ARRAY_SIZE(mt76x8_clks_base),
 	.clk_fixed = mt76x8_fixed_clocks,
 	.num_clk_fixed = ARRAY_SIZE(mt76x8_fixed_clocks),
-	.clk_factor = mt76x8_factor_clocks,
-	.num_clk_factor = ARRAY_SIZE(mt76x8_factor_clocks),
+	.clk_factor = rt305x_factor_clocks,
+	.num_clk_factor = ARRAY_SIZE(rt305x_factor_clocks),
 	.clk_periph = mt76x8_pherip_clks,
 	.num_clk_periph = ARRAY_SIZE(mt76x8_pherip_clks),
 };

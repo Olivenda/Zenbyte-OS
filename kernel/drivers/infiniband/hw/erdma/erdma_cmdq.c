@@ -182,6 +182,7 @@ int erdma_cmdq_init(struct erdma_dev *dev)
 	int err;
 
 	cmdq->max_outstandings = ERDMA_CMDQ_MAX_OUTSTANDING;
+	cmdq->use_event = false;
 
 	sema_init(&cmdq->credits, cmdq->max_outstandings);
 
@@ -222,6 +223,8 @@ err_destroy_sq:
 
 void erdma_finish_cmdq_init(struct erdma_dev *dev)
 {
+	/* after device init successfully, change cmdq to event mode. */
+	dev->cmdq.use_event = true;
 	arm_cmdq_cq(&dev->cmdq);
 }
 
@@ -309,7 +312,8 @@ static int erdma_poll_single_cmd_completion(struct erdma_cmdq *cmdq)
 	/* Copy 16B comp data after cqe hdr to outer */
 	be32_to_cpu_array(comp_wait->comp_data, cqe + 2, 4);
 
-	complete(&comp_wait->wait_event);
+	if (cmdq->use_event)
+		complete(&comp_wait->wait_event);
 
 	return 0;
 }
@@ -328,6 +332,9 @@ static void erdma_polling_cmd_completions(struct erdma_cmdq *cmdq)
 		if (erdma_poll_single_cmd_completion(cmdq))
 			break;
 
+	if (comp_num && cmdq->use_event)
+		arm_cmdq_cq(cmdq);
+
 	spin_unlock_irqrestore(&cmdq->cq.lock, flags);
 }
 
@@ -335,7 +342,8 @@ void erdma_cmdq_completion_handler(struct erdma_cmdq *cmdq)
 {
 	int got_event = 0;
 
-	if (!test_bit(ERDMA_CMDQ_STATE_OK_BIT, &cmdq->state))
+	if (!test_bit(ERDMA_CMDQ_STATE_OK_BIT, &cmdq->state) ||
+	    !cmdq->use_event)
 		return;
 
 	while (get_next_valid_eqe(&cmdq->eq)) {
@@ -346,7 +354,6 @@ void erdma_cmdq_completion_handler(struct erdma_cmdq *cmdq)
 	if (got_event) {
 		cmdq->cq.cmdsn++;
 		erdma_polling_cmd_completions(cmdq);
-		arm_cmdq_cq(cmdq);
 	}
 
 	notify_eq(&cmdq->eq);
@@ -365,7 +372,7 @@ static int erdma_poll_cmd_completion(struct erdma_comp_wait *comp_ctx,
 		if (time_is_before_jiffies(comp_timeout))
 			return -ETIME;
 
-		udelay(20);
+		msleep(20);
 	}
 
 	return 0;
@@ -396,7 +403,7 @@ void erdma_cmdq_build_reqhdr(u64 *hdr, u32 mod, u32 op)
 }
 
 int erdma_post_cmd_wait(struct erdma_cmdq *cmdq, void *req, u32 req_size,
-			u64 *resp0, u64 *resp1, bool sleepable)
+			u64 *resp0, u64 *resp1)
 {
 	struct erdma_comp_wait *comp_wait;
 	int ret;
@@ -404,12 +411,7 @@ int erdma_post_cmd_wait(struct erdma_cmdq *cmdq, void *req, u32 req_size,
 	if (!test_bit(ERDMA_CMDQ_STATE_OK_BIT, &cmdq->state))
 		return -ENODEV;
 
-	if (!sleepable) {
-		while (down_trylock(&cmdq->credits))
-			;
-	} else {
-		down(&cmdq->credits);
-	}
+	down(&cmdq->credits);
 
 	comp_wait = get_comp_wait(cmdq);
 	if (IS_ERR(comp_wait)) {
@@ -423,7 +425,7 @@ int erdma_post_cmd_wait(struct erdma_cmdq *cmdq, void *req, u32 req_size,
 	push_cmdq_sqe(cmdq, req, req_size, comp_wait);
 	spin_unlock(&cmdq->sq.lock);
 
-	if (sleepable)
+	if (cmdq->use_event)
 		ret = erdma_wait_cmd_completion(comp_wait, cmdq,
 						ERDMA_CMDQ_TIMEOUT_MS);
 	else

@@ -29,13 +29,12 @@
 
 #include "qxl_drv.h"
 
-#include <linux/aperture.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/vgaarb.h>
 
-#include <drm/clients/drm_client_setup.h>
 #include <drm/drm.h>
+#include <drm/drm_aperture.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fbdev_ttm.h>
@@ -92,7 +91,7 @@ qxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		return ret;
 
-	ret = aperture_remove_conflicting_pci_devices(pdev, qxl_driver.name);
+	ret = drm_aperture_remove_conflicting_pci_framebuffers(pdev, &qxl_driver);
 	if (ret)
 		goto disable_pci;
 
@@ -119,7 +118,7 @@ qxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		goto modeset_cleanup;
 
-	drm_client_setup(&qdev->ddev, NULL);
+	drm_fbdev_ttm_setup(&qdev->ddev, 32);
 	return 0;
 
 modeset_cleanup:
@@ -294,12 +293,12 @@ static struct drm_driver qxl_driver = {
 	.debugfs_init = qxl_debugfs_init,
 #endif
 	.gem_prime_import_sg_table = qxl_gem_prime_import_sg_table,
-	DRM_FBDEV_TTM_DRIVER_OPS,
 	.fops = &qxl_fops,
 	.ioctls = qxl_ioctls,
 	.num_ioctls = ARRAY_SIZE(qxl_ioctls),
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
+	.date = DRIVER_DATE,
 	.major = 0,
 	.minor = 1,
 	.patchlevel = 0,

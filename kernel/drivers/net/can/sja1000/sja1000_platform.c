@@ -230,9 +230,18 @@ static int sp_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	addr = devm_platform_get_and_ioremap_resource(pdev, 0, &res_mem);
-	if (IS_ERR(addr))
-		return PTR_ERR(addr);
+	res_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res_mem)
+		return -ENODEV;
+
+	if (!devm_request_mem_region(&pdev->dev, res_mem->start,
+				     resource_size(res_mem), DRV_NAME))
+		return -EBUSY;
+
+	addr = devm_ioremap(&pdev->dev, res_mem->start,
+				    resource_size(res_mem));
+	if (!addr)
+		return -ENOMEM;
 
 	if (of) {
 		irq = platform_get_irq(pdev, 0);

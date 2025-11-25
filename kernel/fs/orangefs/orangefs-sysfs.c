@@ -217,31 +217,36 @@ static ssize_t sysfs_int_show(struct kobject *kobj,
 
 	if (!strcmp(kobj->name, ORANGEFS_KOBJ_ID)) {
 		if (!strcmp(attr->attr.name, "op_timeout_secs")) {
-			rc = sysfs_emit(buf,
+			rc = scnprintf(buf,
+				       PAGE_SIZE,
 				       "%d\n",
 				       op_timeout_secs);
 			goto out;
 		} else if (!strcmp(attr->attr.name,
 				   "slot_timeout_secs")) {
-			rc = sysfs_emit(buf,
+			rc = scnprintf(buf,
+				       PAGE_SIZE,
 				       "%d\n",
 				       slot_timeout_secs);
 			goto out;
 		} else if (!strcmp(attr->attr.name,
 				   "cache_timeout_msecs")) {
-			rc = sysfs_emit(buf,
+			rc = scnprintf(buf,
+				       PAGE_SIZE,
 				       "%d\n",
 				       orangefs_cache_timeout_msecs);
 			goto out;
 		} else if (!strcmp(attr->attr.name,
 				   "dcache_timeout_msecs")) {
-			rc = sysfs_emit(buf,
+			rc = scnprintf(buf,
+				       PAGE_SIZE,
 				       "%d\n",
 				       orangefs_dcache_timeout_msecs);
 			goto out;
 		} else if (!strcmp(attr->attr.name,
 				   "getattr_timeout_msecs")) {
-			rc = sysfs_emit(buf,
+			rc = scnprintf(buf,
+				       PAGE_SIZE,
 				       "%d\n",
 				       orangefs_getattr_timeout_msecs);
 			goto out;
@@ -251,12 +256,14 @@ static ssize_t sysfs_int_show(struct kobject *kobj,
 
 	} else if (!strcmp(kobj->name, STATS_KOBJ_ID)) {
 		if (!strcmp(attr->attr.name, "reads")) {
-			rc = sysfs_emit(buf,
+			rc = scnprintf(buf,
+				       PAGE_SIZE,
 				       "%lu\n",
 				       orangefs_stats.reads);
 			goto out;
 		} else if (!strcmp(attr->attr.name, "writes")) {
-			rc = sysfs_emit(buf,
+			rc = scnprintf(buf,
+				       PAGE_SIZE,
 				       "%lu\n",
 				       orangefs_stats.writes);
 			goto out;
@@ -490,18 +497,19 @@ out:
 		if (strcmp(kobj->name, PC_KOBJ_ID)) {
 			if (new_op->upcall.req.param.op ==
 			    ORANGEFS_PARAM_REQUEST_OP_READAHEAD_COUNT_SIZE) {
-				rc = sysfs_emit(buf, "%d %d\n",
+				rc = scnprintf(buf, PAGE_SIZE, "%d %d\n",
 				    (int)new_op->downcall.resp.param.u.
 				    value32[0],
 				    (int)new_op->downcall.resp.param.u.
 				    value32[1]);
 			} else {
-				rc = sysfs_emit(buf, "%d\n",
+				rc = scnprintf(buf, PAGE_SIZE, "%d\n",
 				    (int)new_op->downcall.resp.param.u.value64);
 			}
 		} else {
-			rc = sysfs_emit(
+			rc = scnprintf(
 				buf,
+				PAGE_SIZE,
 				"%s",
 				new_op->downcall.resp.perf_count.buffer);
 		}

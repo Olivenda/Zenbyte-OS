@@ -38,12 +38,12 @@
 
 #include <drm/drm_crtc.h>
 #include <drm/drm_encoder.h>
-#include <drm/drm_exec.h>
 #include <drm/drm_gem_ttm_helper.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_gem.h>
 #include <drm/qxl_drm.h>
 #include <drm/ttm/ttm_bo.h>
+#include <drm/ttm/ttm_execbuf_util.h>
 #include <drm/ttm/ttm_placement.h>
 
 #include "qxl_dev.h"
@@ -54,6 +54,7 @@ struct iosys_map;
 
 #define DRIVER_NAME		"qxl"
 #define DRIVER_DESC		"RH QXL"
+#define DRIVER_DATE		"20120117"
 
 #define DRIVER_MAJOR 0
 #define DRIVER_MINOR 1
@@ -100,8 +101,7 @@ struct qxl_gem {
 };
 
 struct qxl_bo_list {
-	struct qxl_bo		*bo;
-	struct list_head	list;
+	struct ttm_validate_buffer tv;
 };
 
 struct qxl_crtc {
@@ -150,7 +150,7 @@ struct qxl_release {
 	struct qxl_bo *release_bo;
 	uint32_t release_offset;
 	uint32_t surface_release_id;
-	struct drm_exec	exec;
+	struct ww_acquire_ctx ticket;
 	struct list_head bos;
 };
 

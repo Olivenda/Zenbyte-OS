@@ -13,7 +13,6 @@
  * along with other APIs.
  */
 
-#include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/errno.h>
@@ -57,11 +56,11 @@
 
 struct intel_scu_ipc_dev {
 	struct device dev;
+	struct resource mem;
 	struct module *owner;
+	int irq;
 	void __iomem *ipc_base;
 	struct completion cmd_complete;
-
-	struct intel_scu_ipc_data data;
 };
 
 #define IPC_STATUS		0x04
@@ -100,21 +99,23 @@ static struct class intel_scu_ipc_class = {
  */
 struct intel_scu_ipc_dev *intel_scu_ipc_dev_get(void)
 {
-	guard(mutex)(&ipclock);
+	struct intel_scu_ipc_dev *scu = NULL;
 
+	mutex_lock(&ipclock);
 	if (ipcdev) {
 		get_device(&ipcdev->dev);
 		/*
 		 * Prevent the IPC provider from being unloaded while it
 		 * is being used.
 		 */
-		if (try_module_get(ipcdev->owner))
-			return ipcdev;
-
-		put_device(&ipcdev->dev);
+		if (!try_module_get(ipcdev->owner))
+			put_device(&ipcdev->dev);
+		else
+			scu = ipcdev;
 	}
 
-	return NULL;
+	mutex_unlock(&ipclock);
+	return scu;
 }
 EXPORT_SYMBOL_GPL(intel_scu_ipc_dev_get);
 
@@ -216,6 +217,12 @@ static inline u8 ipc_read_status(struct intel_scu_ipc_dev *scu)
 	return __raw_readl(scu->ipc_base + IPC_STATUS);
 }
 
+/* Read ipc byte data */
+static inline u8 ipc_data_readb(struct intel_scu_ipc_dev *scu, u32 offset)
+{
+	return readb(scu->ipc_base + IPC_READ_BUFFER + offset);
+}
+
 /* Read ipc u32 data */
 static inline u32 ipc_data_readl(struct intel_scu_ipc_dev *scu, u32 offset)
 {
@@ -255,7 +262,7 @@ static inline int ipc_wait_for_interrupt(struct intel_scu_ipc_dev *scu)
 
 static int intel_scu_ipc_check_status(struct intel_scu_ipc_dev *scu)
 {
-	return scu->data.irq > 0 ? ipc_wait_for_interrupt(scu) : busy_loop(scu);
+	return scu->irq > 0 ? ipc_wait_for_interrupt(scu) : busy_loop(scu);
 }
 
 static struct intel_scu_ipc_dev *intel_scu_ipc_get(struct intel_scu_ipc_dev *scu)
@@ -288,11 +295,12 @@ static int pwr_reg_rdwr(struct intel_scu_ipc_dev *scu, u16 *addr, u8 *data,
 
 	memset(cbuf, 0, sizeof(cbuf));
 
-	guard(mutex)(&ipclock);
-
+	mutex_lock(&ipclock);
 	scu = intel_scu_ipc_get(scu);
-	if (IS_ERR(scu))
+	if (IS_ERR(scu)) {
+		mutex_unlock(&ipclock);
 		return PTR_ERR(scu);
+	}
 
 	for (nc = 0; nc < count; nc++, offset += 2) {
 		cbuf[offset] = addr[nc];
@@ -317,15 +325,14 @@ static int pwr_reg_rdwr(struct intel_scu_ipc_dev *scu, u16 *addr, u8 *data,
 	}
 
 	err = intel_scu_ipc_check_status(scu);
-	if (err)
-		return err;
-
-	/* Read rbuf */
-	for (nc = 0, offset = 0; nc < 4; nc++, offset += 4)
-		wbuf[nc] = ipc_data_readl(scu, offset);
-	memcpy(data, wbuf, count);
-
-	return 0;
+	if (!err && id == IPC_CMD_PCNTRL_R) { /* Read rbuf */
+		/* Workaround: values are read as 0 without memcpy_fromio */
+		memcpy_fromio(cbuf, scu->ipc_base + 0x90, 16);
+		for (nc = 0; nc < count; nc++)
+			data[nc] = ipc_data_readb(scu, nc);
+	}
+	mutex_unlock(&ipclock);
+	return err;
 }
 
 /**
@@ -446,15 +453,17 @@ int intel_scu_ipc_dev_simple_command(struct intel_scu_ipc_dev *scu, int cmd,
 	u32 cmdval;
 	int err;
 
-	guard(mutex)(&ipclock);
-
+	mutex_lock(&ipclock);
 	scu = intel_scu_ipc_get(scu);
-	if (IS_ERR(scu))
+	if (IS_ERR(scu)) {
+		mutex_unlock(&ipclock);
 		return PTR_ERR(scu);
+	}
 
 	cmdval = sub << 12 | cmd;
 	ipc_command(scu, cmdval);
 	err = intel_scu_ipc_check_status(scu);
+	mutex_unlock(&ipclock);
 	if (err)
 		dev_err(&scu->dev, "IPC command %#x failed with %d\n", cmdval, err);
 	return err;
@@ -483,17 +492,18 @@ int intel_scu_ipc_dev_command_with_size(struct intel_scu_ipc_dev *scu, int cmd,
 {
 	size_t outbuflen = DIV_ROUND_UP(outlen, sizeof(u32));
 	size_t inbuflen = DIV_ROUND_UP(inlen, sizeof(u32));
-	u32 cmdval, inbuf[4] = {}, outbuf[4] = {};
+	u32 cmdval, inbuf[4] = {};
 	int i, err;
 
 	if (inbuflen > 4 || outbuflen > 4)
 		return -EINVAL;
 
-	guard(mutex)(&ipclock);
-
+	mutex_lock(&ipclock);
 	scu = intel_scu_ipc_get(scu);
-	if (IS_ERR(scu))
+	if (IS_ERR(scu)) {
+		mutex_unlock(&ipclock);
 		return PTR_ERR(scu);
+	}
 
 	memcpy(inbuf, in, inlen);
 	for (i = 0; i < inbuflen; i++)
@@ -502,17 +512,20 @@ int intel_scu_ipc_dev_command_with_size(struct intel_scu_ipc_dev *scu, int cmd,
 	cmdval = (size << 16) | (sub << 12) | cmd;
 	ipc_command(scu, cmdval);
 	err = intel_scu_ipc_check_status(scu);
-	if (err) {
-		dev_err(&scu->dev, "IPC command %#x failed with %d\n", cmdval, err);
-		return err;
+
+	if (!err) {
+		u32 outbuf[4] = {};
+
+		for (i = 0; i < outbuflen; i++)
+			outbuf[i] = ipc_data_readl(scu, 4 * i);
+
+		memcpy(out, outbuf, outlen);
 	}
 
-	for (i = 0; i < outbuflen; i++)
-		outbuf[i] = ipc_data_readl(scu, 4 * i);
-
-	memcpy(out, outbuf, outlen);
-
-	return 0;
+	mutex_unlock(&ipclock);
+	if (err)
+		dev_err(&scu->dev, "IPC command %#x failed with %d\n", cmdval, err);
+	return err;
 }
 EXPORT_SYMBOL(intel_scu_ipc_dev_command_with_size);
 
@@ -536,13 +549,13 @@ static irqreturn_t ioc(int irq, void *dev_id)
 
 static void intel_scu_ipc_release(struct device *dev)
 {
-	struct intel_scu_ipc_dev *scu = container_of(dev, struct intel_scu_ipc_dev, dev);
-	struct intel_scu_ipc_data *data = &scu->data;
+	struct intel_scu_ipc_dev *scu;
 
-	if (data->irq > 0)
-		free_irq(data->irq, scu);
+	scu = container_of(dev, struct intel_scu_ipc_dev, dev);
+	if (scu->irq > 0)
+		free_irq(scu->irq, scu);
 	iounmap(scu->ipc_base);
-	release_mem_region(data->mem.start, resource_size(&data->mem));
+	release_mem_region(scu->mem.start, resource_size(&scu->mem));
 	kfree(scu);
 }
 
@@ -563,44 +576,46 @@ __intel_scu_ipc_register(struct device *parent,
 			 struct module *owner)
 {
 	int err;
-	struct intel_scu_ipc_data *data;
 	struct intel_scu_ipc_dev *scu;
 	void __iomem *ipc_base;
 
-	guard(mutex)(&ipclock);
-
+	mutex_lock(&ipclock);
 	/* We support only one IPC */
-	if (ipcdev)
-		return ERR_PTR(-EBUSY);
+	if (ipcdev) {
+		err = -EBUSY;
+		goto err_unlock;
+	}
 
 	scu = kzalloc(sizeof(*scu), GFP_KERNEL);
-	if (!scu)
-		return ERR_PTR(-ENOMEM);
+	if (!scu) {
+		err = -ENOMEM;
+		goto err_unlock;
+	}
 
 	scu->owner = owner;
 	scu->dev.parent = parent;
 	scu->dev.class = &intel_scu_ipc_class;
 	scu->dev.release = intel_scu_ipc_release;
 
-	memcpy(&scu->data, scu_data, sizeof(scu->data));
-	data = &scu->data;
-
-	if (!request_mem_region(data->mem.start, resource_size(&data->mem), "intel_scu_ipc")) {
+	if (!request_mem_region(scu_data->mem.start, resource_size(&scu_data->mem),
+				"intel_scu_ipc")) {
 		err = -EBUSY;
 		goto err_free;
 	}
 
-	ipc_base = ioremap(data->mem.start, resource_size(&data->mem));
+	ipc_base = ioremap(scu_data->mem.start, resource_size(&scu_data->mem));
 	if (!ipc_base) {
 		err = -ENOMEM;
 		goto err_release;
 	}
 
 	scu->ipc_base = ipc_base;
+	scu->mem = scu_data->mem;
+	scu->irq = scu_data->irq;
 	init_completion(&scu->cmd_complete);
 
-	if (data->irq > 0) {
-		err = request_irq(data->irq, ioc, 0, "intel_scu_ipc", scu);
+	if (scu->irq > 0) {
+		err = request_irq(scu->irq, ioc, 0, "intel_scu_ipc", scu);
 		if (err)
 			goto err_unmap;
 	}
@@ -613,19 +628,24 @@ __intel_scu_ipc_register(struct device *parent,
 	err = device_register(&scu->dev);
 	if (err) {
 		put_device(&scu->dev);
-		return ERR_PTR(err);
+		goto err_unlock;
 	}
 
 	/* Assign device at last */
 	ipcdev = scu;
+	mutex_unlock(&ipclock);
+
 	return scu;
 
 err_unmap:
 	iounmap(ipc_base);
 err_release:
-	release_mem_region(data->mem.start, resource_size(&data->mem));
+	release_mem_region(scu_data->mem.start, resource_size(&scu_data->mem));
 err_free:
 	kfree(scu);
+err_unlock:
+	mutex_unlock(&ipclock);
+
 	return ERR_PTR(err);
 }
 EXPORT_SYMBOL_GPL(__intel_scu_ipc_register);
@@ -639,12 +659,12 @@ EXPORT_SYMBOL_GPL(__intel_scu_ipc_register);
  */
 void intel_scu_ipc_unregister(struct intel_scu_ipc_dev *scu)
 {
-	guard(mutex)(&ipclock);
-
+	mutex_lock(&ipclock);
 	if (!WARN_ON(!ipcdev)) {
 		ipcdev = NULL;
 		device_unregister(&scu->dev);
 	}
+	mutex_unlock(&ipclock);
 }
 EXPORT_SYMBOL_GPL(intel_scu_ipc_unregister);
 

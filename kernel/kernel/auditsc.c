@@ -100,7 +100,7 @@ struct audit_aux_data_pids {
 	kuid_t			target_auid[AUDIT_AUX_PIDS];
 	kuid_t			target_uid[AUDIT_AUX_PIDS];
 	unsigned int		target_sessionid[AUDIT_AUX_PIDS];
-	struct lsm_prop		target_ref[AUDIT_AUX_PIDS];
+	u32			target_sid[AUDIT_AUX_PIDS];
 	char 			target_comm[AUDIT_AUX_PIDS][TASK_COMM_LEN];
 	int			pid_count;
 };
@@ -470,7 +470,7 @@ static int audit_filter_rules(struct task_struct *tsk,
 {
 	const struct cred *cred;
 	int i, need_sid = 1;
-	struct lsm_prop prop = { };
+	u32 sid;
 	unsigned int sessionid;
 
 	if (ctx && rule->prio <= ctx->prio)
@@ -674,16 +674,14 @@ static int audit_filter_rules(struct task_struct *tsk,
 					 * fork()/copy_process() in which case
 					 * the new @tsk creds are still a dup
 					 * of @current's creds so we can still
-					 * use
-					 * security_current_getlsmprop_subj()
+					 * use security_current_getsecid_subj()
 					 * here even though it always refs
 					 * @current's creds
 					 */
-					security_current_getlsmprop_subj(&prop);
+					security_current_getsecid_subj(&sid);
 					need_sid = 0;
 				}
-				result = security_audit_rule_match(&prop,
-								   f->type,
+				result = security_audit_rule_match(sid, f->type,
 								   f->op,
 								   f->lsm_rule);
 			}
@@ -699,14 +697,14 @@ static int audit_filter_rules(struct task_struct *tsk,
 				/* Find files that match */
 				if (name) {
 					result = security_audit_rule_match(
-								&name->oprop,
+								name->osid,
 								f->type,
 								f->op,
 								f->lsm_rule);
 				} else if (ctx) {
 					list_for_each_entry(n, &ctx->names_list, list) {
 						if (security_audit_rule_match(
-								&n->oprop,
+								n->osid,
 								f->type,
 								f->op,
 								f->lsm_rule)) {
@@ -718,7 +716,7 @@ static int audit_filter_rules(struct task_struct *tsk,
 				/* Find ipc objects that match */
 				if (!ctx || ctx->type != AUDIT_IPC)
 					break;
-				if (security_audit_rule_match(&ctx->ipc.oprop,
+				if (security_audit_rule_match(ctx->ipc.osid,
 							      f->type, f->op,
 							      f->lsm_rule))
 					++result;
@@ -1019,7 +1017,7 @@ static void audit_reset_context(struct audit_context *ctx)
 	ctx->target_pid = 0;
 	ctx->target_auid = ctx->target_uid = KUIDT_INIT(0);
 	ctx->target_sessionid = 0;
-	lsmprop_init(&ctx->target_ref);
+	ctx->target_sid = 0;
 	ctx->target_comm[0] = '\0';
 	unroll_tree_refs(ctx, NULL, 0);
 	WARN_ON(!list_empty(&ctx->killed_trees));
@@ -1093,12 +1091,12 @@ static inline void audit_free_context(struct audit_context *context)
 }
 
 static int audit_log_pid_context(struct audit_context *context, pid_t pid,
-				 kuid_t auid, kuid_t uid,
-				 unsigned int sessionid, struct lsm_prop *prop,
-				 char *comm)
+				 kuid_t auid, kuid_t uid, unsigned int sessionid,
+				 u32 sid, char *comm)
 {
 	struct audit_buffer *ab;
-	struct lsm_context ctx;
+	char *ctx = NULL;
+	u32 len;
 	int rc = 0;
 
 	ab = audit_log_start(context, GFP_KERNEL, AUDIT_OBJ_PID);
@@ -1108,13 +1106,13 @@ static int audit_log_pid_context(struct audit_context *context, pid_t pid,
 	audit_log_format(ab, "opid=%d oauid=%d ouid=%d oses=%d", pid,
 			 from_kuid(&init_user_ns, auid),
 			 from_kuid(&init_user_ns, uid), sessionid);
-	if (lsmprop_is_set(prop)) {
-		if (security_lsmprop_to_secctx(prop, &ctx) < 0) {
+	if (sid) {
+		if (security_secid_to_secctx(sid, &ctx, &len)) {
 			audit_log_format(ab, " obj=(none)");
 			rc = 1;
 		} else {
-			audit_log_format(ab, " obj=%s", ctx.context);
-			security_release_secctx(&ctx);
+			audit_log_format(ab, " obj=%s", ctx);
+			security_release_secctx(ctx, len);
 		}
 	}
 	audit_log_format(ab, " ocomm=");
@@ -1386,20 +1384,23 @@ static void show_special(struct audit_context *context, int *call_panic)
 			audit_log_format(ab, " a%d=%lx", i,
 				context->socketcall.args[i]);
 		break; }
-	case AUDIT_IPC:
+	case AUDIT_IPC: {
+		u32 osid = context->ipc.osid;
+
 		audit_log_format(ab, "ouid=%u ogid=%u mode=%#ho",
 				 from_kuid(&init_user_ns, context->ipc.uid),
 				 from_kgid(&init_user_ns, context->ipc.gid),
 				 context->ipc.mode);
-		if (lsmprop_is_set(&context->ipc.oprop)) {
-			struct lsm_context lsmctx;
+		if (osid) {
+			char *ctx = NULL;
+			u32 len;
 
-			if (security_lsmprop_to_secctx(&context->ipc.oprop,
-						       &lsmctx) < 0) {
+			if (security_secid_to_secctx(osid, &ctx, &len)) {
+				audit_log_format(ab, " osid=%u", osid);
 				*call_panic = 1;
 			} else {
-				audit_log_format(ab, " obj=%s", lsmctx.context);
-				security_release_secctx(&lsmctx);
+				audit_log_format(ab, " obj=%s", ctx);
+				security_release_secctx(ctx, len);
 			}
 		}
 		if (context->ipc.has_perm) {
@@ -1415,7 +1416,7 @@ static void show_special(struct audit_context *context, int *call_panic)
 				context->ipc.perm_gid,
 				context->ipc.perm_mode);
 		}
-		break;
+		break; }
 	case AUDIT_MQ_OPEN:
 		audit_log_format(ab,
 			"oflag=0x%x mode=%#ho mq_flags=0x%lx mq_maxmsg=%ld "
@@ -1557,15 +1558,18 @@ static void audit_log_name(struct audit_context *context, struct audit_names *n,
 				 from_kgid(&init_user_ns, n->gid),
 				 MAJOR(n->rdev),
 				 MINOR(n->rdev));
-	if (lsmprop_is_set(&n->oprop)) {
-		struct lsm_context ctx;
+	if (n->osid != 0) {
+		char *ctx = NULL;
+		u32 len;
 
-		if (security_lsmprop_to_secctx(&n->oprop, &ctx) < 0) {
+		if (security_secid_to_secctx(
+			n->osid, &ctx, &len)) {
+			audit_log_format(ab, " osid=%u", n->osid);
 			if (call_panic)
 				*call_panic = 2;
 		} else {
-			audit_log_format(ab, " obj=%s", ctx.context);
-			security_release_secctx(&ctx);
+			audit_log_format(ab, " obj=%s", ctx);
+			security_release_secctx(ctx, len);
 		}
 	}
 
@@ -1649,8 +1653,8 @@ static void audit_log_uring(struct audit_context *ctx)
 	audit_log_format(ab, "uring_op=%d", ctx->uring_op);
 	if (ctx->return_valid != AUDITSC_INVALID)
 		audit_log_format(ab, " success=%s exit=%ld",
-				 str_yes_no(ctx->return_valid ==
-					    AUDITSC_SUCCESS),
+				 (ctx->return_valid == AUDITSC_SUCCESS ?
+				  "yes" : "no"),
 				 ctx->return_code);
 	audit_log_format(ab,
 			 " items=%d"
@@ -1692,8 +1696,8 @@ static void audit_log_exit(void)
 			audit_log_format(ab, " per=%lx", context->personality);
 		if (context->return_valid != AUDITSC_INVALID)
 			audit_log_format(ab, " success=%s exit=%ld",
-					 str_yes_no(context->return_valid ==
-						    AUDITSC_SUCCESS),
+					 (context->return_valid == AUDITSC_SUCCESS ?
+					  "yes" : "no"),
 					 context->return_code);
 		audit_log_format(ab,
 				 " a0=%lx a1=%lx a2=%lx a3=%lx items=%d",
@@ -1776,7 +1780,7 @@ static void audit_log_exit(void)
 						  axs->target_auid[i],
 						  axs->target_uid[i],
 						  axs->target_sessionid[i],
-						  &axs->target_ref[i],
+						  axs->target_sid[i],
 						  axs->target_comm[i]))
 				call_panic = 1;
 	}
@@ -1785,7 +1789,7 @@ static void audit_log_exit(void)
 	    audit_log_pid_context(context, context->target_pid,
 				  context->target_auid, context->target_uid,
 				  context->target_sessionid,
-				  &context->target_ref, context->target_comm))
+				  context->target_sid, context->target_comm))
 			call_panic = 1;
 
 	if (context->pwd.dentry && context->pwd.mnt) {
@@ -2207,8 +2211,10 @@ __audit_reusename(const __user char *uptr)
 	list_for_each_entry(n, &context->names_list, list) {
 		if (!n->name)
 			continue;
-		if (n->name->uptr == uptr)
-			return refname(n->name);
+		if (n->name->uptr == uptr) {
+			atomic_inc(&n->name->refcnt);
+			return n->name;
+		}
 	}
 	return NULL;
 }
@@ -2235,7 +2241,7 @@ void __audit_getname(struct filename *name)
 	n->name = name;
 	n->name_len = AUDIT_NAME_FULL;
 	name->aname = n;
-	refname(name);
+	atomic_inc(&name->refcnt);
 }
 
 static inline int audit_copy_fcaps(struct audit_names *name,
@@ -2272,7 +2278,7 @@ static void audit_copy_inode(struct audit_names *name,
 	name->uid   = inode->i_uid;
 	name->gid   = inode->i_gid;
 	name->rdev  = inode->i_rdev;
-	security_inode_getlsmprop(inode, &name->oprop);
+	security_inode_getsecid(inode, &name->osid);
 	if (flags & AUDIT_INODE_NOEVAL) {
 		name->fcap_ver = -1;
 		return;
@@ -2367,7 +2373,7 @@ out_alloc:
 		return;
 	if (name) {
 		n->name = name;
-		refname(name);
+		atomic_inc(&name->refcnt);
 	}
 
 out:
@@ -2494,7 +2500,7 @@ void __audit_inode_child(struct inode *parent,
 		if (found_parent) {
 			found_child->name = found_parent->name;
 			found_child->name_len = AUDIT_NAME_FULL;
-			refname(found_child->name);
+			atomic_inc(&found_child->name->refcnt);
 		}
 	}
 
@@ -2626,7 +2632,7 @@ void __audit_ipc_obj(struct kern_ipc_perm *ipcp)
 	context->ipc.gid = ipcp->gid;
 	context->ipc.mode = ipcp->mode;
 	context->ipc.has_perm = 0;
-	security_ipc_getlsmprop(ipcp, &context->ipc.oprop);
+	security_ipc_getsecid(ipcp, &context->ipc.osid);
 	context->type = AUDIT_IPC;
 }
 
@@ -2723,8 +2729,8 @@ void __audit_ptrace(struct task_struct *t)
 	context->target_auid = audit_get_loginuid(t);
 	context->target_uid = task_uid(t);
 	context->target_sessionid = audit_get_sessionid(t);
-	strscpy(context->target_comm, t->comm);
-	security_task_getlsmprop_obj(t, &context->target_ref);
+	security_task_getsecid_obj(t, &context->target_sid);
+	memcpy(context->target_comm, t->comm, TASK_COMM_LEN);
 }
 
 /**
@@ -2750,8 +2756,8 @@ int audit_signal_info_syscall(struct task_struct *t)
 		ctx->target_auid = audit_get_loginuid(t);
 		ctx->target_uid = t_uid;
 		ctx->target_sessionid = audit_get_sessionid(t);
-		strscpy(ctx->target_comm, t->comm);
-		security_task_getlsmprop_obj(t, &ctx->target_ref);
+		security_task_getsecid_obj(t, &ctx->target_sid);
+		memcpy(ctx->target_comm, t->comm, TASK_COMM_LEN);
 		return 0;
 	}
 
@@ -2771,8 +2777,8 @@ int audit_signal_info_syscall(struct task_struct *t)
 	axp->target_auid[axp->pid_count] = audit_get_loginuid(t);
 	axp->target_uid[axp->pid_count] = t_uid;
 	axp->target_sessionid[axp->pid_count] = audit_get_sessionid(t);
-	security_task_getlsmprop_obj(t, &axp->target_ref[axp->pid_count]);
-	strscpy(axp->target_comm[axp->pid_count], t->comm);
+	security_task_getsecid_obj(t, &axp->target_sid[axp->pid_count]);
+	memcpy(axp->target_comm[axp->pid_count], t->comm, TASK_COMM_LEN);
 	axp->pid_count++;
 
 	return 0;

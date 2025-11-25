@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (C) 2024-2025 Intel Corporation */
-
-#define DEFAULT_SYMBOL_NAMESPACE	"LIBETH"
-
-#include <linux/export.h>
+/* Copyright (C) 2024 Intel Corporation */
 
 #include <net/libeth/rx.h>
 
@@ -72,7 +68,7 @@ static u32 libeth_rx_hw_len_truesize(const struct page_pool_params *pp,
 static bool libeth_rx_page_pool_params(struct libeth_fq *fq,
 				       struct page_pool_params *pp)
 {
-	pp->offset = fq->xdp ? LIBETH_XDP_HEADROOM : LIBETH_SKB_HEADROOM;
+	pp->offset = LIBETH_SKB_HEADROOM;
 	/* HW-writeable / syncable length per one page */
 	pp->max_len = LIBETH_RX_PAGE_LEN(pp->offset);
 
@@ -159,12 +155,11 @@ int libeth_rx_fq_create(struct libeth_fq *fq, struct napi_struct *napi)
 		.dev		= napi->dev->dev.parent,
 		.netdev		= napi->dev,
 		.napi		= napi,
+		.dma_dir	= DMA_FROM_DEVICE,
 	};
 	struct libeth_fqe *fqes;
 	struct page_pool *pool;
-	int ret;
-
-	pp.dma_dir = fq->xdp ? DMA_BIDIRECTIONAL : DMA_FROM_DEVICE;
+	bool ret;
 
 	if (!fq->hsplit)
 		ret = libeth_rx_page_pool_params(fq, &pp);
@@ -178,28 +173,20 @@ int libeth_rx_fq_create(struct libeth_fq *fq, struct napi_struct *napi)
 		return PTR_ERR(pool);
 
 	fqes = kvcalloc_node(fq->count, sizeof(*fqes), GFP_KERNEL, fq->nid);
-	if (!fqes) {
-		ret = -ENOMEM;
+	if (!fqes)
 		goto err_buf;
-	}
-
-	ret = xdp_reg_page_pool(pool);
-	if (ret)
-		goto err_mem;
 
 	fq->fqes = fqes;
 	fq->pp = pool;
 
 	return 0;
 
-err_mem:
-	kvfree(fqes);
 err_buf:
 	page_pool_destroy(pool);
 
-	return ret;
+	return -ENOMEM;
 }
-EXPORT_SYMBOL_GPL(libeth_rx_fq_create);
+EXPORT_SYMBOL_NS_GPL(libeth_rx_fq_create, LIBETH);
 
 /**
  * libeth_rx_fq_destroy - destroy a &page_pool created by libeth
@@ -207,23 +194,22 @@ EXPORT_SYMBOL_GPL(libeth_rx_fq_create);
  */
 void libeth_rx_fq_destroy(struct libeth_fq *fq)
 {
-	xdp_unreg_page_pool(fq->pp);
 	kvfree(fq->fqes);
 	page_pool_destroy(fq->pp);
 }
-EXPORT_SYMBOL_GPL(libeth_rx_fq_destroy);
+EXPORT_SYMBOL_NS_GPL(libeth_rx_fq_destroy, LIBETH);
 
 /**
- * libeth_rx_recycle_slow - recycle libeth netmem
- * @netmem: network memory to recycle
+ * libeth_rx_recycle_slow - recycle a libeth page from the NAPI context
+ * @page: page to recycle
  *
  * To be used on exceptions or rare cases not requiring fast inline recycling.
  */
-void __cold libeth_rx_recycle_slow(netmem_ref netmem)
+void libeth_rx_recycle_slow(struct page *page)
 {
-	page_pool_put_full_netmem(netmem_get_pp(netmem), netmem, false);
+	page_pool_recycle_direct(page->pp, page);
 }
-EXPORT_SYMBOL_GPL(libeth_rx_recycle_slow);
+EXPORT_SYMBOL_NS_GPL(libeth_rx_recycle_slow, LIBETH);
 
 /* Converting abstract packet type numbers into a software structure with
  * the packet parameters to do O(1) lookup on Rx.
@@ -265,7 +251,7 @@ void libeth_rx_pt_gen_hash_type(struct libeth_rx_pt *pt)
 	pt->hash_type |= libeth_rx_pt_xdp_iprot[pt->inner_prot];
 	pt->hash_type |= libeth_rx_pt_xdp_pl[pt->payload_layer];
 }
-EXPORT_SYMBOL_GPL(libeth_rx_pt_gen_hash_type);
+EXPORT_SYMBOL_NS_GPL(libeth_rx_pt_gen_hash_type, LIBETH);
 
 /* Module */
 

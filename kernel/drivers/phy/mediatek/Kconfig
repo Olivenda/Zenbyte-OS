@@ -65,7 +65,6 @@ config PHY_MTK_HDMI
 	depends on ARCH_MEDIATEK || COMPILE_TEST
 	depends on COMMON_CLK
 	depends on OF
-	depends on REGULATOR
 	select GENERIC_PHY
 	help
 	  Support HDMI PHY for Mediatek SoCs.

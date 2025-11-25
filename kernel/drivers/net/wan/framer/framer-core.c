@@ -732,8 +732,8 @@ EXPORT_SYMBOL_GPL(devm_framer_create);
 
 /**
  * framer_provider_simple_of_xlate() - returns the framer instance from framer provider
- * @dev: the framer provider device (not used here)
- * @args: of_phandle_args
+ * @dev: the framer provider device
+ * @args: of_phandle_args (not used here)
  *
  * Intended to be used by framer provider for the common case where #framer-cells is
  * 0. For other cases where #framer-cells is greater than '0', the framer provider
@@ -743,14 +743,21 @@ EXPORT_SYMBOL_GPL(devm_framer_create);
 struct framer *framer_provider_simple_of_xlate(struct device *dev,
 					       const struct of_phandle_args *args)
 {
-	struct device *target_dev;
+	struct class_dev_iter iter;
+	struct framer *framer;
 
-	target_dev = class_find_device_by_of_node(&framer_class, args->np);
-	if (!target_dev)
-		return ERR_PTR(-ENODEV);
+	class_dev_iter_init(&iter, &framer_class, NULL, NULL);
+	while ((dev = class_dev_iter_next(&iter))) {
+		framer = dev_to_framer(dev);
+		if (args->np != framer->dev.of_node)
+			continue;
 
-	put_device(target_dev);
-	return dev_to_framer(target_dev);
+		class_dev_iter_exit(&iter);
+		return framer;
+	}
+
+	class_dev_iter_exit(&iter);
+	return ERR_PTR(-ENODEV);
 }
 EXPORT_SYMBOL_GPL(framer_provider_simple_of_xlate);
 

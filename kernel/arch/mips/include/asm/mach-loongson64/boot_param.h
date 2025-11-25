@@ -128,10 +128,10 @@ struct irq_source_routing_table {
 } __packed;
 
 struct interface_info {
-	u16 vers; /* version of the specification */
-	u16 size; /* size of this interface */
-	u8  flag; /* used or unused */
-	char description[64]; /* description for each change */
+	u16 vers; /* version of the specificition */
+	u16 size;
+	u8  flag;
+	char description[64];
 } __packed;
 
 #define MAX_RESOURCE_NUMBER 128

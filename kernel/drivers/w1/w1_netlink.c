@@ -194,16 +194,16 @@ static void w1_netlink_queue_status(struct w1_cb_block *block,
 static void w1_netlink_send_error(struct cn_msg *cn, struct w1_netlink_msg *msg,
 	int portid, int error)
 {
-	DEFINE_RAW_FLEX(struct cn_msg, packet, data,
-			sizeof(struct w1_netlink_msg));
-	struct w1_netlink_msg *pkt_msg = (struct w1_netlink_msg *)packet->data;
-
-	*packet = *cn;
-	*pkt_msg = *msg;
-	packet->len = sizeof(*pkt_msg);
-	pkt_msg->len = 0;
-	pkt_msg->status = (u8)-error;
-	cn_netlink_send(packet, portid, 0, GFP_KERNEL);
+	struct {
+		struct cn_msg cn;
+		struct w1_netlink_msg msg;
+	} packet;
+	memcpy(&packet.cn, cn, sizeof(packet.cn));
+	memcpy(&packet.msg, msg, sizeof(packet.msg));
+	packet.cn.len = sizeof(packet.msg);
+	packet.msg.len = 0;
+	packet.msg.status = (u8)-error;
+	cn_netlink_send(&packet.cn, portid, 0, GFP_KERNEL);
 }
 
 /**
@@ -215,20 +215,22 @@ static void w1_netlink_send_error(struct cn_msg *cn, struct w1_netlink_msg *msg,
  */
 void w1_netlink_send(struct w1_master *dev, struct w1_netlink_msg *msg)
 {
-	DEFINE_RAW_FLEX(struct cn_msg, packet, data,
-			sizeof(struct w1_netlink_msg));
-	struct w1_netlink_msg *pkt_msg = (struct w1_netlink_msg *)packet->data;
+	struct {
+		struct cn_msg cn;
+		struct w1_netlink_msg msg;
+	} packet;
+	memset(&packet, 0, sizeof(packet));
 
-	packet->id.idx = CN_W1_IDX;
-	packet->id.val = CN_W1_VAL;
+	packet.cn.id.idx = CN_W1_IDX;
+	packet.cn.id.val = CN_W1_VAL;
 
-	packet->seq = dev->seq++;
-	packet->len = sizeof(*msg);
+	packet.cn.seq = dev->seq++;
+	packet.cn.len = sizeof(*msg);
 
-	*pkt_msg = *msg;
-	pkt_msg->len = 0;
+	memcpy(&packet.msg, msg, sizeof(*msg));
+	packet.msg.len = 0;
 
-	cn_netlink_send(packet, 0, 0, GFP_KERNEL);
+	cn_netlink_send(&packet.cn, 0, 0, GFP_KERNEL);
 }
 
 static void w1_send_slave(struct w1_master *dev, u64 rn)

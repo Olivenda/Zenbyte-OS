@@ -15,7 +15,6 @@
 
 	aliases {
 		serial0 = &uart4;
-		serial1 = &uart3;
 		sdhc1 = &sdhc_1;
 		sdhc2 = &sdhc_2;
 	};
@@ -25,7 +24,7 @@
 	};
 
 	clocks {
-		clk40m: can-clk {
+		clk40M: can-clk {
 			compatible = "fixed-clock";
 			clock-frequency = <40000000>;
 			#clock-cells = <0>;
@@ -189,23 +188,23 @@
 	};
 };
 
-&cpu_pd0 {
+&CPU_PD0 {
 	/delete-property/ power-domains;
 };
 
-&cpu_pd1 {
+&CPU_PD1 {
 	/delete-property/ power-domains;
 };
 
-&cpu_pd2 {
+&CPU_PD2 {
 	/delete-property/ power-domains;
 };
 
-&cpu_pd3 {
+&CPU_PD3 {
 	/delete-property/ power-domains;
 };
 
-/delete-node/ &cluster_pd;
+/delete-node/ &CLUSTER_PD;
 
 &gpi_dma0 {
 	status = "okay";
@@ -542,7 +541,7 @@
 		compatible = "microchip,mcp2518fd";
 		reg = <0>;
 		interrupts-extended = <&tlmm 39 IRQ_TYPE_LEVEL_LOW>;
-		clocks = <&clk40m>;
+		clocks = <&clk40M>;
 		spi-max-frequency = <10000000>;
 		vdd-supply = <&vdc_5v>;
 		xceiver-supply = <&vdc_5v>;
@@ -550,66 +549,6 @@
 };
 
 &tlmm {
-	uart3_default: uart3-default-state {
-		cts-pins {
-			pins = "gpio8";
-			function = "qup3";
-			drive-strength = <2>;
-			bias-bus-hold;
-		};
-
-		rts-pins {
-			pins = "gpio9";
-			function = "qup3";
-			drive-strength = <2>;
-			bias-disable;
-		};
-
-		tx-pins {
-			pins = "gpio10";
-			function = "qup3";
-			drive-strength = <2>;
-			bias-disable;
-		};
-
-		rx-pins {
-			pins = "gpio11";
-			function = "qup3";
-			drive-strength = <2>;
-			bias-pull-up;
-		};
-	};
-
-	uart3_sleep: uart3-sleep-state {
-		cts-pins {
-			pins = "gpio8";
-			function = "gpio";
-			drive-strength = <2>;
-			bias-bus-hold;
-		};
-
-		rts-pins {
-			pins = "gpio9";
-			function = "gpio";
-			drive-strength = <2>;
-			bias-pull-down;
-		};
-
-		tx-pins {
-			pins = "gpio10";
-			function = "gpio";
-			drive-strength = <2>;
-			bias-pull-up;
-		};
-
-		rx-pins {
-			pins = "gpio11";
-			function = "gpio";
-			drive-strength = <2>;
-			bias-pull-up;
-		};
-	};
-
 	lt9611_rst_pin: lt9611-rst-state {
 		pins = "gpio41";
 		function = "gpio";
@@ -642,28 +581,6 @@
 		function = "gpio";
 		bias-pull-up;
 		output-disable;
-	};
-};
-
-&uart3 {
-	/delete-property/ interrupts;
-	interrupts-extended = <&intc GIC_SPI 330 IRQ_TYPE_LEVEL_HIGH>,
-			      <&tlmm 11 IRQ_TYPE_LEVEL_HIGH>;
-	pinctrl-0 = <&uart3_default>;
-	pinctrl-1 = <&uart3_sleep>;
-	pinctrl-names = "default", "sleep";
-
-	status = "okay";
-
-	bluetooth {
-		compatible = "qcom,wcn3950-bt";
-
-		vddio-supply = <&pm4125_l15>;
-		vddxo-supply = <&pm4125_l13>;
-		vddrf-supply = <&pm4125_l10>;
-		vddch0-supply = <&pm4125_l22>;
-		enable-gpios = <&tlmm 87 GPIO_ACTIVE_HIGH>;
-		max-speed = <3200000>;
 	};
 };
 
@@ -703,7 +620,7 @@
 	vdd-1.8-xo-supply = <&pm4125_l13>;
 	vdd-1.3-rfa-supply = <&pm4125_l10>;
 	vdd-3.3-ch0-supply = <&pm4125_l22>;
-	qcom,calibration-variant = "Thundercomm_RB1";
+	qcom,ath10k-calibration-variant = "Thundercomm_RB1";
 	firmware-name = "qcm2290";
 	status = "okay";
 };

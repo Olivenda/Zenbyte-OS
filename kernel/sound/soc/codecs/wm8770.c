@@ -349,10 +349,10 @@ static int wm8770_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	component = dai->component;
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBP_CFP:
+	case SND_SOC_DAIFMT_CBM_CFM:
 		master = 0x100;
 		break;
-	case SND_SOC_DAIFMT_CBC_CFC:
+	case SND_SOC_DAIFMT_CBS_CFS:
 		master = 0;
 		break;
 	default:

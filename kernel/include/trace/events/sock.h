@@ -19,6 +19,7 @@
 /* The protocol traced by inet_sock_set_state */
 #define inet_protocol_names		\
 		EM(IPPROTO_TCP)			\
+		EM(IPPROTO_DCCP)		\
 		EM(IPPROTO_SCTP)		\
 		EMe(IPPROTO_MPTCP)
 

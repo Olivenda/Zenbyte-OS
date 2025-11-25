@@ -18,7 +18,6 @@
  * triggering stack protector errors themselves
  */
 
-void __stack_chk_fail(void);
 __attribute__((weak,used,noreturn,section(".text.nolibc_stack_chk")))
 void __stack_chk_fail(void)
 {
@@ -29,7 +28,6 @@ void __stack_chk_fail(void)
 	for (;;);
 }
 
-void __stack_chk_fail_local(void);
 __attribute__((weak,noreturn,section(".text.nolibc_stack_chk")))
 void __stack_chk_fail_local(void)
 {

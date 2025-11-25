@@ -23,14 +23,14 @@
 efi_status_t efi_low_alloc_above(unsigned long size, unsigned long align,
 				 unsigned long *addr, unsigned long min)
 {
-	struct efi_boot_memmap *map __free(efi_pool) = NULL;
+	struct efi_boot_memmap *map;
 	efi_status_t status;
 	unsigned long nr_pages;
 	int i;
 
 	status = efi_get_memory_map(&map, false);
 	if (status != EFI_SUCCESS)
-		return status;
+		goto fail;
 
 	/*
 	 * Enforce minimum alignment that EFI or Linux requires when
@@ -82,9 +82,11 @@ efi_status_t efi_low_alloc_above(unsigned long size, unsigned long align,
 	}
 
 	if (i == map->map_size / map->desc_size)
-		return EFI_NOT_FOUND;
+		status = EFI_NOT_FOUND;
 
-	return EFI_SUCCESS;
+	efi_bs_call(free_pool, map);
+fail:
+	return status;
 }
 
 /**

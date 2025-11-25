@@ -289,8 +289,26 @@ int __must_check
 i915_vma_pin_ww(struct i915_vma *vma, struct i915_gem_ww_ctx *ww,
 		u64 size, u64 alignment, u64 flags);
 
-int __must_check
-i915_vma_pin(struct i915_vma *vma, u64 size, u64 alignment, u64 flags);
+static inline int __must_check
+i915_vma_pin(struct i915_vma *vma, u64 size, u64 alignment, u64 flags)
+{
+	struct i915_gem_ww_ctx ww;
+	int err;
+
+	i915_gem_ww_ctx_init(&ww, true);
+retry:
+	err = i915_gem_object_lock(vma->obj, &ww);
+	if (!err)
+		err = i915_vma_pin_ww(vma, &ww, size, alignment, flags);
+	if (err == -EDEADLK) {
+		err = i915_gem_ww_ctx_backoff(&ww);
+		if (!err)
+			goto retry;
+	}
+	i915_gem_ww_ctx_fini(&ww);
+
+	return err;
+}
 
 int i915_ggtt_pin(struct i915_vma *vma, struct i915_gem_ww_ctx *ww,
 		  u32 align, unsigned int flags);
@@ -333,11 +351,6 @@ static inline bool i915_node_color_differs(const struct drm_mm_node *node,
 					   unsigned long color)
 {
 	return drm_mm_node_allocated(node) && node->color != color;
-}
-
-static inline void __iomem *i915_vma_get_iomap(struct i915_vma *vma)
-{
-	return READ_ONCE(vma->iomap);
 }
 
 /**

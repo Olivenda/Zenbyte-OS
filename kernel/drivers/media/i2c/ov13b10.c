@@ -34,6 +34,9 @@
 #define OV13B10_VTS_120FPS		0x0320
 #define OV13B10_VTS_MAX			0x7fff
 
+/* HBLANK control - read only */
+#define OV13B10_PPL_560MHZ		4704
+
 /* Exposure control */
 #define OV13B10_REG_EXPOSURE		0x3500
 #define OV13B10_EXPOSURE_MIN		4
@@ -92,7 +95,7 @@ struct ov13b10_reg_list {
 
 /* Link frequency config */
 struct ov13b10_link_freq_config {
-	u64 link_freq;
+	u32 pixels_per_line;
 
 	/* registers for this link frequency */
 	struct ov13b10_reg_list reg_list;
@@ -111,10 +114,6 @@ struct ov13b10_mode {
 
 	/* Index of Link frequency config to be used */
 	u32 link_freq_index;
-
-	/* Pixels per line in current mode */
-	u32 ppl;
-
 	/* Default register values */
 	struct ov13b10_reg_list reg_list;
 };
@@ -514,52 +513,6 @@ static const struct ov13b10_reg mode_1364x768_120fps_regs[] = {
 	{0x5001, 0x0d},
 };
 
-static const struct ov13b10_reg mode_2lanes_2104x1560_60fps_regs[] = {
-	{0x3016, 0x32},
-	{0x3106, 0x29},
-	{0x0305, 0xaf},
-	{0x3501, 0x06},
-	{0x3662, 0x88},
-	{0x3714, 0x28},
-	{0x3739, 0x10},
-	{0x37c2, 0x14},
-	{0x37d9, 0x06},
-	{0x37e2, 0x0c},
-	{0x3800, 0x00},
-	{0x3801, 0x00},
-	{0x3802, 0x00},
-	{0x3803, 0x08},
-	{0x3804, 0x10},
-	{0x3805, 0x8f},
-	{0x3806, 0x0c},
-	{0x3807, 0x47},
-	{0x3808, 0x08},
-	{0x3809, 0x38},
-	{0x380a, 0x06},
-	{0x380b, 0x18},
-	{0x380c, 0x04},
-	{0x380d, 0x98},
-	{0x380e, 0x06},
-	{0x380f, 0x3e},
-	{0x3810, 0x00},
-	{0x3811, 0x07},
-	{0x3812, 0x00},
-	{0x3813, 0x05},
-	{0x3814, 0x03},
-	{0x3816, 0x03},
-	{0x3820, 0x8b},
-	{0x3c8c, 0x18},
-	{0x4008, 0x00},
-	{0x4009, 0x05},
-	{0x4050, 0x00},
-	{0x4051, 0x05},
-	{0x4501, 0x08},
-	{0x4505, 0x00},
-	{0x4837, 0x0e},
-	{0x5000, 0xfd},
-	{0x5001, 0x0d},
-};
-
 static const char * const ov13b10_test_pattern_menu[] = {
 	"Disabled",
 	"Vertical Color Bar Type 1",
@@ -573,16 +526,15 @@ static const char * const ov13b10_test_pattern_menu[] = {
 #define OV13B10_LINK_FREQ_INDEX_0	0
 
 #define OV13B10_EXT_CLK			19200000
-#define OV13B10_4_DATA_LANES		4
-#define OV13B10_2_DATA_LANES		2
+#define OV13B10_DATA_LANES		4
 
 /*
- * pixel_rate = data_rate * nr_of_lanes / bits_per_pixel
- * data_rate => link_freq * 2; number of lanes => 4 or 2; bits per pixel => 10
+ * pixel_rate = link_freq * data-rate * nr_of_lanes / bits_per_sample
+ * data rate => double data rate; number of lanes => 4; bits per pixel => 10
  */
-static u64 link_freq_to_pixel_rate(u64 f, u8 lanes)
+static u64 link_freq_to_pixel_rate(u64 f)
 {
-	f *= 2 * lanes;
+	f *= 2 * OV13B10_DATA_LANES;
 	do_div(f, 10);
 
 	return f;
@@ -597,7 +549,7 @@ static const s64 link_freq_menu_items[] = {
 static const struct ov13b10_link_freq_config
 			link_freq_configs[] = {
 	{
-		.link_freq = OV13B10_LINK_FREQ_560MHZ,
+		.pixels_per_line = OV13B10_PPL_560MHZ,
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(mipi_data_rate_1120mbps),
 			.regs = mipi_data_rate_1120mbps,
@@ -606,14 +558,12 @@ static const struct ov13b10_link_freq_config
 };
 
 /* Mode configs */
-static const struct ov13b10_mode supported_4_lanes_modes[] = {
-	/* 4 data lanes */
+static const struct ov13b10_mode supported_modes[] = {
 	{
 		.width = 4208,
 		.height = 3120,
 		.vts_def = OV13B10_VTS_30FPS,
 		.vts_min = OV13B10_VTS_30FPS,
-		.ppl = 4704,
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(mode_4208x3120_regs),
 			.regs = mode_4208x3120_regs,
@@ -625,7 +575,6 @@ static const struct ov13b10_mode supported_4_lanes_modes[] = {
 		.height = 3120,
 		.vts_def = OV13B10_VTS_30FPS,
 		.vts_min = OV13B10_VTS_30FPS,
-		.ppl = 4704,
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(mode_4160x3120_regs),
 			.regs = mode_4160x3120_regs,
@@ -637,7 +586,6 @@ static const struct ov13b10_mode supported_4_lanes_modes[] = {
 		.height = 2340,
 		.vts_def = OV13B10_VTS_30FPS,
 		.vts_min = OV13B10_VTS_30FPS,
-		.ppl = 4704,
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(mode_4160x2340_regs),
 			.regs = mode_4160x2340_regs,
@@ -649,7 +597,6 @@ static const struct ov13b10_mode supported_4_lanes_modes[] = {
 		.height = 1560,
 		.vts_def = OV13B10_VTS_60FPS,
 		.vts_min = OV13B10_VTS_60FPS,
-		.ppl = 4704,
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(mode_2104x1560_regs),
 			.regs = mode_2104x1560_regs,
@@ -661,7 +608,6 @@ static const struct ov13b10_mode supported_4_lanes_modes[] = {
 		.height = 1170,
 		.vts_def = OV13B10_VTS_60FPS,
 		.vts_min = OV13B10_VTS_60FPS,
-		.ppl = 4704,
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(mode_2080x1170_regs),
 			.regs = mode_2080x1170_regs,
@@ -674,27 +620,9 @@ static const struct ov13b10_mode supported_4_lanes_modes[] = {
 		.vts_def = OV13B10_VTS_120FPS,
 		.vts_min = OV13B10_VTS_120FPS,
 		.link_freq_index = OV13B10_LINK_FREQ_INDEX_0,
-		.ppl = 4664,
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(mode_1364x768_120fps_regs),
 			.regs = mode_1364x768_120fps_regs,
-		},
-	},
-};
-
-static const struct ov13b10_mode supported_2_lanes_modes[] = {
-	/* 2 data lanes */
-	{
-		.width = 2104,
-		.height = 1560,
-		.vts_def = OV13B10_VTS_60FPS,
-		.vts_min = OV13B10_VTS_60FPS,
-		.link_freq_index = OV13B10_LINK_FREQ_INDEX_0,
-		.ppl = 2352,
-		.reg_list = {
-			.num_of_regs =
-				ARRAY_SIZE(mode_2lanes_2104x1560_60fps_regs),
-			.regs = mode_2lanes_2104x1560_60fps_regs,
 		},
 	},
 };
@@ -716,19 +644,11 @@ struct ov13b10 {
 	struct v4l2_ctrl *hblank;
 	struct v4l2_ctrl *exposure;
 
-	/* Supported modes */
-	const struct ov13b10_mode *supported_modes;
-
 	/* Current mode */
 	const struct ov13b10_mode *cur_mode;
 
 	/* Mutex for serialized access */
 	struct mutex mutex;
-
-	u8 supported_modes_num;
-
-	/* Data lanes used */
-	u8 data_lanes;
 
 	/* True if the device has been identified */
 	bool identified;
@@ -833,8 +753,8 @@ static int ov13b10_write_reg_list(struct ov13b10 *ov13b,
 /* Open sub-device */
 static int ov13b10_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 {
+	const struct ov13b10_mode *default_mode = &supported_modes[0];
 	struct ov13b10 *ov13b = to_ov13b10(sd);
-	const struct ov13b10_mode *default_mode = ov13b->supported_modes;
 	struct v4l2_mbus_framefmt *try_fmt = v4l2_subdev_state_get_format(fh->state,
 									  0);
 
@@ -1053,10 +973,7 @@ static int ov13b10_enum_frame_size(struct v4l2_subdev *sd,
 				   struct v4l2_subdev_state *sd_state,
 				   struct v4l2_subdev_frame_size_enum *fse)
 {
-	struct ov13b10 *ov13b = to_ov13b10(sd);
-	const struct ov13b10_mode *supported_modes = ov13b->supported_modes;
-
-	if (fse->index >= ov13b->supported_modes_num)
+	if (fse->index >= ARRAY_SIZE(supported_modes))
 		return -EINVAL;
 
 	if (fse->code != MEDIA_BUS_FMT_SGRBG10_1X10)
@@ -1116,7 +1033,6 @@ ov13b10_set_pad_format(struct v4l2_subdev *sd,
 {
 	struct ov13b10 *ov13b = to_ov13b10(sd);
 	const struct ov13b10_mode *mode;
-	const struct ov13b10_mode *supported_modes = ov13b->supported_modes;
 	struct v4l2_mbus_framefmt *framefmt;
 	s32 vblank_def;
 	s32 vblank_min;
@@ -1131,7 +1047,7 @@ ov13b10_set_pad_format(struct v4l2_subdev *sd,
 		fmt->format.code = MEDIA_BUS_FMT_SGRBG10_1X10;
 
 	mode = v4l2_find_nearest_size(supported_modes,
-				      ov13b->supported_modes_num,
+				      ARRAY_SIZE(supported_modes),
 				      width, height,
 				      fmt->format.width, fmt->format.height);
 	ov13b10_update_pad_format(mode, fmt);
@@ -1142,18 +1058,23 @@ ov13b10_set_pad_format(struct v4l2_subdev *sd,
 		ov13b->cur_mode = mode;
 		__v4l2_ctrl_s_ctrl(ov13b->link_freq, mode->link_freq_index);
 		link_freq = link_freq_menu_items[mode->link_freq_index];
-		pixel_rate = link_freq_to_pixel_rate(link_freq,
-						     ov13b->data_lanes);
+		pixel_rate = link_freq_to_pixel_rate(link_freq);
 		__v4l2_ctrl_s_ctrl_int64(ov13b->pixel_rate, pixel_rate);
 
 		/* Update limits and set FPS to default */
-		vblank_def = mode->vts_def - mode->height;
-		vblank_min = mode->vts_min - mode->height;
+		vblank_def = ov13b->cur_mode->vts_def -
+			     ov13b->cur_mode->height;
+		vblank_min = ov13b->cur_mode->vts_min -
+			     ov13b->cur_mode->height;
 		__v4l2_ctrl_modify_range(ov13b->vblank, vblank_min,
-					 OV13B10_VTS_MAX - mode->height,
-					 1, vblank_def);
+					 OV13B10_VTS_MAX
+					 - ov13b->cur_mode->height,
+					 1,
+					 vblank_def);
 		__v4l2_ctrl_s_ctrl(ov13b->vblank, vblank_def);
-		h_blank = mode->ppl - mode->width;
+		h_blank =
+			link_freq_configs[mode->link_freq_index].pixels_per_line
+			 - ov13b->cur_mode->width;
 		__v4l2_ctrl_modify_range(ov13b->hblank, h_blank,
 					 h_blank, 1, h_blank);
 	}
@@ -1390,8 +1311,7 @@ static int ov13b10_init_controls(struct ov13b10 *ov13b)
 	if (ov13b->link_freq)
 		ov13b->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
-	pixel_rate_max = link_freq_to_pixel_rate(link_freq_menu_items[0],
-						 ov13b->data_lanes);
+	pixel_rate_max = link_freq_to_pixel_rate(link_freq_menu_items[0]);
 	pixel_rate_min = 0;
 	/* By default, PIXEL_RATE is read only */
 	ov13b->pixel_rate = v4l2_ctrl_new_std(ctrl_hdlr, &ov13b10_ctrl_ops,
@@ -1408,7 +1328,8 @@ static int ov13b10_init_controls(struct ov13b10 *ov13b)
 					  OV13B10_VTS_MAX - mode->height, 1,
 					  vblank_def);
 
-	hblank = mode->ppl - mode->width;
+	hblank = link_freq_configs[mode->link_freq_index].pixels_per_line -
+		 mode->width;
 	ov13b->hblank = v4l2_ctrl_new_std(ctrl_hdlr, &ov13b10_ctrl_ops,
 					  V4L2_CID_HBLANK,
 					  hblank, hblank, 1, hblank);
@@ -1502,7 +1423,7 @@ static int ov13b10_get_pm_resources(struct device *dev)
 	return 0;
 }
 
-static int ov13b10_check_hwcfg(struct device *dev, struct ov13b10 *ov13b)
+static int ov13b10_check_hwcfg(struct device *dev)
 {
 	struct v4l2_fwnode_endpoint bus_cfg = {
 		.bus_type = V4L2_MBUS_CSI2_DPHY
@@ -1512,7 +1433,6 @@ static int ov13b10_check_hwcfg(struct device *dev, struct ov13b10 *ov13b)
 	unsigned int i, j;
 	int ret;
 	u32 ext_clk;
-	u8 dlane;
 
 	if (!fwnode)
 		return -ENXIO;
@@ -1539,31 +1459,12 @@ static int ov13b10_check_hwcfg(struct device *dev, struct ov13b10 *ov13b)
 	if (ret)
 		return ret;
 
-	dlane = bus_cfg.bus.mipi_csi2.num_data_lanes;
-	switch (dlane) {
-	case OV13B10_4_DATA_LANES:
-		ov13b->supported_modes = supported_4_lanes_modes;
-		ov13b->supported_modes_num =
-			ARRAY_SIZE(supported_4_lanes_modes);
-		break;
-
-	case OV13B10_2_DATA_LANES:
-		ov13b->supported_modes = supported_2_lanes_modes;
-		ov13b->supported_modes_num =
-			ARRAY_SIZE(supported_2_lanes_modes);
-		break;
-
-	default:
+	if (bus_cfg.bus.mipi_csi2.num_data_lanes != OV13B10_DATA_LANES) {
 		dev_err(dev, "number of CSI2 data lanes %d is not supported",
-			dlane);
+			bus_cfg.bus.mipi_csi2.num_data_lanes);
 		ret = -EINVAL;
 		goto out_err;
 	}
-
-	ov13b->data_lanes = dlane;
-	ov13b->cur_mode = ov13b->supported_modes;
-	dev_dbg(dev, "%u lanes with %u modes selected\n",
-		ov13b->data_lanes, ov13b->supported_modes_num);
 
 	if (!bus_cfg.nr_of_link_frequencies) {
 		dev_err(dev, "no link frequencies defined");
@@ -1598,16 +1499,16 @@ static int ov13b10_probe(struct i2c_client *client)
 	bool full_power;
 	int ret;
 
-	ov13b = devm_kzalloc(&client->dev, sizeof(*ov13b), GFP_KERNEL);
-	if (!ov13b)
-		return -ENOMEM;
-
 	/* Check HW config */
-	ret = ov13b10_check_hwcfg(&client->dev, ov13b);
+	ret = ov13b10_check_hwcfg(&client->dev);
 	if (ret) {
 		dev_err(&client->dev, "failed to check hwcfg: %d", ret);
 		return ret;
 	}
+
+	ov13b = devm_kzalloc(&client->dev, sizeof(*ov13b), GFP_KERNEL);
+	if (!ov13b)
+		return -ENOMEM;
 
 	/* Initialize subdev */
 	v4l2_i2c_subdev_init(&ov13b->sd, client, &ov13b10_subdev_ops);
@@ -1631,6 +1532,9 @@ static int ov13b10_probe(struct i2c_client *client)
 			goto error_power_off;
 		}
 	}
+
+	/* Set default mode to max resolution */
+	ov13b->cur_mode = &supported_modes[0];
 
 	ret = ov13b10_init_controls(ov13b);
 	if (ret)

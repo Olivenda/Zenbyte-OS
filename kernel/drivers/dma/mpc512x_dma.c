@@ -1110,7 +1110,7 @@ MODULE_DEVICE_TABLE(of, mpc_dma_match);
 
 static struct platform_driver mpc_dma_driver = {
 	.probe		= mpc_dma_probe,
-	.remove		= mpc_dma_remove,
+	.remove_new	= mpc_dma_remove,
 	.driver = {
 		.name = DRV_NAME,
 		.of_match_table	= mpc_dma_match,

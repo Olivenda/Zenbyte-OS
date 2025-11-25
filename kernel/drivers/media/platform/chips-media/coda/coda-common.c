@@ -2171,6 +2171,8 @@ static const struct vb2_ops coda_qops = {
 	.buf_queue		= coda_buf_queue,
 	.start_streaming	= coda_start_streaming,
 	.stop_streaming		= coda_stop_streaming,
+	.wait_prepare		= vb2_ops_wait_prepare,
+	.wait_finish		= vb2_ops_wait_finish,
 };
 
 static int coda_s_ctrl(struct v4l2_ctrl *ctrl)
@@ -3340,12 +3342,11 @@ static int coda_runtime_resume(struct device *dev)
 
 static const struct dev_pm_ops coda_pm_ops = {
 	SET_RUNTIME_PM_OPS(NULL, coda_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
 };
 
 static struct platform_driver coda_driver = {
 	.probe	= coda_probe,
-	.remove = coda_remove,
+	.remove_new = coda_remove,
 	.driver	= {
 		.name	= CODA_NAME,
 		.of_match_table = coda_dt_ids,

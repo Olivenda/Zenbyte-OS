@@ -17,7 +17,6 @@
 #include <linux/bitops.h>
 #include <linux/module.h>
 #include <linux/sched/mm.h>
-#include <linux/string_choices.h>
 
 #include <asm/setup.h>
 #include <asm/traps.h>
@@ -371,8 +370,8 @@ int mmu_emu_handle_fault (unsigned long vaddr, int read_flag, int kernel_fault)
 	}
 
 #ifdef DEBUG_MMU_EMU
-	pr_info("%s: vaddr=%lx type=%s crp=%px\n", __func__, vaddr,
-		str_read_write(read_flag), crp);
+	pr_info("%s: vaddr=%lx type=%s crp=%p\n", __func__, vaddr,
+		read_flag ? "read" : "write", crp);
 #endif
 
 	segment = (vaddr >> SUN3_PMEG_SIZE_BITS) & 0x7FF;
@@ -418,7 +417,7 @@ int mmu_emu_handle_fault (unsigned long vaddr, int read_flag, int kernel_fault)
 		pte_val (*pte) |= SUN3_PAGE_ACCESSED;
 
 #ifdef DEBUG_MMU_EMU
-	pr_info("seg:%ld crp:%px ->", get_fc(), crp);
+	pr_info("seg:%ld crp:%p ->", get_fs().seg, crp);
 	print_pte_vaddr (vaddr);
 	pr_cont("\n");
 #endif

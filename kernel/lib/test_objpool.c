@@ -190,7 +190,8 @@ static int ot_init_hrtimer(struct ot_item *item, unsigned long hrtimer)
 		return -ENOENT;
 
 	item->hrtcycle = ktime_set(0, hrtimer * 1000000UL);
-	hrtimer_setup(hrt, ot_hrtimer_handler, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	hrtimer_init(hrt, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	hrt->function = ot_hrtimer_handler;
 	return 0;
 }
 
@@ -370,10 +371,14 @@ static int ot_start_sync(struct ot_test *test)
 		if (!cpu_online(cpu))
 			continue;
 
-		work = kthread_run_on_cpu(ot_thread_worker, item,
-					  cpu, "ot_worker_%d");
-		if (IS_ERR(work))
+		work = kthread_create_on_node(ot_thread_worker, item,
+				cpu_to_node(cpu), "ot_worker_%d", cpu);
+		if (IS_ERR(work)) {
 			pr_err("failed to create thread for cpu %d\n", cpu);
+		} else {
+			kthread_bind(work, cpu);
+			wake_up_process(work);
+		}
 	}
 
 	/* wait a while to make sure all threads waiting at start line */
@@ -557,9 +562,14 @@ static int ot_start_async(struct ot_test *test)
 		if (!cpu_online(cpu))
 			continue;
 
-		work = kthread_run_on_cpu(ot_thread_worker, item, cpu, "ot_worker_%d");
-		if (IS_ERR(work))
+		work = kthread_create_on_node(ot_thread_worker, item,
+				cpu_to_node(cpu), "ot_worker_%d", cpu);
+		if (IS_ERR(work)) {
 			pr_err("failed to create thread for cpu %d\n", cpu);
+		} else {
+			kthread_bind(work, cpu);
+			wake_up_process(work);
+		}
 	}
 
 	/* wait a while to make sure all threads waiting at start line */

@@ -8,7 +8,6 @@
 
 #include <linux/slab.h>
 #include <linux/unaligned.h>
-#include <net/sock.h>
 #include "ieee80211_i.h"
 #include "mesh.h"
 #include "wme.h"
@@ -40,7 +39,7 @@ void ieee80211s_stop(void)
 static void ieee80211_mesh_housekeeping_timer(struct timer_list *t)
 {
 	struct ieee80211_sub_if_data *sdata =
-		timer_container_of(sdata, t, u.mesh.housekeeping_timer);
+		from_timer(sdata, t, u.mesh.housekeeping_timer);
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_if_mesh *ifmsh = &sdata->u.mesh;
 
@@ -687,7 +686,7 @@ int mesh_add_eht_oper_ie(struct ieee80211_sub_if_data *sdata, struct sk_buff *sk
 static void ieee80211_mesh_path_timer(struct timer_list *t)
 {
 	struct ieee80211_sub_if_data *sdata =
-		timer_container_of(sdata, t, u.mesh.mesh_path_timer);
+		from_timer(sdata, t, u.mesh.mesh_path_timer);
 
 	wiphy_work_queue(sdata->local->hw.wiphy, &sdata->work);
 }
@@ -695,7 +694,7 @@ static void ieee80211_mesh_path_timer(struct timer_list *t)
 static void ieee80211_mesh_path_root_timer(struct timer_list *t)
 {
 	struct ieee80211_sub_if_data *sdata =
-		timer_container_of(sdata, t, u.mesh.mesh_path_root_timer);
+		from_timer(sdata, t, u.mesh.mesh_path_root_timer);
 	struct ieee80211_if_mesh *ifmsh = &sdata->u.mesh;
 
 	set_bit(MESH_WORK_ROOT, &ifmsh->wrkq_flags);
@@ -710,7 +709,7 @@ void ieee80211_mesh_root_setup(struct ieee80211_if_mesh *ifmsh)
 	else {
 		clear_bit(MESH_WORK_ROOT, &ifmsh->wrkq_flags);
 		/* stop running timer */
-		timer_delete_sync(&ifmsh->mesh_path_root_timer);
+		del_timer_sync(&ifmsh->mesh_path_root_timer);
 	}
 }
 
@@ -780,7 +779,7 @@ bool ieee80211_mesh_xmit_fast(struct ieee80211_sub_if_data *sdata,
 	if (ethertype < ETH_P_802_3_MIN)
 		return false;
 
-	if (sk_requests_wifi_status(skb->sk))
+	if (skb->sk && skb_shinfo(skb)->tx_flags & SKBTX_WIFI_STATUS)
 		return false;
 
 	if (skb->ip_summed == CHECKSUM_PARTIAL) {
@@ -960,10 +959,13 @@ ieee80211_mesh_build_beacon(struct ieee80211_if_mesh *ifmsh)
 	u8 *pos;
 	struct ieee80211_sub_if_data *sdata;
 	int hdr_len = offsetofend(struct ieee80211_mgmt, u.beacon);
+	u32 rate_flags;
 
 	sdata = container_of(ifmsh, struct ieee80211_sub_if_data, u.mesh);
 
 	sband = ieee80211_get_sband(sdata);
+	rate_flags =
+		ieee80211_chandef_rate_flags(&sdata->vif.bss_conf.chanreq.oper);
 
 	ie_len_he_cap = ieee80211_ie_len_he_cap(sdata);
 	ie_len_eht_cap = ieee80211_ie_len_eht_cap(sdata);
@@ -1092,7 +1094,7 @@ ieee80211_mesh_build_beacon(struct ieee80211_if_mesh *ifmsh)
 
 	if (ieee80211_put_srates_elem(skb, sband,
 				      sdata->vif.bss_conf.basic_rates,
-				      0, WLAN_EID_SUPP_RATES) ||
+				      rate_flags, 0, WLAN_EID_SUPP_RATES) ||
 	    mesh_add_ds_params_ie(sdata, skb))
 		goto out_free;
 
@@ -1105,7 +1107,7 @@ ieee80211_mesh_build_beacon(struct ieee80211_if_mesh *ifmsh)
 
 	if (ieee80211_put_srates_elem(skb, sband,
 				      sdata->vif.bss_conf.basic_rates,
-				      0, WLAN_EID_EXT_SUPP_RATES) ||
+				      rate_flags, 0, WLAN_EID_EXT_SUPP_RATES) ||
 	    mesh_add_rsn_ie(sdata, skb) ||
 	    mesh_add_ht_cap_ie(sdata, skb) ||
 	    mesh_add_ht_oper_ie(sdata, skb) ||
@@ -1205,7 +1207,7 @@ int ieee80211_start_mesh(struct ieee80211_sub_if_data *sdata)
 		return -ENOMEM;
 	}
 
-	ieee80211_recalc_dtim(sdata, drv_get_tsf(local, sdata));
+	ieee80211_recalc_dtim(local, sdata);
 	ieee80211_link_info_change_notify(sdata, &sdata->deflink, changed);
 
 	netif_carrier_on(sdata->dev);
@@ -1242,9 +1244,9 @@ void ieee80211_stop_mesh(struct ieee80211_sub_if_data *sdata)
 	local->total_ps_buffered -= skb_queue_len(&ifmsh->ps.bc_buf);
 	skb_queue_purge(&ifmsh->ps.bc_buf);
 
-	timer_delete_sync(&sdata->u.mesh.housekeeping_timer);
-	timer_delete_sync(&sdata->u.mesh.mesh_path_root_timer);
-	timer_delete_sync(&sdata->u.mesh.mesh_path_timer);
+	del_timer_sync(&sdata->u.mesh.housekeeping_timer);
+	del_timer_sync(&sdata->u.mesh.mesh_path_root_timer);
+	del_timer_sync(&sdata->u.mesh.mesh_path_timer);
 
 	/* clear any mesh work (for next join) we may have accrued */
 	ifmsh->wrkq_flags = 0;
@@ -1483,7 +1485,7 @@ static void ieee80211_mesh_rx_bcn_presp(struct ieee80211_sub_if_data *sdata,
 	if (!elems)
 		return;
 
-	/* ignore non-mesh or secure / insecure mismatch */
+	/* ignore non-mesh or secure / unsecure mismatch */
 	if ((!elems->mesh_id || !elems->mesh_config) ||
 	    (elems->rsn && sdata->u.mesh.security == IEEE80211_MESH_SEC_NONE) ||
 	    (!elems->rsn && sdata->u.mesh.security != IEEE80211_MESH_SEC_NONE))

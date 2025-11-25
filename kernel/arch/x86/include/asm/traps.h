@@ -35,6 +35,8 @@ static inline int get_si_code(unsigned long condition)
 		return TRAP_BRKPT;
 }
 
+extern int panic_on_unrecovered_nmi;
+
 void math_emulate(struct math_emu_info *);
 
 bool fault_in_kernel_space(unsigned long address);

@@ -36,7 +36,7 @@
 
 #define DART_MAX_STREAMS 256
 #define DART_MAX_TTBR 4
-#define MAX_DARTS_PER_DEVICE 3
+#define MAX_DARTS_PER_DEVICE 2
 
 /* Common registers */
 
@@ -279,9 +279,6 @@ struct apple_dart_domain {
  * @streams: streams for this device
  */
 struct apple_dart_master_cfg {
-	/* Intersection of DART capabilitles */
-	u32 supports_bypass : 1;
-
 	struct apple_dart_stream_map stream_maps[MAX_DARTS_PER_DEVICE];
 };
 
@@ -689,7 +686,7 @@ static int apple_dart_attach_dev_identity(struct iommu_domain *domain,
 	struct apple_dart_stream_map *stream_map;
 	int i;
 
-	if (!cfg->supports_bypass)
+	if (!cfg->stream_maps[0].dart->supports_bypass)
 		return -EINVAL;
 
 	for_each_stream_map(i, cfg, stream_map)
@@ -778,7 +775,8 @@ static void apple_dart_domain_free(struct iommu_domain *domain)
 {
 	struct apple_dart_domain *dart_domain = to_dart_domain(domain);
 
-	free_io_pgtable_ops(dart_domain->pgtbl_ops);
+	if (dart_domain->pgtbl_ops)
+		free_io_pgtable_ops(dart_domain->pgtbl_ops);
 
 	kfree(dart_domain);
 }
@@ -796,22 +794,19 @@ static int apple_dart_of_xlate(struct device *dev,
 		return -EINVAL;
 	sid = args->args[0];
 
-	if (!cfg) {
+	if (!cfg)
 		cfg = kzalloc(sizeof(*cfg), GFP_KERNEL);
-		if (!cfg)
-			return -ENOMEM;
-		/* Will be ANDed with DART capabilities */
-		cfg->supports_bypass = true;
-	}
+	if (!cfg)
+		return -ENOMEM;
 	dev_iommu_priv_set(dev, cfg);
 
 	cfg_dart = cfg->stream_maps[0].dart;
 	if (cfg_dart) {
+		if (cfg_dart->supports_bypass != dart->supports_bypass)
+			return -EINVAL;
 		if (cfg_dart->pgsize != dart->pgsize)
 			return -EINVAL;
 	}
-
-	cfg->supports_bypass &= dart->supports_bypass;
 
 	for (i = 0; i < MAX_DARTS_PER_DEVICE; ++i) {
 		if (cfg->stream_maps[i].dart == dart) {
@@ -952,7 +947,7 @@ static int apple_dart_def_domain_type(struct device *dev)
 
 	if (cfg->stream_maps[0].dart->pgsize > PAGE_SIZE)
 		return IOMMU_DOMAIN_IDENTITY;
-	if (!cfg->supports_bypass)
+	if (!cfg->stream_maps[0].dart->supports_bypass)
 		return IOMMU_DOMAIN_DMA;
 
 	return 0;
@@ -993,6 +988,7 @@ static const struct iommu_ops apple_dart_iommu_ops = {
 	.of_xlate = apple_dart_of_xlate,
 	.def_domain_type = apple_dart_def_domain_type,
 	.get_resv_regions = apple_dart_get_resv_regions,
+	.pgsize_bitmap = -1UL, /* Restricted during dart probe */
 	.owner = THIS_MODULE,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
 		.attach_dev	= apple_dart_attach_dev_paging,
@@ -1361,7 +1357,7 @@ static struct platform_driver apple_dart_driver = {
 		.pm			= pm_sleep_ptr(&apple_dart_pm_ops),
 	},
 	.probe	= apple_dart_probe,
-	.remove = apple_dart_remove,
+	.remove_new = apple_dart_remove,
 };
 
 module_platform_driver(apple_dart_driver);

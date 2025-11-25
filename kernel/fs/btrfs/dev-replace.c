@@ -45,7 +45,7 @@
  *
  * - Copy existing extents
  *
- *   This happens by reusing scrub facility, as scrub also iterates through
+ *   This happens by re-using scrub facility, as scrub also iterates through
  *   existing extents from commit root.
  *
  *   Location:		scrub_write_block_to_dev_replace() from
@@ -76,7 +76,7 @@ int btrfs_init_dev_replace(struct btrfs_fs_info *fs_info)
 	struct extent_buffer *eb;
 	int slot;
 	int ret = 0;
-	BTRFS_PATH_AUTO_FREE(path);
+	struct btrfs_path *path = NULL;
 	int item_size;
 	struct btrfs_dev_replace_item *ptr;
 	u64 src_devid;
@@ -85,8 +85,10 @@ int btrfs_init_dev_replace(struct btrfs_fs_info *fs_info)
 		return 0;
 
 	path = btrfs_alloc_path();
-	if (!path)
-		return -ENOMEM;
+	if (!path) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	key.objectid = 0;
 	key.type = BTRFS_DEV_REPLACE_KEY;
@@ -101,8 +103,10 @@ no_valid_dev_replace_entry_found:
 		if (btrfs_find_device(fs_info->fs_devices, &args)) {
 			btrfs_err(fs_info,
 			"found replace target device without a valid replace item");
-			return -EUCLEAN;
+			ret = -EUCLEAN;
+			goto out;
 		}
+		ret = 0;
 		dev_replace->replace_state =
 			BTRFS_IOCTL_DEV_REPLACE_STATE_NEVER_STARTED;
 		dev_replace->cont_reading_from_srcdev_mode =
@@ -119,7 +123,7 @@ no_valid_dev_replace_entry_found:
 		dev_replace->tgtdev = NULL;
 		dev_replace->is_valid = 0;
 		dev_replace->item_needs_writeback = 0;
-		return 0;
+		goto out;
 	}
 	slot = path->slots[0];
 	eb = path->nodes[0];
@@ -222,6 +226,8 @@ no_valid_dev_replace_entry_found:
 		break;
 	}
 
+out:
+	btrfs_free_path(path);
 	return ret;
 }
 
@@ -250,7 +256,7 @@ static int btrfs_init_dev_replace_tgtdev(struct btrfs_fs_info *fs_info,
 	}
 
 	bdev_file = bdev_file_open_by_path(device_path, BLK_OPEN_WRITE,
-					   fs_info->sb, &fs_holder_ops);
+					fs_info->bdev_holder, NULL);
 	if (IS_ERR(bdev_file)) {
 		btrfs_err(fs_info, "target device %s is invalid!", device_path);
 		return PTR_ERR(bdev_file);
@@ -327,7 +333,7 @@ static int btrfs_init_dev_replace_tgtdev(struct btrfs_fs_info *fs_info,
 	return 0;
 
 error:
-	bdev_fput(bdev_file);
+	fput(bdev_file);
 	return ret;
 }
 
@@ -340,7 +346,7 @@ int btrfs_run_dev_replace(struct btrfs_trans_handle *trans)
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	int ret;
 	struct btrfs_root *dev_root = fs_info->dev_root;
-	BTRFS_PATH_AUTO_FREE(path);
+	struct btrfs_path *path;
 	struct btrfs_key key;
 	struct extent_buffer *eb;
 	struct btrfs_dev_replace_item *ptr;
@@ -359,15 +365,16 @@ int btrfs_run_dev_replace(struct btrfs_trans_handle *trans)
 	key.offset = 0;
 
 	path = btrfs_alloc_path();
-	if (!path)
-		return -ENOMEM;
-
+	if (!path) {
+		ret = -ENOMEM;
+		goto out;
+	}
 	ret = btrfs_search_slot(trans, dev_root, &key, path, -1, 1);
 	if (ret < 0) {
 		btrfs_warn(fs_info,
 			   "error %d while searching for dev_replace item!",
 			   ret);
-		return ret;
+		goto out;
 	}
 
 	if (ret == 0 &&
@@ -388,7 +395,7 @@ int btrfs_run_dev_replace(struct btrfs_trans_handle *trans)
 			btrfs_warn(fs_info,
 				   "delete too small dev_replace item failed %d!",
 				   ret);
-			return ret;
+			goto out;
 		}
 		ret = 1;
 	}
@@ -401,7 +408,7 @@ int btrfs_run_dev_replace(struct btrfs_trans_handle *trans)
 		if (ret < 0) {
 			btrfs_warn(fs_info,
 				   "insert dev_replace item failed %d!", ret);
-			return ret;
+			goto out;
 		}
 	}
 
@@ -433,6 +440,11 @@ int btrfs_run_dev_replace(struct btrfs_trans_handle *trans)
 		dev_replace->cursor_right);
 	dev_replace->item_needs_writeback = 0;
 	up_write(&dev_replace->rwsem);
+
+	btrfs_mark_buffer_dirty(trans, eb);
+
+out:
+	btrfs_free_path(path);
 
 	return ret;
 }
@@ -600,7 +612,7 @@ static int btrfs_dev_replace_start(struct btrfs_fs_info *fs_info,
 		return PTR_ERR(src_device);
 
 	if (btrfs_pinned_by_swapfile(fs_info, src_device)) {
-		btrfs_warn(fs_info,
+		btrfs_warn_in_rcu(fs_info,
 	  "cannot replace device %s (devid %llu) due to active swapfile",
 			btrfs_dev_name(src_device), src_device->devid);
 		return -ETXTBSY;
@@ -637,7 +649,7 @@ static int btrfs_dev_replace_start(struct btrfs_fs_info *fs_info,
 		break;
 	case BTRFS_IOCTL_DEV_REPLACE_STATE_STARTED:
 	case BTRFS_IOCTL_DEV_REPLACE_STATE_SUSPENDED:
-		DEBUG_WARN("unexpected STARTED ot SUSPENDED dev-replace state");
+		ASSERT(0);
 		ret = BTRFS_IOCTL_DEV_REPLACE_RESULT_ALREADY_STARTED;
 		up_write(&dev_replace->rwsem);
 		goto leave;
@@ -647,7 +659,7 @@ static int btrfs_dev_replace_start(struct btrfs_fs_info *fs_info,
 	dev_replace->srcdev = src_device;
 	dev_replace->tgtdev = tgt_device;
 
-	btrfs_info(fs_info,
+	btrfs_info_in_rcu(fs_info,
 		      "dev_replace from %s (devid %llu) to %s started",
 		      btrfs_dev_name(src_device),
 		      src_device->devid,
@@ -794,17 +806,17 @@ static int btrfs_set_target_alloc_state(struct btrfs_device *srcdev,
 
 	lockdep_assert_held(&srcdev->fs_info->chunk_mutex);
 
-	while (btrfs_find_first_extent_bit(&srcdev->alloc_state, start,
-					   &found_start, &found_end,
-					   CHUNK_ALLOCATED, &cached_state)) {
-		ret = btrfs_set_extent_bit(&tgtdev->alloc_state, found_start,
-					   found_end, CHUNK_ALLOCATED, NULL);
+	while (find_first_extent_bit(&srcdev->alloc_state, start,
+				     &found_start, &found_end,
+				     CHUNK_ALLOCATED, &cached_state)) {
+		ret = set_extent_bit(&tgtdev->alloc_state, found_start,
+				     found_end, CHUNK_ALLOCATED, NULL);
 		if (ret)
 			break;
 		start = found_end + 1;
 	}
 
-	btrfs_free_extent_state(cached_state);
+	free_extent_state(cached_state);
 	return ret;
 }
 
@@ -943,7 +955,7 @@ static int btrfs_dev_replace_finishing(struct btrfs_fs_info *fs_info,
 								tgt_device);
 	} else {
 		if (scrub_ret != -ECANCELED)
-			btrfs_err(fs_info,
+			btrfs_err_in_rcu(fs_info,
 				 "btrfs_scrub_dev(%s, %llu, %s) failed %d",
 				 btrfs_dev_name(src_device),
 				 src_device->devid,
@@ -961,7 +973,7 @@ error:
 		return scrub_ret;
 	}
 
-	btrfs_info(fs_info,
+	btrfs_info_in_rcu(fs_info,
 			  "dev_replace from %s (devid %llu) to %s finished",
 			  btrfs_dev_name(src_device),
 			  src_device->devid,
@@ -1109,7 +1121,7 @@ int btrfs_dev_replace_cancel(struct btrfs_fs_info *fs_info)
 			 * btrfs_dev_replace_finishing() will handle the
 			 * cleanup part
 			 */
-			btrfs_info(fs_info,
+			btrfs_info_in_rcu(fs_info,
 				"dev_replace from %s (devid %llu) to %s canceled",
 				btrfs_dev_name(src_device), src_device->devid,
 				btrfs_dev_name(tgt_device));
@@ -1143,7 +1155,7 @@ int btrfs_dev_replace_cancel(struct btrfs_fs_info *fs_info)
 		ret = btrfs_commit_transaction(trans);
 		WARN_ON(ret);
 
-		btrfs_info(fs_info,
+		btrfs_info_in_rcu(fs_info,
 		"suspended dev_replace from %s (devid %llu) to %s canceled",
 			btrfs_dev_name(src_device), src_device->devid,
 			btrfs_dev_name(tgt_device));
@@ -1247,7 +1259,7 @@ static int btrfs_dev_replace_kthread(void *data)
 
 	progress = btrfs_dev_replace_progress(fs_info);
 	progress = div_u64(progress, 10);
-	btrfs_info(fs_info,
+	btrfs_info_in_rcu(fs_info,
 		"continuing dev_replace from %s (devid %llu) to target %s @%u%%",
 		btrfs_dev_name(dev_replace->srcdev),
 		dev_replace->srcdev->devid,
@@ -1265,16 +1277,16 @@ static int btrfs_dev_replace_kthread(void *data)
 	return 0;
 }
 
-bool __pure btrfs_dev_replace_is_ongoing(struct btrfs_dev_replace *dev_replace)
+int __pure btrfs_dev_replace_is_ongoing(struct btrfs_dev_replace *dev_replace)
 {
 	if (!dev_replace->is_valid)
-		return false;
+		return 0;
 
 	switch (dev_replace->replace_state) {
 	case BTRFS_IOCTL_DEV_REPLACE_STATE_NEVER_STARTED:
 	case BTRFS_IOCTL_DEV_REPLACE_STATE_FINISHED:
 	case BTRFS_IOCTL_DEV_REPLACE_STATE_CANCELED:
-		return false;
+		return 0;
 	case BTRFS_IOCTL_DEV_REPLACE_STATE_STARTED:
 	case BTRFS_IOCTL_DEV_REPLACE_STATE_SUSPENDED:
 		/*
@@ -1289,7 +1301,7 @@ bool __pure btrfs_dev_replace_is_ongoing(struct btrfs_dev_replace *dev_replace)
 		 */
 		break;
 	}
-	return true;
+	return 1;
 }
 
 void btrfs_bio_counter_sub(struct btrfs_fs_info *fs_info, s64 amount)

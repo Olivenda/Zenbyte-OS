@@ -12,7 +12,6 @@
 
 #include <linux/interrupt.h>
 #include <linux/compat.h>
-#include <linux/export.h>
 #include <linux/major.h>
 #include <linux/fs.h>
 #include <linux/blkpg.h>

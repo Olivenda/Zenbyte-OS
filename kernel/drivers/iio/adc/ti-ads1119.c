@@ -336,24 +336,19 @@ static int ads1119_read_raw(struct iio_dev *indio_dev,
 {
 	struct ads1119_state *st = iio_priv(indio_dev);
 	unsigned int index = chan->address;
-	int ret;
 
 	if (index >= st->num_channels_cfg)
 		return -EINVAL;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
-		ret = ads1119_single_conversion(st, chan, val, false);
-		iio_device_release_direct(indio_dev);
-		return ret;
+		iio_device_claim_direct_scoped(return -EBUSY, indio_dev)
+			return ads1119_single_conversion(st, chan, val, false);
+		unreachable();
 	case IIO_CHAN_INFO_OFFSET:
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
-		ret = ads1119_single_conversion(st, chan, val, true);
-		iio_device_release_direct(indio_dev);
-		return ret;
+		iio_device_claim_direct_scoped(return -EBUSY, indio_dev)
+			return ads1119_single_conversion(st, chan, val, true);
+		unreachable();
 	case IIO_CHAN_INFO_SCALE:
 		*val = st->vref_uV / 1000;
 		*val /= st->channels_cfg[index].gain;
@@ -506,10 +501,12 @@ static irqreturn_t ads1119_trigger_handler(int irq, void *private)
 	struct ads1119_state *st = iio_priv(indio_dev);
 	struct {
 		s16 sample;
-		aligned_s64 timestamp;
-	} scan = { };
+		s64 timestamp __aligned(8);
+	} scan;
 	unsigned int index;
 	int ret;
+
+	memset(&scan, 0, sizeof(scan));
 
 	if (!iio_trigger_using_own(indio_dev)) {
 		index = find_first_bit(indio_dev->active_scan_mask,
@@ -532,8 +529,8 @@ static irqreturn_t ads1119_trigger_handler(int irq, void *private)
 
 	scan.sample = ret;
 
-	iio_push_to_buffers_with_ts(indio_dev, &scan, sizeof(scan),
-				    iio_get_time_ns(indio_dev));
+	iio_push_to_buffers_with_timestamp(indio_dev, &scan,
+					   iio_get_time_ns(indio_dev));
 done:
 	iio_trigger_notify_done(indio_dev->trig);
 	return IRQ_HANDLED;
@@ -809,7 +806,7 @@ static const struct of_device_id __maybe_unused ads1119_of_match[] = {
 MODULE_DEVICE_TABLE(of, ads1119_of_match);
 
 static const struct i2c_device_id ads1119_id[] = {
-	{ "ads1119" },
+	{ "ads1119", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ads1119_id);

@@ -18,7 +18,6 @@
 #include <linux/kobject.h>
 
 #include <linux/uaccess.h>
-#include <asm/machine.h>
 #include <asm/cio.h>
 #include <asm/ccwdev.h>
 #include <asm/debug.h>
@@ -346,7 +345,7 @@ static ssize_t ur_attr_reclen_show(struct device *dev,
 	urd = urdev_get_from_cdev(to_ccwdev(dev));
 	if (!urd)
 		return -ENODEV;
-	rc = sysfs_emit(buf, "%zu\n", urd->reclen);
+	rc = sprintf(buf, "%zu\n", urd->reclen);
 	urdev_put(urd);
 	return rc;
 }
@@ -1010,7 +1009,7 @@ static int __init ur_init(void)
 	int rc;
 	dev_t dev;
 
-	if (!machine_is_vm()) {
+	if (!MACHINE_IS_VM) {
 		pr_err("The %s cannot be loaded without z/VM\n",
 		       ur_banner);
 		return -ENODEV;

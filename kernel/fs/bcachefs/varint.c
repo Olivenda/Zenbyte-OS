@@ -9,7 +9,6 @@
 #include <valgrind/memcheck.h>
 #endif
 
-#include "errcode.h"
 #include "varint.h"
 
 /**
@@ -54,7 +53,7 @@ int bch2_varint_decode(const u8 *in, const u8 *end, u64 *out)
 	u64 v;
 
 	if (unlikely(in + bytes > end))
-		return -BCH_ERR_varint_decode_error;
+		return -1;
 
 	if (likely(bytes < 9)) {
 		__le64 v_le = 0;
@@ -116,7 +115,7 @@ int bch2_varint_decode_fast(const u8 *in, const u8 *end, u64 *out)
 	unsigned bytes = ffz(*in) + 1;
 
 	if (unlikely(in + bytes > end))
-		return -BCH_ERR_varint_decode_error;
+		return -1;
 
 	if (likely(bytes < 9)) {
 		v >>= bytes;

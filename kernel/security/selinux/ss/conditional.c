@@ -206,7 +206,7 @@ static int bool_isvalid(struct cond_bool_datum *b)
 	return 1;
 }
 
-int cond_read_bool(struct policydb *p, struct symtab *s, struct policy_file *fp)
+int cond_read_bool(struct policydb *p, struct symtab *s, void *fp)
 {
 	char *key = NULL;
 	struct cond_bool_datum *booldatum;
@@ -230,11 +230,17 @@ int cond_read_bool(struct policydb *p, struct symtab *s, struct policy_file *fp)
 		goto err;
 
 	len = le32_to_cpu(buf[2]);
-
-	rc = str_read(&key, GFP_KERNEL, fp, len);
-	if (rc)
+	if (((len == 0) || (len == (u32)-1)))
 		goto err;
 
+	rc = -ENOMEM;
+	key = kmalloc(len + 1, GFP_KERNEL);
+	if (!key)
+		goto err;
+	rc = next_entry(key, fp, len);
+	if (rc)
+		goto err;
+	key[len] = '\0';
 	rc = symtab_insert(s, key, booldatum);
 	if (rc)
 		goto err;
@@ -317,7 +323,7 @@ static int cond_insertf(struct avtab *a, const struct avtab_key *k,
 	return 0;
 }
 
-static int cond_read_av_list(struct policydb *p, struct policy_file *fp,
+static int cond_read_av_list(struct policydb *p, void *fp,
 			     struct cond_av_list *list,
 			     struct cond_av_list *other)
 {
@@ -343,7 +349,7 @@ static int cond_read_av_list(struct policydb *p, struct policy_file *fp,
 	for (i = 0; i < len; i++) {
 		data.dst = &list->nodes[i];
 		rc = avtab_read_item(&p->te_cond_avtab, fp, p, cond_insertf,
-				     &data, true);
+				     &data);
 		if (rc) {
 			kfree(list->nodes);
 			list->nodes = NULL;
@@ -369,7 +375,7 @@ static int expr_node_isvalid(struct policydb *p, struct cond_expr_node *expr)
 	return 1;
 }
 
-static int cond_read_node(struct policydb *p, struct cond_node *node, struct policy_file *fp)
+static int cond_read_node(struct policydb *p, struct cond_node *node, void *fp)
 {
 	__le32 buf[2];
 	u32 i, len;
@@ -409,7 +415,7 @@ static int cond_read_node(struct policydb *p, struct cond_node *node, struct pol
 	return cond_read_av_list(p, fp, &node->false_list, &node->true_list);
 }
 
-int cond_read_list(struct policydb *p, struct policy_file *fp)
+int cond_read_list(struct policydb *p, void *fp)
 {
 	__le32 buf[1];
 	u32 i, len;
@@ -447,7 +453,7 @@ int cond_write_bool(void *vkey, void *datum, void *ptr)
 	char *key = vkey;
 	struct cond_bool_datum *booldatum = datum;
 	struct policy_data *pd = ptr;
-	struct policy_file *fp = pd->fp;
+	void *fp = pd->fp;
 	__le32 buf[3];
 	u32 len;
 	int rc;
@@ -530,7 +536,7 @@ static int cond_write_node(struct policydb *p, struct cond_node *node,
 	return 0;
 }
 
-int cond_write_list(struct policydb *p, struct policy_file *fp)
+int cond_write_list(struct policydb *p, void *fp)
 {
 	u32 i;
 	__le32 buf[1];

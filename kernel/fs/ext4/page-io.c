@@ -164,8 +164,7 @@ static void ext4_release_io_end(ext4_io_end_t *io_end)
 }
 
 /*
- * On successful IO, check a range of space and convert unwritten extents to
- * written. On IO failure, check if journal abort is needed. Note that
+ * Check a range of space and convert unwritten extents to written. Note that
  * we are protected from truncate touching same part of extent tree by the
  * fact that truncate code waits for all DIO to finish (thus exclusion from
  * direct IO is achieved) and also waits for PageWriteback bits. Thus we
@@ -176,7 +175,6 @@ static int ext4_end_io_end(ext4_io_end_t *io_end)
 {
 	struct inode *inode = io_end->inode;
 	handle_t *handle = io_end->handle;
-	struct super_block *sb = inode->i_sb;
 	int ret = 0;
 
 	ext4_debug("ext4_end_io_nolock: io_end 0x%p from inode %lu,list->next 0x%p,"
@@ -192,15 +190,11 @@ static int ext4_end_io_end(ext4_io_end_t *io_end)
 		ret = -EIO;
 		if (handle)
 			jbd2_journal_free_reserved(handle);
-
-		if (test_opt(sb, DATA_ERR_ABORT))
-			jbd2_journal_abort(EXT4_SB(sb)->s_journal, ret);
 	} else {
 		ret = ext4_convert_unwritten_io_end_vec(handle, io_end);
 	}
-	if (ret < 0 && !ext4_emergency_state(sb) &&
-	    io_end->flag & EXT4_IO_END_UNWRITTEN) {
-		ext4_msg(sb, KERN_EMERG,
+	if (ret < 0 && !ext4_forced_shutdown(inode->i_sb)) {
+		ext4_msg(inode->i_sb, KERN_EMERG,
 			 "failed to convert unwritten extents to written "
 			 "extents -- potential data loss!  "
 			 "(inode %lu, error %d)", inode->i_ino, ret);
@@ -234,18 +228,6 @@ static void dump_completed_IO(struct inode *inode, struct list_head *head)
 #endif
 }
 
-static bool ext4_io_end_defer_completion(ext4_io_end_t *io_end)
-{
-	if (io_end->flag & EXT4_IO_END_UNWRITTEN &&
-	    !list_empty(&io_end->list_vec))
-		return true;
-	if (test_opt(io_end->inode->i_sb, DATA_ERR_ABORT) &&
-	    io_end->flag & EXT4_IO_END_FAILED &&
-	    !ext4_emergency_state(io_end->inode->i_sb))
-		return true;
-	return false;
-}
-
 /* Add the io_end to per-inode completed end_io list. */
 static void ext4_add_complete_io(ext4_io_end_t *io_end)
 {
@@ -254,12 +236,9 @@ static void ext4_add_complete_io(ext4_io_end_t *io_end)
 	struct workqueue_struct *wq;
 	unsigned long flags;
 
-	/* Only reserved conversions or pending IO errors will enter here. */
-	WARN_ON(!(io_end->flag & EXT4_IO_END_DEFER_COMPLETION));
-	WARN_ON(io_end->flag & EXT4_IO_END_UNWRITTEN &&
-		!io_end->handle && sbi->s_journal);
-	WARN_ON(!io_end->bio);
-
+	/* Only reserved conversions from writeback should enter here */
+	WARN_ON(!(io_end->flag & EXT4_IO_END_UNWRITTEN));
+	WARN_ON(!io_end->handle && sbi->s_journal);
 	spin_lock_irqsave(&ei->i_completed_io_lock, flags);
 	wq = sbi->rsv_conversion_wq;
 	if (list_empty(&ei->i_rsv_conversion_list))
@@ -284,7 +263,7 @@ static int ext4_do_flush_completed_IO(struct inode *inode,
 
 	while (!list_empty(&unwritten)) {
 		io_end = list_entry(unwritten.next, ext4_io_end_t, list);
-		BUG_ON(!(io_end->flag & EXT4_IO_END_DEFER_COMPLETION));
+		BUG_ON(!(io_end->flag & EXT4_IO_END_UNWRITTEN));
 		list_del_init(&io_end->list);
 
 		err = ext4_end_io_end(io_end);
@@ -295,8 +274,7 @@ static int ext4_do_flush_completed_IO(struct inode *inode,
 }
 
 /*
- * Used to convert unwritten extents to written extents upon IO completion,
- * or used to abort the journal upon IO errors.
+ * work on completed IO, to convert unwritten extents to extents
  */
 void ext4_end_io_rsv_work(struct work_struct *work)
 {
@@ -321,22 +299,29 @@ ext4_io_end_t *ext4_init_io_end(struct inode *inode, gfp_t flags)
 void ext4_put_io_end_defer(ext4_io_end_t *io_end)
 {
 	if (refcount_dec_and_test(&io_end->count)) {
-		if (ext4_io_end_defer_completion(io_end))
-			return ext4_add_complete_io(io_end);
-
-		ext4_release_io_end(io_end);
+		if (!(io_end->flag & EXT4_IO_END_UNWRITTEN) ||
+				list_empty(&io_end->list_vec)) {
+			ext4_release_io_end(io_end);
+			return;
+		}
+		ext4_add_complete_io(io_end);
 	}
 }
 
 int ext4_put_io_end(ext4_io_end_t *io_end)
 {
-	if (refcount_dec_and_test(&io_end->count)) {
-		if (ext4_io_end_defer_completion(io_end))
-			return ext4_end_io_end(io_end);
+	int err = 0;
 
+	if (refcount_dec_and_test(&io_end->count)) {
+		if (io_end->flag & EXT4_IO_END_UNWRITTEN) {
+			err = ext4_convert_unwritten_io_end_vec(io_end->handle,
+								io_end);
+			io_end->handle = NULL;
+			ext4_clear_io_unwritten_flag(io_end);
+		}
 		ext4_release_io_end(io_end);
 	}
-	return 0;
+	return err;
 }
 
 ext4_io_end_t *ext4_get_io_end(ext4_io_end_t *io_end)
@@ -375,7 +360,7 @@ static void ext4_end_bio(struct bio *bio)
 				blk_status_to_errno(bio->bi_status));
 	}
 
-	if (ext4_io_end_defer_completion(io_end)) {
+	if (io_end->flag & EXT4_IO_END_UNWRITTEN) {
 		/*
 		 * Link bio into list hanging from io_end. We have to do it
 		 * atomically as bio completions can be racing against each
@@ -444,10 +429,8 @@ static void io_submit_add_bh(struct ext4_io_submit *io,
 submit_and_retry:
 		ext4_io_submit(io);
 	}
-	if (io->io_bio == NULL) {
+	if (io->io_bio == NULL)
 		io_submit_init_bio(io, bh);
-		io->io_bio->bi_write_hint = inode->i_write_hint;
-	}
 	if (!bio_add_folio(io->io_bio, io_folio, bh->b_size, bh_offset(bh)))
 		goto submit_and_retry;
 	wbc_account_cgroup_owner(io->io_wbc, folio, bh->b_size);
@@ -547,9 +530,9 @@ int ext4_bio_write_folio(struct ext4_io_submit *io, struct folio *folio,
 		 * first page of the bio.  Otherwise it can deadlock.
 		 */
 		if (io->io_bio)
-			gfp_flags = GFP_NOWAIT;
+			gfp_flags = GFP_NOWAIT | __GFP_NOWARN;
 	retry_encrypt:
-		bounce_page = fscrypt_encrypt_pagecache_blocks(folio,
+		bounce_page = fscrypt_encrypt_pagecache_blocks(&folio->page,
 					enc_bytes, 0, gfp_flags);
 		if (IS_ERR(bounce_page)) {
 			ret = PTR_ERR(bounce_page);

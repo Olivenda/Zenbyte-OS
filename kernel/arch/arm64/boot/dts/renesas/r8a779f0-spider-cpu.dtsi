@@ -101,7 +101,6 @@
 &hscif0 {
 	pinctrl-0 = <&hscif0_pins>;
 	pinctrl-names = "default";
-	bootph-all;
 
 	uart-has-rtscts;
 	status = "okay";
@@ -172,7 +171,7 @@
 };
 
 &pciec0 {
-	reset-gpios = <&gpio_exp_20 0 GPIO_ACTIVE_LOW>;
+	reset-gpio = <&gpio_exp_20 0 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 

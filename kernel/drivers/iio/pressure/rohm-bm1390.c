@@ -8,7 +8,6 @@
 
 #include <linux/bitfield.h>
 #include <linux/bits.h>
-#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
@@ -139,7 +138,7 @@ enum {
 struct bm1390_data_buf {
 	u32 pressure;
 	__be16 temp;
-	aligned_s64 ts;
+	s64 ts __aligned(8);
 };
 
 /* BM1390 has FIFO for 4 pressure samples */
@@ -264,14 +263,14 @@ static int bm1390_read_data(struct bm1390_data *data,
 {
 	int ret, warn;
 
-	guard(mutex)(&data->mutex);
+	mutex_lock(&data->mutex);
 	/*
 	 * We use 'continuous mode' even for raw read because according to the
 	 * data-sheet an one-shot mode can't be used with IIR filter.
 	 */
 	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_CONTINUOUS);
 	if (ret)
-		return ret;
+		goto unlock_out;
 
 	switch (chan->type) {
 	case IIO_PRESSURE:
@@ -288,8 +287,10 @@ static int bm1390_read_data(struct bm1390_data *data,
 	warn = bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
 	if (warn)
 		dev_warn(data->dev, "Failed to stop measurement (%d)\n", warn);
+unlock_out:
+	mutex_unlock(&data->mutex);
 
-	return 0;
+	return ret;
 }
 
 static int bm1390_read_raw(struct iio_dev *idev,
@@ -319,11 +320,12 @@ static int bm1390_read_raw(struct iio_dev *idev,
 
 		return -EINVAL;
 	case IIO_CHAN_INFO_RAW:
-		if (!iio_device_claim_direct(idev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(idev);
+		if (ret)
+			return ret;
 
 		ret = bm1390_read_data(data, chan, val, val2);
-		iio_device_release_direct(idev);
+		iio_device_release_direct_mode(idev);
 		if (ret)
 			return ret;
 
@@ -414,6 +416,9 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 		if (ret)
 			return ret;
 	}
+
+	if (ret)
+		return ret;
 
 	for (i = 0; i < smp_lvl; i++) {
 		buffer[i].temp = temp;
@@ -541,33 +546,38 @@ static int bm1390_fifo_enable(struct iio_dev *idev)
 	if (data->irq <= 0)
 		return -EINVAL;
 
-	guard(mutex)(&data->mutex);
-
-	if (data->trigger_enabled)
-		return -EBUSY;
+	mutex_lock(&data->mutex);
+	if (data->trigger_enabled) {
+		ret = -EBUSY;
+		goto unlock_out;
+	}
 
 	/* Update watermark to HW */
 	ret = bm1390_fifo_set_wmi(data);
 	if (ret)
-		return ret;
+		goto unlock_out;
 
 	/* Enable WMI_IRQ */
 	ret = regmap_set_bits(data->regmap, BM1390_REG_MODE_CTRL,
 			      BM1390_MASK_WMI_EN);
 	if (ret)
-		return ret;
+		goto unlock_out;
 
 	/* Enable FIFO */
 	ret = regmap_set_bits(data->regmap, BM1390_REG_FIFO_CTRL,
 			      BM1390_MASK_FIFO_EN);
 	if (ret)
-		return ret;
+		goto unlock_out;
 
 	data->state = BM1390_STATE_FIFO;
 
 	data->old_timestamp = iio_get_time_ns(idev);
+	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_CONTINUOUS);
 
-	return bm1390_meas_set(data, BM1390_MEAS_MODE_CONTINUOUS);
+unlock_out:
+	mutex_unlock(&data->mutex);
+
+	return ret;
 }
 
 static int bm1390_fifo_disable(struct iio_dev *idev)
@@ -577,22 +587,27 @@ static int bm1390_fifo_disable(struct iio_dev *idev)
 
 	msleep(1);
 
-	guard(mutex)(&data->mutex);
+	mutex_lock(&data->mutex);
 	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
 	if (ret)
-		return ret;
+		goto unlock_out;
 
 	/* Disable FIFO */
 	ret = regmap_clear_bits(data->regmap, BM1390_REG_FIFO_CTRL,
 				BM1390_MASK_FIFO_EN);
 	if (ret)
-		return ret;
+		goto unlock_out;
 
 	data->state = BM1390_STATE_SAMPLE;
 
 	/* Disable WMI_IRQ */
-	return regmap_clear_bits(data->regmap, BM1390_REG_MODE_CTRL,
+	ret = regmap_clear_bits(data->regmap, BM1390_REG_MODE_CTRL,
 				 BM1390_MASK_WMI_EN);
+
+unlock_out:
+	mutex_unlock(&data->mutex);
+
+	return ret;
 }
 
 static int bm1390_buffer_postenable(struct iio_dev *idev)
@@ -652,8 +667,7 @@ static irqreturn_t bm1390_trigger_handler(int irq, void *p)
 		}
 	}
 
-	iio_push_to_buffers_with_ts(idev, &data->buf, sizeof(data->buf),
-				    data->timestamp);
+	iio_push_to_buffers_with_timestamp(idev, &data->buf, data->timestamp);
 	iio_trigger_notify_done(idev->trig);
 
 	return IRQ_HANDLED;
@@ -677,24 +691,25 @@ static irqreturn_t bm1390_irq_thread_handler(int irq, void *private)
 {
 	struct iio_dev *idev = private;
 	struct bm1390_data *data = iio_priv(idev);
+	int ret = IRQ_NONE;
 
-	guard(mutex)(&data->mutex);
+	mutex_lock(&data->mutex);
 
 	if (data->trigger_enabled) {
 		iio_trigger_poll_nested(data->trig);
-		return IRQ_HANDLED;
-	}
-
-	if (data->state == BM1390_STATE_FIFO) {
+		ret = IRQ_HANDLED;
+	} else if (data->state == BM1390_STATE_FIFO) {
 		int ok;
 
 		ok = __bm1390_fifo_flush(idev, BM1390_FIFO_LENGTH,
 					 data->timestamp);
 		if (ok > 0)
-			return IRQ_HANDLED;
+			ret = IRQ_HANDLED;
 	}
 
-	return IRQ_NONE;
+	mutex_unlock(&data->mutex);
+
+	return ret;
 }
 
 static int bm1390_set_drdy_irq(struct bm1390_data *data, bool en)
@@ -710,16 +725,17 @@ static int bm1390_trigger_set_state(struct iio_trigger *trig,
 				    bool state)
 {
 	struct bm1390_data *data = iio_trigger_get_drvdata(trig);
-	int ret;
+	int ret = 0;
 
-	guard(mutex)(&data->mutex);
+	mutex_lock(&data->mutex);
 
 	if (data->trigger_enabled == state)
-		return 0;
+		goto unlock_out;
 
 	if (data->state == BM1390_STATE_FIFO) {
 		dev_warn(data->dev, "Can't set trigger when FIFO enabled\n");
-		return -EBUSY;
+		ret = -EBUSY;
+		goto unlock_out;
 	}
 
 	data->trigger_enabled = state;
@@ -727,13 +743,13 @@ static int bm1390_trigger_set_state(struct iio_trigger *trig,
 	if (state) {
 		ret = bm1390_meas_set(data, BM1390_MEAS_MODE_CONTINUOUS);
 		if (ret)
-			return ret;
+			goto unlock_out;
 	} else {
 		int dummy;
 
 		ret = bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
 		if (ret)
-			return ret;
+			goto unlock_out;
 
 		/*
 		 * We need to read the status register in order to ACK the
@@ -745,7 +761,12 @@ static int bm1390_trigger_set_state(struct iio_trigger *trig,
 			dev_warn(data->dev, "status read failed\n");
 	}
 
-	return bm1390_set_drdy_irq(data, state);
+	ret = bm1390_set_drdy_irq(data, state);
+
+unlock_out:
+	mutex_unlock(&data->mutex);
+
+	return ret;
 }
 
 static const struct iio_trigger_ops bm1390_trigger_ops = {
@@ -883,13 +904,13 @@ static int bm1390_probe(struct i2c_client *i2c)
 
 static const struct of_device_id bm1390_of_match[] = {
 	{ .compatible = "rohm,bm1390glv-z" },
-	{ }
+	{}
 };
 MODULE_DEVICE_TABLE(of, bm1390_of_match);
 
 static const struct i2c_device_id bm1390_id[] = {
 	{ "bm1390glv-z", },
-	{ }
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, bm1390_id);
 

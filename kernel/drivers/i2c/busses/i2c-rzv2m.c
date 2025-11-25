@@ -287,15 +287,20 @@ static int rzv2m_i2c_send_address(struct rzv2m_i2c_priv *priv,
 	int ret;
 
 	if (msg->flags & I2C_M_TEN) {
-		/* 10-bit address: Send 1st address(extend code) */
-		addr = i2c_10bit_addr_hi_from_msg(msg);
+		/*
+		 * 10-bit address
+		 *   addr_1: 5'b11110 | addr[9:8] | (R/nW)
+		 *   addr_2: addr[7:0]
+		 */
+		addr = 0xf0 | ((msg->addr & GENMASK(9, 8)) >> 7);
+		addr |= !!(msg->flags & I2C_M_RD);
+		/* Send 1st address(extend code) */
 		ret = rzv2m_i2c_write_with_ack(priv, addr);
 		if (ret)
 			return ret;
 
-		/* 10-bit address: Send 2nd address */
-		addr = i2c_10bit_addr_lo_from_msg(msg);
-		ret = rzv2m_i2c_write_with_ack(priv, addr);
+		/* Send 2nd address */
+		ret = rzv2m_i2c_write_with_ack(priv, msg->addr & 0xff);
 	} else {
 		/* 7-bit address */
 		addr = i2c_8bit_addr_from_msg(msg);
@@ -402,7 +407,7 @@ static const struct i2c_adapter_quirks rzv2m_i2c_quirks = {
 	.flags = I2C_AQ_NO_ZERO_LEN,
 };
 
-static const struct i2c_algorithm rzv2m_i2c_algo = {
+static struct i2c_algorithm rzv2m_i2c_algo = {
 	.xfer = rzv2m_i2c_xfer,
 	.functionality = rzv2m_i2c_func,
 };
@@ -531,7 +536,7 @@ static struct platform_driver rzv2m_i2c_driver = {
 		.pm = pm_sleep_ptr(&rzv2m_i2c_pm_ops),
 	},
 	.probe	= rzv2m_i2c_probe,
-	.remove = rzv2m_i2c_remove,
+	.remove_new = rzv2m_i2c_remove,
 };
 module_platform_driver(rzv2m_i2c_driver);
 

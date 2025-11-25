@@ -382,6 +382,10 @@
 	firmware-name = "qcom/sm8350/cdsp.mbn";
 };
 
+&dispcc {
+	status = "okay";
+};
+
 &mdss_dsi0 {
 	vdda-supply = <&vreg_l6b_1p2>;
 	status = "okay";
@@ -924,11 +928,4 @@
 			bias-disable;
 		};
 	};
-};
-
-&ipa {
-	qcom,gsi-loader = "self";
-	memory-region = <&pil_ipa_fw_mem>;
-	status = "okay";
-	firmware-name = "qcom/sm8350/ipa_fws.mbn";
 };

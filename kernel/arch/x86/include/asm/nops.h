@@ -82,7 +82,7 @@
 #define ASM_NOP7 _ASM_BYTES(BYTES_NOP7)
 #define ASM_NOP8 _ASM_BYTES(BYTES_NOP8)
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 extern const unsigned char * const x86_nops[];
 #endif
 

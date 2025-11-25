@@ -749,17 +749,16 @@ static int hclge_get_rss_key(struct hclge_vport *vport,
 #define HCLGE_RSS_MBX_RESP_LEN	8
 	struct hclge_dev *hdev = vport->back;
 	struct hclge_comm_rss_cfg *rss_cfg;
-	int rss_hash_key_size;
 	u8 index;
 
 	index = mbx_req->msg.data[0];
 	rss_cfg = &hdev->rss_cfg;
-	rss_hash_key_size = sizeof(rss_cfg->rss_hash_key);
 
 	/* Check the query index of rss_hash_key from VF, make sure no
 	 * more than the size of rss_hash_key.
 	 */
-	if (((index + 1) * HCLGE_RSS_MBX_RESP_LEN) > rss_hash_key_size) {
+	if (((index + 1) * HCLGE_RSS_MBX_RESP_LEN) >
+	      sizeof(rss_cfg->rss_hash_key)) {
 		dev_warn(&hdev->pdev->dev,
 			 "failed to get the rss hash key, the index(%u) invalid !\n",
 			 index);
@@ -801,7 +800,7 @@ static void hclge_handle_link_change_event(struct hclge_dev *hdev,
 
 static bool hclge_cmd_crq_empty(struct hclge_hw *hw)
 {
-	int tail = hclge_read_dev(hw, HCLGE_COMM_NIC_CRQ_TAIL_REG);
+	u32 tail = hclge_read_dev(hw, HCLGE_COMM_NIC_CRQ_TAIL_REG);
 
 	return tail == hw->hw.cmq.crq.next_to_use;
 }

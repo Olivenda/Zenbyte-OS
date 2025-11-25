@@ -669,8 +669,8 @@ v9fs_vfs_create(struct mnt_idmap *idmap, struct inode *dir,
  *
  */
 
-static struct dentry *v9fs_vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
-				     struct dentry *dentry, umode_t mode)
+static int v9fs_vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
+			  struct dentry *dentry, umode_t mode)
 {
 	int err;
 	u32 perm;
@@ -692,7 +692,8 @@ static struct dentry *v9fs_vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 
 	if (fid)
 		p9_fid_put(fid);
-	return ERR_PTR(err);
+
+	return err;
 }
 
 /**

@@ -27,7 +27,6 @@
 #include <linux/spinlock.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 #include <linux/syscore_ops.h>
 #include <linux/ratelimit.h>
 #include <linux/pgtable.h>
@@ -475,9 +474,9 @@ static void __init mpic_scan_ht_msi(struct mpic *mpic, u8 __iomem *devbase,
 		addr = addr | ((u64)readl(base + HT_MSI_ADDR_HI) << 32);
 	}
 
-	pr_debug("mpic:   - HT:%02x.%x %s MSI mapping found @ 0x%llx\n",
-		 PCI_SLOT(devfn), PCI_FUNC(devfn),
-		 str_enabled_disabled(flags & HT_MSI_FLAGS_ENABLE), addr);
+	printk(KERN_DEBUG "mpic:   - HT:%02x.%x %s MSI mapping found @ 0x%llx\n",
+		PCI_SLOT(devfn), PCI_FUNC(devfn),
+		flags & HT_MSI_FLAGS_ENABLE ? "enabled" : "disabled", addr);
 
 	if (!(flags & HT_MSI_FLAGS_ENABLE))
 		writeb(flags | HT_MSI_FLAGS_ENABLE, base + HT_MSI_FLAGS);
@@ -1484,9 +1483,9 @@ struct mpic * __init mpic_alloc(struct device_node *node,
 	mpic->isu_shift = 1 + __ilog2(mpic->isu_size - 1);
 	mpic->isu_mask = (1 << mpic->isu_shift) - 1;
 
-	mpic->irqhost = irq_domain_create_linear(of_fwnode_handle(mpic->node),
-						 intvec_top,
-						 &mpic_host_ops, mpic);
+	mpic->irqhost = irq_domain_add_linear(mpic->node,
+				       intvec_top,
+				       &mpic_host_ops, mpic);
 
 	/*
 	 * FIXME: The code leaks the MPIC object and mappings here; this
@@ -1521,7 +1520,7 @@ struct mpic * __init mpic_alloc(struct device_node *node,
 
 	if (!(mpic->flags & MPIC_SECONDARY)) {
 		mpic_primary = mpic;
-		irq_set_default_domain(mpic->irqhost);
+		irq_set_default_host(mpic->irqhost);
 	}
 
 	return mpic;
@@ -1786,7 +1785,7 @@ static unsigned int _mpic_get_one_irq(struct mpic *mpic, int reg)
 		return 0;
 	}
 
-	return irq_find_mapping(mpic->irqhost, src);
+	return irq_linear_revmap(mpic->irqhost, src);
 }
 
 unsigned int mpic_get_one_irq(struct mpic *mpic)
@@ -1824,7 +1823,7 @@ unsigned int mpic_get_coreint_irq(void)
 		return 0;
 	}
 
-	return irq_find_mapping(mpic->irqhost, src);
+	return irq_linear_revmap(mpic->irqhost, src);
 #else
 	return 0;
 #endif

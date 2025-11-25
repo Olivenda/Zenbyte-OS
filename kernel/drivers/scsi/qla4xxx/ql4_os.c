@@ -160,7 +160,7 @@ static int qla4xxx_eh_abort(struct scsi_cmnd *cmd);
 static int qla4xxx_eh_device_reset(struct scsi_cmnd *cmd);
 static int qla4xxx_eh_target_reset(struct scsi_cmnd *cmd);
 static int qla4xxx_eh_host_reset(struct scsi_cmnd *cmd);
-static int qla4xxx_sdev_init(struct scsi_device *device);
+static int qla4xxx_slave_alloc(struct scsi_device *device);
 static umode_t qla4_attr_is_visible(int param_type, int param);
 static int qla4xxx_host_reset(struct Scsi_Host *shost, int reset_type);
 
@@ -234,7 +234,7 @@ static struct scsi_host_template qla4xxx_driver_template = {
 	.eh_host_reset_handler	= qla4xxx_eh_host_reset,
 	.eh_timed_out		= qla4xxx_eh_cmd_timed_out,
 
-	.sdev_init		= qla4xxx_sdev_init,
+	.slave_alloc		= qla4xxx_slave_alloc,
 	.change_queue_depth	= scsi_change_queue_depth,
 
 	.this_id		= -1,
@@ -4023,7 +4023,7 @@ static void qla4xxx_start_timer(struct scsi_qla_host *ha,
 
 static void qla4xxx_stop_timer(struct scsi_qla_host *ha)
 {
-	timer_delete_sync(&ha->timer);
+	del_timer_sync(&ha->timer);
 	ha->timer_active = 0;
 }
 
@@ -4553,7 +4553,7 @@ static void qla4xxx_check_relogin_flash_ddb(struct iscsi_cls_session *cls_sess)
  **/
 static void qla4xxx_timer(struct timer_list *t)
 {
-	struct scsi_qla_host *ha = timer_container_of(ha, t, timer);
+	struct scsi_qla_host *ha = from_timer(ha, t, timer);
 	int start_dpc = 0;
 	uint16_t w;
 
@@ -7193,8 +7193,7 @@ exit_new_nt_list:
  *	1: if flashnode entry is non-persistent
  *	0: if flashnode entry is persistent
  **/
-static int qla4xxx_sysfs_ddb_is_non_persistent(struct device *dev,
-					       const void *data)
+static int qla4xxx_sysfs_ddb_is_non_persistent(struct device *dev, void *data)
 {
 	struct iscsi_bus_flash_session *fnode_sess;
 
@@ -9057,7 +9056,7 @@ static void qla4xxx_config_dma_addressing(struct scsi_qla_host *ha)
 	}
 }
 
-static int qla4xxx_sdev_init(struct scsi_device *sdev)
+static int qla4xxx_slave_alloc(struct scsi_device *sdev)
 {
 	struct iscsi_cls_session *cls_sess;
 	struct iscsi_session *sess;
@@ -9851,7 +9850,7 @@ static const struct pci_error_handlers qla4xxx_err_handler = {
 	.resume = qla4xxx_pci_resume,
 };
 
-static const struct pci_device_id qla4xxx_pci_tbl[] = {
+static struct pci_device_id qla4xxx_pci_tbl[] = {
 	{
 		.vendor		= PCI_VENDOR_ID_QLOGIC,
 		.device		= PCI_DEVICE_ID_QLOGIC_ISP4010,

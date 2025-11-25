@@ -15,6 +15,7 @@
 #include <linux/completion.h>
 #include <linux/cred.h>
 #include <linux/file.h>
+#include <linux/fdtable.h>
 #include <linux/workqueue.h>
 #include <linux/security.h>
 #include <linux/mount.h>

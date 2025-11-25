@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES.
-// All rights reserved.
 //
 // tegra210_ope.c - Tegra210 OPE driver
+//
+// Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
 
 #include <linux/clk.h>
 #include <linux/device.h>
@@ -47,7 +47,6 @@ static int tegra210_ope_set_audio_cif(struct tegra210_ope *ope,
 	case SNDRV_PCM_FORMAT_S16_LE:
 		audio_bits = TEGRA_ACIF_BITS_16;
 		break;
-	case SNDRV_PCM_FORMAT_S24_LE:
 	case SNDRV_PCM_FORMAT_S32_LE:
 		audio_bits = TEGRA_ACIF_BITS_32;
 		break;
@@ -130,7 +129,6 @@ static struct snd_soc_dai_driver tegra210_ope_dais[] = {
 			.rates = SNDRV_PCM_RATE_8000_192000,
 			.formats = SNDRV_PCM_FMTBIT_S8 |
 				SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE |
 				SNDRV_PCM_FMTBIT_S32_LE,
 		},
 		.capture = {
@@ -140,7 +138,6 @@ static struct snd_soc_dai_driver tegra210_ope_dais[] = {
 			.rates = SNDRV_PCM_RATE_8000_192000,
 			.formats = SNDRV_PCM_FMTBIT_S8 |
 				SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE |
 				SNDRV_PCM_FMTBIT_S32_LE,
 		},
 	},
@@ -153,7 +150,6 @@ static struct snd_soc_dai_driver tegra210_ope_dais[] = {
 			.rates = SNDRV_PCM_RATE_8000_192000,
 			.formats = SNDRV_PCM_FMTBIT_S8 |
 				SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE |
 				SNDRV_PCM_FMTBIT_S32_LE,
 		},
 		.capture = {
@@ -163,7 +159,6 @@ static struct snd_soc_dai_driver tegra210_ope_dais[] = {
 			.rates = SNDRV_PCM_RATE_8000_192000,
 			.formats = SNDRV_PCM_FMTBIT_S8 |
 				SNDRV_PCM_FMTBIT_S16_LE |
-				SNDRV_PCM_FMTBIT_S24_LE |
 				SNDRV_PCM_FMTBIT_S32_LE,
 		},
 		.ops = &tegra210_ope_dai_ops,
@@ -356,7 +351,7 @@ static void tegra210_ope_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 }
 
-static int tegra210_ope_runtime_suspend(struct device *dev)
+static int __maybe_unused tegra210_ope_runtime_suspend(struct device *dev)
 {
 	struct tegra210_ope *ope = dev_get_drvdata(dev);
 
@@ -374,7 +369,7 @@ static int tegra210_ope_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int tegra210_ope_runtime_resume(struct device *dev)
+static int __maybe_unused tegra210_ope_runtime_resume(struct device *dev)
 {
 	struct tegra210_ope *ope = dev_get_drvdata(dev);
 
@@ -393,9 +388,10 @@ static int tegra210_ope_runtime_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops tegra210_ope_pm_ops = {
-	RUNTIME_PM_OPS(tegra210_ope_runtime_suspend,
-		       tegra210_ope_runtime_resume, NULL)
-	SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
+	SET_RUNTIME_PM_OPS(tegra210_ope_runtime_suspend,
+			   tegra210_ope_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
+				pm_runtime_force_resume)
 };
 
 static const struct of_device_id tegra210_ope_of_match[] = {
@@ -408,7 +404,7 @@ static struct platform_driver tegra210_ope_driver = {
 	.driver = {
 		.name = "tegra210-ope",
 		.of_match_table = tegra210_ope_of_match,
-		.pm = pm_ptr(&tegra210_ope_pm_ops),
+		.pm = &tegra210_ope_pm_ops,
 	},
 	.probe = tegra210_ope_probe,
 	.remove = tegra210_ope_remove,

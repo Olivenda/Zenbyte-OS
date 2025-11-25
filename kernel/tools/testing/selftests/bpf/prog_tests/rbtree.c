@@ -8,7 +8,6 @@
 #include "rbtree_fail.skel.h"
 #include "rbtree_btf_fail__wrong_node_type.skel.h"
 #include "rbtree_btf_fail__add_wrong_type.skel.h"
-#include "rbtree_search.skel.h"
 
 static void test_rbtree_add_nodes(void)
 {
@@ -187,9 +186,4 @@ void test_rbtree_btf_fail(void)
 void test_rbtree_fail(void)
 {
 	RUN_TESTS(rbtree_fail);
-}
-
-void test_rbtree_search(void)
-{
-	RUN_TESTS(rbtree_search);
 }

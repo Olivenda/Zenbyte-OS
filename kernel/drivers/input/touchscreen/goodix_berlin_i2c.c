@@ -31,8 +31,6 @@ static const struct input_id goodix_berlin_i2c_input_id = {
 
 static int goodix_berlin_i2c_probe(struct i2c_client *client)
 {
-	const struct goodix_berlin_ic_data *ic_data =
-		i2c_get_match_data(client);
 	struct regmap *regmap;
 	int error;
 
@@ -41,28 +39,22 @@ static int goodix_berlin_i2c_probe(struct i2c_client *client)
 		return PTR_ERR(regmap);
 
 	error = goodix_berlin_probe(&client->dev, client->irq,
-				    &goodix_berlin_i2c_input_id, regmap,
-				    ic_data);
+				    &goodix_berlin_i2c_input_id, regmap);
 	if (error)
 		return error;
 
 	return 0;
 }
 
-static const struct goodix_berlin_ic_data gt9916_data = {
-	.fw_version_info_addr = GOODIX_BERLIN_FW_VERSION_INFO_ADDR_D,
-	.ic_info_addr = GOODIX_BERLIN_IC_INFO_ADDR_D,
-};
-
 static const struct i2c_device_id goodix_berlin_i2c_id[] = {
-	{ .name = "gt9916", .driver_data = (long)&gt9916_data },
+	{ "gt9916" },
 	{ }
 };
 
 MODULE_DEVICE_TABLE(i2c, goodix_berlin_i2c_id);
 
 static const struct of_device_id goodix_berlin_i2c_of_match[] = {
-	{ .compatible = "goodix,gt9916", .data = &gt9916_data },
+	{ .compatible = "goodix,gt9916", },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, goodix_berlin_i2c_of_match);

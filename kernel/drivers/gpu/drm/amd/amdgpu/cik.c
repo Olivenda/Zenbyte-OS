@@ -1985,9 +1985,9 @@ static const struct amdgpu_asic_funcs cik_asic_funcs =
 	.query_video_codecs = &cik_query_video_codecs,
 };
 
-static int cik_common_early_init(struct amdgpu_ip_block *ip_block)
+static int cik_common_early_init(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	adev->smc_rreg = &cik_smc_rreg;
 	adev->smc_wreg = &cik_smc_wreg;
@@ -2124,9 +2124,19 @@ static int cik_common_early_init(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int cik_common_hw_init(struct amdgpu_ip_block *ip_block)
+static int cik_common_sw_init(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	return 0;
+}
+
+static int cik_common_sw_fini(void *handle)
+{
+	return 0;
+}
+
+static int cik_common_hw_init(void *handle)
+{
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	/* move the golden regs per IP block */
 	cik_init_golden_registers(adev);
@@ -2138,36 +2148,48 @@ static int cik_common_hw_init(struct amdgpu_ip_block *ip_block)
 	return 0;
 }
 
-static int cik_common_hw_fini(struct amdgpu_ip_block *ip_block)
+static int cik_common_hw_fini(void *handle)
 {
 	return 0;
 }
 
-static int cik_common_resume(struct amdgpu_ip_block *ip_block)
+static int cik_common_suspend(void *handle)
 {
-	return cik_common_hw_init(ip_block);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	return cik_common_hw_fini(adev);
 }
 
-static bool cik_common_is_idle(struct amdgpu_ip_block *ip_block)
+static int cik_common_resume(void *handle)
+{
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	return cik_common_hw_init(adev);
+}
+
+static bool cik_common_is_idle(void *handle)
 {
 	return true;
 }
 
+static int cik_common_wait_for_idle(void *handle)
+{
+	return 0;
+}
 
-
-static int cik_common_soft_reset(struct amdgpu_ip_block *ip_block)
+static int cik_common_soft_reset(void *handle)
 {
 	/* XXX hard reset?? */
 	return 0;
 }
 
-static int cik_common_set_clockgating_state(struct amdgpu_ip_block *ip_block,
+static int cik_common_set_clockgating_state(void *handle,
 					    enum amd_clockgating_state state)
 {
 	return 0;
 }
 
-static int cik_common_set_powergating_state(struct amdgpu_ip_block *ip_block,
+static int cik_common_set_powergating_state(void *handle,
 					    enum amd_powergating_state state)
 {
 	return 0;
@@ -2176,13 +2198,20 @@ static int cik_common_set_powergating_state(struct amdgpu_ip_block *ip_block,
 static const struct amd_ip_funcs cik_common_ip_funcs = {
 	.name = "cik_common",
 	.early_init = cik_common_early_init,
+	.late_init = NULL,
+	.sw_init = cik_common_sw_init,
+	.sw_fini = cik_common_sw_fini,
 	.hw_init = cik_common_hw_init,
 	.hw_fini = cik_common_hw_fini,
+	.suspend = cik_common_suspend,
 	.resume = cik_common_resume,
 	.is_idle = cik_common_is_idle,
+	.wait_for_idle = cik_common_wait_for_idle,
 	.soft_reset = cik_common_soft_reset,
 	.set_clockgating_state = cik_common_set_clockgating_state,
 	.set_powergating_state = cik_common_set_powergating_state,
+	.dump_ip_state = NULL,
+	.print_ip_state = NULL,
 };
 
 static const struct amdgpu_ip_block_version cik_common_ip_block =

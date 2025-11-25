@@ -135,8 +135,6 @@ static struct cache_head *sunrpc_cache_add_entry(struct cache_detail *detail,
 
 	hlist_add_head_rcu(&new->cache_list, head);
 	detail->entries++;
-	if (detail->nextcheck > new->expiry_time)
-		detail->nextcheck = new->expiry_time + 1;
 	cache_get(new);
 	spin_unlock(&detail->hash_lock);
 
@@ -283,7 +281,21 @@ static int try_to_negate_entry(struct cache_detail *detail, struct cache_head *h
 	return rv;
 }
 
-int cache_check_rcu(struct cache_detail *detail,
+/*
+ * This is the generic cache management routine for all
+ * the authentication caches.
+ * It checks the currency of a cache item and will (later)
+ * initiate an upcall to fill it if needed.
+ *
+ *
+ * Returns 0 if the cache_head can be used, or cache_puts it and returns
+ * -EAGAIN if upcall is pending and request has been queued
+ * -ETIMEDOUT if upcall failed or request could not be queue or
+ *           upcall completed but item is still invalid (implying that
+ *           the cache item has been replaced with a newer one).
+ * -ENOENT if cache entry was negative
+ */
+int cache_check(struct cache_detail *detail,
 		    struct cache_head *h, struct cache_req *rqstp)
 {
 	int rv;
@@ -324,31 +336,6 @@ int cache_check_rcu(struct cache_detail *detail,
 				rv = -ETIMEDOUT;
 		}
 	}
-
-	return rv;
-}
-EXPORT_SYMBOL_GPL(cache_check_rcu);
-
-/*
- * This is the generic cache management routine for all
- * the authentication caches.
- * It checks the currency of a cache item and will (later)
- * initiate an upcall to fill it if needed.
- *
- *
- * Returns 0 if the cache_head can be used, or cache_puts it and returns
- * -EAGAIN if upcall is pending and request has been queued
- * -ETIMEDOUT if upcall failed or request could not be queue or
- *           upcall completed but item is still invalid (implying that
- *           the cache item has been replaced with a newer one).
- * -ENOENT if cache entry was negative
- */
-int cache_check(struct cache_detail *detail,
-		struct cache_head *h, struct cache_req *rqstp)
-{
-	int rv;
-
-	rv = cache_check_rcu(detail, h, rqstp);
 	if (rv)
 		cache_put(h, detail);
 	return rv;
@@ -464,21 +451,24 @@ static int cache_clean(void)
 		}
 	}
 
-	spin_lock(&current_detail->hash_lock);
-
 	/* find a non-empty bucket in the table */
-	while (current_index < current_detail->hash_size &&
+	while (current_detail &&
+	       current_index < current_detail->hash_size &&
 	       hlist_empty(&current_detail->hash_table[current_index]))
 		current_index++;
 
 	/* find a cleanable entry in the bucket and clean it, or set to next bucket */
-	if (current_index < current_detail->hash_size) {
+
+	if (current_detail && current_index < current_detail->hash_size) {
 		struct cache_head *ch = NULL;
 		struct cache_detail *d;
 		struct hlist_head *head;
 		struct hlist_node *tmp;
 
+		spin_lock(&current_detail->hash_lock);
+
 		/* Ok, now to clean this strand */
+
 		head = &current_detail->hash_table[current_index];
 		hlist_for_each_entry_safe(ch, tmp, head, cache_list) {
 			if (current_detail->nextcheck > ch->expiry_time)
@@ -499,10 +489,8 @@ static int cache_clean(void)
 		spin_unlock(&cache_list_lock);
 		if (ch)
 			sunrpc_end_cache_remove_entry(ch, d);
-	} else {
-		spin_unlock(&current_detail->hash_lock);
+	} else
 		spin_unlock(&cache_list_lock);
-	}
 
 	return rv;
 }
@@ -1439,11 +1427,17 @@ static int c_show(struct seq_file *m, void *p)
 		seq_printf(m, "# expiry=%lld refcnt=%d flags=%lx\n",
 			   convert_to_wallclock(cp->expiry_time),
 			   kref_read(&cp->ref), cp->flags);
+	if (!cache_get_rcu(cp))
+		return 0;
 
-	if (cache_check_rcu(cd, cp, NULL))
+	if (cache_check(cd, cp, NULL))
+		/* cache_check does a cache_put on failure */
 		seq_puts(m, "# ");
-	else if (cache_is_expired(cd, cp))
-		seq_puts(m, "# ");
+	else {
+		if (cache_is_expired(cd, cp))
+			seq_puts(m, "# ");
+		cache_put(cp, cd);
+	}
 
 	return cd->cache_show(m, cd, cp);
 }

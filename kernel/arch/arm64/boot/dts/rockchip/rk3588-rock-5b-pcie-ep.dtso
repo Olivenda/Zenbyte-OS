@@ -23,7 +23,3 @@
 	vpcie3v3-supply = <&vcc3v3_pcie30>;
 	status = "okay";
 };
-
-&mmu600_pcie {
-	status = "disabled";
-};

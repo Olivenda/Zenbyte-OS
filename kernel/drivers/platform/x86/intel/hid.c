@@ -54,7 +54,6 @@ static const struct acpi_device_id intel_hid_ids[] = {
 	{ "INTC107B" },
 	{ "INTC10CB" },
 	{ "INTC10CC" },
-	{ "INTC10F1" },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, intel_hid_ids);
@@ -118,13 +117,6 @@ static const struct dmi_system_id button_array_table[] = {
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "HP"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "HP Spectre x2 Detachable"),
-		},
-	},
-	{
-		.ident = "Lenovo ThinkPad X1 Tablet Gen 1",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-			DMI_MATCH(DMI_PRODUCT_FAMILY, "ThinkPad X12 Detachable Gen 1"),
 		},
 	},
 	{
@@ -763,7 +755,7 @@ static struct platform_driver intel_hid_pl_driver = {
 		.pm = &intel_hid_pl_pm_ops,
 	},
 	.probe = intel_hid_probe,
-	.remove = intel_hid_remove,
+	.remove_new = intel_hid_remove,
 };
 
 /*

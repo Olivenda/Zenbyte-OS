@@ -30,6 +30,7 @@
 #include <linux/sunrpc/svc_xprt.h>
 #include <linux/lockd/nlm.h>
 #include <linux/lockd/lockd.h>
+#include <linux/exportfs.h>
 
 #define NLMDBG_FACILITY		NLMDBG_SVCLOCK
 
@@ -480,7 +481,7 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 	    struct nlm_host *host, struct nlm_lock *lock, int wait,
 	    struct nlm_cookie *cookie, int reclaim)
 {
-	struct inode		*inode __maybe_unused = nlmsvc_file_inode(file);
+	struct inode		*inode = nlmsvc_file_inode(file);
 	struct nlm_block	*block = NULL;
 	int			error;
 	int			mode;
@@ -495,7 +496,7 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 				(long long)lock->fl.fl_end,
 				wait);
 
-	if (!locks_can_async_lock(nlmsvc_file_file(file)->f_op)) {
+	if (!exportfs_lock_op_is_async(inode->i_sb->s_export_op)) {
 		async_block = wait;
 		wait = 0;
 	}
@@ -549,7 +550,7 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 	 * requests on the underlaying ->lock() implementation but
 	 * only one nlm_block to being granted by lm_grant().
 	 */
-	if (locks_can_async_lock(nlmsvc_file_file(file)->f_op) &&
+	if (exportfs_lock_op_is_async(inode->i_sb->s_export_op) &&
 	    !list_empty(&block->b_list)) {
 		spin_unlock(&nlm_blocked_lock);
 		ret = nlm_lck_blocked;
@@ -608,7 +609,7 @@ out:
 __be32
 nlmsvc_testlock(struct svc_rqst *rqstp, struct nlm_file *file,
 		struct nlm_host *host, struct nlm_lock *lock,
-		struct nlm_lock *conflock)
+		struct nlm_lock *conflock, struct nlm_cookie *cookie)
 {
 	int			error;
 	int			mode;

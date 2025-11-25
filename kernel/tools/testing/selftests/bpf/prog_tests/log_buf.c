@@ -7,10 +7,6 @@
 #include "test_log_buf.skel.h"
 #include "bpf_util.h"
 
-#if !defined(__clang__)
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#endif
-
 static size_t libbpf_log_pos;
 static char libbpf_log_buf[1024 * 1024];
 static bool libbpf_log_error;
@@ -173,6 +169,7 @@ static void bpf_prog_load_log_buf(void)
 	ASSERT_GE(fd, 0, "good_fd1");
 	if (fd >= 0)
 		close(fd);
+	fd = -1;
 
 	/* log_level == 2 should always fill log_buf, even for good prog */
 	log_buf[0] = '\0';
@@ -183,6 +180,7 @@ static void bpf_prog_load_log_buf(void)
 	ASSERT_GE(fd, 0, "good_fd2");
 	if (fd >= 0)
 		close(fd);
+	fd = -1;
 
 	/* log_level == 0 should fill log_buf for bad prog */
 	log_buf[0] = '\0';
@@ -193,6 +191,7 @@ static void bpf_prog_load_log_buf(void)
 	ASSERT_LT(fd, 0, "bad_fd");
 	if (fd >= 0)
 		close(fd);
+	fd = -1;
 
 	free(log_buf);
 }

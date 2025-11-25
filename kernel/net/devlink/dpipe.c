@@ -165,17 +165,18 @@ static int devlink_dpipe_table_put(struct sk_buff *skb,
 		return -EMSGSIZE;
 
 	if (nla_put_string(skb, DEVLINK_ATTR_DPIPE_TABLE_NAME, table->name) ||
-	    devlink_nl_put_u64(skb, DEVLINK_ATTR_DPIPE_TABLE_SIZE, table_size))
+	    nla_put_u64_64bit(skb, DEVLINK_ATTR_DPIPE_TABLE_SIZE, table_size,
+			      DEVLINK_ATTR_PAD))
 		goto nla_put_failure;
 	if (nla_put_u8(skb, DEVLINK_ATTR_DPIPE_TABLE_COUNTERS_ENABLED,
 		       table->counters_enabled))
 		goto nla_put_failure;
 
 	if (table->resource_valid) {
-		if (devlink_nl_put_u64(skb, DEVLINK_ATTR_DPIPE_TABLE_RESOURCE_ID,
-				       table->resource_id) ||
-		    devlink_nl_put_u64(skb, DEVLINK_ATTR_DPIPE_TABLE_RESOURCE_UNITS,
-				       table->resource_units))
+		if (nla_put_u64_64bit(skb, DEVLINK_ATTR_DPIPE_TABLE_RESOURCE_ID,
+				      table->resource_id, DEVLINK_ATTR_PAD) ||
+		    nla_put_u64_64bit(skb, DEVLINK_ATTR_DPIPE_TABLE_RESOURCE_UNITS,
+				      table->resource_units, DEVLINK_ATTR_PAD))
 			goto nla_put_failure;
 	}
 	if (devlink_dpipe_matches_put(table, skb))
@@ -402,11 +403,12 @@ static int devlink_dpipe_entry_put(struct sk_buff *skb,
 	if (!entry_attr)
 		return  -EMSGSIZE;
 
-	if (devlink_nl_put_u64(skb, DEVLINK_ATTR_DPIPE_ENTRY_INDEX, entry->index))
+	if (nla_put_u64_64bit(skb, DEVLINK_ATTR_DPIPE_ENTRY_INDEX, entry->index,
+			      DEVLINK_ATTR_PAD))
 		goto nla_put_failure;
 	if (entry->counter_valid)
-		if (devlink_nl_put_u64(skb, DEVLINK_ATTR_DPIPE_ENTRY_COUNTER,
-				       entry->counter))
+		if (nla_put_u64_64bit(skb, DEVLINK_ATTR_DPIPE_ENTRY_COUNTER,
+				      entry->counter, DEVLINK_ATTR_PAD))
 			goto nla_put_failure;
 
 	matches_attr = nla_nest_start_noflag(skb,

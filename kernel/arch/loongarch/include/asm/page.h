@@ -8,14 +8,19 @@
 #include <linux/const.h>
 #include <asm/addrspace.h>
 
-#include <vdso/page.h>
+/*
+ * PAGE_SHIFT determines the page size
+ */
+#define PAGE_SHIFT	CONFIG_PAGE_SHIFT
+#define PAGE_SIZE	(_AC(1, UL) << PAGE_SHIFT)
+#define PAGE_MASK	(~(PAGE_SIZE - 1))
 
 #define HPAGE_SHIFT	(PAGE_SHIFT + PAGE_SHIFT - 3)
 #define HPAGE_SIZE	(_AC(1, UL) << HPAGE_SHIFT)
 #define HPAGE_MASK	(~(HPAGE_SIZE - 1))
 #define HUGETLB_PAGE_ORDER	(HPAGE_SHIFT - PAGE_SHIFT)
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/kernel.h>
 #include <linux/pfn.h>
@@ -76,6 +81,9 @@ struct page *tlb_virt_to_page(unsigned long kaddr);
 #define pfn_to_phys(pfn)	__pfn_to_phys(pfn)
 #define phys_to_pfn(paddr)	__phys_to_pfn(paddr)
 
+#define page_to_phys(page)	pfn_to_phys(page_to_pfn(page))
+#define phys_to_page(paddr)	pfn_to_page(phys_to_pfn(paddr))
+
 #ifndef CONFIG_KFENCE
 
 #define page_to_virt(page)	__va(page_to_phys(page))
@@ -110,6 +118,6 @@ extern int __virt_addr_valid(volatile void *kaddr);
 #include <asm-generic/memory_model.h>
 #include <asm-generic/getorder.h>
 
-#endif /* !__ASSEMBLER__ */
+#endif /* !__ASSEMBLY__ */
 
 #endif /* _ASM_PAGE_H */

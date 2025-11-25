@@ -581,10 +581,10 @@ int tb_path_activate(struct tb_path *path)
 		}
 	}
 	path->activated = true;
-	tb_dbg(path->tb, "%s path activation complete\n", path->name);
+	tb_dbg(path->tb, "path activation complete\n");
 	return 0;
 err:
-	tb_WARN(path->tb, "%s path activation failed\n", path->name);
+	tb_WARN(path->tb, "path activation failed\n");
 	return res;
 }
 

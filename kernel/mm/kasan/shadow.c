@@ -292,118 +292,34 @@ void __init __weak kasan_populate_early_vm_area_shadow(void *start,
 {
 }
 
-struct vmalloc_populate_data {
-	unsigned long start;
-	struct page **pages;
-};
-
 static int kasan_populate_vmalloc_pte(pte_t *ptep, unsigned long addr,
-				      void *_data)
+				      void *unused)
 {
-	struct vmalloc_populate_data *data = _data;
-	struct page *page;
+	unsigned long page;
 	pte_t pte;
-	int index;
 
-	arch_leave_lazy_mmu_mode();
+	if (likely(!pte_none(ptep_get(ptep))))
+		return 0;
 
-	index = PFN_DOWN(addr - data->start);
-	page = data->pages[index];
-	__memset(page_to_virt(page), KASAN_VMALLOC_INVALID, PAGE_SIZE);
-	pte = pfn_pte(page_to_pfn(page), PAGE_KERNEL);
+	page = __get_free_page(GFP_KERNEL);
+	if (!page)
+		return -ENOMEM;
+
+	__memset((void *)page, KASAN_VMALLOC_INVALID, PAGE_SIZE);
+	pte = pfn_pte(PFN_DOWN(__pa(page)), PAGE_KERNEL);
 
 	spin_lock(&init_mm.page_table_lock);
 	if (likely(pte_none(ptep_get(ptep)))) {
 		set_pte_at(&init_mm, addr, ptep, pte);
-		data->pages[index] = NULL;
+		page = 0;
 	}
 	spin_unlock(&init_mm.page_table_lock);
-
-	arch_enter_lazy_mmu_mode();
-
+	if (page)
+		free_page(page);
 	return 0;
 }
 
-static void ___free_pages_bulk(struct page **pages, int nr_pages)
-{
-	int i;
-
-	for (i = 0; i < nr_pages; i++) {
-		if (pages[i]) {
-			__free_pages(pages[i], 0);
-			pages[i] = NULL;
-		}
-	}
-}
-
-static int ___alloc_pages_bulk(struct page **pages, int nr_pages, gfp_t gfp_mask)
-{
-	unsigned long nr_populated, nr_total = nr_pages;
-	struct page **page_array = pages;
-
-	while (nr_pages) {
-		nr_populated = alloc_pages_bulk(gfp_mask, nr_pages, pages);
-		if (!nr_populated) {
-			___free_pages_bulk(page_array, nr_total - nr_pages);
-			return -ENOMEM;
-		}
-		pages += nr_populated;
-		nr_pages -= nr_populated;
-	}
-
-	return 0;
-}
-
-static int __kasan_populate_vmalloc(unsigned long start, unsigned long end, gfp_t gfp_mask)
-{
-	unsigned long nr_pages, nr_total = PFN_UP(end - start);
-	struct vmalloc_populate_data data;
-	unsigned int flags;
-	int ret = 0;
-
-	data.pages = (struct page **)__get_free_page(gfp_mask | __GFP_ZERO);
-	if (!data.pages)
-		return -ENOMEM;
-
-	while (nr_total) {
-		nr_pages = min(nr_total, PAGE_SIZE / sizeof(data.pages[0]));
-		ret = ___alloc_pages_bulk(data.pages, nr_pages, gfp_mask);
-		if (ret)
-			break;
-
-		data.start = start;
-
-		/*
-		 * page tables allocations ignore external gfp mask, enforce it
-		 * by the scope API
-		 */
-		if ((gfp_mask & (__GFP_FS | __GFP_IO)) == __GFP_IO)
-			flags = memalloc_nofs_save();
-		else if ((gfp_mask & (__GFP_FS | __GFP_IO)) == 0)
-			flags = memalloc_noio_save();
-
-		ret = apply_to_page_range(&init_mm, start, nr_pages * PAGE_SIZE,
-					  kasan_populate_vmalloc_pte, &data);
-
-		if ((gfp_mask & (__GFP_FS | __GFP_IO)) == __GFP_IO)
-			memalloc_nofs_restore(flags);
-		else if ((gfp_mask & (__GFP_FS | __GFP_IO)) == 0)
-			memalloc_noio_restore(flags);
-
-		___free_pages_bulk(data.pages, nr_pages);
-		if (ret)
-			break;
-
-		start += nr_pages * PAGE_SIZE;
-		nr_total -= nr_pages;
-	}
-
-	free_page((unsigned long)data.pages);
-
-	return ret;
-}
-
-int kasan_populate_vmalloc(unsigned long addr, unsigned long size, gfp_t gfp_mask)
+int kasan_populate_vmalloc(unsigned long addr, unsigned long size)
 {
 	unsigned long shadow_start, shadow_end;
 	int ret;
@@ -432,7 +348,9 @@ int kasan_populate_vmalloc(unsigned long addr, unsigned long size, gfp_t gfp_mas
 	shadow_start = PAGE_ALIGN_DOWN(shadow_start);
 	shadow_end = PAGE_ALIGN(shadow_end);
 
-	ret = __kasan_populate_vmalloc(shadow_start, shadow_end, gfp_mask);
+	ret = apply_to_page_range(&init_mm, shadow_start,
+				  shadow_end - shadow_start,
+				  kasan_populate_vmalloc_pte, NULL);
 	if (ret)
 		return ret;
 
@@ -479,22 +397,17 @@ int kasan_populate_vmalloc(unsigned long addr, unsigned long size, gfp_t gfp_mas
 static int kasan_depopulate_vmalloc_pte(pte_t *ptep, unsigned long addr,
 					void *unused)
 {
-	pte_t pte;
-	int none;
+	unsigned long page;
 
-	arch_leave_lazy_mmu_mode();
+	page = (unsigned long)__va(pte_pfn(ptep_get(ptep)) << PAGE_SHIFT);
 
 	spin_lock(&init_mm.page_table_lock);
-	pte = ptep_get(ptep);
-	none = pte_none(pte);
-	if (likely(!none))
+
+	if (likely(!pte_none(ptep_get(ptep)))) {
 		pte_clear(&init_mm, addr, ptep);
+		free_page(page);
+	}
 	spin_unlock(&init_mm.page_table_lock);
-
-	if (likely(!none))
-		__free_page(pfn_to_page(pte_pfn(pte)));
-
-	arch_enter_lazy_mmu_mode();
 
 	return 0;
 }

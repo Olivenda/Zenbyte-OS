@@ -116,12 +116,6 @@ struct icc_provider *icc_clk_register(struct device *dev,
 		}
 
 		node->name = devm_kasprintf(dev, GFP_KERNEL, "%s_master", data[i].name);
-		if (!node->name) {
-			icc_node_destroy(node->id);
-			ret = -ENOMEM;
-			goto err;
-		}
-
 		node->data = &qp->clocks[i];
 		icc_node_add(node, provider);
 		/* link to the next node, slave */
@@ -135,12 +129,6 @@ struct icc_provider *icc_clk_register(struct device *dev,
 		}
 
 		node->name = devm_kasprintf(dev, GFP_KERNEL, "%s_slave", data[i].name);
-		if (!node->name) {
-			icc_node_destroy(node->id);
-			ret = -ENOMEM;
-			goto err;
-		}
-
 		/* no data for slave node */
 		icc_node_add(node, provider);
 		onecell->nodes[j++] = node;

@@ -21,7 +21,6 @@
  * SOFTWARE.
  */
 
-#include <linux/export.h>
 #include <linux/slab.h>
 
 #include <drm/drm_flip_work.h>

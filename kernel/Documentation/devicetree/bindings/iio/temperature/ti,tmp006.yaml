@@ -23,9 +23,6 @@ properties:
   vdd-supply:
     description: provide VDD power to the sensor.
 
-  interrupts:
-    maxItems: 1
-
 required:
   - compatible
   - reg
@@ -34,7 +31,6 @@ additionalProperties: false
 
 examples:
   - |
-    #include <dt-bindings/interrupt-controller/irq.h>
     i2c {
         #address-cells = <1>;
         #size-cells = <0>;
@@ -42,7 +38,5 @@ examples:
             compatible = "ti,tmp006";
             reg = <0x40>;
             vdd-supply = <&ldo4_reg>;
-            interrupt-parent = <&gpio1>;
-            interrupts = <4 IRQ_TYPE_EDGE_FALLING>;
         };
     };

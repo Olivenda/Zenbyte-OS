@@ -58,10 +58,12 @@ static inline void ksmbd_tcp_reuseaddr(struct socket *sock)
 
 static inline void ksmbd_tcp_rcv_timeout(struct socket *sock, s64 secs)
 {
+	lock_sock(sock->sk);
 	if (secs && secs < MAX_SCHEDULE_TIMEOUT / HZ - 1)
-		WRITE_ONCE(sock->sk->sk_rcvtimeo, secs * HZ);
+		sock->sk->sk_rcvtimeo = secs * HZ;
 	else
-		WRITE_ONCE(sock->sk->sk_rcvtimeo, MAX_SCHEDULE_TIMEOUT);
+		sock->sk->sk_rcvtimeo = MAX_SCHEDULE_TIMEOUT;
+	release_sock(sock->sk);
 }
 
 static inline void ksmbd_tcp_snd_timeout(struct socket *sock, s64 secs)

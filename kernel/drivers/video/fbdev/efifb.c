@@ -275,7 +275,7 @@ static const struct fb_ops efifb_ops = {
 	.fb_setcolreg	= efifb_setcolreg,
 };
 
-static void efifb_setup(struct screen_info *si, char *options)
+static int efifb_setup(struct screen_info *si, char *options)
 {
 	char *this_opt;
 
@@ -299,6 +299,8 @@ static void efifb_setup(struct screen_info *si, char *options)
 				use_bgrt = false;
 		}
 	}
+
+	return 0;
 }
 
 static inline bool fb_base_is_valid(struct screen_info *si)

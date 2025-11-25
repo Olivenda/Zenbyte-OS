@@ -486,7 +486,7 @@ struct msc313_gpio {
 	u8 *saved;
 };
 
-static int msc313_gpio_set(struct gpio_chip *chip, unsigned int offset, int value)
+static void msc313_gpio_set(struct gpio_chip *chip, unsigned int offset, int value)
 {
 	struct msc313_gpio *gpio = gpiochip_get_data(chip);
 	u8 gpioreg = readb_relaxed(gpio->base + gpio->gpio_data->offsets[offset]);
@@ -497,8 +497,6 @@ static int msc313_gpio_set(struct gpio_chip *chip, unsigned int offset, int valu
 		gpioreg &= ~MSC313_GPIO_OUT;
 
 	writeb_relaxed(gpioreg, gpio->base + gpio->gpio_data->offsets[offset]);
-
-	return 0;
 }
 
 static int msc313_gpio_get(struct gpio_chip *chip, unsigned int offset)

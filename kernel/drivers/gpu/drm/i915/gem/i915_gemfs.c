@@ -1,27 +1,21 @@
-// SPDX-License-Identifier: MIT
 /*
+ * SPDX-License-Identifier: MIT
+ *
  * Copyright © 2017 Intel Corporation
  */
 
 #include <linux/fs.h>
 #include <linux/mount.h>
-#include <linux/fs_context.h>
 
 #include "i915_drv.h"
 #include "i915_gemfs.h"
 #include "i915_utils.h"
 
-static int add_param(struct fs_context *fc, const char *key, const char *val)
-{
-	return vfs_parse_fs_string(fc, key, val, strlen(val));
-}
-
 void i915_gemfs_init(struct drm_i915_private *i915)
 {
+	char huge_opt[] = "huge=within_size"; /* r/w */
 	struct file_system_type *type;
-	struct fs_context *fc;
 	struct vfsmount *gemfs;
-	int ret;
 
 	/*
 	 * By creating our own shmemfs mountpoint, we can pass in
@@ -45,16 +39,8 @@ void i915_gemfs_init(struct drm_i915_private *i915)
 	if (!type)
 		goto err;
 
-	fc = fs_context_for_mount(type, SB_KERNMOUNT);
-	if (IS_ERR(fc))
-		goto err;
-	ret = add_param(fc, "source", "tmpfs");
-	if (!ret)
-		ret = add_param(fc, "huge", "within_size");
-	if (!ret)
-		gemfs = fc_mount_longterm(fc);
-	put_fs_context(fc);
-	if (ret)
+	gemfs = vfs_kern_mount(type, SB_KERNMOUNT, type->name, huge_opt);
+	if (IS_ERR(gemfs))
 		goto err;
 
 	i915->mm.gemfs = gemfs;

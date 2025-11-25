@@ -5,7 +5,6 @@
 
 #include <linux/export.h>
 #include <linux/linkage.h>
-#include <linux/objtool.h>
 #include <asm/msr-index.h>
 #include <asm/unwind_hints.h>
 #include <asm/segment.h>
@@ -17,9 +16,7 @@
 
 .pushsection .noinstr.text, "ax"
 
-/* Clobbers AX, CX, DX */
-SYM_FUNC_START(write_ibpb)
-	ANNOTATE_NOENDBR
+SYM_FUNC_START(entry_ibpb)
 	movl	$MSR_IA32_PRED_CMD, %ecx
 	movl	_ASM_RIP(x86_pred_cmd), %eax
 	xorl	%edx, %edx
@@ -28,9 +25,9 @@ SYM_FUNC_START(write_ibpb)
 	/* Make sure IBPB clears return stack preductions too. */
 	FILL_RETURN_BUFFER %rax, RSB_CLEAR_LOOPS, X86_BUG_IBPB_NO_RET
 	RET
-SYM_FUNC_END(write_ibpb)
+SYM_FUNC_END(entry_ibpb)
 /* For KVM */
-EXPORT_SYMBOL_GPL(write_ibpb);
+EXPORT_SYMBOL_GPL(entry_ibpb);
 
 .popsection
 
@@ -55,6 +52,7 @@ EXPORT_SYMBOL_GPL(x86_verw_sel);
 
 THUNK warn_thunk_thunk, __warn_thunk
 
+#ifndef CONFIG_X86_64
 /*
  * Clang's implementation of TLS stack cookies requires the variable in
  * question to be a TLS variable. If the variable happens to be defined as an
@@ -67,4 +65,5 @@ THUNK warn_thunk_thunk, __warn_thunk
  */
 #if defined(CONFIG_STACKPROTECTOR) && defined(CONFIG_SMP)
 EXPORT_SYMBOL(__ref_stack_chk_guard);
+#endif
 #endif

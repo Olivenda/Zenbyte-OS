@@ -509,6 +509,7 @@ static int mt6370_led_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mt6370_priv *priv;
+	struct fwnode_handle *child;
 	size_t count;
 	int i = 0, ret;
 
@@ -528,18 +529,22 @@ static int mt6370_led_probe(struct platform_device *pdev)
 	if (!priv->regmap)
 		return dev_err_probe(dev, -ENODEV, "Failed to get parent regmap\n");
 
-	device_for_each_child_node_scoped(dev, child) {
+	device_for_each_child_node(dev, child) {
 		struct mt6370_led *led = priv->leds + i;
 
 		led->priv = priv;
 
 		ret = mt6370_init_flash_properties(dev, led, child);
-		if (ret)
+		if (ret) {
+			fwnode_handle_put(child);
 			return ret;
+		}
 
 		ret = mt6370_led_register(dev, led, child);
-		if (ret)
+		if (ret) {
+			fwnode_handle_put(child);
 			return ret;
+		}
 
 		i++;
 	}

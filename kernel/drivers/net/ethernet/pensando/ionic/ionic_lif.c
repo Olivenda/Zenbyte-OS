@@ -3265,7 +3265,7 @@ int ionic_lif_alloc(struct ionic *ionic)
 	lif->netdev->min_mtu = max_t(unsigned int, ETH_MIN_MTU,
 				     le32_to_cpu(lif->identity->eth.min_frame_size));
 	lif->netdev->max_mtu =
-		le32_to_cpu(lif->identity->eth.max_frame_size) - VLAN_ETH_HLEN;
+		le32_to_cpu(lif->identity->eth.max_frame_size) - ETH_HLEN - VLAN_HLEN;
 
 	lif->neqs = ionic->neqs_per_lif;
 	lif->nxqs = ionic->ntxqs_per_lif;
@@ -3803,6 +3803,10 @@ err_out_adminq_deinit:
 	return err;
 }
 
+static void ionic_lif_notify_work(struct work_struct *ws)
+{
+}
+
 static void ionic_lif_set_netdev_info(struct ionic_lif *lif)
 {
 	struct ionic_admin_ctx ctx = {
@@ -3853,6 +3857,8 @@ int ionic_lif_register(struct ionic_lif *lif)
 
 	ionic_lif_register_phc(lif);
 
+	INIT_WORK(&lif->ionic->nb_work, ionic_lif_notify_work);
+
 	lif->ionic->nb.notifier_call = ionic_lif_notify;
 
 	err = register_netdevice_notifier(&lif->ionic->nb);
@@ -3878,6 +3884,7 @@ void ionic_lif_unregister(struct ionic_lif *lif)
 {
 	if (lif->ionic->nb.notifier_call) {
 		unregister_netdevice_notifier(&lif->ionic->nb);
+		cancel_work_sync(&lif->ionic->nb_work);
 		lif->ionic->nb.notifier_call = NULL;
 	}
 

@@ -22,23 +22,23 @@
 
 static char *fw_path;
 module_param(fw_path, charp, 0444);
-MODULE_PARM_DESC(fw_path, "deprecated - moved to snd-sof module.");
+MODULE_PARM_DESC(fw_path, "alternate path for SOF firmware.");
 
 static char *fw_filename;
 module_param(fw_filename, charp, 0444);
-MODULE_PARM_DESC(fw_filename, "deprecated - moved to snd-sof module.");
+MODULE_PARM_DESC(fw_filename, "alternate filename for SOF firmware.");
 
 static char *lib_path;
 module_param(lib_path, charp, 0444);
-MODULE_PARM_DESC(lib_path, "deprecated - moved to snd-sof module.");
+MODULE_PARM_DESC(lib_path, "alternate path for SOF firmware libraries.");
 
 static char *tplg_path;
 module_param(tplg_path, charp, 0444);
-MODULE_PARM_DESC(tplg_path, "deprecated - moved to snd-sof module.");
+MODULE_PARM_DESC(tplg_path, "alternate path for SOF topology.");
 
 static char *tplg_filename;
 module_param(tplg_filename, charp, 0444);
-MODULE_PARM_DESC(tplg_filename, "deprecated - moved to snd-sof module.");
+MODULE_PARM_DESC(tplg_filename, "alternate filename for SOF topology.");
 
 static int sof_pci_debug;
 module_param_named(sof_pci_debug, sof_pci_debug, int, 0444);
@@ -46,7 +46,7 @@ MODULE_PARM_DESC(sof_pci_debug, "SOF PCI debug options (0x0 all off)");
 
 static int sof_pci_ipc_type = -1;
 module_param_named(ipc_type, sof_pci_ipc_type, int, 0444);
-MODULE_PARM_DESC(ipc_type, "deprecated - moved to snd-sof module.");
+MODULE_PARM_DESC(ipc_type, "Force SOF IPC type. 0 - IPC3, 1 - IPC4");
 
 static const char *sof_dmi_override_tplg_name;
 static bool sof_dmi_use_community_key;
@@ -155,13 +155,14 @@ static const struct dmi_system_id community_key_platforms[] = {
 	{},
 };
 
-EXPORT_NS_DEV_PM_OPS(sof_pci_pm, SND_SOC_SOF_PCI_DEV) = {
+const struct dev_pm_ops sof_pci_pm = {
 	.prepare = snd_sof_prepare,
 	.complete = snd_sof_complete,
-	SYSTEM_SLEEP_PM_OPS(snd_sof_suspend, snd_sof_resume)
-	RUNTIME_PM_OPS(snd_sof_runtime_suspend, snd_sof_runtime_resume,
-		       snd_sof_runtime_idle)
+	SET_SYSTEM_SLEEP_PM_OPS(snd_sof_suspend, snd_sof_resume)
+	SET_RUNTIME_PM_OPS(snd_sof_runtime_suspend, snd_sof_runtime_resume,
+			   snd_sof_runtime_idle)
 };
+EXPORT_SYMBOL_NS(sof_pci_pm, SND_SOC_SOF_PCI_DEV);
 
 static void sof_pci_probe_complete(struct device *dev)
 {
@@ -216,7 +217,7 @@ int sof_pci_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 	if (ret < 0)
 		return ret;
 
-	ret = pcim_request_all_regions(pci, "Audio DSP");
+	ret = pci_request_regions(pci, "Audio DSP");
 	if (ret < 0)
 		return ret;
 
@@ -240,7 +241,8 @@ int sof_pci_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 		path_override->ipc_type = sof_pci_ipc_type;
 	} else {
 		dev_err(dev, "Invalid IPC type requested: %d\n", sof_pci_ipc_type);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out;
 	}
 
 	path_override->fw_path = fw_path;
@@ -270,9 +272,15 @@ int sof_pci_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 	sof_pdata->sof_probe_complete = sof_pci_probe_complete;
 
 	/* call sof helper for DSP hardware probe */
-	return snd_sof_device_probe(dev, sof_pdata);
+	ret = snd_sof_device_probe(dev, sof_pdata);
+
+out:
+	if (ret)
+		pci_release_regions(pci);
+
+	return ret;
 }
-EXPORT_SYMBOL_NS(sof_pci_probe, "SND_SOC_SOF_PCI_DEV");
+EXPORT_SYMBOL_NS(sof_pci_probe, SND_SOC_SOF_PCI_DEV);
 
 void sof_pci_remove(struct pci_dev *pci)
 {
@@ -283,14 +291,17 @@ void sof_pci_remove(struct pci_dev *pci)
 	if (snd_sof_device_probe_completed(&pci->dev) &&
 	    !(sof_pci_debug & SOF_PCI_DISABLE_PM_RUNTIME))
 		pm_runtime_get_noresume(&pci->dev);
+
+	/* release pci regions and disable device */
+	pci_release_regions(pci);
 }
-EXPORT_SYMBOL_NS(sof_pci_remove, "SND_SOC_SOF_PCI_DEV");
+EXPORT_SYMBOL_NS(sof_pci_remove, SND_SOC_SOF_PCI_DEV);
 
 void sof_pci_shutdown(struct pci_dev *pci)
 {
 	snd_sof_device_shutdown(&pci->dev);
 }
-EXPORT_SYMBOL_NS(sof_pci_shutdown, "SND_SOC_SOF_PCI_DEV");
+EXPORT_SYMBOL_NS(sof_pci_shutdown, SND_SOC_SOF_PCI_DEV);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("SOF support for PCI platforms");

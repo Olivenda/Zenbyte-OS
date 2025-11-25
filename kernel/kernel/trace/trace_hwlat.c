@@ -130,6 +130,7 @@ static bool hwlat_busy;
 static void trace_hwlat_sample(struct hwlat_sample *sample)
 {
 	struct trace_array *tr = hwlat_trace;
+	struct trace_event_call *call = &event_hwlat;
 	struct trace_buffer *buffer = tr->array_buffer.buffer;
 	struct ring_buffer_event *event;
 	struct hwlat_entry *entry;
@@ -147,7 +148,8 @@ static void trace_hwlat_sample(struct hwlat_sample *sample)
 	entry->nmi_count		= sample->nmi_count;
 	entry->count			= sample->count;
 
-	trace_buffer_unlock_commit_nostack(buffer, event);
+	if (!call_filter_check_discard(call, entry, buffer, event))
+		trace_buffer_unlock_commit_nostack(buffer, event);
 }
 
 /* Macros to encapsulate the time capturing infrastructure */
@@ -325,8 +327,11 @@ static void move_to_next_cpu(void)
 
 	cpus_read_lock();
 	cpumask_and(current_mask, cpu_online_mask, tr->tracing_cpumask);
-	next_cpu = cpumask_next_wrap(raw_smp_processor_id(), current_mask);
+	next_cpu = cpumask_next(raw_smp_processor_id(), current_mask);
 	cpus_read_unlock();
+
+	if (next_cpu >= nr_cpu_ids)
+		next_cpu = cpumask_first(current_mask);
 
 	if (next_cpu >= nr_cpu_ids) /* Shouldn't happen! */
 		goto change_mode;

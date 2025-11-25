@@ -46,7 +46,7 @@
 
 #define PRID_PRODUCT_MASK	0x0fff
 
-#if !defined(__ASSEMBLER__)
+#if !defined(__ASSEMBLY__)
 
 enum cpu_type_enum {
 	CPU_UNKNOWN,
@@ -55,7 +55,7 @@ enum cpu_type_enum {
 	CPU_LAST
 };
 
-#endif /* !__ASSEMBLER__ */
+#endif /* !__ASSEMBLY */
 
 /*
  * ISA Level encodings

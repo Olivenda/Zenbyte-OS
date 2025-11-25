@@ -26,8 +26,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 **************************************************************************/
 
-#include <drm/drm_print.h>
-
 #include "intel_display_types.h"
 #include "intel_dvo_dev.h"
 
@@ -191,7 +189,7 @@ static enum drm_connector_status sil164_detect(struct intel_dvo_device *dvo)
 }
 
 static enum drm_mode_status sil164_mode_valid(struct intel_dvo_device *dvo,
-					      const struct drm_display_mode *mode)
+					      struct drm_display_mode *mode)
 {
 	return MODE_OK;
 }

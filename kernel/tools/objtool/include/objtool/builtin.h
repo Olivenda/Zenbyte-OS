@@ -29,24 +29,21 @@ struct opts {
 
 	/* options: */
 	bool backtrace;
+	bool backup;
 	bool dryrun;
 	bool link;
 	bool mnop;
 	bool module;
 	bool no_unreachable;
-	const char *output;
 	bool sec_address;
 	bool stats;
 	bool verbose;
-	bool werror;
 };
 
 extern struct opts opts;
 
-int cmd_parse_options(int argc, const char **argv, const char * const usage[]);
+extern int cmd_parse_options(int argc, const char **argv, const char * const usage[]);
 
-int objtool_run(int argc, const char **argv);
-
-void print_args(void);
+extern int objtool_run(int argc, const char **argv);
 
 #endif /* _BUILTIN_H */

@@ -46,7 +46,7 @@ patternProperties:
           - const: gpio
 
       gpio-line-names:
-        minItems: 83 # Meson8b
+        minItems: 86 # AXG
         maxItems: 120 # Meson8
 
 unevaluatedProperties:

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # build id cache operations
 # SPDX-License-Identifier: GPL-2.0
 

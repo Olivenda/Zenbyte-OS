@@ -768,10 +768,10 @@ done:
 	return ret;
 }
 
-__must_check int __media_pipeline_start(struct media_pad *origin,
+__must_check int __media_pipeline_start(struct media_pad *pad,
 					struct media_pipeline *pipe)
 {
-	struct media_device *mdev = origin->graph_obj.mdev;
+	struct media_device *mdev = pad->graph_obj.mdev;
 	struct media_pipeline_pad *err_ppad;
 	struct media_pipeline_pad *ppad;
 	int ret;
@@ -782,7 +782,7 @@ __must_check int __media_pipeline_start(struct media_pad *origin,
 	 * If the pad is already part of a pipeline, that pipeline must be the
 	 * same as the pipe given to media_pipeline_start().
 	 */
-	if (WARN_ON(origin->pipe && origin->pipe != pipe))
+	if (WARN_ON(pad->pipe && pad->pipe != pipe))
 		return -EINVAL;
 
 	/*
@@ -799,7 +799,7 @@ __must_check int __media_pipeline_start(struct media_pad *origin,
 	 * with media_pipeline_pad instances for each pad found during graph
 	 * walk.
 	 */
-	ret = media_pipeline_populate(pipe, origin);
+	ret = media_pipeline_populate(pipe, pad);
 	if (ret)
 		return ret;
 
@@ -914,14 +914,14 @@ error:
 }
 EXPORT_SYMBOL_GPL(__media_pipeline_start);
 
-__must_check int media_pipeline_start(struct media_pad *origin,
+__must_check int media_pipeline_start(struct media_pad *pad,
 				      struct media_pipeline *pipe)
 {
-	struct media_device *mdev = origin->graph_obj.mdev;
+	struct media_device *mdev = pad->graph_obj.mdev;
 	int ret;
 
 	mutex_lock(&mdev->graph_mutex);
-	ret = __media_pipeline_start(origin, pipe);
+	ret = __media_pipeline_start(pad, pipe);
 	mutex_unlock(&mdev->graph_mutex);
 	return ret;
 }

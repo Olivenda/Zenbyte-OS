@@ -1,7 +1,7 @@
 /*******************************************************************
  * This file is part of the Emulex Linux Device Driver for         *
  * Fibre Channel Host Bus Adapters.                                *
- * Copyright (C) 2017-2025 Broadcom. All Rights Reserved. The term *
+ * Copyright (C) 2017-2024 Broadcom. All Rights Reserved. The term *
  * “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.     *
  * Copyright (C) 2004-2016 Emulex.  All rights reserved.           *
  * EMULEX and SLI are trademarks of Emulex.                        *
@@ -536,8 +536,7 @@ lpfc_sli4_io_xri_aborted(struct lpfc_hba *phba,
 			psb = container_of(iocbq, struct lpfc_io_buf, cur_iocbq);
 			psb->flags &= ~LPFC_SBUF_XBUSY;
 			spin_unlock_irqrestore(&phba->hbalock, iflag);
-			if (test_bit(HBA_SETUP, &phba->hba_flag) &&
-			    !list_empty(&pring->txq))
+			if (!list_empty(&pring->txq))
 				lpfc_worker_wake_up(phba);
 			return;
 		}
@@ -5141,12 +5140,6 @@ lpfc_info(struct Scsi_Host *host)
 				goto buffer_done;
 		}
 
-		/* Support for BSG ioctls */
-		scnprintf(tmp, sizeof(tmp), " BSG");
-		if (strlcat(lpfcinfobuf, tmp, sizeof(lpfcinfobuf)) >=
-		    sizeof(lpfcinfobuf))
-			goto buffer_done;
-
 		/* PCI resettable */
 		if (!lpfc_check_pci_resettable(phba)) {
 			scnprintf(tmp, sizeof(tmp), " PCI resettable");
@@ -5195,7 +5188,7 @@ void lpfc_poll_start_timer(struct lpfc_hba * phba)
  **/
 void lpfc_poll_timeout(struct timer_list *t)
 {
-	struct lpfc_hba *phba = timer_container_of(phba, t, fcp_poll_timer);
+	struct lpfc_hba *phba = from_timer(phba, t, fcp_poll_timer);
 
 	if (phba->cfg_poll & ENABLE_FCP_RING_POLLING) {
 		lpfc_sli_handle_fast_ring_event(phba,
@@ -5493,7 +5486,7 @@ void lpfc_vmid_vport_cleanup(struct lpfc_vport *vport)
 	struct lpfc_vmid *cur;
 
 	if (vport->port_type == LPFC_PHYSICAL_PORT)
-		timer_delete_sync(&vport->phba->inactive_vmid_poll);
+		del_timer_sync(&vport->phba->inactive_vmid_poll);
 
 	kfree(vport->qfpa_res);
 	kfree(vport->vmid_priority.vmid_range);
@@ -5650,8 +5643,9 @@ wait_for_cmpl:
 	 * cmd_flag is set to LPFC_DRIVER_ABORTED before we wait
 	 * for abort to complete.
 	 */
-	wait_event_timeout(waitq, (lpfc_cmd->pCmd != cmnd),
-			   secs_to_jiffies(2*vport->cfg_devloss_tmo));
+	wait_event_timeout(waitq,
+			  (lpfc_cmd->pCmd != cmnd),
+			   msecs_to_jiffies(2*vport->cfg_devloss_tmo*1000));
 
 	spin_lock(&lpfc_cmd->buf_lock);
 
@@ -5915,7 +5909,7 @@ lpfc_chk_tgt_mapped(struct lpfc_vport *vport, struct fc_rport *rport)
 	 * If target is not in a MAPPED state, delay until
 	 * target is rediscovered or devloss timeout expires.
 	 */
-	later = secs_to_jiffies(2 * vport->cfg_devloss_tmo) + jiffies;
+	later = msecs_to_jiffies(2 * vport->cfg_devloss_tmo * 1000) + jiffies;
 	while (time_after(later, jiffies)) {
 		if (!pnode)
 			return FAILED;
@@ -5961,7 +5955,7 @@ lpfc_reset_flush_io_context(struct lpfc_vport *vport, uint16_t tgt_id,
 		lpfc_sli_abort_taskmgmt(vport,
 					&phba->sli.sli3_ring[LPFC_FCP_RING],
 					tgt_id, lun_id, context);
-	later = secs_to_jiffies(2 * vport->cfg_devloss_tmo) + jiffies;
+	later = msecs_to_jiffies(2 * vport->cfg_devloss_tmo * 1000) + jiffies;
 	while (time_after(later, jiffies) && cnt) {
 		schedule_timeout_uninterruptible(msecs_to_jiffies(20));
 		cnt = lpfc_sli_sum_iocb(vport, tgt_id, lun_id, context);
@@ -6136,27 +6130,31 @@ lpfc_target_reset_handler(struct scsi_cmnd *cmnd)
 
 		/* Issue LOGO, if no LOGO is outstanding */
 		spin_lock_irqsave(&pnode->lock, flags);
-		if (!test_bit(NLP_WAIT_FOR_LOGO, &pnode->save_flags) &&
+		if (!(pnode->save_flags & NLP_WAIT_FOR_LOGO) &&
 		    !pnode->logo_waitq) {
 			pnode->logo_waitq = &waitq;
 			pnode->nlp_fcp_info &= ~NLP_FCP_2_DEVICE;
-			spin_unlock_irqrestore(&pnode->lock, flags);
 			set_bit(NLP_ISSUE_LOGO, &pnode->nlp_flag);
-			set_bit(NLP_WAIT_FOR_LOGO, &pnode->save_flags);
+			pnode->save_flags |= NLP_WAIT_FOR_LOGO;
+			spin_unlock_irqrestore(&pnode->lock, flags);
 			lpfc_unreg_rpi(vport, pnode);
 			wait_event_timeout(waitq,
-					   !test_bit(NLP_WAIT_FOR_LOGO,
-						     &pnode->save_flags),
-					   secs_to_jiffies(dev_loss_tmo));
+					   (!(pnode->save_flags &
+					      NLP_WAIT_FOR_LOGO)),
+					   msecs_to_jiffies(dev_loss_tmo *
+							    1000));
 
-			if (test_and_clear_bit(NLP_WAIT_FOR_LOGO,
-					       &pnode->save_flags))
+			if (pnode->save_flags & NLP_WAIT_FOR_LOGO) {
 				lpfc_printf_vlog(vport, KERN_ERR, logit,
 						 "0725 SCSI layer TGTRST "
 						 "failed & LOGO TMO (%d, %llu) "
 						 "return x%x\n",
 						 tgt_id, lun_id, status);
-			spin_lock_irqsave(&pnode->lock, flags);
+				spin_lock_irqsave(&pnode->lock, flags);
+				pnode->save_flags &= ~NLP_WAIT_FOR_LOGO;
+			} else {
+				spin_lock_irqsave(&pnode->lock, flags);
+			}
 			pnode->logo_waitq = NULL;
 			spin_unlock_irqrestore(&pnode->lock, flags);
 			status = SUCCESS;
@@ -6238,7 +6236,7 @@ error:
 }
 
 /**
- * lpfc_sdev_init - scsi_host_template sdev_init entry point
+ * lpfc_slave_alloc - scsi_host_template slave_alloc entry point
  * @sdev: Pointer to scsi_device.
  *
  * This routine populates the cmds_per_lun count + 2 scsi_bufs into  this host's
@@ -6251,7 +6249,7 @@ error:
  *   0 - Success
  **/
 static int
-lpfc_sdev_init(struct scsi_device *sdev)
+lpfc_slave_alloc(struct scsi_device *sdev)
 {
 	struct lpfc_vport *vport = (struct lpfc_vport *) sdev->host->hostdata;
 	struct lpfc_hba   *phba = vport->phba;
@@ -6354,9 +6352,8 @@ lpfc_sdev_init(struct scsi_device *sdev)
 }
 
 /**
- * lpfc_sdev_configure - scsi_host_template sdev_configure entry point
+ * lpfc_slave_configure - scsi_host_template slave_configure entry point
  * @sdev: Pointer to scsi_device.
- * @lim: Request queue limits.
  *
  * This routine configures following items
  *   - Tag command queuing support for @sdev if supported.
@@ -6366,7 +6363,7 @@ lpfc_sdev_init(struct scsi_device *sdev)
  *   0 - Success
  **/
 static int
-lpfc_sdev_configure(struct scsi_device *sdev, struct queue_limits *lim)
+lpfc_slave_configure(struct scsi_device *sdev)
 {
 	struct lpfc_vport *vport = (struct lpfc_vport *) sdev->host->hostdata;
 	struct lpfc_hba   *phba = vport->phba;
@@ -6384,13 +6381,13 @@ lpfc_sdev_configure(struct scsi_device *sdev, struct queue_limits *lim)
 }
 
 /**
- * lpfc_sdev_destroy - sdev_destroy entry point of SHT data structure
+ * lpfc_slave_destroy - slave_destroy entry point of SHT data structure
  * @sdev: Pointer to scsi_device.
  *
  * This routine sets @sdev hostatdata filed to null.
  **/
 static void
-lpfc_sdev_destroy(struct scsi_device *sdev)
+lpfc_slave_destroy(struct scsi_device *sdev)
 {
 	struct lpfc_vport *vport = (struct lpfc_vport *) sdev->host->hostdata;
 	struct lpfc_hba   *phba = vport->phba;
@@ -6435,7 +6432,7 @@ lpfc_create_device_data(struct lpfc_hba *phba, struct lpfc_name *vport_wwpn,
 {
 
 	struct lpfc_device_data *lun_info;
-	gfp_t memory_flags;
+	int memory_flags;
 
 	if (unlikely(!phba) || !vport_wwpn || !target_wwpn  ||
 	    !(phba->cfg_fof))
@@ -6750,13 +6747,7 @@ lpfc_no_command(struct Scsi_Host *shost, struct scsi_cmnd *cmnd)
 }
 
 static int
-lpfc_init_no_sdev(struct scsi_device *sdev)
-{
-	return -ENODEV;
-}
-
-static int
-lpfc_config_no_sdev(struct scsi_device *sdev, struct queue_limits *lim)
+lpfc_no_slave(struct scsi_device *sdev)
 {
 	return -ENODEV;
 }
@@ -6767,8 +6758,8 @@ struct scsi_host_template lpfc_template_nvme = {
 	.proc_name		= LPFC_DRIVER_NAME,
 	.info			= lpfc_info,
 	.queuecommand		= lpfc_no_command,
-	.sdev_init		= lpfc_init_no_sdev,
-	.sdev_configure		= lpfc_config_no_sdev,
+	.slave_alloc		= lpfc_no_slave,
+	.slave_configure	= lpfc_no_slave,
 	.scan_finished		= lpfc_scan_finished,
 	.this_id		= -1,
 	.sg_tablesize		= 1,
@@ -6791,9 +6782,9 @@ struct scsi_host_template lpfc_template = {
 	.eh_device_reset_handler = lpfc_device_reset_handler,
 	.eh_target_reset_handler = lpfc_target_reset_handler,
 	.eh_host_reset_handler  = lpfc_host_reset_handler,
-	.sdev_init		= lpfc_sdev_init,
-	.sdev_configure		= lpfc_sdev_configure,
-	.sdev_destroy		= lpfc_sdev_destroy,
+	.slave_alloc		= lpfc_slave_alloc,
+	.slave_configure	= lpfc_slave_configure,
+	.slave_destroy		= lpfc_slave_destroy,
 	.scan_finished		= lpfc_scan_finished,
 	.this_id		= -1,
 	.sg_tablesize		= LPFC_DEFAULT_SG_SEG_CNT,
@@ -6818,9 +6809,9 @@ struct scsi_host_template lpfc_vport_template = {
 	.eh_target_reset_handler = lpfc_target_reset_handler,
 	.eh_bus_reset_handler	= NULL,
 	.eh_host_reset_handler	= NULL,
-	.sdev_init		= lpfc_sdev_init,
-	.sdev_configure		= lpfc_sdev_configure,
-	.sdev_destroy		= lpfc_sdev_destroy,
+	.slave_alloc		= lpfc_slave_alloc,
+	.slave_configure	= lpfc_slave_configure,
+	.slave_destroy		= lpfc_slave_destroy,
 	.scan_finished		= lpfc_scan_finished,
 	.this_id		= -1,
 	.sg_tablesize		= LPFC_DEFAULT_SG_SEG_CNT,

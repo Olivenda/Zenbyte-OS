@@ -556,7 +556,6 @@ int bnxt_qplib_enable_nq(struct pci_dev *pdev, struct bnxt_qplib_nq *nq,
 	nq->pdev = pdev;
 	nq->cqn_handler = cqn_handler;
 	nq->srqn_handler = srqn_handler;
-	nq->load = 0;
 
 	/* Have a task to schedule CQ notifiers in post send case */
 	nq->cqn_wq  = create_singlethread_workqueue("bnxt_qplib_nq");
@@ -1085,7 +1084,7 @@ int bnxt_qplib_create_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp)
 		qp_flags |= CMDQ_CREATE_QP_QP_FLAGS_FORCE_COMPLETION;
 	if (qp->wqe_mode == BNXT_QPLIB_WQE_MODE_VARIABLE)
 		qp_flags |= CMDQ_CREATE_QP_QP_FLAGS_VARIABLE_SIZED_WQE_ENABLED;
-	if (bnxt_ext_stats_supported(res->cctx, res->dattr->dev_cap_flags, res->is_vf))
+	if (_is_ext_stats_supported(res->dattr->dev_cap_flags) && !res->is_vf)
 		qp_flags |= CMDQ_CREATE_QP_QP_FLAGS_EXT_STATS_ENABLED;
 
 	req.qp_flags = cpu_to_le32(qp_flags);
@@ -1262,56 +1261,12 @@ static void __filter_modify_flags(struct bnxt_qplib_qp *qp)
 	}
 }
 
-static void bnxt_set_mandatory_attributes(struct bnxt_qplib_res *res,
-					  struct bnxt_qplib_qp *qp,
-					  struct cmdq_modify_qp *req)
-{
-	u32 mandatory_flags = 0;
-
-	if (qp->type == CMDQ_MODIFY_QP_QP_TYPE_RC)
-		mandatory_flags |= CMDQ_MODIFY_QP_MODIFY_MASK_ACCESS;
-
-	if (qp->cur_qp_state == CMDQ_MODIFY_QP_NEW_STATE_INIT &&
-	    qp->state == CMDQ_MODIFY_QP_NEW_STATE_RTR) {
-		if (qp->type == CMDQ_MODIFY_QP_QP_TYPE_RC && qp->srq)
-			req->flags = cpu_to_le16(CMDQ_MODIFY_QP_FLAGS_SRQ_USED);
-		mandatory_flags |= CMDQ_MODIFY_QP_MODIFY_MASK_PKEY;
-	}
-
-	if (_is_min_rnr_in_rtr_rts_mandatory(res->dattr->dev_cap_flags2) &&
-	    (qp->cur_qp_state == CMDQ_MODIFY_QP_NEW_STATE_RTR &&
-	     qp->state == CMDQ_MODIFY_QP_NEW_STATE_RTS)) {
-		if (qp->type == CMDQ_MODIFY_QP_QP_TYPE_RC)
-			mandatory_flags |=
-				CMDQ_MODIFY_QP_MODIFY_MASK_MIN_RNR_TIMER;
-	}
-
-	if (qp->type == CMDQ_MODIFY_QP_QP_TYPE_UD ||
-	    qp->type == CMDQ_MODIFY_QP_QP_TYPE_GSI)
-		mandatory_flags |= CMDQ_MODIFY_QP_MODIFY_MASK_QKEY;
-
-	qp->modify_flags |= mandatory_flags;
-	req->qp_type = qp->type;
-}
-
-static bool is_optimized_state_transition(struct bnxt_qplib_qp *qp)
-{
-	if ((qp->cur_qp_state == CMDQ_MODIFY_QP_NEW_STATE_INIT &&
-	     qp->state == CMDQ_MODIFY_QP_NEW_STATE_RTR) ||
-	    (qp->cur_qp_state == CMDQ_MODIFY_QP_NEW_STATE_RTR &&
-	     qp->state == CMDQ_MODIFY_QP_NEW_STATE_RTS))
-		return true;
-
-	return false;
-}
-
 int bnxt_qplib_modify_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp)
 {
 	struct bnxt_qplib_rcfw *rcfw = res->rcfw;
 	struct creq_modify_qp_resp resp = {};
 	struct bnxt_qplib_cmdqmsg msg = {};
 	struct cmdq_modify_qp req = {};
-	u16 vlan_pcp_vlan_dei_vlan_id;
 	u32 temp32[4];
 	u32 bmask;
 	int rc;
@@ -1322,12 +1277,6 @@ int bnxt_qplib_modify_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp)
 
 	/* Filter out the qp_attr_mask based on the state->new transition */
 	__filter_modify_flags(qp);
-	if (qp->modify_flags & CMDQ_MODIFY_QP_MODIFY_MASK_STATE) {
-		/* Set mandatory attributes for INIT -> RTR and RTR -> RTS transition */
-		if (_is_optimize_modify_qp_supported(res->dattr->dev_cap_flags2) &&
-		    is_optimized_state_transition(qp))
-			bnxt_set_mandatory_attributes(res, qp, &req);
-	}
 	bmask = qp->modify_flags;
 	req.modify_mask = cpu_to_le32(qp->modify_flags);
 	req.qp_cid = cpu_to_le32(qp->id);
@@ -1408,16 +1357,7 @@ int bnxt_qplib_modify_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp)
 	if (bmask & CMDQ_MODIFY_QP_MODIFY_MASK_DEST_QP_ID)
 		req.dest_qp_id = cpu_to_le32(qp->dest_qpn);
 
-	if (bmask & CMDQ_MODIFY_QP_MODIFY_MASK_VLAN_ID) {
-		vlan_pcp_vlan_dei_vlan_id =
-			((res->sgid_tbl.tbl[qp->ah.sgid_index].vlan_id <<
-			  CMDQ_MODIFY_QP_VLAN_ID_SFT) &
-			 CMDQ_MODIFY_QP_VLAN_ID_MASK);
-		vlan_pcp_vlan_dei_vlan_id |=
-			((qp->ah.sl << CMDQ_MODIFY_QP_VLAN_PCP_SFT) &
-			 CMDQ_MODIFY_QP_VLAN_PCP_MASK);
-		req.vlan_pcp_vlan_dei_vlan_id = cpu_to_le16(vlan_pcp_vlan_dei_vlan_id);
-	}
+	req.vlan_pcp_vlan_dei_vlan_id = cpu_to_le16(qp->vlan_id);
 
 	bnxt_qplib_fill_cmdqmsg(&msg, &req, &resp, NULL, sizeof(req),  sizeof(resp), 0);
 	rc = bnxt_qplib_rcfw_send_message(rcfw, &msg);
@@ -1722,9 +1662,9 @@ static void bnxt_qplib_fill_psn_search(struct bnxt_qplib_qp *qp,
 	}
 }
 
-static unsigned int bnxt_qplib_put_inline(struct bnxt_qplib_qp *qp,
-					  struct bnxt_qplib_swqe *wqe,
-					  u32 *idx)
+static int bnxt_qplib_put_inline(struct bnxt_qplib_qp *qp,
+				 struct bnxt_qplib_swqe *wqe,
+				 u16 *idx)
 {
 	struct bnxt_qplib_hwq *hwq;
 	int len, t_len, offt;
@@ -1741,7 +1681,7 @@ static unsigned int bnxt_qplib_put_inline(struct bnxt_qplib_qp *qp,
 		il_src = (void *)wqe->sg_list[indx].addr;
 		t_len += len;
 		if (t_len > qp->max_inline_data)
-			return BNXT_RE_INVAL_MSG_SIZE;
+			return -ENOMEM;
 		while (len) {
 			if (pull_dst) {
 				pull_dst = false;
@@ -1767,9 +1707,9 @@ static unsigned int bnxt_qplib_put_inline(struct bnxt_qplib_qp *qp,
 	return t_len;
 }
 
-static unsigned int bnxt_qplib_put_sges(struct bnxt_qplib_hwq *hwq,
-					struct bnxt_qplib_sge *ssge,
-					u32 nsge, u32 *idx)
+static u32 bnxt_qplib_put_sges(struct bnxt_qplib_hwq *hwq,
+			       struct bnxt_qplib_sge *ssge,
+			       u16 nsge, u16 *idx)
 {
 	struct sq_sge *dsge;
 	int indx, len = 0;
@@ -1850,12 +1790,14 @@ int bnxt_qplib_post_send(struct bnxt_qplib_qp *qp,
 	struct bnxt_qplib_hwq *hwq;
 	struct bnxt_qplib_swq *swq;
 	bool sch_handler = false;
-	u32 wqe_idx, slots, idx;
 	u16 wqe_sz, qdf = 0;
 	bool msn_update;
 	void *base_hdr;
 	void *ext_hdr;
 	__le32 temp32;
+	u32 wqe_idx;
+	u32 slots;
+	u16 idx;
 
 	hwq = &sq->hwq;
 	if (qp->state != CMDQ_MODIFY_QP_NEW_STATE_RTS &&
@@ -1907,10 +1849,8 @@ int bnxt_qplib_post_send(struct bnxt_qplib_qp *qp,
 	else
 		data_len = bnxt_qplib_put_sges(hwq, wqe->sg_list, wqe->num_sge,
 					       &idx);
-	if (data_len > BNXT_RE_MAX_MSG_SIZE) {
-		rc = -EINVAL;
-		goto done;
-	}
+	if (data_len < 0)
+		goto queue_err;
 	/* Make sure we update MSN table only for wired wqes */
 	msn_update = true;
 	/* Specifics */
@@ -2111,8 +2051,8 @@ int bnxt_qplib_post_recv(struct bnxt_qplib_qp *qp,
 	struct bnxt_qplib_hwq *hwq;
 	struct bnxt_qplib_swq *swq;
 	bool sch_handler = false;
-	u32 wqe_idx, idx;
-	u16 wqe_sz;
+	u16 wqe_sz, idx;
+	u32 wqe_idx;
 	int rc = 0;
 
 	hwq = &rq->hwq;
@@ -2191,7 +2131,6 @@ int bnxt_qplib_create_cq(struct bnxt_qplib_res *res, struct bnxt_qplib_cq *cq)
 	struct bnxt_qplib_cmdqmsg msg = {};
 	struct cmdq_create_cq req = {};
 	struct bnxt_qplib_pbl *pbl;
-	u32 coalescing = 0;
 	u32 pg_sz_lvl;
 	int rc;
 
@@ -2218,25 +2157,6 @@ int bnxt_qplib_create_cq(struct bnxt_qplib_res *res, struct bnxt_qplib_cq *cq)
 	req.dpi = cpu_to_le32(cq->dpi->dpi);
 	req.cq_handle = cpu_to_le64(cq->cq_handle);
 	req.cq_size = cpu_to_le32(cq->max_wqe);
-
-	if (_is_cq_coalescing_supported(res->dattr->dev_cap_flags2)) {
-		req.flags |= cpu_to_le16(CMDQ_CREATE_CQ_FLAGS_COALESCING_VALID);
-		coalescing |= ((cq->coalescing->buf_maxtime <<
-				CMDQ_CREATE_CQ_BUF_MAXTIME_SFT) &
-			       CMDQ_CREATE_CQ_BUF_MAXTIME_MASK);
-		coalescing |= ((cq->coalescing->normal_maxbuf <<
-				CMDQ_CREATE_CQ_NORMAL_MAXBUF_SFT) &
-			       CMDQ_CREATE_CQ_NORMAL_MAXBUF_MASK);
-		coalescing |= ((cq->coalescing->during_maxbuf <<
-				CMDQ_CREATE_CQ_DURING_MAXBUF_SFT) &
-			       CMDQ_CREATE_CQ_DURING_MAXBUF_MASK);
-		if (cq->coalescing->en_ring_idle_mode)
-			coalescing |= CMDQ_CREATE_CQ_ENABLE_RING_IDLE_MODE;
-		else
-			coalescing &= ~CMDQ_CREATE_CQ_ENABLE_RING_IDLE_MODE;
-		req.coalescing = cpu_to_le32(coalescing);
-	}
-
 	pbl = &cq->hwq.pbl[PBL_LVL_0];
 	pg_sz_lvl = (bnxt_qplib_base_pg_size(&cq->hwq) <<
 		     CMDQ_CREATE_CQ_PG_SIZE_SFT);

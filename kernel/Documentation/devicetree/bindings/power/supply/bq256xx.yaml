@@ -58,7 +58,9 @@ properties:
     minimum: 100000
     maximum: 3200000
 
-  monitored-battery: true
+  monitored-battery:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: phandle to the battery node being monitored
 
   interrupts:
     maxItems: 1
@@ -76,7 +78,6 @@ required:
   - monitored-battery
 
 allOf:
-  - $ref: power-supply.yaml#
   - if:
       properties:
         compatible:

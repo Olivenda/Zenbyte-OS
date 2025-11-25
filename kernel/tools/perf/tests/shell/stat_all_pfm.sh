@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # perf all libpfm4 events test
 # SPDX-License-Identifier: GPL-2.0
 

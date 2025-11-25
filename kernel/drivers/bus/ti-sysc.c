@@ -1987,21 +1987,6 @@ static void sysc_module_disable_quirk_pruss(struct sysc *ddata)
 	sysc_write(ddata, ddata->offsets[SYSC_SYSCONFIG], reg);
 }
 
-static void sysc_module_enable_quirk_pruss(struct sysc *ddata)
-{
-	u32 reg;
-
-	reg = sysc_read(ddata, ddata->offsets[SYSC_SYSCONFIG]);
-
-	/*
-	 * Clearing the SYSC_PRUSS_STANDBY_INIT bit - Updates OCP master
-	 * port configuration to enable memory access outside of the
-	 * PRU-ICSS subsystem.
-	 */
-	reg &= (~SYSC_PRUSS_STANDBY_INIT);
-	sysc_write(ddata, ddata->offsets[SYSC_SYSCONFIG], reg);
-}
-
 static void sysc_init_module_quirks(struct sysc *ddata)
 {
 	if (ddata->legacy_mode || !ddata->name)
@@ -2054,10 +2039,8 @@ static void sysc_init_module_quirks(struct sysc *ddata)
 		ddata->module_disable_quirk = sysc_reset_done_quirk_wdt;
 	}
 
-	if (ddata->cfg.quirks & SYSC_MODULE_QUIRK_PRUSS) {
-		ddata->module_enable_quirk = sysc_module_enable_quirk_pruss;
+	if (ddata->cfg.quirks & SYSC_MODULE_QUIRK_PRUSS)
 		ddata->module_disable_quirk = sysc_module_disable_quirk_pruss;
-	}
 }
 
 static int sysc_clockdomain_init(struct sysc *ddata)
@@ -2170,8 +2153,9 @@ static int sysc_reset(struct sysc *ddata)
 static int sysc_init_module(struct sysc *ddata)
 {
 	bool rstctrl_deasserted = false;
-	int error = sysc_clockdomain_init(ddata);
+	int error = 0;
 
+	error = sysc_clockdomain_init(ddata);
 	if (error)
 		return error;
 
@@ -3312,7 +3296,7 @@ MODULE_DEVICE_TABLE(of, sysc_match);
 
 static struct platform_driver sysc_driver = {
 	.probe		= sysc_probe,
-	.remove		= sysc_remove,
+	.remove_new	= sysc_remove,
 	.driver         = {
 		.name   = "ti-sysc",
 		.of_match_table	= sysc_match,

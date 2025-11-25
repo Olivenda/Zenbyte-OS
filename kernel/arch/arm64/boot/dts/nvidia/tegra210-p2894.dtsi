@@ -1365,7 +1365,7 @@
 				};
 			};
 
-			max77620-hog {
+			hog-0 {
 				gpio-hog;
 				output-high;
 				gpios = <2 GPIO_ACTIVE_HIGH>,

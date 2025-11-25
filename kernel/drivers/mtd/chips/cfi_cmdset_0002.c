@@ -1779,8 +1779,10 @@ static int __xipram do_write_oneword_retry(struct map_info *map,
 		map_write(map, CMD(0xF0), chip->start);
 		/* FIXME - should have reset delay before continuing */
 
-		if (++retry_cnt <= MAX_RETRIES)
+		if (++retry_cnt <= MAX_RETRIES) {
+			ret = 0;
 			goto retry;
+		}
 	}
 	xip_enable(map, chip, adr);
 

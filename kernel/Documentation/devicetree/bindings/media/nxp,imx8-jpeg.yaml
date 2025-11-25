@@ -22,14 +22,10 @@ properties:
             - nxp,imx8qxp-jpgdec
             - nxp,imx8qxp-jpgenc
       - items:
-          - enum:
-              - nxp,imx8qm-jpgdec
-              - nxp,imx95-jpgdec
+          - const: nxp,imx8qm-jpgdec
           - const: nxp,imx8qxp-jpgdec
       - items:
-          - enum:
-              - nxp,imx8qm-jpgenc
-              - nxp,imx95-jpgenc
+          - const: nxp,imx8qm-jpgenc
           - const: nxp,imx8qxp-jpgenc
 
   reg:
@@ -52,7 +48,7 @@ properties:
     description:
       List of phandle and PM domain specifier as documented in
       Documentation/devicetree/bindings/power/power_domain.txt
-    minItems: 1               # Wrapper and all slots
+    minItems: 2               # Wrapper and 1 slot
     maxItems: 5               # Wrapper and 4 slots
 
 required:
@@ -61,24 +57,6 @@ required:
   - clocks
   - interrupts
   - power-domains
-
-allOf:
-  - if:
-      properties:
-        compatible:
-          contains:
-            enum:
-              - nxp,imx95-jpgenc
-              - nxp,imx95-jpgdec
-    then:
-      properties:
-        power-domains:
-          maxItems: 1
-    else:
-      properties:
-        power-domains:
-          minItems: 2        # Wrapper and 1 slot
-
 
 additionalProperties: false
 

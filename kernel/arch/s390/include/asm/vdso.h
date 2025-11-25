@@ -4,13 +4,18 @@
 
 #include <vdso/datapage.h>
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
+
+extern struct vdso_data *vdso_data;
 
 int vdso_getcpu_init(void);
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 
-#define __VDSO_PAGES	4
+/* Default link address for the vDSO */
+#define VDSO_LBASE	0
+
+#define __VVAR_PAGES	2
 
 #define VDSO_VERSION_STRING	LINUX_2.6.29
 

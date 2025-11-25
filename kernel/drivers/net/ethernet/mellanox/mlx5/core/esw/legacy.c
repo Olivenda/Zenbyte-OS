@@ -176,10 +176,20 @@ static void esw_destroy_legacy_vepa_table(struct mlx5_eswitch *esw)
 
 static int esw_create_legacy_table(struct mlx5_eswitch *esw)
 {
+	int err;
+
 	memset(&esw->fdb_table.legacy, 0, sizeof(struct legacy_fdb));
 	atomic64_set(&esw->user_count, 0);
 
-	return esw_create_legacy_fdb_table(esw);
+	err = esw_create_legacy_vepa_table(esw);
+	if (err)
+		return err;
+
+	err = esw_create_legacy_fdb_table(esw);
+	if (err)
+		esw_destroy_legacy_vepa_table(esw);
+
+	return err;
 }
 
 static void esw_cleanup_vepa_rules(struct mlx5_eswitch *esw)
@@ -249,22 +259,15 @@ static int _mlx5_eswitch_set_vepa_locked(struct mlx5_eswitch *esw,
 
 	if (!setting) {
 		esw_cleanup_vepa_rules(esw);
-		esw_destroy_legacy_vepa_table(esw);
 		return 0;
 	}
 
 	if (esw->fdb_table.legacy.vepa_uplink_rule)
 		return 0;
 
-	err = esw_create_legacy_vepa_table(esw);
-	if (err)
-		return err;
-
 	spec = kvzalloc(sizeof(*spec), GFP_KERNEL);
-	if (!spec) {
-		err = -ENOMEM;
-		goto out;
-	}
+	if (!spec)
+		return -ENOMEM;
 
 	/* Uplink rule forward uplink traffic to FDB */
 	misc = MLX5_ADDR_OF(fte_match_param, spec->match_value, misc_parameters);
@@ -300,10 +303,8 @@ static int _mlx5_eswitch_set_vepa_locked(struct mlx5_eswitch *esw,
 
 out:
 	kvfree(spec);
-	if (err) {
+	if (err)
 		esw_cleanup_vepa_rules(esw);
-		esw_destroy_legacy_vepa_table(esw);
-	}
 	return err;
 }
 
@@ -512,11 +513,15 @@ int mlx5_eswitch_set_vport_rate(struct mlx5_eswitch *esw, u16 vport,
 				u32 max_rate, u32 min_rate)
 {
 	struct mlx5_vport *evport = mlx5_eswitch_get_vport(esw, vport);
+	int err;
 
 	if (!mlx5_esw_allowed(esw))
 		return -EPERM;
 	if (IS_ERR(evport))
 		return PTR_ERR(evport);
 
-	return mlx5_esw_qos_set_vport_rate(evport, max_rate, min_rate);
+	mutex_lock(&esw->state_lock);
+	err = mlx5_esw_qos_set_vport_rate(esw, evport, max_rate, min_rate);
+	mutex_unlock(&esw->state_lock);
+	return err;
 }

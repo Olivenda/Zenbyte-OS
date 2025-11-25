@@ -30,7 +30,8 @@ static int mdio_mux_gpio_switch_fn(int current_child, int desired_child,
 
 	values[0] = desired_child;
 
-	gpiod_multi_set_value_cansleep(s->gpios, values);
+	gpiod_set_array_value_cansleep(s->gpios->ndescs, s->gpios->desc,
+				       s->gpios->info, values);
 
 	return 0;
 }
@@ -85,7 +86,7 @@ static struct platform_driver mdio_mux_gpio_driver = {
 		.of_match_table = mdio_mux_gpio_match,
 	},
 	.probe		= mdio_mux_gpio_probe,
-	.remove		= mdio_mux_gpio_remove,
+	.remove_new	= mdio_mux_gpio_remove,
 };
 
 module_platform_driver(mdio_mux_gpio_driver);

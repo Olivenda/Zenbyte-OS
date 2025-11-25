@@ -42,7 +42,7 @@
 		};
 	};
 
-	vdd_log: regulator-vdd-log {
+	vdd_log: vdd-log {
 		compatible = "pwm-regulator";
 		pwms = <&pwm3 0 1000>;
 		regulator-name = "vdd_log";
@@ -54,7 +54,7 @@
 		status = "okay";
 	};
 
-	vsys: regulator-vsys {
+	vsys: vsys-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "vsys";
 		regulator-min-microvolt = <5000000>;
@@ -64,7 +64,7 @@
 	};
 
 	/* input for 5V_STDBY is VSYS or DC5V, selectable by jumper J4 */
-	vcc_stdby: regulator-stdby {
+	vcc_stdby: stdby-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "5v_stdby";
 		regulator-min-microvolt = <5000000>;
@@ -73,7 +73,7 @@
 		regulator-boot-on;
 	};
 
-	vcc_emmc: regulator-emmc {
+	vcc_emmc: emmc-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "emmc_vccq";
 		regulator-min-microvolt = <3000000>;
@@ -81,7 +81,7 @@
 		vin-supply = <&vsys>;
 	};
 
-	vcc_sata: regulator-sata {
+	vcc_sata: sata-regulator {
 		compatible = "regulator-fixed";
 		enable-active-high;
 		gpio = <&gpio4 RK_PC6 GPIO_ACTIVE_HIGH>;
@@ -94,7 +94,7 @@
 		vin-supply = <&vcc_stdby>;
 	};
 
-	vcc_sd: regulator-sdmmc {
+	vcc_sd: sdmmc-regulator {
 		compatible = "regulator-fixed";
 		gpio = <&gpio3 RK_PA7 GPIO_ACTIVE_LOW>;
 		pinctrl-names = "default";
@@ -106,7 +106,7 @@
 		vin-supply = <&vcc_io>;
 	};
 
-	vcc_host: regulator-usb-host {
+	vcc_host: usb-host-regulator {
 		compatible = "regulator-fixed";
 		enable-active-high;
 		gpio = <&gpio0 RK_PA6 GPIO_ACTIVE_HIGH>;
@@ -119,7 +119,7 @@
 		vin-supply = <&vcc_stdby>;
 	};
 
-	vcc_otg: regulator-usb-otg {
+	vcc_otg: usb-otg-regulator {
 		compatible = "regulator-fixed";
 		enable-active-high;
 		gpio = <&gpio0 RK_PA5 GPIO_ACTIVE_HIGH>;

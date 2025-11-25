@@ -195,17 +195,20 @@ nvif_outp_dp_aux_pwr(struct nvif_outp *outp, bool enable)
 int
 nvif_outp_hda_eld(struct nvif_outp *outp, int head, void *data, u32 size)
 {
-	DEFINE_RAW_FLEX(struct nvif_outp_hda_eld_v0, mthd, data, 128);
+	struct {
+		struct nvif_outp_hda_eld_v0 mthd;
+		u8 data[128];
+	} args;
 	int ret;
 
-	if (WARN_ON(size > __member_size(mthd->data)))
+	if (WARN_ON(size > ARRAY_SIZE(args.data)))
 		return -EINVAL;
 
-	mthd->version = 0;
-	mthd->head = head;
+	args.mthd.version = 0;
+	args.mthd.head = head;
 
-	memcpy(mthd->data, data, size);
-	ret = nvif_mthd(&outp->object, NVIF_OUTP_V0_HDA_ELD, mthd, sizeof(*mthd) + size);
+	memcpy(args.data, data, size);
+	ret = nvif_mthd(&outp->object, NVIF_OUTP_V0_HDA_ELD, &args, sizeof(args.mthd) + size);
 	NVIF_ERRON(ret, &outp->object, "[HDA_ELD head:%d size:%d]", head, size);
 	return ret;
 }

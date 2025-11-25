@@ -315,6 +315,14 @@ static void odm_CommonInfoSelfUpdate(struct dm_odm_t *pDM_Odm)
 		pDM_Odm->bOneEntryOnly = false;
 }
 
+static void odm_CmnInfoInit_Debug(struct dm_odm_t *pDM_Odm)
+{
+}
+
+static void odm_BasicDbgMessage(struct dm_odm_t *pDM_Odm)
+{
+}
+
 /* 3 ============================================================ */
 /* 3 RATR MASK */
 /* 3 ============================================================ */
@@ -409,11 +417,13 @@ static void odm_RefreshRateAdaptiveMaskCE(struct dm_odm_t *pDM_Odm)
 	u8 i;
 	struct adapter *padapter =  pDM_Odm->Adapter;
 
-	if (padapter->bDriverStopped)
+	if (padapter->bDriverStopped) {
 		return;
+	}
 
-	if (!pDM_Odm->bUseRAMask)
+	if (!pDM_Odm->bUseRAMask) {
 		return;
+	}
 
 	for (i = 0; i < ODM_ASSOCIATE_ENTRY_NUM; i++) {
 		PSTA_INFO_T pstat = pDM_Odm->pODM_StaInfo[i];
@@ -423,6 +433,7 @@ static void odm_RefreshRateAdaptiveMaskCE(struct dm_odm_t *pDM_Odm)
 				continue;
 
 			if (true == ODM_RAStateCheck(pDM_Odm, pstat->rssi_stat.UndecoratedSmoothedPWDB, false, &pstat->rssi_level)) {
+				/* printk("RSSI:%d, RSSI_LEVEL:%d\n", pstat->rssi_stat.UndecoratedSmoothedPWDB, pstat->rssi_level); */
 				rtw_hal_update_ra_mask(pstat, pstat->rssi_level);
 			}
 
@@ -450,9 +461,9 @@ static void odm_RefreshRateAdaptiveMaskCE(struct dm_odm_t *pDM_Odm)
 static void odm_RefreshRateAdaptiveMask(struct dm_odm_t *pDM_Odm)
 {
 
-	if (!(pDM_Odm->SupportAbility & ODM_BB_RA_MASK))
+	if (!(pDM_Odm->SupportAbility & ODM_BB_RA_MASK)) {
 		return;
-
+	}
 	odm_RefreshRateAdaptiveMaskCE(pDM_Odm);
 }
 
@@ -501,6 +512,7 @@ bool ODM_RAStateCheck(
 		RATRState = DM_RATR_STA_MIDDLE;
 	else
 		RATRState = DM_RATR_STA_LOW;
+	/* printk("==>%s, RATRState:0x%02x , RSSI:%d\n", __func__, RATRState, RSSI); */
 
 	if (*pRATRState != RATRState || bForceUpdate) {
 		*pRATRState = RATRState;
@@ -580,6 +592,8 @@ static void odm_RSSIMonitorCheckCE(struct dm_odm_t *pDM_Odm)
 					PWDB_rssi[sta_cnt++] = (psta->mac_id | (psta->rssi_stat.UndecoratedSmoothedPWDB<<16));
 			}
 		}
+
+		/* printk("%s ==> sta_cnt(%d)\n", __func__, sta_cnt); */
 
 		for (i = 0; i < sta_cnt; i++) {
 			if (PWDB_rssi[i] != (0)) {
@@ -727,6 +741,7 @@ void ODM_DMInit(struct dm_odm_t *pDM_Odm)
 {
 
 	odm_CommonInfoSelfInit(pDM_Odm);
+	odm_CmnInfoInit_Debug(pDM_Odm);
 	odm_DIGInit(pDM_Odm);
 	odm_NHMCounterStatisticsInit(pDM_Odm);
 	odm_AdaptivityInit(pDM_Odm);
@@ -752,6 +767,7 @@ void ODM_DMInit(struct dm_odm_t *pDM_Odm)
 void ODM_DMWatchdog(struct dm_odm_t *pDM_Odm)
 {
 	odm_CommonInfoSelfUpdate(pDM_Odm);
+	odm_BasicDbgMessage(pDM_Odm);
 	odm_FalseAlarmCounterStatistics(pDM_Odm);
 	odm_NHMCounterStatistics(pDM_Odm);
 

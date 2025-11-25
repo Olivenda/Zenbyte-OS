@@ -15,7 +15,6 @@
 #include <linux/kthread.h>
 #include <linux/rtnetlink.h>
 #include <linux/sched.h>
-#include <linux/string_choices.h>
 #include <linux/of.h>
 #include <linux/io.h>
 #include <linux/bitops.h>
@@ -141,8 +140,8 @@ spu_skcipher_rx_sg_create(struct brcm_message *mssg,
 	struct iproc_ctx_s *ctx = rctx->ctx;
 	u32 datalen;		/* Number of bytes of response data expected */
 
-	mssg->spu.dst = kmalloc_array(rx_frag_num, sizeof(struct scatterlist),
-				      rctx->gfp);
+	mssg->spu.dst = kcalloc(rx_frag_num, sizeof(struct scatterlist),
+				rctx->gfp);
 	if (!mssg->spu.dst)
 		return -ENOMEM;
 
@@ -205,8 +204,8 @@ spu_skcipher_tx_sg_create(struct brcm_message *mssg,
 	u32 datalen;		/* Number of bytes of response data expected */
 	u32 stat_len;
 
-	mssg->spu.src = kmalloc_array(tx_frag_num, sizeof(struct scatterlist),
-				      rctx->gfp);
+	mssg->spu.src = kcalloc(tx_frag_num, sizeof(struct scatterlist),
+				rctx->gfp);
 	if (unlikely(!mssg->spu.src))
 		return -ENOMEM;
 
@@ -532,8 +531,8 @@ spu_ahash_rx_sg_create(struct brcm_message *mssg,
 	struct scatterlist *sg;	/* used to build sgs in mbox message */
 	struct iproc_ctx_s *ctx = rctx->ctx;
 
-	mssg->spu.dst = kmalloc_array(rx_frag_num, sizeof(struct scatterlist),
-				      rctx->gfp);
+	mssg->spu.dst = kcalloc(rx_frag_num, sizeof(struct scatterlist),
+				rctx->gfp);
 	if (!mssg->spu.dst)
 		return -ENOMEM;
 
@@ -587,8 +586,8 @@ spu_ahash_tx_sg_create(struct brcm_message *mssg,
 	u32 datalen;		/* Number of bytes of response data expected */
 	u32 stat_len;
 
-	mssg->spu.src = kmalloc_array(tx_frag_num, sizeof(struct scatterlist),
-				      rctx->gfp);
+	mssg->spu.src = kcalloc(tx_frag_num, sizeof(struct scatterlist),
+				rctx->gfp);
 	if (!mssg->spu.src)
 		return -ENOMEM;
 
@@ -1077,8 +1076,8 @@ static int spu_aead_rx_sg_create(struct brcm_message *mssg,
 		/* have to catch gcm pad in separate buffer */
 		rx_frag_num++;
 
-	mssg->spu.dst = kmalloc_array(rx_frag_num, sizeof(struct scatterlist),
-				      rctx->gfp);
+	mssg->spu.dst = kcalloc(rx_frag_num, sizeof(struct scatterlist),
+				rctx->gfp);
 	if (!mssg->spu.dst)
 		return -ENOMEM;
 
@@ -1179,8 +1178,8 @@ static int spu_aead_tx_sg_create(struct brcm_message *mssg,
 	u32 assoc_offset = 0;
 	u32 stat_len;
 
-	mssg->spu.src = kmalloc_array(tx_frag_num, sizeof(struct scatterlist),
-				      rctx->gfp);
+	mssg->spu.src = kcalloc(tx_frag_num, sizeof(struct scatterlist),
+				rctx->gfp);
 	if (!mssg->spu.src)
 		return -ENOMEM;
 
@@ -2688,7 +2687,7 @@ static int aead_enqueue(struct aead_request *req, bool is_encrypt)
 	flow_log("  iv_ctr_len:%u\n", rctx->iv_ctr_len);
 	flow_dump("  iv: ", req->iv, rctx->iv_ctr_len);
 	flow_log("  authkeylen:%u\n", ctx->authkeylen);
-	flow_log("  is_esp: %s\n", str_yes_no(ctx->is_esp));
+	flow_log("  is_esp: %s\n", ctx->is_esp ? "yes" : "no");
 
 	if (ctx->max_payload == SPU_MAX_PAYLOAD_INF)
 		flow_log("  max_payload infinite");
@@ -4708,7 +4707,7 @@ static struct platform_driver bcm_spu_pdriver = {
 		   .of_match_table = of_match_ptr(bcm_spu_dt_ids),
 		   },
 	.probe = bcm_spu_probe,
-	.remove = bcm_spu_remove,
+	.remove_new = bcm_spu_remove,
 };
 module_platform_driver(bcm_spu_pdriver);
 

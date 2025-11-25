@@ -91,34 +91,28 @@
 	};
 };
 
-&cpu0 {
+&CPU0 {
 	enable-method = "spin-table";
-	cpu-release-addr = /bits/ 64 <0>;
 };
 
-&cpu1 {
+&CPU1 {
 	enable-method = "spin-table";
-	cpu-release-addr = /bits/ 64 <0>;
 };
 
-&cpu2 {
+&CPU2 {
 	enable-method = "spin-table";
-	cpu-release-addr = /bits/ 64 <0>;
 };
 
-&cpu3 {
+&CPU3 {
 	enable-method = "spin-table";
-	cpu-release-addr = /bits/ 64 <0>;
 };
 
-&cpu4 {
+&CPU4 {
 	enable-method = "spin-table";
-	cpu-release-addr = /bits/ 64 <0>;
 };
 
-&cpu5 {
+&CPU5 {
 	enable-method = "spin-table";
-	cpu-release-addr = /bits/ 64 <0>;
 };
 
 &pm8994_resin {

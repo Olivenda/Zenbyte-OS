@@ -355,6 +355,10 @@
 			   <GCC_LPASS_SWAY_CLK>;
 };
 
+&gmu {
+	status = "okay";
+};
+
 &gpu {
 	status = "okay";
 	zap-shader {
@@ -612,22 +616,16 @@
 
 &q6asmdai {
 	dai@0 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
+		reg = <0>;
 	};
 
 	dai@1 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA2>;
+		reg = <1>;
 	};
 
 	dai@2 {
-		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
+		reg = <2>;
 	};
-};
-
-&slpi_pas {
-	firmware-name = "qcom/sdm850/LENOVO/81JL/qcslpi850.mbn";
-
-	status = "okay";
 };
 
 &sound {
@@ -638,7 +636,10 @@
 		"RX_BIAS", "MCLK",
 		"AMIC2", "MIC BIAS2",
 		"SpkrLeft IN", "SPK1 OUT",
-		"SpkrRight IN", "SPK2 OUT";
+		"SpkrRight IN", "SPK2 OUT",
+		"MM_DL1",  "MultiMedia1 Playback",
+		"MM_DL3",  "MultiMedia3 Playback",
+		"MultiMedia2 Capture", "MM_UL2";
 
 	mm1-dai-link {
 		link-name = "MultiMedia1";
@@ -909,7 +910,7 @@
 	vdd-3.3-ch1-supply = <&vreg_l23a_3p3>;
 
 	qcom,snoc-host-cap-8bit-quirk;
-	qcom,calibration-variant = "Lenovo_C630";
+	qcom,ath10k-calibration-variant = "Lenovo_C630";
 };
 
 &crypto {

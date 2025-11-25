@@ -15,7 +15,6 @@
 #define KMSG_COMPONENT "zcrypt"
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
-#include <linux/export.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -50,10 +49,6 @@ MODULE_AUTHOR("IBM Corporation");
 MODULE_DESCRIPTION("Cryptographic Coprocessor interface, " \
 		   "Copyright IBM Corp. 2001, 2012");
 MODULE_LICENSE("GPL");
-
-unsigned int zcrypt_mempool_threshold = 5;
-module_param_named(mempool_threshold, zcrypt_mempool_threshold, uint, 0440);
-MODULE_PARM_DESC(mempool_threshold, "CCA and EP11 request/reply mempool minimal items (min: 1)");
 
 /*
  * zcrypt tracepoint functions
@@ -647,17 +642,16 @@ static long zcrypt_rsa_modexpo(struct ap_perms *perms,
 	struct zcrypt_queue *zq, *pref_zq;
 	struct ap_message ap_msg;
 	unsigned int wgt = 0, pref_wgt = 0;
-	unsigned int func_code = 0;
-	int cpen, qpen, qid = 0, rc;
+	unsigned int func_code;
+	int cpen, qpen, qid = 0, rc = -ENODEV;
 	struct module *mod;
 
 	trace_s390_zcrypt_req(mex, TP_ICARSAMODEXPO);
 
-	rc = ap_init_apmsg(&ap_msg, 0);
-	if (rc)
-		goto out;
+	ap_init_message(&ap_msg);
 
 	if (mex->outputdatalength < mex->inputdatalength) {
+		func_code = 0;
 		rc = -EINVAL;
 		goto out;
 	}
@@ -734,7 +728,7 @@ static long zcrypt_rsa_modexpo(struct ap_perms *perms,
 	spin_unlock(&zcrypt_list_lock);
 
 out:
-	ap_release_apmsg(&ap_msg);
+	ap_release_message(&ap_msg);
 	if (tr) {
 		tr->last_rc = rc;
 		tr->last_qid = qid;
@@ -752,17 +746,16 @@ static long zcrypt_rsa_crt(struct ap_perms *perms,
 	struct zcrypt_queue *zq, *pref_zq;
 	struct ap_message ap_msg;
 	unsigned int wgt = 0, pref_wgt = 0;
-	unsigned int func_code = 0;
-	int cpen, qpen, qid = 0, rc;
+	unsigned int func_code;
+	int cpen, qpen, qid = 0, rc = -ENODEV;
 	struct module *mod;
 
 	trace_s390_zcrypt_req(crt, TP_ICARSACRT);
 
-	rc = ap_init_apmsg(&ap_msg, 0);
-	if (rc)
-		goto out;
+	ap_init_message(&ap_msg);
 
 	if (crt->outputdatalength < crt->inputdatalength) {
+		func_code = 0;
 		rc = -EINVAL;
 		goto out;
 	}
@@ -839,7 +832,7 @@ static long zcrypt_rsa_crt(struct ap_perms *perms,
 	spin_unlock(&zcrypt_list_lock);
 
 out:
-	ap_release_apmsg(&ap_msg);
+	ap_release_message(&ap_msg);
 	if (tr) {
 		tr->last_rc = rc;
 		tr->last_qid = qid;
@@ -849,28 +842,23 @@ out:
 	return rc;
 }
 
-static long _zcrypt_send_cprb(u32 xflags, struct ap_perms *perms,
+static long _zcrypt_send_cprb(bool userspace, struct ap_perms *perms,
 			      struct zcrypt_track *tr,
 			      struct ica_xcRB *xcrb)
 {
-	bool userspace = xflags & ZCRYPT_XFLAG_USERSPACE;
 	struct zcrypt_card *zc, *pref_zc;
 	struct zcrypt_queue *zq, *pref_zq;
 	struct ap_message ap_msg;
 	unsigned int wgt = 0, pref_wgt = 0;
-	unsigned int func_code = 0;
+	unsigned int func_code;
 	unsigned short *domain, tdom;
-	int cpen, qpen, qid = 0, rc;
+	int cpen, qpen, qid = 0, rc = -ENODEV;
 	struct module *mod;
 
 	trace_s390_zcrypt_req(xcrb, TB_ZSECSENDCPRB);
 
 	xcrb->status = 0;
-
-	rc = ap_init_apmsg(&ap_msg, xflags & ZCRYPT_XFLAG_NOMEMALLOC ?
-			   AP_MSG_FLAG_MEMPOOL : 0);
-	if (rc)
-		goto out;
+	ap_init_message(&ap_msg);
 
 	rc = prep_cca_ap_msg(userspace, xcrb, &ap_msg, &func_code, &domain);
 	if (rc)
@@ -974,7 +962,7 @@ static long _zcrypt_send_cprb(u32 xflags, struct ap_perms *perms,
 	spin_unlock(&zcrypt_list_lock);
 
 out:
-	ap_release_apmsg(&ap_msg);
+	ap_release_message(&ap_msg);
 	if (tr) {
 		tr->last_rc = rc;
 		tr->last_qid = qid;
@@ -984,7 +972,7 @@ out:
 	return rc;
 }
 
-long zcrypt_send_cprb(struct ica_xcRB *xcrb, u32 xflags)
+long zcrypt_send_cprb(struct ica_xcRB *xcrb)
 {
 	struct zcrypt_track tr;
 	int rc;
@@ -992,13 +980,13 @@ long zcrypt_send_cprb(struct ica_xcRB *xcrb, u32 xflags)
 	memset(&tr, 0, sizeof(tr));
 
 	do {
-		rc = _zcrypt_send_cprb(xflags, &ap_perms, &tr, xcrb);
+		rc = _zcrypt_send_cprb(false, &ap_perms, &tr, xcrb);
 	} while (rc == -EAGAIN && ++tr.again_counter < TRACK_AGAIN_MAX);
 
 	/* on ENODEV failure: retry once again after a requested rescan */
 	if (rc == -ENODEV && zcrypt_process_rescan())
 		do {
-			rc = _zcrypt_send_cprb(xflags, &ap_perms, &tr, xcrb);
+			rc = _zcrypt_send_cprb(false, &ap_perms, &tr, xcrb);
 		} while (rc == -EAGAIN && ++tr.again_counter < TRACK_AGAIN_MAX);
 	if (rc == -EAGAIN && tr.again_counter >= TRACK_AGAIN_MAX)
 		rc = -EIO;
@@ -1036,50 +1024,50 @@ static bool is_desired_ep11_queue(unsigned int dev_qid,
 	return false;
 }
 
-static long _zcrypt_send_ep11_cprb(u32 xflags, struct ap_perms *perms,
+static long _zcrypt_send_ep11_cprb(bool userspace, struct ap_perms *perms,
 				   struct zcrypt_track *tr,
 				   struct ep11_urb *xcrb)
 {
-	bool userspace = xflags & ZCRYPT_XFLAG_USERSPACE;
 	struct zcrypt_card *zc, *pref_zc;
 	struct zcrypt_queue *zq, *pref_zq;
-	struct ep11_target_dev *targets = NULL;
+	struct ep11_target_dev *targets;
 	unsigned short target_num;
 	unsigned int wgt = 0, pref_wgt = 0;
-	unsigned int func_code = 0, domain;
+	unsigned int func_code, domain;
 	struct ap_message ap_msg;
-	int cpen, qpen, qid = 0, rc;
+	int cpen, qpen, qid = 0, rc = -ENODEV;
 	struct module *mod;
 
 	trace_s390_zcrypt_req(xcrb, TP_ZSENDEP11CPRB);
 
-	rc = ap_init_apmsg(&ap_msg, xflags & ZCRYPT_XFLAG_NOMEMALLOC ?
-			   AP_MSG_FLAG_MEMPOOL : 0);
-	if (rc)
-		goto out;
+	ap_init_message(&ap_msg);
 
 	target_num = (unsigned short)xcrb->targets_num;
 
 	/* empty list indicates autoselect (all available targets) */
-	rc = -ENOMEM;
+	targets = NULL;
 	if (target_num != 0) {
-		if (userspace) {
-			targets = kcalloc(target_num, sizeof(*targets), GFP_KERNEL);
-			if (!targets)
-				goto out;
-			if (copy_from_user(targets, xcrb->targets,
-					   target_num * sizeof(*targets))) {
-				rc = -EFAULT;
-				goto out;
-			}
-		} else {
-			targets = (struct ep11_target_dev __force __kernel *)xcrb->targets;
+		struct ep11_target_dev __user *uptr;
+
+		targets = kcalloc(target_num, sizeof(*targets), GFP_KERNEL);
+		if (!targets) {
+			func_code = 0;
+			rc = -ENOMEM;
+			goto out;
+		}
+
+		uptr = (struct ep11_target_dev __force __user *)xcrb->targets;
+		if (z_copy_from_user(userspace, targets, uptr,
+				     target_num * sizeof(*targets))) {
+			func_code = 0;
+			rc = -EFAULT;
+			goto out_free;
 		}
 	}
 
 	rc = prep_ep11_ap_msg(userspace, xcrb, &ap_msg, &func_code, &domain);
 	if (rc)
-		goto out;
+		goto out_free;
 	print_hex_dump_debug("ep11req: ", DUMP_PREFIX_ADDRESS, 16, 1,
 			     ap_msg.msg, ap_msg.len, false);
 
@@ -1087,11 +1075,11 @@ static long _zcrypt_send_ep11_cprb(u32 xflags, struct ap_perms *perms,
 		if (ap_msg.flags & AP_MSG_FLAG_ADMIN) {
 			if (!test_bit_inv(domain, perms->adm)) {
 				rc = -ENODEV;
-				goto out;
+				goto out_free;
 			}
 		} else if ((ap_msg.flags & AP_MSG_FLAG_USAGE) == 0) {
 			rc = -EOPNOTSUPP;
-			goto out;
+			goto out_free;
 		}
 	}
 
@@ -1159,7 +1147,7 @@ static long _zcrypt_send_ep11_cprb(u32 xflags, struct ap_perms *perms,
 			pr_debug("no match for address ff.ffff => ENODEV\n");
 		}
 		rc = -ENODEV;
-		goto out;
+		goto out_free;
 	}
 
 	qid = pref_zq->queue->qid;
@@ -1173,10 +1161,10 @@ static long _zcrypt_send_ep11_cprb(u32 xflags, struct ap_perms *perms,
 	zcrypt_drop_queue(pref_zc, pref_zq, mod, wgt);
 	spin_unlock(&zcrypt_list_lock);
 
+out_free:
+	kfree(targets);
 out:
-	if (userspace)
-		kfree(targets);
-	ap_release_apmsg(&ap_msg);
+	ap_release_message(&ap_msg);
 	if (tr) {
 		tr->last_rc = rc;
 		tr->last_qid = qid;
@@ -1186,7 +1174,7 @@ out:
 	return rc;
 }
 
-long zcrypt_send_ep11_cprb(struct ep11_urb *xcrb, u32 xflags)
+long zcrypt_send_ep11_cprb(struct ep11_urb *xcrb)
 {
 	struct zcrypt_track tr;
 	int rc;
@@ -1194,13 +1182,13 @@ long zcrypt_send_ep11_cprb(struct ep11_urb *xcrb, u32 xflags)
 	memset(&tr, 0, sizeof(tr));
 
 	do {
-		rc = _zcrypt_send_ep11_cprb(xflags, &ap_perms, &tr, xcrb);
+		rc = _zcrypt_send_ep11_cprb(false, &ap_perms, &tr, xcrb);
 	} while (rc == -EAGAIN && ++tr.again_counter < TRACK_AGAIN_MAX);
 
 	/* on ENODEV failure: retry once again after a requested rescan */
 	if (rc == -ENODEV && zcrypt_process_rescan())
 		do {
-			rc = _zcrypt_send_ep11_cprb(xflags, &ap_perms, &tr, xcrb);
+			rc = _zcrypt_send_ep11_cprb(false, &ap_perms, &tr, xcrb);
 		} while (rc == -EAGAIN && ++tr.again_counter < TRACK_AGAIN_MAX);
 	if (rc == -EAGAIN && tr.again_counter >= TRACK_AGAIN_MAX)
 		rc = -EIO;
@@ -1216,7 +1204,7 @@ static long zcrypt_rng(char *buffer)
 	struct zcrypt_card *zc, *pref_zc;
 	struct zcrypt_queue *zq, *pref_zq;
 	unsigned int wgt = 0, pref_wgt = 0;
-	unsigned int func_code = 0;
+	unsigned int func_code;
 	struct ap_message ap_msg;
 	unsigned int domain;
 	int qid = 0, rc = -ENODEV;
@@ -1224,9 +1212,7 @@ static long zcrypt_rng(char *buffer)
 
 	trace_s390_zcrypt_req(buffer, TP_HWRNGCPRB);
 
-	rc = ap_init_apmsg(&ap_msg, 0);
-	if (rc)
-		goto out;
+	ap_init_message(&ap_msg);
 	rc = prep_rng_ap_msg(&ap_msg, &func_code, &domain);
 	if (rc)
 		goto out;
@@ -1272,7 +1258,7 @@ static long zcrypt_rng(char *buffer)
 	spin_unlock(&zcrypt_list_lock);
 
 out:
-	ap_release_apmsg(&ap_msg);
+	ap_release_message(&ap_msg);
 	trace_s390_zcrypt_rep(buffer, func_code, rc,
 			      AP_QID_CARD(qid), AP_QID_QUEUE(qid));
 	return rc;
@@ -1305,25 +1291,19 @@ static void zcrypt_device_status_mask(struct zcrypt_device_status *devstatus)
 	spin_unlock(&zcrypt_list_lock);
 }
 
-void zcrypt_device_status_mask_ext(struct zcrypt_device_status_ext *devstatus,
-				   int maxcard, int maxqueue)
+void zcrypt_device_status_mask_ext(struct zcrypt_device_status_ext *devstatus)
 {
 	struct zcrypt_card *zc;
 	struct zcrypt_queue *zq;
 	struct zcrypt_device_status_ext *stat;
 	int card, queue;
 
-	maxcard = min_t(int, maxcard, MAX_ZDEV_CARDIDS_EXT);
-	maxqueue = min_t(int, maxqueue, MAX_ZDEV_DOMAINS_EXT);
-
 	spin_lock(&zcrypt_list_lock);
 	for_each_zcrypt_card(zc) {
 		for_each_zcrypt_queue(zq, zc) {
 			card = AP_QID_CARD(zq->queue->qid);
 			queue = AP_QID_QUEUE(zq->queue->qid);
-			if (card >= maxcard || queue >= maxqueue)
-				continue;
-			stat = &devstatus[card * maxqueue + queue];
+			stat = &devstatus[card * AP_DOMAINS + queue];
 			stat->hwtype = zc->card->ap_dev.device_type;
 			stat->functions = zc->card->hwinfo.fac >> 26;
 			stat->qid = zq->queue->qid;
@@ -1543,7 +1523,6 @@ static int zsecsendcprb_ioctl(struct ap_perms *perms, unsigned long arg)
 	int rc;
 	struct ica_xcRB xcrb;
 	struct zcrypt_track tr;
-	u32 xflags = ZCRYPT_XFLAG_USERSPACE;
 	struct ica_xcRB __user *uxcrb = (void __user *)arg;
 
 	memset(&tr, 0, sizeof(tr));
@@ -1551,13 +1530,13 @@ static int zsecsendcprb_ioctl(struct ap_perms *perms, unsigned long arg)
 		return -EFAULT;
 
 	do {
-		rc = _zcrypt_send_cprb(xflags, perms, &tr, &xcrb);
+		rc = _zcrypt_send_cprb(true, perms, &tr, &xcrb);
 	} while (rc == -EAGAIN && ++tr.again_counter < TRACK_AGAIN_MAX);
 
 	/* on ENODEV failure: retry once again after a requested rescan */
 	if (rc == -ENODEV && zcrypt_process_rescan())
 		do {
-			rc = _zcrypt_send_cprb(xflags, perms, &tr, &xcrb);
+			rc = _zcrypt_send_cprb(true, perms, &tr, &xcrb);
 		} while (rc == -EAGAIN && ++tr.again_counter < TRACK_AGAIN_MAX);
 	if (rc == -EAGAIN && tr.again_counter >= TRACK_AGAIN_MAX)
 		rc = -EIO;
@@ -1574,7 +1553,6 @@ static int zsendep11cprb_ioctl(struct ap_perms *perms, unsigned long arg)
 	int rc;
 	struct ep11_urb xcrb;
 	struct zcrypt_track tr;
-	u32 xflags = ZCRYPT_XFLAG_USERSPACE;
 	struct ep11_urb __user *uxcrb = (void __user *)arg;
 
 	memset(&tr, 0, sizeof(tr));
@@ -1582,13 +1560,13 @@ static int zsendep11cprb_ioctl(struct ap_perms *perms, unsigned long arg)
 		return -EFAULT;
 
 	do {
-		rc = _zcrypt_send_ep11_cprb(xflags, perms, &tr, &xcrb);
+		rc = _zcrypt_send_ep11_cprb(true, perms, &tr, &xcrb);
 	} while (rc == -EAGAIN && ++tr.again_counter < TRACK_AGAIN_MAX);
 
 	/* on ENODEV failure: retry once again after a requested rescan */
 	if (rc == -ENODEV && zcrypt_process_rescan())
 		do {
-			rc = _zcrypt_send_ep11_cprb(xflags, perms, &tr, &xcrb);
+			rc = _zcrypt_send_ep11_cprb(true, perms, &tr, &xcrb);
 		} while (rc == -EAGAIN && ++tr.again_counter < TRACK_AGAIN_MAX);
 	if (rc == -EAGAIN && tr.again_counter >= TRACK_AGAIN_MAX)
 		rc = -EIO;
@@ -1629,9 +1607,7 @@ static long zcrypt_unlocked_ioctl(struct file *filp, unsigned int cmd,
 					 GFP_KERNEL);
 		if (!device_status)
 			return -ENOMEM;
-		zcrypt_device_status_mask_ext(device_status,
-					      MAX_ZDEV_CARDIDS_EXT,
-					      MAX_ZDEV_DOMAINS_EXT);
+		zcrypt_device_status_mask_ext(device_status);
 		if (copy_to_user((char __user *)arg, device_status,
 				 total_size))
 			rc = -EFAULT;
@@ -1851,7 +1827,6 @@ static long trans_xcrb32(struct ap_perms *perms, struct file *filp,
 			 unsigned int cmd, unsigned long arg)
 {
 	struct compat_ica_xcrb __user *uxcrb32 = compat_ptr(arg);
-	u32 xflags = ZCRYPT_XFLAG_USERSPACE;
 	struct compat_ica_xcrb xcrb32;
 	struct zcrypt_track tr;
 	struct ica_xcRB xcrb64;
@@ -1881,13 +1856,13 @@ static long trans_xcrb32(struct ap_perms *perms, struct file *filp,
 	xcrb64.priority_window = xcrb32.priority_window;
 	xcrb64.status = xcrb32.status;
 	do {
-		rc = _zcrypt_send_cprb(xflags, perms, &tr, &xcrb64);
+		rc = _zcrypt_send_cprb(true, perms, &tr, &xcrb64);
 	} while (rc == -EAGAIN && ++tr.again_counter < TRACK_AGAIN_MAX);
 
 	/* on ENODEV failure: retry once again after a requested rescan */
 	if (rc == -ENODEV && zcrypt_process_rescan())
 		do {
-			rc = _zcrypt_send_cprb(xflags, perms, &tr, &xcrb64);
+			rc = _zcrypt_send_cprb(true, perms, &tr, &xcrb64);
 		} while (rc == -EAGAIN && ++tr.again_counter < TRACK_AGAIN_MAX);
 	if (rc == -EAGAIN && tr.again_counter >= TRACK_AGAIN_MAX)
 		rc = -EIO;
@@ -2157,27 +2132,13 @@ int __init zcrypt_api_init(void)
 {
 	int rc;
 
-	/* make sure the mempool threshold is >= 1 */
-	if (zcrypt_mempool_threshold < 1) {
-		rc = -EINVAL;
-		goto out;
-	}
-
 	rc = zcrypt_debug_init();
 	if (rc)
 		goto out;
 
 	rc = zcdn_init();
 	if (rc)
-		goto out_zcdn_init_failed;
-
-	rc = zcrypt_ccamisc_init();
-	if (rc)
-		goto out_ccamisc_init_failed;
-
-	rc = zcrypt_ep11misc_init();
-	if (rc)
-		goto out_ep11misc_init_failed;
+		goto out;
 
 	/* Register the request sprayer. */
 	rc = misc_register(&zcrypt_misc_device);
@@ -2190,12 +2151,7 @@ int __init zcrypt_api_init(void)
 	return 0;
 
 out_misc_register_failed:
-	zcrypt_ep11misc_exit();
-out_ep11misc_init_failed:
-	zcrypt_ccamisc_exit();
-out_ccamisc_init_failed:
 	zcdn_exit();
-out_zcdn_init_failed:
 	zcrypt_debug_exit();
 out:
 	return rc;

@@ -5,8 +5,6 @@
  */
 
 #include <linux/bits.h>
-#include <linux/bug.h>
-#include <linux/export.h>
 #include <linux/iosys-map.h>
 #include <linux/types.h>
 

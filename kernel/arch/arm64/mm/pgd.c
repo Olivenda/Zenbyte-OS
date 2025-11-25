@@ -33,7 +33,7 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 	gfp_t gfp = GFP_PGTABLE_USER;
 
 	if (pgdir_is_page_size())
-		return __pgd_alloc(mm, 0);
+		return (pgd_t *)__get_free_page(gfp);
 	else
 		return kmem_cache_alloc(pgd_cache, gfp);
 }
@@ -41,7 +41,7 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 {
 	if (pgdir_is_page_size())
-		__pgd_free(mm, pgd);
+		free_page((unsigned long)pgd);
 	else
 		kmem_cache_free(pgd_cache, pgd);
 }

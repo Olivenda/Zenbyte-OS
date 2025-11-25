@@ -94,13 +94,9 @@
 	status = "okay";
 };
 
-&amix {
-	status = "okay";
-};
+/* TODO: Audio Mixer */
 
-&asrc0 {
-	status = "okay";
-};
+/* TODO: Asynchronous Sample Rate Converter (ASRC) */
 
 /* TODO: Display Controller */
 
@@ -240,35 +236,17 @@
 	status = "okay";
 };
 
-/* Apalis PCIE1 */
-&pciea {
-	status = "okay";
-};
+/* TODO: Apalis PCIE1 */
 
 /* TODO: Apalis BKL1_PWM */
 
-/* Apalis DAP1 */
-&sai1 {
-	status = "okay";
-};
+/* TODO: Apalis DAP1 */
 
-&sai5 {
-	status = "okay";
-};
+/* TODO: Apalis Analogue Audio */
 
-&sai5_lpcg {
-	status = "okay";
-};
+/* TODO: Apalis SATA1 */
 
-/* Apalis SATA1 */
-&sata {
-	status = "okay";
-};
-
-/* Apalis SPDIF1 */
-&spdif0 {
-	status = "okay";
-};
+/* TODO: Apalis SPDIF1 */
 
 /* TODO: Apalis USBH2, Apalis USBH3 and on-module Wi-Fi via on-module HSIC Hub */
 
@@ -277,10 +255,7 @@
 	status = "okay";
 };
 
-/* Apalis USBH4 SuperSpeed */
-&usbotg3_cdns3 {
-	status = "okay";
-};
+/* TODO: Apalis USBH4 SuperSpeed */
 
 /* Apalis MMC1 */
 &usdhc2 {

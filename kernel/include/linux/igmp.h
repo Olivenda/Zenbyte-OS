@@ -87,8 +87,6 @@ struct ip_mc_list {
 	char			loaded;
 	unsigned char		gsquery;	/* check source marks? */
 	unsigned char		crcount;
-	unsigned long		mca_cstamp;
-	unsigned long		mca_tstamp;
 	struct rcu_head		rcu;
 };
 

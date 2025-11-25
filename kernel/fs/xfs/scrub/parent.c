@@ -132,14 +132,6 @@ xchk_parent_validate(
 		return 0;
 	}
 
-	/* Is this the metadata root dir?  Then '..' must point to itself. */
-	if (sc->ip == mp->m_metadirip) {
-		if (sc->ip->i_ino != mp->m_sb.sb_metadirino ||
-		    sc->ip->i_ino != parent_ino)
-			xchk_fblock_set_corrupt(sc, XFS_DATA_FORK, 0);
-		return 0;
-	}
-
 	/* '..' must not point to ourselves. */
 	if (sc->ip->i_ino == parent_ino) {
 		xchk_fblock_set_corrupt(sc, XFS_DATA_FORK, 0);
@@ -190,12 +182,6 @@ xchk_parent_validate(
 	if (xchk_dir_looks_zapped(dp)) {
 		error = -EBUSY;
 		xchk_set_incomplete(sc);
-		goto out_unlock;
-	}
-
-	/* Metadata and regular inodes cannot cross trees. */
-	if (xfs_is_metadir_inode(dp) != xfs_is_metadir_inode(sc->ip)) {
-		xchk_fblock_set_corrupt(sc, XFS_DATA_FORK, 0);
 		goto out_unlock;
 	}
 
@@ -314,7 +300,7 @@ xchk_parent_pptr_and_dotdot(
 	}
 
 	/* Is this the root dir?  Then '..' must point to itself. */
-	if (xchk_inode_is_dirtree_root(sc->ip)) {
+	if (sc->ip == sc->mp->m_rootip) {
 		if (sc->ip->i_ino != pp->parent_ino)
 			xchk_fblock_set_corrupt(sc, XFS_DATA_FORK, 0);
 		return 0;
@@ -725,7 +711,7 @@ xchk_parent_count_pptrs(
 	}
 
 	if (S_ISDIR(VFS_I(sc->ip)->i_mode)) {
-		if (xchk_inode_is_dirtree_root(sc->ip))
+		if (sc->ip == sc->mp->m_rootip)
 			pp->pptrs_found++;
 
 		if (VFS_I(sc->ip)->i_nlink == 0 && pp->pptrs_found > 0)
@@ -734,14 +720,6 @@ xchk_parent_count_pptrs(
 			 pp->pptrs_found == 0)
 			xchk_ino_set_corrupt(sc, sc->ip->i_ino);
 	} else {
-		/*
-		 * Starting with metadir, we allow checking of parent pointers
-		 * of non-directory files that are children of the superblock.
-		 * Pretend that we found a parent pointer attr.
-		 */
-		if (xfs_has_metadir(sc->mp) && xchk_inode_is_sb_rooted(sc->ip))
-			pp->pptrs_found++;
-
 		if (VFS_I(sc->ip)->i_nlink != pp->pptrs_found)
 			xchk_ino_set_corrupt(sc, sc->ip->i_ino);
 	}
@@ -907,9 +885,10 @@ bool
 xchk_pptr_looks_zapped(
 	struct xfs_inode	*ip)
 {
+	struct xfs_mount	*mp = ip->i_mount;
 	struct inode		*inode = VFS_I(ip);
 
-	ASSERT(xfs_has_parent(ip->i_mount));
+	ASSERT(xfs_has_parent(mp));
 
 	/*
 	 * Temporary files that cannot be linked into the directory tree do not
@@ -923,15 +902,15 @@ xchk_pptr_looks_zapped(
 	 * of a parent pointer scan is always the empty set.  It's safe to scan
 	 * them even if the attr fork was zapped.
 	 */
-	if (xchk_inode_is_dirtree_root(ip))
+	if (ip == mp->m_rootip)
 		return false;
 
 	/*
-	 * Metadata inodes that are rooted in the superblock do not have any
-	 * parents.  Hence the attr fork will not be initialized, but there are
-	 * no parent pointers that might have been zapped.
+	 * Metadata inodes are all rooted in the superblock and do not have
+	 * any parents.  Hence the attr fork will not be initialized, but
+	 * there are no parent pointers that might have been zapped.
 	 */
-	if (xchk_inode_is_sb_rooted(ip))
+	if (xfs_is_metadata_inode(ip))
 		return false;
 
 	/*

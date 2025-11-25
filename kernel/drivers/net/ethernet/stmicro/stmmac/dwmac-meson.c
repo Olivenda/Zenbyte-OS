@@ -22,10 +22,9 @@ struct meson_dwmac {
 	void __iomem	*reg;
 };
 
-static int meson6_dwmac_set_clk_tx_rate(void *bsp_priv, struct clk *clk_tx_i,
-					phy_interface_t interface, int speed)
+static void meson6_dwmac_fix_mac_speed(void *priv, unsigned int speed, unsigned int mode)
 {
-	struct meson_dwmac *dwmac = bsp_priv;
+	struct meson_dwmac *dwmac = priv;
 	unsigned int val;
 
 	val = readl(dwmac->reg);
@@ -40,8 +39,6 @@ static int meson6_dwmac_set_clk_tx_rate(void *bsp_priv, struct clk *clk_tx_i,
 	}
 
 	writel(val, dwmac->reg);
-
-	return 0;
 }
 
 static int meson6_dwmac_probe(struct platform_device *pdev)
@@ -68,7 +65,7 @@ static int meson6_dwmac_probe(struct platform_device *pdev)
 		return PTR_ERR(dwmac->reg);
 
 	plat_dat->bsp_priv = dwmac;
-	plat_dat->set_clk_tx_rate = meson6_dwmac_set_clk_tx_rate;
+	plat_dat->fix_mac_speed = meson6_dwmac_fix_mac_speed;
 
 	return stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 }
@@ -81,7 +78,7 @@ MODULE_DEVICE_TABLE(of, meson6_dwmac_match);
 
 static struct platform_driver meson6_dwmac_driver = {
 	.probe  = meson6_dwmac_probe,
-	.remove = stmmac_pltfr_remove,
+	.remove_new = stmmac_pltfr_remove,
 	.driver = {
 		.name           = "meson6-dwmac",
 		.pm		= &stmmac_pltfr_pm_ops,

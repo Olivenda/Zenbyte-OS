@@ -361,8 +361,8 @@ static u32 pca_func(struct i2c_adapter *adap)
 }
 
 static const struct i2c_algorithm pca_algo = {
-	.xfer = pca_xfer,
-	.functionality = pca_func,
+	.master_xfer	= pca_xfer,
+	.functionality	= pca_func,
 };
 
 static unsigned int pca_probe_chip(struct i2c_adapter *adap)

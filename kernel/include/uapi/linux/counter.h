@@ -65,8 +65,6 @@ enum counter_event_type {
 	COUNTER_EVENT_CHANGE_OF_STATE,
 	/* Count value captured */
 	COUNTER_EVENT_CAPTURE,
-	/* Direction change detected */
-	COUNTER_EVENT_DIRECTION_CHANGE,
 };
 
 /**

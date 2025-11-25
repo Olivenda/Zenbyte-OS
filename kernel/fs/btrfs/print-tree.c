@@ -190,7 +190,7 @@ static void print_uuid_item(const struct extent_buffer *l, unsigned long offset,
 			    u32 item_size)
 {
 	if (!IS_ALIGNED(item_size, sizeof(u64))) {
-		btrfs_warn(l->fs_info, "uuid item with illegal size %lu",
+		pr_warn("BTRFS: uuid item with illegal size %lu!\n",
 			(unsigned long)item_size);
 		return;
 	}
@@ -223,7 +223,7 @@ static void print_eb_refs_lock(const struct extent_buffer *eb)
 {
 #ifdef CONFIG_BTRFS_DEBUG
 	btrfs_info(eb->fs_info, "refs %u lock_owner %u current %u",
-		   refcount_read(&eb->refs), eb->lock_owner, current->pid);
+		   atomic_read(&eb->refs), eb->lock_owner, current->pid);
 #endif
 }
 

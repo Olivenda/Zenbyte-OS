@@ -560,11 +560,10 @@ bool printk_percpu_data_ready(void)
 /* Must be called under syslog_lock. */
 static void latched_seq_write(struct latched_seq *ls, u64 val)
 {
-	write_seqcount_latch_begin(&ls->latch);
+	raw_write_seqcount_latch(&ls->latch);
 	ls->val[0] = val;
-	write_seqcount_latch(&ls->latch);
+	raw_write_seqcount_latch(&ls->latch);
 	ls->val[1] = val;
-	write_seqcount_latch_end(&ls->latch);
 }
 
 /* Can be called from any context. */
@@ -575,10 +574,10 @@ static u64 latched_seq_read_nolock(struct latched_seq *ls)
 	u64 val;
 
 	do {
-		seq = read_seqcount_latch(&ls->latch);
+		seq = raw_read_seqcount_latch(&ls->latch);
 		idx = seq & 0x1;
 		val = ls->val[idx];
-	} while (read_seqcount_latch_retry(&ls->latch, seq));
+	} while (raw_read_seqcount_latch_retry(&ls->latch, seq));
 
 	return val;
 }
@@ -1157,17 +1156,6 @@ static unsigned int __init add_to_rb(struct printk_ringbuffer *rb,
 
 static char setup_text_buf[PRINTKRB_RECORD_MAX] __initdata;
 
-static void print_log_buf_usage_stats(void)
-{
-	unsigned int descs_count = log_buf_len >> PRB_AVGBITS;
-	size_t meta_data_size;
-
-	meta_data_size = descs_count * (sizeof(struct prb_desc) + sizeof(struct printk_info));
-
-	pr_info("log buffer data + meta data: %u + %zu = %zu bytes\n",
-		log_buf_len, meta_data_size, log_buf_len + meta_data_size);
-}
-
 void __init setup_log_buf(int early)
 {
 	struct printk_info *new_infos;
@@ -1197,25 +1185,20 @@ void __init setup_log_buf(int early)
 	if (!early && !new_log_buf_len)
 		log_buf_add_cpu();
 
-	if (!new_log_buf_len) {
-		/* Show the memory stats only once. */
-		if (!early)
-			goto out;
-
+	if (!new_log_buf_len)
 		return;
-	}
 
 	new_descs_count = new_log_buf_len >> PRB_AVGBITS;
 	if (new_descs_count == 0) {
 		pr_err("new_log_buf_len: %lu too small\n", new_log_buf_len);
-		goto out;
+		return;
 	}
 
 	new_log_buf = memblock_alloc(new_log_buf_len, LOG_ALIGN);
 	if (unlikely(!new_log_buf)) {
 		pr_err("log_buf_len: %lu text bytes not available\n",
 		       new_log_buf_len);
-		goto out;
+		return;
 	}
 
 	new_descs_size = new_descs_count * sizeof(struct prb_desc);
@@ -1278,7 +1261,7 @@ void __init setup_log_buf(int early)
 		       prb_next_seq(&printk_rb_static) - seq);
 	}
 
-	print_log_buf_usage_stats();
+	pr_info("log_buf_len: %u bytes\n", log_buf_len);
 	pr_info("early log buf free: %u(%u%%)\n",
 		free, (free * 100) / __LOG_BUF_LEN);
 	return;
@@ -1287,8 +1270,6 @@ err_free_descs:
 	memblock_free(new_descs, new_descs_size);
 err_free_log_buf:
 	memblock_free(new_log_buf, new_log_buf_len);
-out:
-	print_log_buf_usage_stats();
 }
 
 static bool __read_mostly ignore_loglevel;
@@ -1338,11 +1319,11 @@ static void boot_delay_msec(int level)
 {
 	unsigned long long k;
 	unsigned long timeout;
-	bool suppress = !is_printk_force_console() &&
-			suppress_message_printing(level);
 
-	if ((boot_delay == 0 || system_state >= SYSTEM_RUNNING) || suppress)
+	if ((boot_delay == 0 || system_state >= SYSTEM_RUNNING)
+		|| suppress_message_printing(level)) {
 		return;
+	}
 
 	k = (unsigned long long)loops_per_msec * boot_delay;
 
@@ -2292,18 +2273,12 @@ int vprintk_store(int facility, int level,
 	if (dev_info)
 		flags |= LOG_NEWLINE;
 
-	if (is_printk_force_console())
-		flags |= LOG_FORCE_CON;
-
 	if (flags & LOG_CONT) {
 		prb_rec_init_wr(&r, reserve_size);
 		if (prb_reserve_in_last(&e, prb, &r, caller_id, PRINTKRB_RECORD_MAX)) {
 			text_len = printk_sprint(&r.text_buf[r.info->text_len], reserve_size,
 						 facility, &flags, fmt, args);
 			r.info->text_len += text_len;
-
-			if (flags & LOG_FORCE_CON)
-				r.info->flags |= LOG_FORCE_CON;
 
 			if (flags & LOG_NEWLINE) {
 				r.info->flags |= LOG_NEWLINE;
@@ -2375,22 +2350,6 @@ void printk_legacy_allow_panic_sync(void)
 	}
 }
 
-bool __read_mostly debug_non_panic_cpus;
-
-#ifdef CONFIG_PRINTK_CALLER
-static int __init debug_non_panic_cpus_setup(char *str)
-{
-	debug_non_panic_cpus = true;
-	pr_info("allow messages from non-panic CPUs in panic()\n");
-
-	return 0;
-}
-early_param("debug_non_panic_cpus", debug_non_panic_cpus_setup);
-module_param(debug_non_panic_cpus, bool, 0644);
-MODULE_PARM_DESC(debug_non_panic_cpus,
-		 "allow messages from non-panic CPUs in panic()");
-#endif
-
 asmlinkage int vprintk_emit(int facility, int level,
 			    const struct dev_printk_info *dev_info,
 			    const char *fmt, va_list args)
@@ -2407,9 +2366,7 @@ asmlinkage int vprintk_emit(int facility, int level,
 	 * non-panic CPUs are generating any messages, they will be
 	 * silently dropped.
 	 */
-	if (other_cpu_in_panic() &&
-	    !debug_non_panic_cpus &&
-	    !panic_triggering_all_cpu_backtrace)
+	if (other_cpu_in_panic() && !panic_triggering_all_cpu_backtrace)
 		return 0;
 
 	printk_get_console_flush_type(&ft);
@@ -2749,11 +2706,11 @@ module_param_named(console_no_auto_verbose, printk_console_no_auto_verbose, bool
 MODULE_PARM_DESC(console_no_auto_verbose, "Disable console loglevel raise to highest on oops/panic/etc");
 
 /**
- * console_suspend_all - suspend the console subsystem
+ * suspend_console - suspend the console subsystem
  *
  * This disables printk() while we go into suspend states
  */
-void console_suspend_all(void)
+void suspend_console(void)
 {
 	struct console *con;
 
@@ -2776,7 +2733,7 @@ void console_suspend_all(void)
 	synchronize_srcu(&console_srcu);
 }
 
-void console_resume_all(void)
+void resume_console(void)
 {
 	struct console_flush_type ft;
 	struct console *con;
@@ -2988,7 +2945,6 @@ bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 	struct printk_info info;
 	struct printk_record r;
 	size_t len = 0;
-	bool force_con;
 
 	/*
 	 * Formatting extended messages requires a separate buffer, so use the
@@ -3007,13 +2963,9 @@ bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 
 	pmsg->seq = r.info->seq;
 	pmsg->dropped = r.info->seq - seq;
-	force_con = r.info->flags & LOG_FORCE_CON;
 
-	/*
-	 * Skip records that are not forced to be printed on consoles and that
-	 * has level above the console loglevel.
-	 */
-	if (!force_con && may_suppress && suppress_message_printing(r.info->level))
+	/* Skip record that has level above the console loglevel. */
+	if (may_suppress && suppress_message_printing(r.info->level))
 		goto out;
 
 	if (is_extended) {
@@ -3523,10 +3475,10 @@ struct tty_driver *console_device(int *index)
 
 /*
  * Prevent further output on the passed console device so that (for example)
- * serial drivers can suspend console output before suspending a port, and can
+ * serial drivers can disable console output before suspending a port, and can
  * re-enable output afterwards.
  */
-void console_suspend(struct console *console)
+void console_stop(struct console *console)
 {
 	__pr_flush(console, 1000, true);
 	console_list_lock();
@@ -3541,9 +3493,9 @@ void console_suspend(struct console *console)
 	 */
 	synchronize_srcu(&console_srcu);
 }
-EXPORT_SYMBOL(console_suspend);
+EXPORT_SYMBOL(console_stop);
 
-void console_resume(struct console *console)
+void console_start(struct console *console)
 {
 	struct console_flush_type ft;
 	bool is_nbcon;
@@ -3568,13 +3520,13 @@ void console_resume(struct console *console)
 
 	__pr_flush(console, 1000, true);
 }
-EXPORT_SYMBOL(console_resume);
+EXPORT_SYMBOL(console_start);
 
 #ifdef CONFIG_PRINTK
 static int unregister_console_locked(struct console *console);
 
 /* True when system boot is far enough to create printer threads. */
-bool printk_kthreads_ready __ro_after_init;
+static bool printk_kthreads_ready __ro_after_init;
 
 static struct task_struct *printk_legacy_kthread;
 
@@ -3713,7 +3665,6 @@ static void printk_kthreads_check_locked(void)
 	if (!printk_kthreads_ready)
 		return;
 
-	/* Start or stop the legacy kthread when needed. */
 	if (have_legacy_console || have_boot_console) {
 		if (!printk_legacy_kthread &&
 		    force_legacy_kthread() &&
@@ -4205,6 +4156,14 @@ static int unregister_console_locked(struct console *console)
 	 */
 	synchronize_srcu(&console_srcu);
 
+	if (console->flags & CON_NBCON)
+		nbcon_free(console);
+
+	console_sysfs_notify();
+
+	if (console->exit)
+		res = console->exit(console);
+
 	/*
 	 * With this console gone, the global flags tracking registered
 	 * console types may have changed. Update them.
@@ -4224,15 +4183,6 @@ static int unregister_console_locked(struct console *console)
 		have_legacy_console = found_legacy_con;
 	if (!found_nbcon_con)
 		have_nbcon_console = found_nbcon_con;
-
-	/* @have_nbcon_console must be updated before calling nbcon_free(). */
-	if (console->flags & CON_NBCON)
-		nbcon_free(console);
-
-	console_sysfs_notify();
-
-	if (console->exit)
-		res = console->exit(console);
 
 	/* Changed console list, may require printer threads to start/stop. */
 	printk_kthreads_check_locked();
@@ -4304,11 +4254,6 @@ void __init console_init(void)
 	int ret;
 	initcall_t call;
 	initcall_entry_t *ce;
-
-#ifdef CONFIG_NULL_TTY_DEFAULT_CONSOLE
-	if (!console_set_on_cmdline)
-		add_preferred_console("ttynull", 0, NULL);
-#endif
 
 	/* Setup the default TTY line discipline. */
 	n_tty_init();

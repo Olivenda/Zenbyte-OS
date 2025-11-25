@@ -48,7 +48,7 @@ static void ufs_commit_chunk(struct folio *folio, loff_t pos, unsigned len)
 	struct inode *dir = mapping->host;
 
 	inode_inc_iversion(dir);
-	block_write_end(pos, len, len, folio);
+	block_write_end(NULL, mapping, pos, len, len, folio, NULL);
 	if (pos+len > dir->i_size) {
 		i_size_write(dir, pos+len);
 		mark_inode_dirty(dir);
@@ -81,9 +81,10 @@ ino_t ufs_inode_by_name(struct inode *dir, const struct qstr *qstr)
 }
 
 
-int ufs_set_link(struct inode *dir, struct ufs_dir_entry *de,
-		 struct folio *folio, struct inode *inode,
-		 bool update_times)
+/* Releases the page */
+void ufs_set_link(struct inode *dir, struct ufs_dir_entry *de,
+		  struct folio *folio, struct inode *inode,
+		  bool update_times)
 {
 	loff_t pos = folio_pos(folio) + offset_in_folio(folio, de);
 	unsigned len = fs16_to_cpu(dir->i_sb, de->d_reclen);
@@ -91,19 +92,17 @@ int ufs_set_link(struct inode *dir, struct ufs_dir_entry *de,
 
 	folio_lock(folio);
 	err = ufs_prepare_chunk(folio, pos, len);
-	if (unlikely(err)) {
-		folio_unlock(folio);
-		return err;
-	}
+	BUG_ON(err);
 
 	de->d_ino = cpu_to_fs32(dir->i_sb, inode->i_ino);
 	ufs_set_de_type(dir->i_sb, de, inode->i_mode);
 
 	ufs_commit_chunk(folio, pos, len);
+	folio_release_kmap(folio, de);
 	if (update_times)
 		inode_set_mtime_to_ts(dir, inode_set_ctime_current(dir));
 	mark_inode_dirty(dir);
-	return ufs_handle_dirsync(dir);
+	ufs_handle_dirsync(dir);
 }
 
 static bool ufs_check_folio(struct folio *folio, char *kaddr)
@@ -506,7 +505,8 @@ int ufs_delete_entry(struct inode *inode, struct ufs_dir_entry *dir,
 		if (de->d_reclen == 0) {
 			ufs_error(inode->i_sb, __func__,
 				  "zero-length directory entry");
-			return -EIO;
+			err = -EIO;
+			goto out;
 		}
 		pde = de;
 		de = ufs_next_entry(sb, de);
@@ -516,17 +516,18 @@ int ufs_delete_entry(struct inode *inode, struct ufs_dir_entry *dir,
 	pos = folio_pos(folio) + from;
 	folio_lock(folio);
 	err = ufs_prepare_chunk(folio, pos, to - from);
-	if (unlikely(err)) {
-		folio_unlock(folio);
-		return err;
-	}
+	BUG_ON(err);
 	if (pde)
 		pde->d_reclen = cpu_to_fs16(sb, to - from);
 	dir->d_ino = 0;
 	ufs_commit_chunk(folio, pos, to - from);
 	inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
 	mark_inode_dirty(inode);
-	return ufs_handle_dirsync(inode);
+	err = ufs_handle_dirsync(inode);
+out:
+	folio_release_kmap(folio, kaddr);
+	UFSD("EXIT\n");
+	return err;
 }
 
 int ufs_make_empty(struct inode * inode, struct inode *dir)

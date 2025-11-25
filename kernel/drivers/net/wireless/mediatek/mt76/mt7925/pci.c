@@ -31,10 +31,6 @@ static void mt7925e_unregister_device(struct mt792x_dev *dev)
 {
 	int i;
 	struct mt76_connac_pm *pm = &dev->pm;
-	struct ieee80211_hw *hw = mt76_hw(dev);
-
-	if (dev->phy.chip_cap & MT792x_CHIP_CAP_WF_RF_PIN_CTRL_EVT_EN)
-		wiphy_rfkill_stop_polling(hw->wiphy);
 
 	cancel_work_sync(&dev->init_work);
 	mt76_unregister_device(&dev->mt76);
@@ -446,10 +442,9 @@ static int mt7925_pci_suspend(struct device *device)
 	struct mt76_dev *mdev = pci_get_drvdata(pdev);
 	struct mt792x_dev *dev = container_of(mdev, struct mt792x_dev, mt76);
 	struct mt76_connac_pm *pm = &dev->pm;
-	int i, err, ret;
+	int i, err;
 
 	pm->suspended = true;
-	dev->hif_resumed = false;
 	flush_work(&dev->reset_work);
 	cancel_delayed_work_sync(&pm->ps_work);
 	cancel_work_sync(&pm->wake_work);
@@ -460,21 +455,14 @@ static int mt7925_pci_suspend(struct device *device)
 	if (err < 0)
 		goto restore_suspend;
 
-	wait_event_timeout(dev->wait,
-			   !dev->regd_in_progress, 5 * HZ);
-
 	/* always enable deep sleep during suspend to reduce
 	 * power consumption
 	 */
 	mt7925_mcu_set_deep_sleep(dev, true);
 
-	mt76_connac_mcu_set_hif_suspend(mdev, true, false);
-	ret = wait_event_timeout(dev->wait,
-				 dev->hif_idle, 3 * HZ);
-	if (!ret) {
-		err = -ETIMEDOUT;
+	err = mt76_connac_mcu_set_hif_suspend(mdev, true);
+	if (err)
 		goto restore_suspend;
-	}
 
 	napi_disable(&mdev->tx_napi);
 	mt76_worker_disable(&mdev->tx_worker);
@@ -515,11 +503,8 @@ restore_napi:
 	if (!pm->ds_enable)
 		mt7925_mcu_set_deep_sleep(dev, false);
 
-	mt76_connac_mcu_set_hif_suspend(mdev, false, false);
-	ret = wait_event_timeout(dev->wait,
-				 dev->hif_resumed, 3 * HZ);
-	if (!ret)
-		err = -ETIMEDOUT;
+	mt76_connac_mcu_set_hif_suspend(mdev, false);
+
 restore_suspend:
 	pm->suspended = false;
 
@@ -529,15 +514,14 @@ restore_suspend:
 	return err;
 }
 
-static int _mt7925_pci_resume(struct device *device, bool restore)
+static int mt7925_pci_resume(struct device *device)
 {
 	struct pci_dev *pdev = to_pci_dev(device);
 	struct mt76_dev *mdev = pci_get_drvdata(pdev);
 	struct mt792x_dev *dev = container_of(mdev, struct mt792x_dev, mt76);
 	struct mt76_connac_pm *pm = &dev->pm;
-	int i, err, ret;
+	int i, err;
 
-	dev->hif_idle = false;
 	err = mt792x_mcu_drv_pmctrl(dev);
 	if (err < 0)
 		goto failed;
@@ -557,38 +541,25 @@ static int _mt7925_pci_resume(struct device *device, bool restore)
 
 	mt76_worker_enable(&mdev->tx_worker);
 
-	mt76_for_each_q_rx(mdev, i) {
-		napi_enable(&mdev->napi[i]);
-	}
-	napi_enable(&mdev->tx_napi);
-
 	local_bh_disable();
 	mt76_for_each_q_rx(mdev, i) {
+		napi_enable(&mdev->napi[i]);
 		napi_schedule(&mdev->napi[i]);
 	}
+	napi_enable(&mdev->tx_napi);
 	napi_schedule(&mdev->tx_napi);
 	local_bh_enable();
 
-	if (restore)
-		goto failed;
-
-	mt76_connac_mcu_set_hif_suspend(mdev, false, false);
-	ret = wait_event_timeout(dev->wait,
-				 dev->hif_resumed, 3 * HZ);
-	if (!ret) {
-		err = -ETIMEDOUT;
-		goto failed;
-	}
+	err = mt76_connac_mcu_set_hif_suspend(mdev, false);
 
 	/* restore previous ds setting */
 	if (!pm->ds_enable)
 		mt7925_mcu_set_deep_sleep(dev, false);
 
-	mt7925_regd_update(dev);
 failed:
 	pm->suspended = false;
 
-	if (err < 0 || restore)
+	if (err < 0)
 		mt792x_reset(&dev->mt76);
 
 	return err;
@@ -599,24 +570,7 @@ static void mt7925_pci_shutdown(struct pci_dev *pdev)
 	mt7925_pci_remove(pdev);
 }
 
-static int mt7925_pci_resume(struct device *device)
-{
-	return _mt7925_pci_resume(device, false);
-}
-
-static int mt7925_pci_restore(struct device *device)
-{
-	return _mt7925_pci_resume(device, true);
-}
-
-static const struct dev_pm_ops mt7925_pm_ops = {
-	.suspend = pm_sleep_ptr(mt7925_pci_suspend),
-	.resume  = pm_sleep_ptr(mt7925_pci_resume),
-	.freeze = pm_sleep_ptr(mt7925_pci_suspend),
-	.thaw = pm_sleep_ptr(mt7925_pci_resume),
-	.poweroff = pm_sleep_ptr(mt7925_pci_suspend),
-	.restore = pm_sleep_ptr(mt7925_pci_restore),
-};
+static DEFINE_SIMPLE_DEV_PM_OPS(mt7925_pm_ops, mt7925_pci_suspend, mt7925_pci_resume);
 
 static struct pci_driver mt7925_pci_driver = {
 	.name		= KBUILD_MODNAME,

@@ -15,8 +15,6 @@ properties:
       - enum:
           - amd,pensando-elba-sd4hc
           - microchip,mpfs-sd4hc
-          - microchip,pic64gx-sd4hc
-          - mobileye,eyeq-sd4hc
           - socionext,uniphier-sd4hc
       - const: cdns,sd4hc
 
@@ -122,7 +120,7 @@ required:
   - clocks
 
 allOf:
-  - $ref: sdhci-common.yaml
+  - $ref: mmc-controller.yaml
   - if:
       properties:
         compatible:

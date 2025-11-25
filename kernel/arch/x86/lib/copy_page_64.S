@@ -3,7 +3,6 @@
 
 #include <linux/export.h>
 #include <linux/linkage.h>
-#include <linux/cfi_types.h>
 #include <asm/cpufeatures.h>
 #include <asm/alternative.h>
 
@@ -14,7 +13,7 @@
  * prefetch distance based on SMP/UP.
  */
 	ALIGN
-SYM_TYPED_FUNC_START(copy_page)
+SYM_FUNC_START(copy_page)
 	ALTERNATIVE "jmp copy_page_regs", "", X86_FEATURE_REP_GOOD
 	movl	$4096/8, %ecx
 	rep	movsq

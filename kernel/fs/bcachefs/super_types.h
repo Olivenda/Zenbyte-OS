@@ -2,19 +2,13 @@
 #ifndef _BCACHEFS_SUPER_TYPES_H
 #define _BCACHEFS_SUPER_TYPES_H
 
-struct bch_fs;
-
-struct bch_sb_handle_holder {
-	struct bch_fs		*c;
-};
-
 struct bch_sb_handle {
 	struct bch_sb		*sb;
 	struct file		*s_bdev_file;
 	struct block_device	*bdev;
 	char			*sb_name;
 	struct bio		*bio;
-	struct bch_sb_handle_holder *holder;
+	void			*holder;
 	size_t			buffer_size;
 	blk_mode_t		mode;
 	unsigned		have_layout:1;

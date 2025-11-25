@@ -4,7 +4,6 @@
 #define _DRIVERS_FIRMWARE_EFI_EFISTUB_H
 
 #include <linux/compiler.h>
-#include <linux/cleanup.h>
 #include <linux/efi.h>
 #include <linux/kernel.h>
 #include <linux/kern_levels.h>
@@ -123,10 +122,11 @@ efi_status_t __efiapi efi_pe_entry(efi_handle_t handle,
 #define efi_get_handle_num(size)					\
 	((size) / (efi_is_native() ? sizeof(efi_handle_t) : sizeof(u32)))
 
-#define for_each_efi_handle(handle, array, num)				\
-	for (int __i = 0; __i < (num) &&				\
-		((handle = efi_get_handle_at((array), __i)) || true);	\
-	     __i++)
+#define for_each_efi_handle(handle, array, size, i)			\
+	for (i = 0;							\
+	     i < efi_get_handle_num(size) &&				\
+		((handle = efi_get_handle_at((array), i)) || true);	\
+	     i++)
 
 static inline
 void efi_set_u64_split(u64 data, u32 *lo, u32 *hi)
@@ -314,9 +314,7 @@ union efi_boot_services {
 		void *close_protocol;
 		void *open_protocol_information;
 		void *protocols_per_handle;
-		efi_status_t (__efiapi *locate_handle_buffer)(int, efi_guid_t *,
-							      void *, unsigned long *,
-							      efi_handle_t **);
+		void *locate_handle_buffer;
 		efi_status_t (__efiapi *locate_protocol)(efi_guid_t *, void *,
 							 void **);
 		efi_status_t (__efiapi *install_multiple_protocol_interfaces)(efi_handle_t *, ...);
@@ -1055,11 +1053,10 @@ void efi_puts(const char *str);
 __printf(1, 2) int efi_printk(char const *fmt, ...);
 
 void efi_free(unsigned long size, unsigned long addr);
-DEFINE_FREE(efi_pool, void *, if (_T) efi_bs_call(free_pool, _T));
 
 void efi_apply_loadoptions_quirk(const void **load_options, u32 *load_options_size);
 
-char *efi_convert_cmdline(efi_loaded_image_t *image);
+char *efi_convert_cmdline(efi_loaded_image_t *image, int *cmd_line_len);
 
 efi_status_t efi_get_memory_map(struct efi_boot_memmap **map,
 				bool install_cfg_tbl);
@@ -1085,7 +1082,8 @@ efi_status_t efi_parse_options(char const *cmdline);
 
 void efi_parse_option_graphics(char *option);
 
-efi_status_t efi_setup_gop(struct screen_info *si);
+efi_status_t efi_setup_gop(struct screen_info *si, efi_guid_t *proto,
+			   unsigned long size);
 
 efi_status_t handle_cmdline_files(efi_loaded_image_t *image,
 				  const efi_char16_t *optstr,
@@ -1233,8 +1231,5 @@ efi_status_t allocate_unaccepted_bitmap(__u32 nr_desc,
 void process_unaccepted_memory(u64 start, u64 end);
 void accept_memory(phys_addr_t start, unsigned long size);
 void arch_accept_memory(phys_addr_t start, phys_addr_t end);
-
-efi_status_t efi_zboot_decompress_init(unsigned long *alloc_size);
-efi_status_t efi_zboot_decompress(u8 *out, unsigned long outlen);
 
 #endif

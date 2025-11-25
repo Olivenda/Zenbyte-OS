@@ -17,9 +17,7 @@
 
 /**
  * ecryptfs_d_revalidate - revalidate an ecryptfs dentry
- * @dir: inode of expected parent
- * @name: expected name
- * @dentry: dentry to revalidate
+ * @dentry: The ecryptfs dentry
  * @flags: lookup flags
  *
  * Called when the VFS needs to revalidate a dentry. This
@@ -30,8 +28,7 @@
  * Returns 1 if valid, 0 otherwise.
  *
  */
-static int ecryptfs_d_revalidate(struct inode *dir, const struct qstr *name,
-				 struct dentry *dentry, unsigned int flags)
+static int ecryptfs_d_revalidate(struct dentry *dentry, unsigned int flags)
 {
 	struct dentry *lower_dentry = ecryptfs_dentry_to_lower(dentry);
 	int rc = 1;
@@ -39,15 +36,8 @@ static int ecryptfs_d_revalidate(struct inode *dir, const struct qstr *name,
 	if (flags & LOOKUP_RCU)
 		return -ECHILD;
 
-	if (lower_dentry->d_flags & DCACHE_OP_REVALIDATE) {
-		struct inode *lower_dir = ecryptfs_inode_to_lower(dir);
-		struct name_snapshot n;
-
-		take_dentry_name_snapshot(&n, lower_dentry);
-		rc = lower_dentry->d_op->d_revalidate(lower_dir, &n.name,
-						      lower_dentry, flags);
-		release_dentry_name_snapshot(&n);
-	}
+	if (lower_dentry->d_flags & DCACHE_OP_REVALIDATE)
+		rc = lower_dentry->d_op->d_revalidate(lower_dentry, flags);
 
 	if (d_really_is_positive(dentry)) {
 		struct inode *inode = d_inode(dentry);

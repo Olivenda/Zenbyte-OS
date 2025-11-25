@@ -15,7 +15,6 @@
 #include <linux/uuid.h>
 #include <linux/namei.h>
 #include <linux/ratelimit.h>
-#include <linux/overflow.h>
 #include "overlayfs.h"
 
 /* Get write access to upper mnt - may fail if upper sb was remounted ro */
@@ -67,11 +66,6 @@ const struct cred *ovl_override_creds(struct super_block *sb)
 	struct ovl_fs *ofs = OVL_FS(sb);
 
 	return override_creds(ofs->creator_cred);
-}
-
-void ovl_revert_creds(const struct cred *old_cred)
-{
-	revert_creds(old_cred);
 }
 
 /*
@@ -146,9 +140,9 @@ void ovl_stack_free(struct ovl_path *stack, unsigned int n)
 
 struct ovl_entry *ovl_alloc_entry(unsigned int numlower)
 {
-	struct ovl_entry *oe;
+	size_t size = offsetof(struct ovl_entry, __lowerstack[numlower]);
+	struct ovl_entry *oe = kzalloc(size, GFP_KERNEL);
 
-	oe = kzalloc(struct_size(oe, __lowerstack, numlower), GFP_KERNEL);
 	if (oe)
 		oe->__numlower = numlower;
 
@@ -206,17 +200,10 @@ bool ovl_dentry_weird(struct dentry *dentry)
 	if (!d_can_lookup(dentry) && !d_is_file(dentry) && !d_is_symlink(dentry))
 		return true;
 
-	if (dentry->d_flags & (DCACHE_NEED_AUTOMOUNT | DCACHE_MANAGE_TRANSIT))
-		return true;
-
-	/*
-	 * Allow filesystems that are case-folding capable but deny composing
-	 * ovl stack from case-folded directories.
-	 */
-	if (sb_has_encoding(dentry->d_sb))
-		return IS_CASEFOLDED(d_inode(dentry));
-
-	return dentry->d_flags & (DCACHE_OP_HASH | DCACHE_OP_COMPARE);
+	return dentry->d_flags & (DCACHE_NEED_AUTOMOUNT |
+				  DCACHE_MANAGE_TRANSIT |
+				  DCACHE_OP_HASH |
+				  DCACHE_OP_COMPARE);
 }
 
 enum ovl_path_type ovl_path_type(struct dentry *dentry)
@@ -966,7 +953,7 @@ void ovl_check_protattr(struct inode *inode, struct dentry *upper)
 }
 
 int ovl_set_protattr(struct inode *inode, struct dentry *upper,
-		      struct file_kattr *fa)
+		      struct fileattr *fa)
 {
 	struct ovl_fs *ofs = OVL_FS(inode->i_sb);
 	char buf[OVL_PROTATTR_MAX];
@@ -1078,6 +1065,7 @@ static void ovl_cleanup_index(struct dentry *dentry)
 {
 	struct ovl_fs *ofs = OVL_FS(dentry->d_sb);
 	struct dentry *indexdir = ovl_indexdir(dentry->d_sb);
+	struct inode *dir = indexdir->d_inode;
 	struct dentry *lowerdentry = ovl_dentry_lower(dentry);
 	struct dentry *upperdentry = ovl_dentry_upper(dentry);
 	struct dentry *index = NULL;
@@ -1113,18 +1101,21 @@ static void ovl_cleanup_index(struct dentry *dentry)
 		goto out;
 	}
 
-	index = ovl_lookup_upper_unlocked(ofs, name.name, indexdir, name.len);
+	inode_lock_nested(dir, I_MUTEX_PARENT);
+	index = ovl_lookup_upper(ofs, name.name, indexdir, name.len);
 	err = PTR_ERR(index);
 	if (IS_ERR(index)) {
 		index = NULL;
 	} else if (ovl_index_all(dentry->d_sb)) {
 		/* Whiteout orphan index to block future open by handle */
 		err = ovl_cleanup_and_whiteout(OVL_FS(dentry->d_sb),
-					       indexdir, index);
+					       dir, index);
 	} else {
 		/* Cleanup orphan index entries */
-		err = ovl_cleanup(ofs, indexdir, index);
+		err = ovl_cleanup(ofs, dir, index);
 	}
+
+	inode_unlock(dir);
 	if (err)
 		goto fail;
 
@@ -1192,7 +1183,7 @@ int ovl_nlink_start(struct dentry *dentry)
 	 * value relative to the upper inode nlink in an upper inode xattr.
 	 */
 	err = ovl_set_nlink_upper(dentry);
-	ovl_revert_creds(old_cred);
+	revert_creds(old_cred);
 	if (err)
 		goto out_drop_write;
 
@@ -1217,26 +1208,25 @@ void ovl_nlink_end(struct dentry *dentry)
 
 		old_cred = ovl_override_creds(dentry->d_sb);
 		ovl_cleanup_index(dentry);
-		ovl_revert_creds(old_cred);
+		revert_creds(old_cred);
 	}
 
 	ovl_inode_unlock(inode);
 }
 
-int ovl_lock_rename_workdir(struct dentry *workdir, struct dentry *work,
-			    struct dentry *upperdir, struct dentry *upper)
+int ovl_lock_rename_workdir(struct dentry *workdir, struct dentry *upperdir)
 {
 	struct dentry *trap;
+
+	/* Workdir should not be the same as upperdir */
+	if (workdir == upperdir)
+		goto err;
 
 	/* Workdir should not be subdir of upperdir and vice versa */
 	trap = lock_rename(workdir, upperdir);
 	if (IS_ERR(trap))
 		goto err;
 	if (trap)
-		goto err_unlock;
-	if (work && work->d_parent != workdir)
-		goto err_unlock;
-	if (upper && upper->d_parent != upperdir)
 		goto err_unlock;
 
 	return 0;
@@ -1547,15 +1537,4 @@ void ovl_copyattr(struct inode *inode)
 	inode_set_ctime_to_ts(inode, inode_get_ctime(realinode));
 	i_size_write(inode, i_size_read(realinode));
 	spin_unlock(&inode->i_lock);
-}
-
-int ovl_parent_lock(struct dentry *parent, struct dentry *child)
-{
-	inode_lock_nested(parent->d_inode, I_MUTEX_PARENT);
-	if (!child ||
-	    (!d_unhashed(child) && child->d_parent == parent))
-		return 0;
-
-	inode_unlock(parent->d_inode);
-	return -EINVAL;
 }

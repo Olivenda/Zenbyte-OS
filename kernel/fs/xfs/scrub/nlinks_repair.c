@@ -60,9 +60,11 @@ xrep_nlinks_is_orphaned(
 	unsigned int		actual_nlink,
 	const struct xchk_nlink	*obs)
 {
+	struct xfs_mount	*mp = ip->i_mount;
+
 	if (obs->parents != 0)
 		return false;
-	if (xchk_inode_is_dirtree_root(ip) || ip == sc->orphanage)
+	if (ip == mp->m_rootip || ip == sc->orphanage)
 		return false;
 	return actual_nlink != 0;
 }
@@ -340,7 +342,9 @@ xrep_nlinks(
 		 * We can only push the inactivation workqueues with an empty
 		 * transaction.
 		 */
-		xchk_trans_alloc_empty(sc);
+		error = xchk_trans_alloc_empty(sc);
+		if (error)
+			break;
 	}
 	xchk_iscan_iter_finish(&xnc->compare_iscan);
 	xchk_iscan_teardown(&xnc->compare_iscan);

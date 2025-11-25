@@ -411,7 +411,6 @@ static int mqueue_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_blocksize_bits = PAGE_SHIFT;
 	sb->s_magic = MQUEUE_MAGIC;
 	sb->s_op = &mqueue_super_ops;
-	sb->s_d_flags = DCACHE_DONTCACHE;
 
 	inode = mqueue_get_inode(sb, ns, S_IFDIR | S_ISVTX | S_IRWXUGO, NULL);
 	if (IS_ERR(inode))
@@ -483,7 +482,7 @@ static struct vfsmount *mq_create_mount(struct ipc_namespace *ns)
 	put_user_ns(fc->user_ns);
 	fc->user_ns = get_user_ns(ctx->ipc_ns->user_ns);
 
-	mnt = fc_mount_longterm(fc);
+	mnt = fc_mount(fc);
 	put_fs_context(fc);
 	return mnt;
 }
@@ -914,7 +913,7 @@ static int do_mq_open(const char __user *u_name, int oflag, umode_t mode,
 
 	ro = mnt_want_write(mnt);	/* we'll drop it in any case */
 	inode_lock(d_inode(root));
-	path.dentry = lookup_noperm(&QSTR(name->name), root);
+	path.dentry = lookup_one_len(name->name, root, strlen(name->name));
 	if (IS_ERR(path.dentry)) {
 		error = PTR_ERR(path.dentry);
 		goto out_putfd;
@@ -970,7 +969,8 @@ SYSCALL_DEFINE1(mq_unlink, const char __user *, u_name)
 	if (err)
 		goto out_name;
 	inode_lock_nested(d_inode(mnt->mnt_root), I_MUTEX_PARENT);
-	dentry = lookup_noperm(&QSTR(name->name), mnt->mnt_root);
+	dentry = lookup_one_len(name->name, mnt->mnt_root,
+				strlen(name->name));
 	if (IS_ERR(dentry)) {
 		err = PTR_ERR(dentry);
 		goto out_unlock;
@@ -1063,6 +1063,7 @@ static int do_mq_timedsend(mqd_t mqdes, const char __user *u_msg_ptr,
 		size_t msg_len, unsigned int msg_prio,
 		struct timespec64 *ts)
 {
+	struct fd f;
 	struct inode *inode;
 	struct ext_wait_queue wait;
 	struct ext_wait_queue *receiver;
@@ -1083,27 +1084,37 @@ static int do_mq_timedsend(mqd_t mqdes, const char __user *u_msg_ptr,
 
 	audit_mq_sendrecv(mqdes, msg_len, msg_prio, ts);
 
-	CLASS(fd, f)(mqdes);
-	if (fd_empty(f))
-		return -EBADF;
+	f = fdget(mqdes);
+	if (unlikely(!fd_file(f))) {
+		ret = -EBADF;
+		goto out;
+	}
 
 	inode = file_inode(fd_file(f));
-	if (unlikely(fd_file(f)->f_op != &mqueue_file_operations))
-		return -EBADF;
+	if (unlikely(fd_file(f)->f_op != &mqueue_file_operations)) {
+		ret = -EBADF;
+		goto out_fput;
+	}
 	info = MQUEUE_I(inode);
 	audit_file(fd_file(f));
 
-	if (unlikely(!(fd_file(f)->f_mode & FMODE_WRITE)))
-		return -EBADF;
+	if (unlikely(!(fd_file(f)->f_mode & FMODE_WRITE))) {
+		ret = -EBADF;
+		goto out_fput;
+	}
 
-	if (unlikely(msg_len > info->attr.mq_msgsize))
-		return -EMSGSIZE;
+	if (unlikely(msg_len > info->attr.mq_msgsize)) {
+		ret = -EMSGSIZE;
+		goto out_fput;
+	}
 
 	/* First try to allocate memory, before doing anything with
 	 * existing queues. */
 	msg_ptr = load_msg(u_msg_ptr, msg_len);
-	if (IS_ERR(msg_ptr))
-		return PTR_ERR(msg_ptr);
+	if (IS_ERR(msg_ptr)) {
+		ret = PTR_ERR(msg_ptr);
+		goto out_fput;
+	}
 	msg_ptr->m_ts = msg_len;
 	msg_ptr->m_type = msg_prio;
 
@@ -1161,6 +1172,9 @@ out_unlock:
 out_free:
 	if (ret)
 		free_msg(msg_ptr);
+out_fput:
+	fdput(f);
+out:
 	return ret;
 }
 
@@ -1170,6 +1184,7 @@ static int do_mq_timedreceive(mqd_t mqdes, char __user *u_msg_ptr,
 {
 	ssize_t ret;
 	struct msg_msg *msg_ptr;
+	struct fd f;
 	struct inode *inode;
 	struct mqueue_inode_info *info;
 	struct ext_wait_queue wait;
@@ -1183,22 +1198,30 @@ static int do_mq_timedreceive(mqd_t mqdes, char __user *u_msg_ptr,
 
 	audit_mq_sendrecv(mqdes, msg_len, 0, ts);
 
-	CLASS(fd, f)(mqdes);
-	if (fd_empty(f))
-		return -EBADF;
+	f = fdget(mqdes);
+	if (unlikely(!fd_file(f))) {
+		ret = -EBADF;
+		goto out;
+	}
 
 	inode = file_inode(fd_file(f));
-	if (unlikely(fd_file(f)->f_op != &mqueue_file_operations))
-		return -EBADF;
+	if (unlikely(fd_file(f)->f_op != &mqueue_file_operations)) {
+		ret = -EBADF;
+		goto out_fput;
+	}
 	info = MQUEUE_I(inode);
 	audit_file(fd_file(f));
 
-	if (unlikely(!(fd_file(f)->f_mode & FMODE_READ)))
-		return -EBADF;
+	if (unlikely(!(fd_file(f)->f_mode & FMODE_READ))) {
+		ret = -EBADF;
+		goto out_fput;
+	}
 
 	/* checks if buffer is big enough */
-	if (unlikely(msg_len < info->attr.mq_msgsize))
-		return -EMSGSIZE;
+	if (unlikely(msg_len < info->attr.mq_msgsize)) {
+		ret = -EMSGSIZE;
+		goto out_fput;
+	}
 
 	/*
 	 * msg_insert really wants us to have a valid, spare node struct so
@@ -1252,6 +1275,9 @@ static int do_mq_timedreceive(mqd_t mqdes, char __user *u_msg_ptr,
 		}
 		free_msg(msg_ptr);
 	}
+out_fput:
+	fdput(f);
+out:
 	return ret;
 }
 
@@ -1291,6 +1317,7 @@ SYSCALL_DEFINE5(mq_timedreceive, mqd_t, mqdes, char __user *, u_msg_ptr,
 static int do_mq_notify(mqd_t mqdes, const struct sigevent *notification)
 {
 	int ret;
+	struct fd f;
 	struct sock *sock;
 	struct inode *inode;
 	struct mqueue_inode_info *info;
@@ -1320,31 +1347,39 @@ static int do_mq_notify(mqd_t mqdes, const struct sigevent *notification)
 			if (copy_from_user(nc->data,
 					notification->sigev_value.sival_ptr,
 					NOTIFY_COOKIE_LEN)) {
-				kfree_skb(nc);
-				return -EFAULT;
+				ret = -EFAULT;
+				goto free_skb;
 			}
 
 			/* TODO: add a header? */
 			skb_put(nc, NOTIFY_COOKIE_LEN);
 			/* and attach it to the socket */
 retry:
-			sock = netlink_getsockbyfd(notification->sigev_signo);
+			f = fdget(notification->sigev_signo);
+			if (!fd_file(f)) {
+				ret = -EBADF;
+				goto out;
+			}
+			sock = netlink_getsockbyfilp(fd_file(f));
+			fdput(f);
 			if (IS_ERR(sock)) {
-				kfree_skb(nc);
-				return PTR_ERR(sock);
+				ret = PTR_ERR(sock);
+				goto free_skb;
 			}
 
 			timeo = MAX_SCHEDULE_TIMEOUT;
 			ret = netlink_attachskb(sock, nc, &timeo, NULL);
-			if (ret == 1)
+			if (ret == 1) {
+				sock = NULL;
 				goto retry;
+			}
 			if (ret)
 				return ret;
 		}
 	}
 
-	CLASS(fd, f)(mqdes);
-	if (fd_empty(f)) {
+	f = fdget(mqdes);
+	if (!fd_file(f)) {
 		ret = -EBADF;
 		goto out;
 	}
@@ -1352,7 +1387,7 @@ retry:
 	inode = file_inode(fd_file(f));
 	if (unlikely(fd_file(f)->f_op != &mqueue_file_operations)) {
 		ret = -EBADF;
-		goto out;
+		goto out_fput;
 	}
 	info = MQUEUE_I(inode);
 
@@ -1391,9 +1426,15 @@ retry:
 		inode_set_atime_to_ts(inode, inode_set_ctime_current(inode));
 	}
 	spin_unlock(&info->lock);
+out_fput:
+	fdput(f);
 out:
 	if (sock)
 		netlink_detachskb(sock, nc);
+	else
+free_skb:
+		dev_kfree_skb(nc);
+
 	return ret;
 }
 
@@ -1411,18 +1452,21 @@ SYSCALL_DEFINE2(mq_notify, mqd_t, mqdes,
 
 static int do_mq_getsetattr(int mqdes, struct mq_attr *new, struct mq_attr *old)
 {
+	struct fd f;
 	struct inode *inode;
 	struct mqueue_inode_info *info;
 
 	if (new && (new->mq_flags & (~O_NONBLOCK)))
 		return -EINVAL;
 
-	CLASS(fd, f)(mqdes);
-	if (fd_empty(f))
+	f = fdget(mqdes);
+	if (!fd_file(f))
 		return -EBADF;
 
-	if (unlikely(fd_file(f)->f_op != &mqueue_file_operations))
+	if (unlikely(fd_file(f)->f_op != &mqueue_file_operations)) {
+		fdput(f);
 		return -EBADF;
+	}
 
 	inode = file_inode(fd_file(f));
 	info = MQUEUE_I(inode);
@@ -1446,6 +1490,7 @@ static int do_mq_getsetattr(int mqdes, struct mq_attr *new, struct mq_attr *old)
 	}
 
 	spin_unlock(&info->lock);
+	fdput(f);
 	return 0;
 }
 

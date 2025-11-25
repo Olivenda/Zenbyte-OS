@@ -355,6 +355,7 @@ SYSCALL_DEFINE5(fsconfig,
 		int, aux)
 {
 	struct fs_context *fc;
+	struct fd f;
 	int ret;
 	int lookup_flags = 0;
 
@@ -397,11 +398,12 @@ SYSCALL_DEFINE5(fsconfig,
 		return -EOPNOTSUPP;
 	}
 
-	CLASS(fd, f)(fd);
-	if (fd_empty(f))
+	f = fdget(fd);
+	if (!fd_file(f))
 		return -EBADF;
+	ret = -EINVAL;
 	if (fd_file(f)->f_op != &fscontext_fops)
-		return -EINVAL;
+		goto out_f;
 
 	fc = fd_file(f)->private_data;
 	if (fc->ops == &legacy_fs_context_ops) {
@@ -411,14 +413,17 @@ SYSCALL_DEFINE5(fsconfig,
 		case FSCONFIG_SET_PATH_EMPTY:
 		case FSCONFIG_SET_FD:
 		case FSCONFIG_CMD_CREATE_EXCL:
-			return -EOPNOTSUPP;
+			ret = -EOPNOTSUPP;
+			goto out_f;
 		}
 	}
 
 	if (_key) {
 		param.key = strndup_user(_key, 256);
-		if (IS_ERR(param.key))
-			return PTR_ERR(param.key);
+		if (IS_ERR(param.key)) {
+			ret = PTR_ERR(param.key);
+			goto out_f;
+		}
 	}
 
 	switch (cmd) {
@@ -459,7 +464,7 @@ SYSCALL_DEFINE5(fsconfig,
 	case FSCONFIG_SET_FD:
 		param.type = fs_value_is_file;
 		ret = -EBADF;
-		param.file = fget_raw(aux);
+		param.file = fget(aux);
 		if (!param.file)
 			goto out_key;
 		param.dirfd = aux;
@@ -497,5 +502,7 @@ SYSCALL_DEFINE5(fsconfig,
 	}
 out_key:
 	kfree(param.key);
+out_f:
+	fdput(f);
 	return ret;
 }

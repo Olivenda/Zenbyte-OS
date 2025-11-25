@@ -723,25 +723,27 @@ static void snd_card_set_id_no_lock(struct snd_card *card, const char *src,
 	 * ("card" conflicts with proc directories)
 	 */
 	if (!*id || !strncmp(id, "card", 4)) {
-		strscpy(card->id, "Default");
+		strcpy(id, "Default");
 		is_default = true;
 	}
 
 	len = strlen(id);
 	for (loops = 0; loops < SNDRV_CARDS; loops++) {
+		char *spos;
 		char sfxstr[5]; /* "_012" */
-		int sfxlen, slen;
+		int sfxlen;
 
 		if (card_id_ok(card, id))
 			return; /* OK */
 
 		/* Add _XYZ suffix */
-		sfxlen = scnprintf(sfxstr, sizeof(sfxstr), "_%X", loops + 1);
+		sprintf(sfxstr, "_%X", loops + 1);
+		sfxlen = strlen(sfxstr);
 		if (len + sfxlen >= sizeof(card->id))
-			slen = sizeof(card->id) - sfxlen - 1;
+			spos = id + sizeof(card->id) - sfxlen - 1;
 		else
-			slen = len;
-		strscpy(id + slen, sfxstr, sizeof(card->id) - slen);
+			spos = id + len;
+		strcpy(spos, sfxstr);
 	}
 	/* fallback to the default id */
 	if (!is_default) {
@@ -799,7 +801,7 @@ static ssize_t id_store(struct device *dev, struct device_attribute *attr,
 	guard(mutex)(&snd_card_mutex);
 	if (!card_id_ok(NULL, buf1))
 		return -EEXIST;
-	strscpy(card->id, buf1);
+	strcpy(card->id, buf1);
 	snd_info_card_id_change(card);
 
 	return count;

@@ -863,7 +863,7 @@ static void dnet_remove(struct platform_device *pdev)
 
 static struct platform_driver dnet_driver = {
 	.probe		= dnet_probe,
-	.remove		= dnet_remove,
+	.remove_new	= dnet_remove,
 	.driver		= {
 		.name		= "dnet",
 	},

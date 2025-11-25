@@ -13,7 +13,6 @@
 #include <linux/cpu.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/entry-common.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
@@ -35,7 +34,6 @@
 #include <linux/nmi.h>
 
 #include <asm/asm.h>
-#include <asm/asm-prototypes.h>
 #include <asm/bootinfo.h>
 #include <asm/cpu.h>
 #include <asm/elf.h>
@@ -49,7 +47,6 @@
 #include <asm/pgtable.h>
 #include <asm/processor.h>
 #include <asm/reg.h>
-#include <asm/switch_to.h>
 #include <asm/unwind.h>
 #include <asm/vdso.h>
 
@@ -66,9 +63,8 @@ EXPORT_SYMBOL(__stack_chk_guard);
 unsigned long boot_option_idle_override = IDLE_NO_OVERRIDE;
 EXPORT_SYMBOL(boot_option_idle_override);
 
-asmlinkage void restore_and_ret(void);
-asmlinkage void ret_from_fork_asm(void);
-asmlinkage void ret_from_kernel_thread_asm(void);
+asmlinkage void ret_from_fork(void);
+asmlinkage void ret_from_kernel_thread(void);
 
 void start_thread(struct pt_regs *regs, unsigned long pc, unsigned long sp)
 {
@@ -142,23 +138,6 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 	return 0;
 }
 
-asmlinkage void noinstr __no_stack_protector ret_from_fork(struct task_struct *prev,
-							   struct pt_regs *regs)
-{
-	schedule_tail(prev);
-	syscall_exit_to_user_mode(regs);
-}
-
-asmlinkage void noinstr __no_stack_protector ret_from_kernel_thread(struct task_struct *prev,
-								    struct pt_regs *regs,
-								    int (*fn)(void *),
-								    void *fn_arg)
-{
-	schedule_tail(prev);
-	fn(fn_arg);
-	syscall_exit_to_user_mode(regs);
-}
-
 /*
  * Copy architecture-specific thread state
  */
@@ -167,7 +146,7 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 	unsigned long childksp;
 	unsigned long tls = args->tls;
 	unsigned long usp = args->stack;
-	u64 clone_flags = args->flags;
+	unsigned long clone_flags = args->flags;
 	struct pt_regs *childregs, *regs = current_pt_regs();
 
 	childksp = (unsigned long)task_stack_page(p) + THREAD_SIZE;
@@ -186,8 +165,8 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 		p->thread.reg03 = childksp;
 		p->thread.reg23 = (unsigned long)args->fn;
 		p->thread.reg24 = (unsigned long)args->fn_arg;
-		p->thread.reg01 = (unsigned long)ret_from_kernel_thread_asm;
-		p->thread.sched_ra = (unsigned long)ret_from_kernel_thread_asm;
+		p->thread.reg01 = (unsigned long)ret_from_kernel_thread;
+		p->thread.sched_ra = (unsigned long)ret_from_kernel_thread;
 		memset(childregs, 0, sizeof(struct pt_regs));
 		childregs->csr_euen = p->thread.csr_euen;
 		childregs->csr_crmd = p->thread.csr_crmd;
@@ -203,8 +182,8 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 		childregs->regs[3] = usp;
 
 	p->thread.reg03 = (unsigned long) childregs;
-	p->thread.reg01 = (unsigned long) ret_from_fork_asm;
-	p->thread.sched_ra = (unsigned long) ret_from_fork_asm;
+	p->thread.reg01 = (unsigned long) ret_from_fork;
+	p->thread.sched_ra = (unsigned long) ret_from_fork;
 
 	/*
 	 * New tasks lose permission to use the fpu. This accelerates context

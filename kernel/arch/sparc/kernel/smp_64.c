@@ -297,7 +297,9 @@ static void ldom_startcpu_cpuid(unsigned int cpu, unsigned long thread_reg,
 	unsigned long hv_err;
 	int i;
 
-	hdesc = kzalloc(struct_size(hdesc, maps, num_kernel_image_mappings),
+	hdesc = kzalloc(sizeof(*hdesc) +
+			(sizeof(struct hvtramp_mapping) *
+			 num_kernel_image_mappings - 1),
 			GFP_KERNEL);
 	if (!hdesc) {
 		printk(KERN_ERR "ldom_startcpu_cpuid: Cannot allocate "

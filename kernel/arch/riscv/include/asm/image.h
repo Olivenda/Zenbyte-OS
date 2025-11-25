@@ -30,8 +30,6 @@
 			      RISCV_HEADER_VERSION_MINOR)
 
 #ifndef __ASSEMBLY__
-#define riscv_image_flag_field(flags, field)\
-			       (((flags) >> field##_SHIFT) & field##_MASK)
 /**
  * struct riscv_image_header - riscv kernel image header
  * @code0:		Executable code

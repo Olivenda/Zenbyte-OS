@@ -95,7 +95,6 @@ struct xsk_socket_info {
 	u32 batch_size;
 	u8 dst_mac[ETH_ALEN];
 	u8 src_mac[ETH_ALEN];
-	bool check_consumer;
 };
 
 struct pkt {
@@ -174,8 +173,6 @@ struct test_spec {
 	u16 nb_sockets;
 	bool fail;
 	bool set_ring;
-	bool adjust_tail;
-	bool adjust_tail_support;
 	enum test_mode mode;
 	char name[MAX_TEST_NAME_SIZE];
 };

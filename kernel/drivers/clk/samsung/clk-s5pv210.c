@@ -9,6 +9,7 @@
  */
 
 #include <linux/clk-provider.h>
+#include <linux/of.h>
 #include <linux/of_address.h>
 
 #include "clk.h"

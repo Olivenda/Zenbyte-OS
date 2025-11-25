@@ -19,9 +19,7 @@ properties:
       - onnn,ncp5623
 
   reg:
-    enum:
-      - 0x38
-      - 0x39
+    const: 0x38
 
   multi-led:
     type: object

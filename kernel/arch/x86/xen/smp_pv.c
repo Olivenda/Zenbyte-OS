@@ -70,7 +70,7 @@ static void cpu_bringup(void)
 		xen_enable_syscall();
 	}
 	cpu = smp_processor_id();
-	identify_secondary_cpu(cpu);
+	smp_store_cpu_info(cpu);
 	set_cpu_sibling_map(cpu);
 
 	speculative_store_bypass_ht_init();

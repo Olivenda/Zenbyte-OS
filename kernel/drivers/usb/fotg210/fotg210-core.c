@@ -13,7 +13,6 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
-#include <linux/string_choices.h>
 #include <linux/usb.h>
 #include <linux/usb/otg.h>
 
@@ -120,8 +119,8 @@ void fotg210_vbus(struct fotg210 *fotg, bool enable)
 	ret = regmap_update_bits(fotg->map, GEMINI_GLOBAL_MISC_CTRL, mask, val);
 	if (ret)
 		dev_err(fotg->dev, "failed to %s VBUS\n",
-			str_enable_disable(enable));
-	dev_info(fotg->dev, "%s: %s VBUS\n", __func__, str_enable_disable(enable));
+			enable ? "enable" : "disable");
+	dev_info(fotg->dev, "%s: %s VBUS\n", __func__, enable ? "enable" : "disable");
 }
 
 static int fotg210_probe(struct platform_device *pdev)
@@ -196,7 +195,7 @@ static struct platform_driver fotg210_driver = {
 		.of_match_table = of_match_ptr(fotg210_of_match),
 	},
 	.probe  = fotg210_probe,
-	.remove = fotg210_remove,
+	.remove_new = fotg210_remove,
 };
 
 static int __init fotg210_init(void)

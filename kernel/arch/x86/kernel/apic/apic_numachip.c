@@ -14,7 +14,6 @@
 #include <linux/init.h>
 #include <linux/pgtable.h>
 
-#include <asm/msr.h>
 #include <asm/numachip/numachip.h>
 #include <asm/numachip/numachip_csr.h>
 
@@ -32,7 +31,7 @@ static u32 numachip1_get_apic_id(u32 x)
 	unsigned int id = (x >> 24) & 0xff;
 
 	if (static_cpu_has(X86_FEATURE_NODEID_MSR)) {
-		rdmsrq(MSR_FAM10H_NODE_ID, value);
+		rdmsrl(MSR_FAM10H_NODE_ID, value);
 		id |= (value << 2) & 0xff00;
 	}
 
@@ -43,7 +42,7 @@ static u32 numachip2_get_apic_id(u32 x)
 {
 	u64 mcfg;
 
-	rdmsrq(MSR_FAM10H_MMIO_CONF_BASE, mcfg);
+	rdmsrl(MSR_FAM10H_MMIO_CONF_BASE, mcfg);
 	return ((mcfg >> (28 - 8)) & 0xfff00) | (x >> 24);
 }
 
@@ -57,7 +56,7 @@ static void numachip2_apic_icr_write(int apicid, unsigned int val)
 	numachip2_write32_lcsr(NUMACHIP2_APIC_ICR, (apicid << 12) | val);
 }
 
-static int numachip_wakeup_secondary(u32 phys_apicid, unsigned long start_rip, unsigned int cpu)
+static int numachip_wakeup_secondary(u32 phys_apicid, unsigned long start_rip)
 {
 	numachip_apic_icr_write(phys_apicid, APIC_DM_INIT);
 	numachip_apic_icr_write(phys_apicid, APIC_DM_STARTUP |
@@ -151,7 +150,7 @@ static void fixup_cpu_id(struct cpuinfo_x86 *c, int node)
 
 	/* Account for nodes per socket in multi-core-module processors */
 	if (boot_cpu_has(X86_FEATURE_NODEID_MSR)) {
-		rdmsrq(MSR_FAM10H_NODE_ID, val);
+		rdmsrl(MSR_FAM10H_NODE_ID, val);
 		nodes = ((val >> 3) & 7) + 1;
 	}
 

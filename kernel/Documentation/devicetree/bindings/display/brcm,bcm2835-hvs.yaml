@@ -13,7 +13,6 @@ properties:
   compatible:
     enum:
       - brcm,bcm2711-hvs
-      - brcm,bcm2712-hvs
       - brcm,bcm2835-hvs
 
   reg:
@@ -37,9 +36,7 @@ if:
   properties:
     compatible:
       contains:
-        enum:
-          - brcm,bcm2711-hvs
-          - brcm,bcm2712-hvs
+        const: brcm,bcm2711-hvs
 
 then:
   required:

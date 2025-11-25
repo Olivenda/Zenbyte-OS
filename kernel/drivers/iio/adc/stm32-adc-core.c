@@ -407,6 +407,7 @@ static const struct irq_domain_ops stm32_adc_domain_ops = {
 static int stm32_adc_irq_probe(struct platform_device *pdev,
 			       struct stm32_adc_priv *priv)
 {
+	struct device_node *np = pdev->dev.of_node;
 	unsigned int i;
 
 	/*
@@ -420,10 +421,9 @@ static int stm32_adc_irq_probe(struct platform_device *pdev,
 			return priv->irq[i];
 	}
 
-	priv->domain = irq_domain_create_simple(dev_fwnode(&pdev->dev),
-						STM32_ADC_MAX_ADCS, 0,
-						&stm32_adc_domain_ops,
-						priv);
+	priv->domain = irq_domain_add_simple(np, STM32_ADC_MAX_ADCS, 0,
+					     &stm32_adc_domain_ops,
+					     priv);
 	if (!priv->domain) {
 		dev_err(&pdev->dev, "Failed to add irq domain\n");
 		return -ENOMEM;
@@ -614,7 +614,8 @@ static int stm32_adc_core_switches_probe(struct device *dev,
 	}
 
 	/* Booster can be used to supply analog switches (optional) */
-	if (priv->cfg->has_syscfg & HAS_VBOOSTER) {
+	if (priv->cfg->has_syscfg & HAS_VBOOSTER &&
+	    of_property_read_bool(np, "booster-supply")) {
 		priv->booster = devm_regulator_get_optional(dev, "booster");
 		if (IS_ERR(priv->booster)) {
 			ret = PTR_ERR(priv->booster);
@@ -626,7 +627,8 @@ static int stm32_adc_core_switches_probe(struct device *dev,
 	}
 
 	/* Vdd can be used to supply analog switches (optional) */
-	if (priv->cfg->has_syscfg & HAS_ANASWVDD) {
+	if (priv->cfg->has_syscfg & HAS_ANASWVDD &&
+	    of_property_read_bool(np, "vdd-supply")) {
 		priv->vdd = devm_regulator_get_optional(dev, "vdd");
 		if (IS_ERR(priv->vdd)) {
 			ret = PTR_ERR(priv->vdd);
@@ -903,7 +905,7 @@ MODULE_DEVICE_TABLE(of, stm32_adc_of_match);
 
 static struct platform_driver stm32_adc_driver = {
 	.probe = stm32_adc_probe,
-	.remove = stm32_adc_remove,
+	.remove_new = stm32_adc_remove,
 	.driver = {
 		.name = "stm32-adc-core",
 		.of_match_table = stm32_adc_of_match,

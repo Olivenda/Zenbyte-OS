@@ -176,6 +176,7 @@ static void clear_vm_list(struct list_head *list)
 			i915_vma_destroy_locked(vma);
 			i915_gem_object_put(obj);
 		}
+
 	}
 }
 

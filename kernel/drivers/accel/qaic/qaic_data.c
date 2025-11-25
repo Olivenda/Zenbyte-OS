@@ -609,7 +609,7 @@ static int qaic_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struc
 	struct scatterlist *sg;
 	int ret = 0;
 
-	if (drm_gem_is_imported(obj))
+	if (obj->import_attach)
 		return -EINVAL;
 
 	for (sg = bo->sgt->sgl; sg; sg = sg_next(sg)) {
@@ -630,7 +630,7 @@ static void qaic_free_object(struct drm_gem_object *obj)
 {
 	struct qaic_bo *bo = to_qaic_bo(obj);
 
-	if (drm_gem_is_imported(obj)) {
+	if (obj->import_attach) {
 		/* DMABUF/PRIME Path */
 		drm_prime_gem_destroy(obj, NULL);
 	} else {
@@ -731,6 +731,7 @@ int qaic_create_bo_ioctl(struct drm_device *dev, void *data, struct drm_file *fi
 	if (ret)
 		goto free_bo;
 
+	bo->handle = args->handle;
 	drm_gem_object_put(obj);
 	srcu_read_unlock(&qdev->dev_lock, qdev_rcu_id);
 	srcu_read_unlock(&usr->qddev_lock, usr_rcu_id);
@@ -869,7 +870,7 @@ static int qaic_prepare_bo(struct qaic_device *qdev, struct qaic_bo *bo,
 {
 	int ret;
 
-	if (drm_gem_is_imported(&bo->base))
+	if (bo->base.import_attach)
 		ret = qaic_prepare_import_bo(bo, hdr);
 	else
 		ret = qaic_prepare_export_bo(qdev, bo, hdr);
@@ -893,7 +894,7 @@ static void qaic_unprepare_export_bo(struct qaic_device *qdev, struct qaic_bo *b
 
 static void qaic_unprepare_bo(struct qaic_device *qdev, struct qaic_bo *bo)
 {
-	if (drm_gem_is_imported(&bo->base))
+	if (bo->base.import_attach)
 		qaic_unprepare_import_bo(bo);
 	else
 		qaic_unprepare_export_bo(qdev, bo);

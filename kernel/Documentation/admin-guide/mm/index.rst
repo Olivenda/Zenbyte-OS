@@ -37,10 +37,8 @@ the Linux memory management.
    numaperf
    pagemap
    shrinker_debugfs
-   slab
    soft-dirty
    swap_numa
    transhuge
    userfaultfd
    zswap
-   kho

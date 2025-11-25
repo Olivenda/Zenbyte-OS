@@ -8,8 +8,8 @@ from jinja2 import Environment
 from generators import SourceGenerator
 from generators import create_jinja2_environment, get_jinja2_template
 
-from xdr_ast import _XdrBasic, _XdrUnion, _XdrVoid, get_header_name
-from xdr_ast import _XdrDeclaration, _XdrCaseSpec, public_apis, big_endian
+from xdr_ast import _XdrBasic, _XdrUnion, _XdrVoid
+from xdr_ast import _XdrDeclaration, _XdrCaseSpec, public_apis
 
 
 def emit_union_declaration(environment: Environment, node: _XdrUnion) -> None:
@@ -77,18 +77,13 @@ def emit_union_switch_spec_decoder(
     print(template.render(name=node.name, type=node.spec.type_name))
 
 
-def emit_union_case_spec_decoder(
-    environment: Environment, node: _XdrCaseSpec, big_endian_discriminant: bool
-) -> None:
+def emit_union_case_spec_decoder(environment: Environment, node: _XdrCaseSpec) -> None:
     """Emit decoder functions for an XDR union's case arm"""
 
     if isinstance(node.arm, _XdrVoid):
         return
 
-    if big_endian_discriminant:
-        template = get_jinja2_template(environment, "decoder", "case_spec_be")
-    else:
-        template = get_jinja2_template(environment, "decoder", "case_spec")
+    template = get_jinja2_template(environment, "decoder", "case_spec")
     for case in node.values:
         print(template.render(case=case))
 
@@ -141,11 +136,7 @@ def emit_union_decoder(environment: Environment, node: _XdrUnion) -> None:
     emit_union_switch_spec_decoder(environment, node.discriminant)
 
     for case in node.cases:
-        emit_union_case_spec_decoder(
-            environment,
-            case,
-            node.discriminant.spec.type_name in big_endian,
-        )
+        emit_union_case_spec_decoder(environment, case)
 
     emit_union_default_spec_decoder(environment, node)
 
@@ -162,21 +153,17 @@ def emit_union_switch_spec_encoder(
     print(template.render(name=node.name, type=node.spec.type_name))
 
 
-def emit_union_case_spec_encoder(
-    environment: Environment, node: _XdrCaseSpec, big_endian_discriminant: bool
-) -> None:
+def emit_union_case_spec_encoder(environment: Environment, node: _XdrCaseSpec) -> None:
     """Emit encoder functions for an XDR union's case arm"""
 
     if isinstance(node.arm, _XdrVoid):
         return
 
-    if big_endian_discriminant:
-        template = get_jinja2_template(environment, "encoder", "case_spec_be")
-    else:
-        template = get_jinja2_template(environment, "encoder", "case_spec")
+    template = get_jinja2_template(environment, "encoder", "case_spec")
     for case in node.values:
         print(template.render(case=case))
 
+    assert isinstance(node.arm, _XdrBasic)
     template = get_jinja2_template(environment, "encoder", node.arm.template)
     print(
         template.render(
@@ -205,6 +192,7 @@ def emit_union_default_spec_encoder(environment: Environment, node: _XdrUnion) -
         print(template.render())
         return
 
+    assert isinstance(default_case.arm, _XdrBasic)
     template = get_jinja2_template(environment, "encoder", default_case.arm.template)
     print(
         template.render(
@@ -222,28 +210,12 @@ def emit_union_encoder(environment, node: _XdrUnion) -> None:
     emit_union_switch_spec_encoder(environment, node.discriminant)
 
     for case in node.cases:
-        emit_union_case_spec_encoder(
-            environment,
-            case,
-            node.discriminant.spec.type_name in big_endian,
-        )
+        emit_union_case_spec_encoder(environment, case)
 
     emit_union_default_spec_encoder(environment, node)
 
     template = get_jinja2_template(environment, "encoder", "close")
     print(template.render())
-
-
-def emit_union_maxsize(environment: Environment, node: _XdrUnion) -> None:
-    """Emit one maxsize macro for an XDR union type"""
-    macro_name = get_header_name().upper() + "_" + node.name + "_sz"
-    template = get_jinja2_template(environment, "maxsize", "union")
-    print(
-        template.render(
-            macro=macro_name,
-            width=" + ".join(node.symbolic_width()),
-        )
-    )
 
 
 class XdrUnionGenerator(SourceGenerator):
@@ -269,7 +241,3 @@ class XdrUnionGenerator(SourceGenerator):
     def emit_encoder(self, node: _XdrUnion) -> None:
         """Emit one encoder function for an XDR union"""
         emit_union_encoder(self.environment, node)
-
-    def emit_maxsize(self, node: _XdrUnion) -> None:
-        """Emit one maxsize macro for an XDR union"""
-        emit_union_maxsize(self.environment, node)

@@ -176,7 +176,7 @@ static u32 uart_read(struct omap8250_priv *priv, u32 reg)
 static void __omap8250_set_mctrl(struct uart_port *port, unsigned int mctrl)
 {
 	struct uart_8250_port *up = up_to_u8250p(port);
-	struct omap8250_priv *priv = port->private_data;
+	struct omap8250_priv *priv = up->port.private_data;
 	u8 lcr;
 
 	serial8250_do_set_mctrl(port, mctrl);
@@ -303,13 +303,12 @@ static void omap8250_update_mdr1(struct uart_8250_port *up,
 
 static void omap8250_restore_regs(struct uart_8250_port *up)
 {
-	struct uart_port *port = &up->port;
-	struct omap8250_priv *priv = port->private_data;
+	struct omap8250_priv *priv = up->port.private_data;
 	struct uart_8250_dma	*dma = up->dma;
 	u8 mcr = serial8250_in_MCR(up);
 
 	/* Port locked to synchronize UART_IER access against the console. */
-	lockdep_assert_held_once(&port->lock);
+	lockdep_assert_held_once(&up->port.lock);
 
 	if (dma && dma->tx_running) {
 		/*
@@ -360,13 +359,13 @@ static void omap8250_restore_regs(struct uart_8250_port *up)
 
 	omap8250_update_mdr1(up, priv);
 
-	__omap8250_set_mctrl(port, port->mctrl);
+	__omap8250_set_mctrl(&up->port, up->port.mctrl);
 
 	serial_out(up, UART_OMAP_MDR3, priv->mdr3);
 
-	if (port->rs485.flags & SER_RS485_ENABLED &&
-	    port->rs485_config == serial8250_em485_config)
-		serial8250_em485_stop_tx(up, true);
+	if (up->port.rs485.flags & SER_RS485_ENABLED &&
+	    up->port.rs485_config == serial8250_em485_config)
+		serial8250_em485_stop_tx(up);
 }
 
 /*
@@ -378,7 +377,7 @@ static void omap_8250_set_termios(struct uart_port *port,
 				  const struct ktermios *old)
 {
 	struct uart_8250_port *up = up_to_u8250p(port);
-	struct omap8250_priv *priv = port->private_data;
+	struct omap8250_priv *priv = up->port.private_data;
 	unsigned char cval = 0;
 	unsigned int baud;
 
@@ -413,45 +412,39 @@ static void omap_8250_set_termios(struct uart_port *port,
 	 */
 	uart_update_timeout(port, termios->c_cflag, baud);
 
-	/*
-	 * Specify which conditions may be considered for error
-	 * handling and the ignoring of characters. The actual
-	 * ignoring of characters only occurs if the bit is set
-	 * in @ignore_status_mask as well.
-	 */
-	port->read_status_mask = UART_LSR_OE | UART_LSR_DR;
+	up->port.read_status_mask = UART_LSR_OE | UART_LSR_THRE | UART_LSR_DR;
 	if (termios->c_iflag & INPCK)
-		port->read_status_mask |= UART_LSR_FE | UART_LSR_PE;
+		up->port.read_status_mask |= UART_LSR_FE | UART_LSR_PE;
 	if (termios->c_iflag & (IGNBRK | PARMRK))
-		port->read_status_mask |= UART_LSR_BI;
+		up->port.read_status_mask |= UART_LSR_BI;
 
 	/*
 	 * Characters to ignore
 	 */
-	port->ignore_status_mask = 0;
+	up->port.ignore_status_mask = 0;
 	if (termios->c_iflag & IGNPAR)
-		port->ignore_status_mask |= UART_LSR_PE | UART_LSR_FE;
+		up->port.ignore_status_mask |= UART_LSR_PE | UART_LSR_FE;
 	if (termios->c_iflag & IGNBRK) {
-		port->ignore_status_mask |= UART_LSR_BI;
+		up->port.ignore_status_mask |= UART_LSR_BI;
 		/*
 		 * If we're ignoring parity and break indicators,
 		 * ignore overruns too (for real raw support).
 		 */
 		if (termios->c_iflag & IGNPAR)
-			port->ignore_status_mask |= UART_LSR_OE;
+			up->port.ignore_status_mask |= UART_LSR_OE;
 	}
 
 	/*
 	 * ignore all characters if CREAD is not set
 	 */
 	if ((termios->c_cflag & CREAD) == 0)
-		port->ignore_status_mask |= UART_LSR_DR;
+		up->port.ignore_status_mask |= UART_LSR_DR;
 
 	/*
 	 * Modem status interrupts
 	 */
 	up->ier &= ~UART_IER_MSI;
-	if (UART_ENABLE_MS(port, termios->c_cflag))
+	if (UART_ENABLE_MS(&up->port, termios->c_cflag))
 		up->ier |= UART_IER_MSI;
 
 	up->lcr = cval;
@@ -489,15 +482,15 @@ static void omap_8250_set_termios(struct uart_port *port,
 	priv->xoff = termios->c_cc[VSTOP];
 
 	priv->efr = 0;
-	port->status &= ~(UPSTAT_AUTOCTS | UPSTAT_AUTORTS | UPSTAT_AUTOXOFF);
+	up->port.status &= ~(UPSTAT_AUTOCTS | UPSTAT_AUTORTS | UPSTAT_AUTOXOFF);
 
-	if (termios->c_cflag & CRTSCTS && port->flags & UPF_HARD_FLOW &&
+	if (termios->c_cflag & CRTSCTS && up->port.flags & UPF_HARD_FLOW &&
 	    !mctrl_gpio_to_gpiod(up->gpios, UART_GPIO_RTS) &&
 	    !mctrl_gpio_to_gpiod(up->gpios, UART_GPIO_CTS)) {
 		/* Enable AUTOCTS (autoRTS is enabled when RTS is raised) */
-		port->status |= UPSTAT_AUTOCTS | UPSTAT_AUTORTS;
+		up->port.status |= UPSTAT_AUTOCTS | UPSTAT_AUTORTS;
 		priv->efr |= UART_EFR_CTS;
-	} else	if (port->flags & UPF_SOFT_FLOW) {
+	} else	if (up->port.flags & UPF_SOFT_FLOW) {
 		/*
 		 * OMAP rx s/w flow control is borked; the transmitter remains
 		 * stuck off even if rx flow control is subsequently disabled
@@ -509,7 +502,7 @@ static void omap_8250_set_termios(struct uart_port *port,
 		 * Transmit XON1, XOFF1
 		 */
 		if (termios->c_iflag & IXOFF) {
-			port->status |= UPSTAT_AUTOXOFF;
+			up->port.status |= UPSTAT_AUTOXOFF;
 			priv->efr |= OMAP_UART_SW_TX;
 		}
 	}
@@ -693,7 +686,7 @@ static irqreturn_t omap8250_irq(int irq, void *dev_id)
 
 		/* Synchronize UART_IER access against the console. */
 		uart_port_lock(port);
-		up->ier = serial_port_in(port, UART_IER);
+		up->ier = port->serial_in(port, UART_IER);
 		if (up->ier & (UART_IER_RLSI | UART_IER_RDI)) {
 			port->ops->stop_rx(port);
 		} else {
@@ -771,7 +764,7 @@ static int omap_8250_startup(struct uart_port *port)
 		uart_port_unlock_irq(port);
 	}
 
-	enable_irq(port->irq);
+	enable_irq(up->port.irq);
 
 	pm_runtime_mark_last_busy(port->dev);
 	pm_runtime_put_autosuspend(port->dev);
@@ -798,7 +791,7 @@ static void omap_8250_shutdown(struct uart_port *port)
 	up->ier = 0;
 	serial_out(up, UART_IER, 0);
 	uart_port_unlock_irq(port);
-	disable_irq_nosync(port->irq);
+	disable_irq_nosync(up->port.irq);
 	dev_pm_clear_wake_irq(port->dev);
 
 	serial8250_release_dma(up);
@@ -845,6 +838,7 @@ static void omap_8250_unthrottle(struct uart_port *port)
 	if (up->dma)
 		up->dma->rx_dma(up);
 	up->ier |= UART_IER_RLSI | UART_IER_RDI;
+	port->read_status_mask |= UART_LSR_DR;
 	serial_out(up, UART_IER, up->ier);
 	uart_port_unlock_irqrestore(port, flags);
 
@@ -1305,13 +1299,13 @@ static void am654_8250_handle_rx_dma(struct uart_8250_port *up, u8 iir,
 
 /*
  * This is mostly serial8250_handle_irq(). We have a slightly different DMA
- * hook for RX/TX and need different logic for them in the ISR. Therefore we
+ * hoook for RX/TX and need different logic for them in the ISR. Therefore we
  * use the default routine in the non-DMA case and this one for with DMA.
  */
 static int omap_8250_dma_handle_irq(struct uart_port *port)
 {
 	struct uart_8250_port *up = up_to_u8250p(port);
-	struct omap8250_priv *priv = port->private_data;
+	struct omap8250_priv *priv = up->port.private_data;
 	u16 status;
 	u8 iir;
 
@@ -1333,13 +1327,13 @@ static int omap_8250_dma_handle_irq(struct uart_port *port)
 
 	serial8250_modem_status(up);
 	if (status & UART_LSR_THRE && up->dma->tx_err) {
-		if (uart_tx_stopped(port) ||
-		    kfifo_is_empty(&port->state->port.xmit_fifo)) {
+		if (uart_tx_stopped(&up->port) ||
+		    kfifo_is_empty(&up->port.state->port.xmit_fifo)) {
 			up->dma->tx_err = 0;
 			serial8250_tx_chars(up);
 		} else  {
 			/*
-			 * try again due to an earlier failure which
+			 * try again due to an earlier failer which
 			 * might have been resolved by now.
 			 */
 			if (omap_8250_tx_dma(up))
@@ -1868,7 +1862,7 @@ static struct platform_driver omap8250_platform_driver = {
 		.of_match_table = omap8250_dt_ids,
 	},
 	.probe			= omap8250_probe,
-	.remove			= omap8250_remove,
+	.remove_new		= omap8250_remove,
 };
 module_platform_driver(omap8250_platform_driver);
 

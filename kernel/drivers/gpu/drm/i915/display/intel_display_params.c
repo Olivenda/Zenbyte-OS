@@ -3,13 +3,8 @@
  * Copyright © 2023 Intel Corporation
  */
 
-#include <linux/moduleparam.h>
-#include <linux/slab.h>
-#include <linux/string_choices.h>
-
-#include <drm/drm_print.h>
-
 #include "intel_display_params.h"
+#include "i915_drv.h"
 
 #define intel_display_param_named(name, T, perm, desc) \
 	module_param_named(name, intel_display_modparams.name, T, perm); \
@@ -61,9 +56,6 @@ intel_display_param_named_unsafe(enable_dpt, bool, 0400,
 
 intel_display_param_named_unsafe(enable_dsb, bool, 0400,
 	"Enable display state buffer (DSB) (default: true)");
-
-intel_display_param_named_unsafe(enable_flipq, bool, 0400,
-	"Enable DMC flip queue (default: false)");
 
 intel_display_param_named_unsafe(enable_sagv, bool, 0400,
 	"Enable system agent voltage/frequency scaling (SAGV) (default: true)");
@@ -131,10 +123,10 @@ intel_display_param_named_unsafe(enable_psr2_sel_fetch, bool, 0400,
 	"(0=disabled, 1=enabled) "
 	"Default: 1");
 
-intel_display_param_named_unsafe(enable_dmc_wl, int, 0400,
+intel_display_param_named_unsafe(enable_dmc_wl, bool, 0400,
 	"Enable DMC wakelock "
-	"(-1=use per-chip default, 0=disabled, 1=enabled, 2=match any register, 3=always locked) "
-	"Default: -1");
+	"(0=disabled, 1=enabled) "
+	"Default: 0");
 
 __maybe_unused
 static void _param_print_bool(struct drm_printer *p, const char *driver_name,
@@ -181,16 +173,14 @@ static void _param_print_charp(struct drm_printer *p, const char *driver_name,
 
 /**
  * intel_display_params_dump - dump intel display modparams
- * @params: display params
- * @driver_name: driver name to use for printing
+ * @display: display device
  * @p: the &drm_printer
  *
  * Pretty printer for i915 modparams.
  */
-void intel_display_params_dump(const struct intel_display_params *params,
-			       const char *driver_name, struct drm_printer *p)
+void intel_display_params_dump(struct intel_display *display, struct drm_printer *p)
 {
-#define PRINT(T, x, ...) _param_print(p, driver_name, #x, params->x);
+#define PRINT(T, x, ...) _param_print(p, display->drm->driver->name, #x, display->params.x);
 	INTEL_DISPLAY_PARAMS_FOR_EACH(PRINT);
 #undef PRINT
 }

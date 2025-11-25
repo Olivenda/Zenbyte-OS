@@ -6,7 +6,6 @@
 #ifndef _LINUX_CORESIGHT_H
 #define _LINUX_CORESIGHT_H
 
-#include <linux/acpi.h>
 #include <linux/amba/bus.h>
 #include <linux/clk.h>
 #include <linux/device.h>
@@ -72,8 +71,7 @@ enum coresight_dev_subtype_source {
 
 enum coresight_dev_subtype_helper {
 	CORESIGHT_DEV_SUBTYPE_HELPER_CATU,
-	CORESIGHT_DEV_SUBTYPE_HELPER_ECT_CTI,
-	CORESIGHT_DEV_SUBTYPE_HELPER_CTCU,
+	CORESIGHT_DEV_SUBTYPE_HELPER_ECT_CTI
 };
 
 /**
@@ -174,9 +172,6 @@ struct coresight_desc {
  * @dest_dev:	a @coresight_device representation of the component
 		connected to @src_port. NULL until the device is created
  * @link: Representation of the connection as a sysfs link.
- * @filter_src_fwnode: filter source component's fwnode handle.
- * @filter_src_dev: a @coresight_device representation of the component that
-		needs to be filtered.
  *
  * The full connection structure looks like this, where in_conns store
  * references to same connection as the source device's out_conns.
@@ -205,10 +200,8 @@ struct coresight_connection {
 	struct coresight_device *dest_dev;
 	struct coresight_sysfs_link *link;
 	struct coresight_device *src_dev;
-	struct fwnode_handle *filter_src_fwnode;
-	struct coresight_device *filter_src_dev;
-	int src_refcnt;
-	int dest_refcnt;
+	atomic_t src_refcnt;
+	atomic_t dest_refcnt;
 };
 
 /**
@@ -240,7 +233,7 @@ struct coresight_trace_id_map {
 	DECLARE_BITMAP(used_ids, CORESIGHT_TRACE_IDS_MAX);
 	atomic_t __percpu *cpu_map;
 	atomic_t perf_cs_etm_session_active;
-	raw_spinlock_t lock;
+	spinlock_t lock;
 };
 
 /**
@@ -303,7 +296,7 @@ struct coresight_device {
 	/* system configuration and feature lists */
 	struct list_head feature_csdev_list;
 	struct list_head config_csdev_list;
-	raw_spinlock_t cscfg_csdev_lock;
+	spinlock_t cscfg_csdev_lock;
 	void *active_cscfg_ctxt;
 };
 
@@ -331,29 +324,17 @@ static struct coresight_dev_list (var) = {				\
 
 #define to_coresight_device(d) container_of(d, struct coresight_device, dev)
 
-/**
- * struct coresight_path - data needed by enable/disable path
- * @path_list:              path from source to sink.
- * @trace_id:          trace_id of the whole path.
- */
-struct coresight_path {
-	struct list_head	path_list;
-	u8			trace_id;
-};
-
 enum cs_mode {
 	CS_MODE_DISABLED,
 	CS_MODE_SYSFS,
 	CS_MODE_PERF,
 };
 
-#define coresight_ops(csdev)	csdev->ops
 #define source_ops(csdev)	csdev->ops->source_ops
 #define sink_ops(csdev)		csdev->ops->sink_ops
 #define link_ops(csdev)		csdev->ops->link_ops
 #define helper_ops(csdev)	csdev->ops->helper_ops
 #define ect_ops(csdev)		csdev->ops->ect_ops
-#define panic_ops(csdev)	csdev->ops->panic_ops
 
 /**
  * struct coresight_ops_sink - basic operations for a sink
@@ -399,17 +380,13 @@ struct coresight_ops_link {
  *		is associated to.
  * @enable:	enables tracing for a source.
  * @disable:	disables tracing for a source.
- * @resume_perf: resumes tracing for a source in perf session.
- * @pause_perf:	pauses tracing for a source in perf session.
  */
 struct coresight_ops_source {
 	int (*cpu_id)(struct coresight_device *csdev);
 	int (*enable)(struct coresight_device *csdev, struct perf_event *event,
-		      enum cs_mode mode, struct coresight_path *path);
+		      enum cs_mode mode, struct coresight_trace_id_map *id_map);
 	void (*disable)(struct coresight_device *csdev,
 			struct perf_event *event);
-	int (*resume_perf)(struct coresight_device *csdev);
-	void (*pause_perf)(struct coresight_device *csdev);
 };
 
 /**
@@ -427,24 +404,11 @@ struct coresight_ops_helper {
 	int (*disable)(struct coresight_device *csdev, void *data);
 };
 
-
-/**
- * struct coresight_ops_panic - Generic device ops for panic handing
- *
- * @sync	: Sync the device register state/trace data
- */
-struct coresight_ops_panic {
-	int (*sync)(struct coresight_device *csdev);
-};
-
 struct coresight_ops {
-	int (*trace_id)(struct coresight_device *csdev, enum cs_mode mode,
-			struct coresight_device *sink);
 	const struct coresight_ops_sink *sink_ops;
 	const struct coresight_ops_link *link_ops;
 	const struct coresight_ops_source *source_ops;
 	const struct coresight_ops_helper *helper_ops;
-	const struct coresight_ops_panic *panic_ops;
 };
 
 static inline u32 csdev_access_relaxed_read32(struct csdev_access *csa,
@@ -481,24 +445,23 @@ static inline bool is_coresight_device(void __iomem *base)
  * Returns:
  *
  * clk   - Clock is found and enabled
- * NULL  - Clock is controlled by firmware (ACPI device only) or when managed
- *	   by the AMBA bus driver instead
+ * NULL  - clock is not found
  * ERROR - Clock is found but failed to enable
  */
 static inline struct clk *coresight_get_enable_apb_pclk(struct device *dev)
 {
-	struct clk *pclk = NULL;
+	struct clk *pclk;
+	int ret;
 
-	/* Firmware controls clocks for an ACPI device. */
-	if (has_acpi_companion(dev))
+	pclk = clk_get(dev, "apb_pclk");
+	if (IS_ERR(pclk))
 		return NULL;
 
-	if (!dev_is_amba(dev)) {
-		pclk = devm_clk_get_optional_enabled(dev, "apb_pclk");
-		if (!pclk)
-			pclk = devm_clk_get_optional_enabled(dev, "apb");
+	ret = clk_prepare_enable(pclk);
+	if (ret) {
+		clk_put(pclk);
+		return ERR_PTR(ret);
 	}
-
 	return pclk;
 }
 
@@ -625,14 +588,9 @@ static inline void csdev_access_write64(struct csdev_access *csa, u64 val, u32 o
 }
 #endif	/* CONFIG_64BIT */
 
-static inline bool coresight_is_device_source(struct coresight_device *csdev)
-{
-	return csdev && (csdev->type == CORESIGHT_DEV_TYPE_SOURCE);
-}
-
 static inline bool coresight_is_percpu_source(struct coresight_device *csdev)
 {
-	return csdev && coresight_is_device_source(csdev) &&
+	return csdev && (csdev->type == CORESIGHT_DEV_TYPE_SOURCE) &&
 	       (csdev->subtype.source_subtype == CORESIGHT_DEV_SUBTYPE_SOURCE_PROC);
 }
 
@@ -674,27 +632,27 @@ static inline void coresight_set_mode(struct coresight_device *csdev,
 	local_set(&csdev->mode, new_mode);
 }
 
-struct coresight_device *coresight_register(struct coresight_desc *desc);
-void coresight_unregister(struct coresight_device *csdev);
-int coresight_enable_sysfs(struct coresight_device *csdev);
-void coresight_disable_sysfs(struct coresight_device *csdev);
-int coresight_timeout(struct csdev_access *csa, u32 offset, int position, int value);
+extern struct coresight_device *
+coresight_register(struct coresight_desc *desc);
+extern void coresight_unregister(struct coresight_device *csdev);
+extern int coresight_enable_sysfs(struct coresight_device *csdev);
+extern void coresight_disable_sysfs(struct coresight_device *csdev);
+extern int coresight_timeout(struct csdev_access *csa, u32 offset,
+			     int position, int value);
 typedef void (*coresight_timeout_cb_t) (struct csdev_access *, u32, int, int);
-int coresight_timeout_action(struct csdev_access *csa, u32 offset, int position, int value,
-			     coresight_timeout_cb_t cb);
-int coresight_claim_device(struct coresight_device *csdev);
-int coresight_claim_device_unlocked(struct coresight_device *csdev);
+extern int coresight_timeout_action(struct csdev_access *csa, u32 offset,
+					int position, int value,
+					coresight_timeout_cb_t cb);
 
-int coresight_claim_device(struct coresight_device *csdev);
-int coresight_claim_device_unlocked(struct coresight_device *csdev);
-void coresight_clear_self_claim_tag(struct csdev_access *csa);
-void coresight_clear_self_claim_tag_unlocked(struct csdev_access *csa);
-void coresight_disclaim_device(struct coresight_device *csdev);
-void coresight_disclaim_device_unlocked(struct coresight_device *csdev);
-char *coresight_alloc_device_name(struct coresight_dev_list *devs,
+extern int coresight_claim_device(struct coresight_device *csdev);
+extern int coresight_claim_device_unlocked(struct coresight_device *csdev);
+
+extern void coresight_disclaim_device(struct coresight_device *csdev);
+extern void coresight_disclaim_device_unlocked(struct coresight_device *csdev);
+extern char *coresight_alloc_device_name(struct coresight_dev_list *devs,
 					 struct device *dev);
 
-bool coresight_loses_context_with_cpu(struct device *dev);
+extern bool coresight_loses_context_with_cpu(struct device *dev);
 
 u32 coresight_relaxed_read32(struct coresight_device *csdev, u32 offset);
 u32 coresight_read32(struct coresight_device *csdev, u32 offset);
@@ -707,8 +665,7 @@ void coresight_relaxed_write64(struct coresight_device *csdev,
 			       u64 val, u32 offset);
 void coresight_write64(struct coresight_device *csdev, u64 val, u32 offset);
 
-int coresight_get_cpu(struct device *dev);
-int coresight_get_static_trace_id(struct device *dev, u32 *id);
+extern int coresight_get_cpu(struct device *dev);
 
 struct coresight_platform_data *coresight_get_platform_data(struct device *dev);
 struct coresight_connection *
@@ -730,6 +687,4 @@ int coresight_init_driver(const char *drv, struct amba_driver *amba_drv,
 
 void coresight_remove_driver(struct amba_driver *amba_drv,
 			     struct platform_driver *pdev_drv);
-int coresight_etm_get_trace_id(struct coresight_device *csdev, enum cs_mode mode,
-			       struct coresight_device *sink);
 #endif		/* _LINUX_COREISGHT_H */

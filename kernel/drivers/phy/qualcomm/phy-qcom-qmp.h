@@ -25,14 +25,10 @@
 #include "phy-qcom-qmp-qserdes-txrx-v6.h"
 #include "phy-qcom-qmp-qserdes-txrx-v6_20.h"
 #include "phy-qcom-qmp-qserdes-txrx-v6_n4.h"
-#include "phy-qcom-qmp-qserdes-ln-shrd-v5.h"
 #include "phy-qcom-qmp-qserdes-ln-shrd-v6.h"
 
 #include "phy-qcom-qmp-qserdes-com-v7.h"
 #include "phy-qcom-qmp-qserdes-txrx-v7.h"
-
-#include "phy-qcom-qmp-qserdes-com-v8.h"
-#include "phy-qcom-qmp-qserdes-txrx-v8.h"
 
 #include "phy-qcom-qmp-qserdes-pll.h"
 
@@ -55,8 +51,6 @@
 #include "phy-qcom-qmp-pcs-v6_20.h"
 
 #include "phy-qcom-qmp-pcs-v7.h"
-
-#include "phy-qcom-qmp-pcs-v8.h"
 
 /* QPHY_SW_RESET bit */
 #define SW_RESET				BIT(0)

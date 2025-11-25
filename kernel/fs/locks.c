@@ -97,7 +97,7 @@ static int leases_enable = 1;
 static int lease_break_time = 45;
 
 #ifdef CONFIG_SYSCTL
-static const struct ctl_table locks_sysctls[] = {
+static struct ctl_table locks_sysctls[] = {
 	{
 		.procname	= "leases-enable",
 		.data		= &leases_enable,
@@ -712,7 +712,7 @@ static void __locks_wake_up_blocks(struct file_lock_core *blocker)
 		    fl->fl_lmops && fl->fl_lmops->lm_notify)
 			fl->fl_lmops->lm_notify(fl);
 		else
-			locks_wake_up_waiter(waiter);
+			locks_wake_up(fl);
 
 		/*
 		 * The setting of flc_blocker to NULL marks the "done"
@@ -1794,7 +1794,7 @@ generic_add_lease(struct file *filp, int arg, struct file_lease **flp, void **pr
 
 	/*
 	 * In the delegation case we need mutual exclusion with
-	 * a number of operations that take the i_rwsem.  We trylock
+	 * a number of operations that take the i_mutex.  We trylock
 	 * because delegations are an optional optimization, and if
 	 * there's some chance of a conflict--we'd rather not
 	 * bother, maybe that's a sign this just isn't a good file to
@@ -2136,6 +2136,7 @@ SYSCALL_DEFINE2(flock, unsigned int, fd, unsigned int, cmd)
 {
 	int can_sleep, error, type;
 	struct file_lock fl;
+	struct fd f;
 
 	/*
 	 * LOCK_MAND locks were broken for a long time in that they never
@@ -2154,18 +2155,19 @@ SYSCALL_DEFINE2(flock, unsigned int, fd, unsigned int, cmd)
 	if (type < 0)
 		return type;
 
-	CLASS(fd, f)(fd);
-	if (fd_empty(f))
-		return -EBADF;
+	error = -EBADF;
+	f = fdget(fd);
+	if (!fd_file(f))
+		return error;
 
 	if (type != F_UNLCK && !(fd_file(f)->f_mode & (FMODE_READ | FMODE_WRITE)))
-		return -EBADF;
+		goto out_putf;
 
 	flock_make_lock(fd_file(f), &fl, type);
 
 	error = security_file_lock(fd_file(f), fl.c.flc_type);
 	if (error)
-		return error;
+		goto out_putf;
 
 	can_sleep = !(cmd & LOCK_NB);
 	if (can_sleep)
@@ -2179,6 +2181,9 @@ SYSCALL_DEFINE2(flock, unsigned int, fd, unsigned int, cmd)
 		error = locks_lock_file_wait(fd_file(f), &fl);
 
 	locks_release_private(&fl);
+ out_putf:
+	fdput(f);
+
 	return error;
 }
 

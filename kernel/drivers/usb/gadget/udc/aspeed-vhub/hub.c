@@ -22,7 +22,6 @@
 #include <linux/usb/gadget.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
-#include <linux/string_choices.h>
 #include <linux/dma-mapping.h>
 #include <linux/bcd.h>
 #include <linux/version.h>
@@ -220,7 +219,7 @@ static int ast_vhub_hub_dev_feature(struct ast_vhub_ep *ep,
 	if (wValue == USB_DEVICE_REMOTE_WAKEUP) {
 		ep->vhub->wakeup_en = is_set;
 		EPDBG(ep, "Hub remote wakeup %s\n",
-		      str_enabled_disabled(is_set));
+		      is_set ? "enabled" : "disabled");
 		return std_req_complete;
 	}
 

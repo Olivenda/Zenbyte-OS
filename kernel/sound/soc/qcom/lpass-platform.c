@@ -1239,16 +1239,14 @@ static int lpass_platform_copy(struct snd_soc_component *component,
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		if (is_cdc_dma_port(dai_id)) {
-			if (copy_from_iter_toio(dma_buf, bytes, buf) != bytes)
-				ret = -EFAULT;
+			ret = copy_from_iter_toio(dma_buf, buf, bytes);
 		} else {
 			if (copy_from_iter((void __force *)dma_buf, bytes, buf) != bytes)
 				ret = -EFAULT;
 		}
 	} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 		if (is_cdc_dma_port(dai_id)) {
-			if (copy_to_iter_fromio(dma_buf, bytes, buf) != bytes)
-				ret = -EFAULT;
+			ret = copy_to_iter_fromio(buf, dma_buf, bytes);
 		} else {
 			if (copy_to_iter((void __force *)dma_buf, bytes, buf) != bytes)
 				ret = -EFAULT;

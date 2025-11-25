@@ -858,5 +858,5 @@ struct platform_driver tegra_csi_driver = {
 		.pm		= &tegra_csi_pm_ops,
 	},
 	.probe			= tegra_csi_probe,
-	.remove			= tegra_csi_remove,
+	.remove_new		= tegra_csi_remove,
 };

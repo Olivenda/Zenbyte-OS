@@ -701,7 +701,7 @@ static int remove_ctl(struct snd_card *card, const char *name)
 {
 	struct snd_ctl_elem_id id;
 	memset(&id, 0, sizeof(id));
-	strscpy(id.name, name);
+	strcpy(id.name, name);
 	id.iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	return snd_ctl_remove_id(card, &id);
 }
@@ -849,7 +849,7 @@ int snd_ca0106_mixer(struct snd_ca0106 *emu)
 			return err;
 	}
 
-	strscpy(card->mixername, "CA0106");
+	strcpy(card->mixername, "CA0106");
         return 0;
 }
 

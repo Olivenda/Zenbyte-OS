@@ -1448,7 +1448,6 @@ static void atom_get_vbios_pn(struct atom_context *ctx)
 		if (vbios_str == NULL)
 			vbios_str += sizeof(BIOS_ATOM_PREFIX) - 1;
 	}
-	OPTIMIZER_HIDE_VAR(vbios_str);
 	if (vbios_str != NULL && *vbios_str == 0)
 		vbios_str++;
 

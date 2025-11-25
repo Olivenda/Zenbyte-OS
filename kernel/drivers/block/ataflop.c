@@ -494,7 +494,7 @@ static inline void start_timeout(void)
 
 static inline void stop_timeout(void)
 {
-	timer_delete(&timeout_timer);
+	del_timer(&timeout_timer);
 }
 
 /* Select the side to use. */
@@ -746,7 +746,6 @@ static int do_format(int drive, int type, struct atari_format_descr *desc)
 	unsigned char	*p;
 	int sect, nsect;
 	unsigned long	flags;
-	unsigned int memflags;
 	int ret;
 
 	if (type) {
@@ -759,7 +758,7 @@ static int do_format(int drive, int type, struct atari_format_descr *desc)
 	}
 
 	q = unit[drive].disk[type]->queue;
-	memflags = blk_mq_freeze_queue(q);
+	blk_mq_freeze_queue(q);
 	blk_mq_quiesce_queue(q);
 
 	local_irq_save(flags);
@@ -784,7 +783,7 @@ static int do_format(int drive, int type, struct atari_format_descr *desc)
 	   contents become invalid! */
 	BufferDrive = -1;
 	/* stop deselect timer */
-	timer_delete(&motor_off_timer);
+	del_timer( &motor_off_timer );
 
 	FILL( 60 * (nsect / 9), 0x4e );
 	for( sect = 0; sect < nsect; ++sect ) {
@@ -818,7 +817,7 @@ static int do_format(int drive, int type, struct atari_format_descr *desc)
 	ret = FormatError ? -EIO : 0;
 out:
 	blk_mq_unquiesce_queue(q);
-	blk_mq_unfreeze_queue(q, memflags);
+	blk_mq_unfreeze_queue(q);
 	return ret;
 }
 
@@ -1138,7 +1137,7 @@ static void fd_rwsec_done( int status )
 	DPRINT(("fd_rwsec_done()\n"));
 
 	if (read_track) {
-		timer_delete(&readtrack_timer);
+		del_timer(&readtrack_timer);
 		if (!MultReadInProgress)
 			return;
 		MultReadInProgress = 0;
@@ -1356,7 +1355,7 @@ static void fd_times_out(struct timer_list *unused)
 	/* If the timeout occurred while the readtrack_check timer was
 	 * active, we need to cancel it, else bad things will happen */
 	if (UseTrackbuffer)
-		timer_delete(&readtrack_timer);
+		del_timer( &readtrack_timer );
 	FDC_WRITE( FDCREG_CMD, FDCCMD_FORCI );
 	udelay( 25 );
 	
@@ -1566,7 +1565,7 @@ static blk_status_t ataflop_queue_rq(struct blk_mq_hw_ctx *hctx,
 	}
 
 	/* stop deselect timer */
-	timer_delete(&motor_off_timer);
+	del_timer( &motor_off_timer );
 		
 	ReqCnt = 0;
 	ReqCmd = rq_data_dir(fd_request);
@@ -2055,7 +2054,7 @@ static void atari_floppy_cleanup(void)
 		blk_mq_free_tag_set(&unit[i].tag_set);
 	}
 
-	timer_delete_sync(&fd_timer);
+	del_timer_sync(&fd_timer);
 	atari_stram_free(DMABuffer);
 }
 
@@ -2089,6 +2088,7 @@ static int __init atari_floppy_init (void)
 		unit[i].tag_set.nr_maps = 1;
 		unit[i].tag_set.queue_depth = 2;
 		unit[i].tag_set.numa_node = NUMA_NO_NODE;
+		unit[i].tag_set.flags = BLK_MQ_F_SHOULD_MERGE;
 		ret = blk_mq_alloc_tag_set(&unit[i].tag_set);
 		if (ret)
 			goto err;

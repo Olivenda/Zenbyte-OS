@@ -2320,8 +2320,7 @@ static int velocity_change_mtu(struct net_device *dev, int new_mtu)
 		if (ret < 0)
 			goto out_free_tmp_vptr_1;
 
-		netdev_lock(dev);
-		napi_disable_locked(&vptr->napi);
+		napi_disable(&vptr->napi);
 
 		spin_lock_irqsave(&vptr->lock, flags);
 
@@ -2343,13 +2342,12 @@ static int velocity_change_mtu(struct net_device *dev, int new_mtu)
 
 		velocity_give_many_rx_descs(vptr);
 
-		napi_enable_locked(&vptr->napi);
+		napi_enable(&vptr->napi);
 
 		mac_enable_int(vptr->mac_regs);
 		netif_start_queue(dev);
 
 		spin_unlock_irqrestore(&vptr->lock, flags);
-		netdev_unlock(dev);
 
 		velocity_free_rings(tmp_vptr);
 
@@ -3249,7 +3247,7 @@ static struct pci_driver velocity_pci_driver = {
 
 static struct platform_driver velocity_platform_driver = {
 	.probe		= velocity_platform_probe,
-	.remove		= velocity_platform_remove,
+	.remove_new	= velocity_platform_remove,
 	.driver = {
 		.name = "via-velocity",
 		.of_match_table = velocity_of_ids,

@@ -454,10 +454,9 @@ int v9fs_file_fsync_dotl(struct file *filp, loff_t start, loff_t end,
 }
 
 static int
-v9fs_file_mmap_prepare(struct vm_area_desc *desc)
+v9fs_file_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	int retval;
-	struct file *filp = desc->file;
 	struct inode *inode = file_inode(filp);
 	struct v9fs_session_info *v9ses = v9fs_inode2v9ses(inode);
 
@@ -465,12 +464,12 @@ v9fs_file_mmap_prepare(struct vm_area_desc *desc)
 
 	if (!(v9ses->cache & CACHE_WRITEBACK)) {
 		p9_debug(P9_DEBUG_CACHE, "(read-only mmap mode)");
-		return generic_file_readonly_mmap_prepare(desc);
+		return generic_file_readonly_mmap(filp, vma);
 	}
 
-	retval = generic_file_mmap_prepare(desc);
+	retval = generic_file_mmap(filp, vma);
 	if (!retval)
-		desc->vm_ops = &v9fs_mmap_file_vm_ops;
+		vma->vm_ops = &v9fs_mmap_file_vm_ops;
 
 	return retval;
 }
@@ -517,7 +516,7 @@ const struct file_operations v9fs_file_operations = {
 	.open = v9fs_file_open,
 	.release = v9fs_dir_release,
 	.lock = v9fs_file_lock,
-	.mmap_prepare = generic_file_readonly_mmap_prepare,
+	.mmap = generic_file_readonly_mmap,
 	.splice_read = v9fs_file_splice_read,
 	.splice_write = iter_file_splice_write,
 	.fsync = v9fs_file_fsync,
@@ -532,7 +531,7 @@ const struct file_operations v9fs_file_operations_dotl = {
 	.release = v9fs_dir_release,
 	.lock = v9fs_file_lock_dotl,
 	.flock = v9fs_file_flock_dotl,
-	.mmap_prepare = v9fs_file_mmap_prepare,
+	.mmap = v9fs_file_mmap,
 	.splice_read = v9fs_file_splice_read,
 	.splice_write = iter_file_splice_write,
 	.fsync = v9fs_file_fsync_dotl,

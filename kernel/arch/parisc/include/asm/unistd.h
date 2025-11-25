@@ -6,7 +6,7 @@
 
 #define __NR_Linux_syscalls	__NR_syscalls
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #define SYS_ify(syscall_name)   __NR_##syscall_name
 
@@ -144,7 +144,7 @@
 #define __ARCH_WANT_SYS_UTIME
 #endif
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 
 #undef STR
 

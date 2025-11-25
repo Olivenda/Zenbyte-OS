@@ -18,7 +18,6 @@
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 #include <linux/timer.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>
@@ -252,7 +251,7 @@ static int omap_ep_disable(struct usb_ep *_ep)
 	ep->has_dma = 0;
 	omap_writew(UDC_SET_HALT, UDC_CTRL);
 	list_del_init(&ep->iso);
-	timer_delete(&ep->timer);
+	del_timer(&ep->timer);
 
 	spin_unlock_irqrestore(&ep->udc->lock, flags);
 
@@ -577,13 +576,13 @@ static void finish_in_dma(struct omap_ep *ep, struct omap_req *req, int status)
 
 static void next_out_dma(struct omap_ep *ep, struct omap_req *req)
 {
-	unsigned int packets = req->req.length - req->req.actual;
+	unsigned packets = req->req.length - req->req.actual;
 	int dma_trigger = 0;
 	u16 w;
 
 	/* set up this DMA transfer, enable the fifo, start */
 	packets /= ep->ep.maxpacket;
-	packets = min_t(unsigned int, packets, UDC_RXN_TC + 1);
+	packets = min(packets, (unsigned)UDC_RXN_TC + 1);
 	req->dma_bytes = packets * ep->ep.maxpacket;
 	omap_set_dma_transfer_params(ep->lch, OMAP_DMA_DATA_TYPE_S16,
 			ep->ep.maxpacket >> 1, packets,
@@ -1253,7 +1252,7 @@ static int omap_vbus_session(struct usb_gadget *gadget, int is_active)
 
 	udc = container_of(gadget, struct omap_udc, gadget);
 	spin_lock_irqsave(&udc->lock, flags);
-	VDBG("VBUS %s\n", str_on_off(is_active));
+	VDBG("VBUS %s\n", is_active ? "on" : "off");
 	udc->vbus_active = (is_active != 0);
 	if (cpu_is_omap15xx()) {
 		/* "software" detect, ignored if !VBUS_MODE_1510 */
@@ -1860,7 +1859,7 @@ static irqreturn_t omap_udc_irq(int irq, void *_udc)
 
 static void pio_out_timer(struct timer_list *t)
 {
-	struct omap_ep	*ep = timer_container_of(ep, t, timer);
+	struct omap_ep	*ep = from_timer(ep, t, timer);
 	unsigned long	flags;
 	u16		stat_flg;
 
@@ -2981,7 +2980,7 @@ static int omap_udc_resume(struct platform_device *dev)
 
 static struct platform_driver udc_driver = {
 	.probe		= omap_udc_probe,
-	.remove		= omap_udc_remove,
+	.remove_new	= omap_udc_remove,
 	.suspend	= omap_udc_suspend,
 	.resume		= omap_udc_resume,
 	.driver		= {

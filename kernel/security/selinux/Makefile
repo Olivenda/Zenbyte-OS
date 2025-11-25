@@ -33,12 +33,10 @@ $(addprefix $(obj)/,$(selinux-y)): $(obj)/flask.h
 quiet_cmd_genhdrs = GEN     $(addprefix $(obj)/,$(genhdrs))
       cmd_genhdrs = $< $(addprefix $(obj)/,$(genhdrs))
 
-targets += $(genhdrs)
-
-# see the note above, replace the 'flask.h' rule with the line below:
-#  $(addprefix $(obj)/,$(genhdrs)) &: $(obj)/genheaders FORCE
-$(obj)/flask.h: $(obj)/genheaders FORCE
+# see the note above, replace the $targets and 'flask.h' rule with the lines
+# below:
+#  targets += $(genhdrs)
+#  $(addprefix $(obj)/,$(genhdrs)) &: scripts/selinux/...
+targets += flask.h
+$(obj)/flask.h: scripts/selinux/genheaders/genheaders FORCE
 	$(call if_changed,genhdrs)
-
-hostprogs := genheaders
-HOST_EXTRACFLAGS += -I$(srctree)/security/selinux/include

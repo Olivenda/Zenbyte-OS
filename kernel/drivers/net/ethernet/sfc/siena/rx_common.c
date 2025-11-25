@@ -268,6 +268,8 @@ void efx_siena_init_rx_queue(struct efx_rx_queue *rx_queue)
 			  "Failure to initialise XDP queue information rc=%d\n",
 			  rc);
 		efx->xdp_rxq_info_failed = true;
+	} else {
+		rx_queue->xdp_rxq_info_valid = true;
 	}
 
 	/* Set up RX descriptor ring */
@@ -282,7 +284,7 @@ void efx_siena_fini_rx_queue(struct efx_rx_queue *rx_queue)
 	netif_dbg(rx_queue->efx, drv, rx_queue->efx->net_dev,
 		  "shutting down RX queue %d\n", efx_rx_queue_index(rx_queue));
 
-	timer_delete_sync(&rx_queue->slow_fill);
+	del_timer_sync(&rx_queue->slow_fill);
 
 	/* Release RX buffers from the current read ptr to the write ptr */
 	if (rx_queue->buffer) {
@@ -297,8 +299,10 @@ void efx_siena_fini_rx_queue(struct efx_rx_queue *rx_queue)
 
 	efx_fini_rx_recycle_ring(rx_queue);
 
-	if (xdp_rxq_info_is_reg(&rx_queue->xdp_rxq_info))
+	if (rx_queue->xdp_rxq_info_valid)
 		xdp_rxq_info_unreg(&rx_queue->xdp_rxq_info);
+
+	rx_queue->xdp_rxq_info_valid = false;
 }
 
 void efx_siena_remove_rx_queue(struct efx_rx_queue *rx_queue)
@@ -345,8 +349,7 @@ void efx_siena_free_rx_buffers(struct efx_rx_queue *rx_queue,
 
 void efx_siena_rx_slow_fill(struct timer_list *t)
 {
-	struct efx_rx_queue *rx_queue = timer_container_of(rx_queue, t,
-							   slow_fill);
+	struct efx_rx_queue *rx_queue = from_timer(rx_queue, t, slow_fill);
 
 	/* Post an event to cause NAPI to run and refill the queue */
 	efx_nic_generate_fill_event(rx_queue);
@@ -885,7 +888,7 @@ static void efx_filter_rfs_work(struct work_struct *data)
 
 	/* Release references */
 	clear_bit(slot_idx, &efx->rps_slot_map);
-	netdev_put(req->net_dev, &req->net_dev_tracker);
+	dev_put(req->net_dev);
 }
 
 int efx_siena_filter_rfs(struct net_device *net_dev, const struct sk_buff *skb,
@@ -977,8 +980,7 @@ int efx_siena_filter_rfs(struct net_device *net_dev, const struct sk_buff *skb,
 	}
 
 	/* Queue the request */
-	req->net_dev = net_dev;
-	netdev_hold(req->net_dev, &req->net_dev_tracker, GFP_ATOMIC);
+	dev_hold(req->net_dev = net_dev);
 	INIT_WORK(&req->work, efx_filter_rfs_work);
 	req->rxq_index = rxq_index;
 	req->flow_id = flow_id;

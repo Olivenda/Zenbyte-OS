@@ -54,6 +54,12 @@ static const struct hwmon_channel_info *const powerz_info[] = {
 	NULL
 };
 
+static umode_t powerz_is_visible(const void *data, enum hwmon_sensor_types type,
+				 u32 attr, int channel)
+{
+	return 0444;
+}
+
 static int powerz_read_string(struct device *dev, enum hwmon_sensor_types type,
 			      u32 attr, int channel, const char **str)
 {
@@ -195,7 +201,7 @@ out:
 }
 
 static const struct hwmon_ops powerz_hwmon_ops = {
-	.visible = 0444,
+	.is_visible = powerz_is_visible,
 	.read = powerz_read,
 	.read_string = powerz_read_string,
 };

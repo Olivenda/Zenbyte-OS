@@ -150,8 +150,6 @@ static int mt7921s_probe(struct sdio_func *func,
 	if (ret)
 		goto error;
 
-	atomic_set(&mdev->bus_hung, false);
-
 	mdev->rev = (mt76_rr(dev, MT_HW_CHIPID) << 16) |
 		    (mt76_rr(dev, MT_HW_REV) & 0xff);
 	dev_dbg(mdev->dev, "ASIC revision: %04x\n", mdev->rev);
@@ -242,7 +240,7 @@ static int mt7921s_suspend(struct device *__dev)
 			   mt76s_txqs_empty(&dev->mt76), 5 * HZ);
 
 	/* It is supposed that SDIO bus is idle at the point */
-	err = mt76_connac_mcu_set_hif_suspend(mdev, true, true);
+	err = mt76_connac_mcu_set_hif_suspend(mdev, true);
 	if (err)
 		goto restore_worker;
 
@@ -260,7 +258,7 @@ static int mt7921s_suspend(struct device *__dev)
 restore_txrx_worker:
 	mt76_worker_enable(&mdev->sdio.net_worker);
 	mt76_worker_enable(&mdev->sdio.txrx_worker);
-	mt76_connac_mcu_set_hif_suspend(mdev, false, true);
+	mt76_connac_mcu_set_hif_suspend(mdev, false);
 
 restore_worker:
 	mt76_worker_enable(&mdev->tx_worker);
@@ -304,7 +302,7 @@ static int mt7921s_resume(struct device *__dev)
 	if (!pm->ds_enable)
 		mt76_connac_mcu_set_deep_sleep(mdev, false);
 
-	err = mt76_connac_mcu_set_hif_suspend(mdev, false, true);
+	err = mt76_connac_mcu_set_hif_suspend(mdev, false);
 failed:
 	pm->suspended = false;
 

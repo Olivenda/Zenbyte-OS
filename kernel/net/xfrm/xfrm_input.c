@@ -48,7 +48,7 @@ static DEFINE_SPINLOCK(xfrm_input_afinfo_lock);
 static struct xfrm_input_afinfo const __rcu *xfrm_input_afinfo[2][AF_INET6 + 1];
 
 static struct gro_cells gro_cells;
-static struct net_device *xfrm_napi_dev;
+static struct net_device xfrm_napi_dev;
 
 static DEFINE_PER_CPU(struct xfrm_trans_tasklet, xfrm_trans_tasklet);
 
@@ -446,9 +446,6 @@ static int xfrm_inner_mode_input(struct xfrm_state *x,
 		WARN_ON_ONCE(1);
 		break;
 	default:
-		if (x->mode_cbs && x->mode_cbs->input)
-			return x->mode_cbs->input(x, skb);
-
 		WARN_ON_ONCE(1);
 		break;
 	}
@@ -456,10 +453,6 @@ static int xfrm_inner_mode_input(struct xfrm_state *x,
 	return -EOPNOTSUPP;
 }
 
-/* NOTE: encap_type - In addition to the normal (non-negative) values for
- * encap_type, a negative value of -1 or -2 can be used to resume/restart this
- * function after a previous invocation early terminated for async operation.
- */
 int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 {
 	const struct xfrm_state_afinfo *afinfo;
@@ -496,14 +489,9 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 
 		family = x->props.family;
 
-		/* An encap_type of -2 indicates reconstructed inner packet */
-		if (encap_type == -2)
-			goto resume_decapped;
-
 		/* An encap_type of -1 indicates async resumption. */
 		if (encap_type == -1) {
 			async = 1;
-			dev_put(skb->dev);
 			seq = XFRM_SKB_CB(skb)->seq.input.low;
 			goto resume;
 		}
@@ -650,18 +638,18 @@ lock:
 		XFRM_SKB_CB(skb)->seq.input.low = seq;
 		XFRM_SKB_CB(skb)->seq.input.hi = seq_hi;
 
-		if (crypto_done) {
+		dev_hold(skb->dev);
+
+		if (crypto_done)
 			nexthdr = x->type_offload->input_tail(x, skb);
-		} else {
-			dev_hold(skb->dev);
-
+		else
 			nexthdr = x->type->input(x, skb);
-			if (nexthdr == -EINPROGRESS)
-				return 0;
 
-			dev_put(skb->dev);
-		}
+		if (nexthdr == -EINPROGRESS)
+			return 0;
 resume:
+		dev_put(skb->dev);
+
 		spin_lock(&x->lock);
 		if (nexthdr < 0) {
 			if (nexthdr == -EBADMSG) {
@@ -691,14 +679,11 @@ resume:
 
 		XFRM_MODE_SKB_CB(skb)->protocol = nexthdr;
 
-		err = xfrm_inner_mode_input(x, skb);
-		if (err == -EINPROGRESS)
-			return 0;
-		else if (err) {
+		if (xfrm_inner_mode_input(x, skb)) {
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMINSTATEMODEERROR);
 			goto drop;
 		}
-resume_decapped:
+
 		if (x->outer_mode.flags & XFRM_MODE_FLAG_TUNNEL) {
 			decaps = 1;
 			break;
@@ -826,11 +811,8 @@ void __init xfrm_input_init(void)
 	int err;
 	int i;
 
-	xfrm_napi_dev = alloc_netdev_dummy(0);
-	if (!xfrm_napi_dev)
-		panic("Failed to allocate XFRM dummy netdev\n");
-
-	err = gro_cells_init(&gro_cells, xfrm_napi_dev);
+	init_dummy_netdev(&xfrm_napi_dev);
+	err = gro_cells_init(&gro_cells, &xfrm_napi_dev);
 	if (err)
 		gro_cells.cells = NULL;
 

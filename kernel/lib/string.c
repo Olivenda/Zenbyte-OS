@@ -104,12 +104,6 @@ char *strncpy(char *dest, const char *src, size_t count)
 EXPORT_SYMBOL(strncpy);
 #endif
 
-#ifdef __BIG_ENDIAN
-# define ALLBUTLAST_BYTE_MASK (~255ul)
-#else
-# define ALLBUTLAST_BYTE_MASK (~0ul >> 8)
-#endif
-
 ssize_t sized_strscpy(char *dest, const char *src, size_t count)
 {
 	const struct word_at_a_time constants = WORD_AT_A_TIME_CONSTANTS;
@@ -160,18 +154,13 @@ ssize_t sized_strscpy(char *dest, const char *src, size_t count)
 			*(unsigned long *)(dest+res) = c & zero_bytemask(data);
 			return res + find_zero(data);
 		}
-		count -= sizeof(unsigned long);
-		if (unlikely(!count)) {
-			c &= ALLBUTLAST_BYTE_MASK;
-			*(unsigned long *)(dest+res) = c;
-			return -E2BIG;
-		}
 		*(unsigned long *)(dest+res) = c;
 		res += sizeof(unsigned long);
+		count -= sizeof(unsigned long);
 		max -= sizeof(unsigned long);
 	}
 
-	while (count > 1) {
+	while (count) {
 		char c;
 
 		c = src[res];
@@ -182,11 +171,11 @@ ssize_t sized_strscpy(char *dest, const char *src, size_t count)
 		count--;
 	}
 
-	/* Force NUL-termination. */
-	dest[res] = '\0';
+	/* Hit buffer length without finding a NUL; force NUL-termination. */
+	if (res)
+		dest[res-1] = '\0';
 
-	/* Return E2BIG if the source didn't stop */
-	return src[res] ? -E2BIG : res;
+	return -E2BIG;
 }
 EXPORT_SYMBOL(sized_strscpy);
 

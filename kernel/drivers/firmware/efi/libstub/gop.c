@@ -133,11 +133,13 @@ void efi_parse_option_graphics(char *option)
 
 static u32 choose_mode_modenum(efi_graphics_output_protocol_t *gop)
 {
-	efi_graphics_output_mode_info_t *info __free(efi_pool) = NULL;
-	efi_graphics_output_protocol_mode_t *mode;
-	unsigned long info_size;
-	u32 max_mode, cur_mode;
 	efi_status_t status;
+
+	efi_graphics_output_protocol_mode_t *mode;
+	efi_graphics_output_mode_info_t *info;
+	unsigned long info_size;
+
+	u32 max_mode, cur_mode;
 	int pf;
 
 	mode = efi_table_attr(gop, mode);
@@ -152,41 +154,23 @@ static u32 choose_mode_modenum(efi_graphics_output_protocol_t *gop)
 		return cur_mode;
 	}
 
-	status = efi_call_proto(gop, query_mode, cmdline.mode, &info_size, &info);
+	status = efi_call_proto(gop, query_mode, cmdline.mode,
+				&info_size, &info);
 	if (status != EFI_SUCCESS) {
 		efi_err("Couldn't get mode information\n");
 		return cur_mode;
 	}
 
 	pf = info->pixel_format;
+
+	efi_bs_call(free_pool, info);
+
 	if (pf == PIXEL_BLT_ONLY || pf >= PIXEL_FORMAT_MAX) {
 		efi_err("Invalid PixelFormat\n");
 		return cur_mode;
 	}
 
 	return cmdline.mode;
-}
-
-static u32 choose_mode(efi_graphics_output_protocol_t *gop,
-		       bool (*match)(const efi_graphics_output_mode_info_t *, u32, void *),
-		       void *ctx)
-{
-	efi_graphics_output_protocol_mode_t *mode = efi_table_attr(gop, mode);
-	u32 max_mode = efi_table_attr(mode, max_mode);
-
-	for (u32 m = 0; m < max_mode; m++) {
-		efi_graphics_output_mode_info_t *info __free(efi_pool) = NULL;
-		unsigned long info_size;
-		efi_status_t status;
-
-		status = efi_call_proto(gop, query_mode, m, &info_size, &info);
-		if (status != EFI_SUCCESS)
-			continue;
-
-		if (match(info, m, ctx))
-			return m;
-	}
-	return (unsigned long)ctx;
 }
 
 static u8 pixel_bpp(int pixel_format, efi_pixel_bitmask_t pixel_info)
@@ -201,117 +185,192 @@ static u8 pixel_bpp(int pixel_format, efi_pixel_bitmask_t pixel_info)
 		return 32;
 }
 
-static bool match_res(const efi_graphics_output_mode_info_t *info, u32 mode, void *ctx)
-{
-	efi_pixel_bitmask_t pi = info->pixel_information;
-	int pf = info->pixel_format;
-
-	if (pf == PIXEL_BLT_ONLY || pf >= PIXEL_FORMAT_MAX)
-		return false;
-
-	return cmdline.res.width == info->horizontal_resolution &&
-	       cmdline.res.height == info->vertical_resolution &&
-	       (cmdline.res.format < 0 || cmdline.res.format == pf) &&
-	       (!cmdline.res.depth || cmdline.res.depth == pixel_bpp(pf, pi));
-}
-
 static u32 choose_mode_res(efi_graphics_output_protocol_t *gop)
 {
-	efi_graphics_output_protocol_mode_t *mode = efi_table_attr(gop, mode);
-	unsigned long cur_mode = efi_table_attr(mode, mode);
+	efi_status_t status;
 
-	if (match_res(efi_table_attr(mode, info), cur_mode, NULL))
+	efi_graphics_output_protocol_mode_t *mode;
+	efi_graphics_output_mode_info_t *info;
+	unsigned long info_size;
+
+	u32 max_mode, cur_mode;
+	int pf;
+	efi_pixel_bitmask_t pi;
+	u32 m, w, h;
+
+	mode = efi_table_attr(gop, mode);
+
+	cur_mode = efi_table_attr(mode, mode);
+	info = efi_table_attr(mode, info);
+	pf = info->pixel_format;
+	pi = info->pixel_information;
+	w  = info->horizontal_resolution;
+	h  = info->vertical_resolution;
+
+	if (w == cmdline.res.width && h == cmdline.res.height &&
+	    (cmdline.res.format < 0 || cmdline.res.format == pf) &&
+	    (!cmdline.res.depth || cmdline.res.depth == pixel_bpp(pf, pi)))
 		return cur_mode;
 
-	return choose_mode(gop, match_res, (void *)cur_mode);
-}
+	max_mode = efi_table_attr(mode, max_mode);
 
-struct match {
-	u32	mode;
-	u32	area;
-	u8	depth;
-};
+	for (m = 0; m < max_mode; m++) {
+		if (m == cur_mode)
+			continue;
 
-static bool match_auto(const efi_graphics_output_mode_info_t *info, u32 mode, void *ctx)
-{
-	u32 area = info->horizontal_resolution * info->vertical_resolution;
-	efi_pixel_bitmask_t pi = info->pixel_information;
-	int pf = info->pixel_format;
-	u8 depth = pixel_bpp(pf, pi);
-	struct match *m = ctx;
+		status = efi_call_proto(gop, query_mode, m,
+					&info_size, &info);
+		if (status != EFI_SUCCESS)
+			continue;
 
-	if (pf == PIXEL_BLT_ONLY || pf >= PIXEL_FORMAT_MAX)
-		return false;
+		pf = info->pixel_format;
+		pi = info->pixel_information;
+		w  = info->horizontal_resolution;
+		h  = info->vertical_resolution;
 
-	if (area > m->area || (area == m->area && depth > m->depth))
-		*m = (struct match){ mode, area, depth };
+		efi_bs_call(free_pool, info);
 
-	return false;
+		if (pf == PIXEL_BLT_ONLY || pf >= PIXEL_FORMAT_MAX)
+			continue;
+		if (w == cmdline.res.width && h == cmdline.res.height &&
+		    (cmdline.res.format < 0 || cmdline.res.format == pf) &&
+		    (!cmdline.res.depth || cmdline.res.depth == pixel_bpp(pf, pi)))
+			return m;
+	}
+
+	efi_err("Couldn't find requested mode\n");
+
+	return cur_mode;
 }
 
 static u32 choose_mode_auto(efi_graphics_output_protocol_t *gop)
 {
-	struct match match = {};
+	efi_status_t status;
 
-	choose_mode(gop, match_auto, &match);
+	efi_graphics_output_protocol_mode_t *mode;
+	efi_graphics_output_mode_info_t *info;
+	unsigned long info_size;
 
-	return match.mode;
-}
+	u32 max_mode, cur_mode, best_mode, area;
+	u8 depth;
+	int pf;
+	efi_pixel_bitmask_t pi;
+	u32 m, w, h, a;
+	u8 d;
 
-static bool match_list(const efi_graphics_output_mode_info_t *info, u32 mode, void *ctx)
-{
-	efi_pixel_bitmask_t pi = info->pixel_information;
-	u32 cur_mode = (unsigned long)ctx;
-	int pf = info->pixel_format;
-	const char *dstr;
-	u8 depth = 0;
-	bool valid;
+	mode = efi_table_attr(gop, mode);
 
-	valid = !(pf == PIXEL_BLT_ONLY || pf >= PIXEL_FORMAT_MAX);
+	cur_mode = efi_table_attr(mode, mode);
+	max_mode = efi_table_attr(mode, max_mode);
 
-	switch (pf) {
-	case PIXEL_RGB_RESERVED_8BIT_PER_COLOR:
-		dstr = "rgb";
-		break;
-	case PIXEL_BGR_RESERVED_8BIT_PER_COLOR:
-		dstr = "bgr";
-		break;
-	case PIXEL_BIT_MASK:
-		dstr = "";
-		depth = pixel_bpp(pf, pi);
-		break;
-	case PIXEL_BLT_ONLY:
-		dstr = "blt";
-		break;
-	default:
-		dstr = "xxx";
-		break;
+	info = efi_table_attr(mode, info);
+
+	pf = info->pixel_format;
+	pi = info->pixel_information;
+	w  = info->horizontal_resolution;
+	h  = info->vertical_resolution;
+
+	best_mode = cur_mode;
+	area = w * h;
+	depth = pixel_bpp(pf, pi);
+
+	for (m = 0; m < max_mode; m++) {
+		if (m == cur_mode)
+			continue;
+
+		status = efi_call_proto(gop, query_mode, m,
+					&info_size, &info);
+		if (status != EFI_SUCCESS)
+			continue;
+
+		pf = info->pixel_format;
+		pi = info->pixel_information;
+		w  = info->horizontal_resolution;
+		h  = info->vertical_resolution;
+
+		efi_bs_call(free_pool, info);
+
+		if (pf == PIXEL_BLT_ONLY || pf >= PIXEL_FORMAT_MAX)
+			continue;
+		a = w * h;
+		if (a < area)
+			continue;
+		d = pixel_bpp(pf, pi);
+		if (a > area || d > depth) {
+			best_mode = m;
+			area = a;
+			depth = d;
+		}
 	}
 
-	efi_printk("Mode %3u %c%c: Resolution %ux%u-%s%.0hhu\n",
-		    mode,
-		    (mode == cur_mode) ? '*' : ' ',
-		    !valid ? '-' : ' ',
-		    info->horizontal_resolution,
-		    info->vertical_resolution,
-		    dstr, depth);
-
-	return false;
+	return best_mode;
 }
 
 static u32 choose_mode_list(efi_graphics_output_protocol_t *gop)
 {
-	efi_graphics_output_protocol_mode_t *mode = efi_table_attr(gop, mode);
-	unsigned long cur_mode = efi_table_attr(mode, mode);
-	u32 max_mode = efi_table_attr(mode, max_mode);
-	efi_input_key_t key;
 	efi_status_t status;
+
+	efi_graphics_output_protocol_mode_t *mode;
+	efi_graphics_output_mode_info_t *info;
+	unsigned long info_size;
+
+	u32 max_mode, cur_mode;
+	int pf;
+	efi_pixel_bitmask_t pi;
+	u32 m, w, h;
+	u8 d;
+	const char *dstr;
+	bool valid;
+	efi_input_key_t key;
+
+	mode = efi_table_attr(gop, mode);
+
+	cur_mode = efi_table_attr(mode, mode);
+	max_mode = efi_table_attr(mode, max_mode);
 
 	efi_printk("Available graphics modes are 0-%u\n", max_mode-1);
 	efi_puts("  * = current mode\n"
 		 "  - = unusable mode\n");
+	for (m = 0; m < max_mode; m++) {
+		status = efi_call_proto(gop, query_mode, m,
+					&info_size, &info);
+		if (status != EFI_SUCCESS)
+			continue;
 
-	choose_mode(gop, match_list, (void *)cur_mode);
+		pf = info->pixel_format;
+		pi = info->pixel_information;
+		w  = info->horizontal_resolution;
+		h  = info->vertical_resolution;
+
+		efi_bs_call(free_pool, info);
+
+		valid = !(pf == PIXEL_BLT_ONLY || pf >= PIXEL_FORMAT_MAX);
+		d = 0;
+		switch (pf) {
+		case PIXEL_RGB_RESERVED_8BIT_PER_COLOR:
+			dstr = "rgb";
+			break;
+		case PIXEL_BGR_RESERVED_8BIT_PER_COLOR:
+			dstr = "bgr";
+			break;
+		case PIXEL_BIT_MASK:
+			dstr = "";
+			d = pixel_bpp(pf, pi);
+			break;
+		case PIXEL_BLT_ONLY:
+			dstr = "blt";
+			break;
+		default:
+			dstr = "xxx";
+			break;
+		}
+
+		efi_printk("Mode %3u %c%c: Resolution %ux%u-%s%.0hhu\n",
+			   m,
+			   m == cur_mode ? '*' : ' ',
+			   !valid ? '-' : ' ',
+			   w, h, dstr, d);
+	}
 
 	efi_puts("\nPress any key to continue (or wait 10 seconds)\n");
 	status = efi_wait_for_key(10 * EFI_USEC_PER_SEC, &key);
@@ -402,25 +461,26 @@ setup_pixel_info(struct screen_info *si, u32 pixels_per_scan_line,
 	}
 }
 
-static efi_graphics_output_protocol_t *find_gop(unsigned long num,
-						const efi_handle_t handles[])
+static efi_graphics_output_protocol_t *
+find_gop(efi_guid_t *proto, unsigned long size, void **handles)
 {
 	efi_graphics_output_protocol_t *first_gop;
 	efi_handle_t h;
+	int i;
 
 	first_gop = NULL;
 
-	for_each_efi_handle(h, handles, num) {
+	for_each_efi_handle(h, handles, size, i) {
 		efi_status_t status;
 
 		efi_graphics_output_protocol_t *gop;
 		efi_graphics_output_protocol_mode_t *mode;
 		efi_graphics_output_mode_info_t *info;
+
+		efi_guid_t conout_proto = EFI_CONSOLE_OUT_DEVICE_GUID;
 		void *dummy = NULL;
 
-		status = efi_bs_call(handle_protocol, h,
-				     &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
-				     (void **)&gop);
+		status = efi_bs_call(handle_protocol, h, proto, (void **)&gop);
 		if (status != EFI_SUCCESS)
 			continue;
 
@@ -440,8 +500,7 @@ static efi_graphics_output_protocol_t *find_gop(unsigned long num,
 		 * Once we've found a GOP supporting ConOut,
 		 * don't bother looking any further.
 		 */
-		status = efi_bs_call(handle_protocol, h,
-				     &EFI_CONSOLE_OUT_DEVICE_GUID, &dummy);
+		status = efi_bs_call(handle_protocol, h, &conout_proto, &dummy);
 		if (status == EFI_SUCCESS)
 			return gop;
 
@@ -452,22 +511,16 @@ static efi_graphics_output_protocol_t *find_gop(unsigned long num,
 	return first_gop;
 }
 
-efi_status_t efi_setup_gop(struct screen_info *si)
+static efi_status_t setup_gop(struct screen_info *si, efi_guid_t *proto,
+			      unsigned long size, void **handles)
 {
-	efi_handle_t *handles __free(efi_pool) = NULL;
+	efi_graphics_output_protocol_t *gop;
 	efi_graphics_output_protocol_mode_t *mode;
 	efi_graphics_output_mode_info_t *info;
-	efi_graphics_output_protocol_t *gop;
-	efi_status_t status;
-	unsigned long num;
 
-	status = efi_bs_call(locate_handle_buffer, EFI_LOCATE_BY_PROTOCOL,
-			      &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID, NULL, &num,
-			      &handles);
-	if (status != EFI_SUCCESS)
-		return status;
+	gop = find_gop(proto, size, handles);
 
-	gop = find_gop(num, handles);
+	/* Did we find any GOPs? */
 	if (!gop)
 		return EFI_NOT_FOUND;
 
@@ -498,4 +551,30 @@ efi_status_t efi_setup_gop(struct screen_info *si)
 	si->capabilities |= VIDEO_CAPABILITY_SKIP_QUIRKS;
 
 	return EFI_SUCCESS;
+}
+
+/*
+ * See if we have Graphics Output Protocol
+ */
+efi_status_t efi_setup_gop(struct screen_info *si, efi_guid_t *proto,
+			   unsigned long size)
+{
+	efi_status_t status;
+	void **gop_handle = NULL;
+
+	status = efi_bs_call(allocate_pool, EFI_LOADER_DATA, size,
+			     (void **)&gop_handle);
+	if (status != EFI_SUCCESS)
+		return status;
+
+	status = efi_bs_call(locate_handle, EFI_LOCATE_BY_PROTOCOL, proto, NULL,
+			     &size, gop_handle);
+	if (status != EFI_SUCCESS)
+		goto free_handle;
+
+	status = setup_gop(si, proto, size, gop_handle);
+
+free_handle:
+	efi_bs_call(free_pool, gop_handle);
+	return status;
 }

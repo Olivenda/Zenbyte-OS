@@ -288,7 +288,8 @@ void otx2_cptlf_unregister_misc_interrupts(struct otx2_cptlfs_info *lfs)
 
 	cptlf_set_misc_intrs(lfs, false);
 }
-EXPORT_SYMBOL_NS_GPL(otx2_cptlf_unregister_misc_interrupts, "CRYPTO_DEV_OCTEONTX2_CPT");
+EXPORT_SYMBOL_NS_GPL(otx2_cptlf_unregister_misc_interrupts,
+		     CRYPTO_DEV_OCTEONTX2_CPT);
 
 void otx2_cptlf_unregister_done_interrupts(struct otx2_cptlfs_info *lfs)
 {
@@ -307,7 +308,8 @@ void otx2_cptlf_unregister_done_interrupts(struct otx2_cptlfs_info *lfs)
 
 	cptlf_set_done_intrs(lfs, false);
 }
-EXPORT_SYMBOL_NS_GPL(otx2_cptlf_unregister_done_interrupts, "CRYPTO_DEV_OCTEONTX2_CPT");
+EXPORT_SYMBOL_NS_GPL(otx2_cptlf_unregister_done_interrupts,
+		     CRYPTO_DEV_OCTEONTX2_CPT);
 
 static int cptlf_do_register_interrrupts(struct otx2_cptlfs_info *lfs,
 					 int lf_num, int irq_offset,
@@ -349,7 +351,8 @@ free_irq:
 	otx2_cptlf_unregister_misc_interrupts(lfs);
 	return ret;
 }
-EXPORT_SYMBOL_NS_GPL(otx2_cptlf_register_misc_interrupts, "CRYPTO_DEV_OCTEONTX2_CPT");
+EXPORT_SYMBOL_NS_GPL(otx2_cptlf_register_misc_interrupts,
+		     CRYPTO_DEV_OCTEONTX2_CPT);
 
 int otx2_cptlf_register_done_interrupts(struct otx2_cptlfs_info *lfs)
 {
@@ -372,7 +375,8 @@ free_irq:
 	otx2_cptlf_unregister_done_interrupts(lfs);
 	return ret;
 }
-EXPORT_SYMBOL_NS_GPL(otx2_cptlf_register_done_interrupts, "CRYPTO_DEV_OCTEONTX2_CPT");
+EXPORT_SYMBOL_NS_GPL(otx2_cptlf_register_done_interrupts,
+		     CRYPTO_DEV_OCTEONTX2_CPT);
 
 void otx2_cptlf_free_irqs_affinity(struct otx2_cptlfs_info *lfs)
 {
@@ -386,7 +390,7 @@ void otx2_cptlf_free_irqs_affinity(struct otx2_cptlfs_info *lfs)
 		free_cpumask_var(lfs->lf[slot].affinity_mask);
 	}
 }
-EXPORT_SYMBOL_NS_GPL(otx2_cptlf_free_irqs_affinity, "CRYPTO_DEV_OCTEONTX2_CPT");
+EXPORT_SYMBOL_NS_GPL(otx2_cptlf_free_irqs_affinity, CRYPTO_DEV_OCTEONTX2_CPT);
 
 int otx2_cptlf_set_irqs_affinity(struct otx2_cptlfs_info *lfs)
 {
@@ -419,7 +423,7 @@ free_affinity_mask:
 	otx2_cptlf_free_irqs_affinity(lfs);
 	return ret;
 }
-EXPORT_SYMBOL_NS_GPL(otx2_cptlf_set_irqs_affinity, "CRYPTO_DEV_OCTEONTX2_CPT");
+EXPORT_SYMBOL_NS_GPL(otx2_cptlf_set_irqs_affinity, CRYPTO_DEV_OCTEONTX2_CPT);
 
 int otx2_cptlf_init(struct otx2_cptlfs_info *lfs, u8 eng_grp_mask, int pri,
 		    int lfs_num)
@@ -433,7 +437,10 @@ int otx2_cptlf_init(struct otx2_cptlfs_info *lfs, u8 eng_grp_mask, int pri,
 	for (slot = 0; slot < lfs->lfs_num; slot++) {
 		lfs->lf[slot].lfs = lfs;
 		lfs->lf[slot].slot = slot;
-		if (!lfs->lmt_info.base)
+		if (lfs->lmt_base)
+			lfs->lf[slot].lmtline = lfs->lmt_base +
+						(slot * LMTLINE_SIZE);
+		else
 			lfs->lf[slot].lmtline = lfs->reg_base +
 				OTX2_CPT_RVU_FUNC_ADDR_S(BLKADDR_LMT, slot,
 						 OTX2_CPT_LMT_LF_LMTLINEX(0));
@@ -479,7 +486,7 @@ clear_lfs_num:
 	lfs->lfs_num = 0;
 	return ret;
 }
-EXPORT_SYMBOL_NS_GPL(otx2_cptlf_init, "CRYPTO_DEV_OCTEONTX2_CPT");
+EXPORT_SYMBOL_NS_GPL(otx2_cptlf_init, CRYPTO_DEV_OCTEONTX2_CPT);
 
 void otx2_cptlf_shutdown(struct otx2_cptlfs_info *lfs)
 {
@@ -491,7 +498,7 @@ void otx2_cptlf_shutdown(struct otx2_cptlfs_info *lfs)
 	otx2_cpt_detach_rsrcs_msg(lfs);
 	lfs->lfs_num = 0;
 }
-EXPORT_SYMBOL_NS_GPL(otx2_cptlf_shutdown, "CRYPTO_DEV_OCTEONTX2_CPT");
+EXPORT_SYMBOL_NS_GPL(otx2_cptlf_shutdown, CRYPTO_DEV_OCTEONTX2_CPT);
 
 MODULE_AUTHOR("Marvell");
 MODULE_DESCRIPTION("Marvell RVU CPT Common module");

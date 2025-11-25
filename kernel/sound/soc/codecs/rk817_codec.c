@@ -303,10 +303,10 @@ static int rk817_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	unsigned int i2s_mst = 0;
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBC_CFC:
+	case SND_SOC_DAIFMT_CBS_CFS:
 		i2s_mst |= RK817_I2S_MODE_SLV;
 		break;
-	case SND_SOC_DAIFMT_CBP_CFP:
+	case SND_SOC_DAIFMT_CBM_CFM:
 		i2s_mst |= RK817_I2S_MODE_MST;
 		break;
 	default:

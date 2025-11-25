@@ -60,12 +60,11 @@ that signal handlers in applications making use of tags cannot rely
 on the tag information for user virtual addresses being maintained
 in these fields unless the flag was set.
 
-If FEAT_MTE_TAGGED_FAR (Armv8.9) is supported, bits 63:60 of the fault address
-are preserved in response to synchronous tag check faults (SEGV_MTESERR)
-otherwise not preserved even if SA_EXPOSE_TAGBITS was set.
-Applications should interpret the values of these bits based on
-the support for the HWCAP3_MTE_FAR. If the support is not present,
-the values of these bits should be considered as undefined otherwise valid.
+Due to architecture limitations, bits 63:60 of the fault address
+are not preserved in response to synchronous tag check faults
+(SEGV_MTESERR) even if SA_EXPOSE_TAGBITS was set. Applications should
+treat the values of these bits as undefined in order to accommodate
+future architecture revisions which may preserve the bits.
 
 For signals raised in response to watchpoint debug exceptions, the
 tag information will be preserved regardless of the SA_EXPOSE_TAGBITS

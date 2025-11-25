@@ -294,7 +294,7 @@ static int ads1298_get_scale(struct ads1298_private *priv,
 		if (ret)
 			return ret;
 
-		/* Reference in millivolts */
+		/* Refererence in millivolts */
 		*val = regval & ADS1298_MASK_CONFIG3_VREF_4V ? 4000 : 2400;
 	}
 
@@ -319,12 +319,13 @@ static int ads1298_read_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
 
 		ret = ads1298_read_one(priv, chan->scan_index);
 
-		iio_device_release_direct(indio_dev);
+		iio_device_release_direct_mode(indio_dev);
 
 		if (ret)
 			return ret;

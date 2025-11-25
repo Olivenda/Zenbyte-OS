@@ -1,13 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright(c) 2020-2023, 2025 Intel Corporation
+ * Copyright(c) 2020-2023 Intel Corporation
  */
 #ifndef __IWL_PNVM_H__
 #define __IWL_PNVM_H__
 
 #include "iwl-drv.h"
 #include "fw/notif-wait.h"
-#include "fw/img.h"
 
 #define MVM_UCODE_PNVM_TIMEOUT	(HZ / 4)
 
@@ -15,7 +14,7 @@
 
 int iwl_pnvm_load(struct iwl_trans *trans,
 		  struct iwl_notif_wait_data *notif_wait,
-		  const struct iwl_fw *fw, __le32 sku_id[3]);
+		  const struct iwl_ucode_capabilities *capa);
 
 static inline
 void iwl_pnvm_get_fs_name(struct iwl_trans *trans,

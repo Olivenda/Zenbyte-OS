@@ -22,9 +22,9 @@ static ssize_t show_state(struct device *dev, struct device_attribute *attr, cha
 	int count;
 
 	if (fps->control == 0xFFFFFFFF || fps->control > 100)
-		count = sysfs_emit(buf, "not-defined:");
+		count = scnprintf(buf, PAGE_SIZE, "not-defined:");
 	else
-		count = sysfs_emit(buf, "%lld:", fps->control);
+		count = scnprintf(buf, PAGE_SIZE, "%lld:", fps->control);
 
 	if (fps->trip_point == 0xFFFFFFFF || fps->trip_point > 9)
 		count += sysfs_emit_at(buf, count, "not-defined:");
@@ -59,7 +59,7 @@ static ssize_t show_fan_speed(struct device *dev, struct device_attribute *attr,
 	if (status)
 		return status;
 
-	return sysfs_emit(buf, "%lld\n", fst.speed);
+	return sprintf(buf, "%lld\n", fst.speed);
 }
 
 static ssize_t show_fine_grain_control(struct device *dev, struct device_attribute *attr, char *buf)
@@ -67,7 +67,7 @@ static ssize_t show_fine_grain_control(struct device *dev, struct device_attribu
 	struct acpi_device *acpi_dev = container_of(dev, struct acpi_device, dev);
 	struct acpi_fan *fan = acpi_driver_data(acpi_dev);
 
-	return sysfs_emit(buf, "%d\n", fan->fif.fine_grain_ctrl);
+	return sprintf(buf, "%d\n", fan->fif.fine_grain_ctrl);
 }
 
 int acpi_fan_create_attributes(struct acpi_device *device)

@@ -16,9 +16,8 @@ description: |
 
 properties:
   compatible:
-    enum:
-      - fujitsu,mb85rs128ty
-      - microchip,48l640
+    items:
+      - const: microchip,48l640
 
   reg:
     maxItems: 1

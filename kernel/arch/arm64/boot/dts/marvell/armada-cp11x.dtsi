@@ -17,7 +17,7 @@
 	 * The contents of the node are defined below, in order to
 	 * save one indentation level
 	 */
-	CP11X_NAME: CP11X_NODE_NAME(bus) { };
+	CP11X_NAME: CP11X_NAME { };
 
 	/*
 	 * CPs only have one sensor in the thermal IC.
@@ -51,7 +51,7 @@
 	interrupt-parent = <&CP11X_LABEL(icu_nsr)>;
 	ranges;
 
-	bus@CP11X_BASE {
+	config-space@CP11X_BASE {
 		#address-cells = <1>;
 		#size-cells = <1>;
 		compatible = "simple-bus";
@@ -347,12 +347,10 @@
 
 			sata-port@0 {
 				reg = <0>;
-				status = "disabled";
 			};
 
 			sata-port@1 {
 				reg = <1>;
-				status = "disabled";
 			};
 		};
 

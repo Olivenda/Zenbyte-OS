@@ -45,7 +45,9 @@
 #define HVM_HUGEPAGE_SIZE 0x5
 #endif
 
-#include <vdso/page.h>
+#define PAGE_SHIFT CONFIG_PAGE_SHIFT
+#define PAGE_SIZE  (1UL << PAGE_SHIFT)
+#define PAGE_MASK  (~((1 << PAGE_SHIFT) - 1))
 
 #ifdef __KERNEL__
 #ifndef __ASSEMBLY__
@@ -115,6 +117,12 @@ static inline void clear_page(void *page)
  */
 #define clear_user_page(page, vaddr, pg)	clear_page(page)
 #define copy_user_page(to, from, vaddr, pg)	copy_page(to, from)
+
+/*
+ * page_to_phys - convert page to physical address
+ * @page - pointer to page entry in mem_map
+ */
+#define page_to_phys(page)      (page_to_pfn(page) << PAGE_SHIFT)
 
 static inline unsigned long virt_to_pfn(const void *kaddr)
 {

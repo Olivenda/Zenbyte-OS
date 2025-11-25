@@ -434,8 +434,9 @@ static u32 navi10_ih_get_wptr(struct amdgpu_device *adev,
 	 * this should allow us to catch up.
 	 */
 	tmp = (wptr + 32) & ih->ptr_mask;
-	dev_warn(adev->dev, "%s ring buffer overflow (0x%08X, 0x%08X, 0x%08X)\n",
-		 amdgpu_ih_ring_name(adev, ih), wptr, ih->rptr, tmp);
+	dev_warn(adev->dev, "IH ring buffer overflow "
+		 "(0x%08X, 0x%08X, 0x%08X)\n",
+		 wptr, ih->rptr, tmp);
 	ih->rptr = tmp;
 
 	tmp = RREG32_NO_KIQ(ih_regs->ih_rb_cntl);
@@ -541,19 +542,19 @@ static void navi10_ih_set_self_irq_funcs(struct amdgpu_device *adev)
 	adev->irq.self_irq.funcs = &navi10_ih_self_irq_funcs;
 }
 
-static int navi10_ih_early_init(struct amdgpu_ip_block *ip_block)
+static int navi10_ih_early_init(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	navi10_ih_set_interrupt_funcs(adev);
 	navi10_ih_set_self_irq_funcs(adev);
 	return 0;
 }
 
-static int navi10_ih_sw_init(struct amdgpu_ip_block *ip_block)
+static int navi10_ih_sw_init(void *handle)
 {
 	int r;
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	bool use_bus_addr;
 
 	r = amdgpu_irq_add_id(adev, SOC15_IH_CLIENTID_IH, 0,
@@ -592,52 +593,58 @@ static int navi10_ih_sw_init(struct amdgpu_ip_block *ip_block)
 	return r;
 }
 
-static int navi10_ih_sw_fini(struct amdgpu_ip_block *ip_block)
+static int navi10_ih_sw_fini(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	amdgpu_irq_fini_sw(adev);
 
 	return 0;
 }
 
-static int navi10_ih_hw_init(struct amdgpu_ip_block *ip_block)
+static int navi10_ih_hw_init(void *handle)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	return navi10_ih_irq_init(adev);
 }
 
-static int navi10_ih_hw_fini(struct amdgpu_ip_block *ip_block)
+static int navi10_ih_hw_fini(void *handle)
 {
-	navi10_ih_irq_disable(ip_block->adev);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	navi10_ih_irq_disable(adev);
 
 	return 0;
 }
 
-static int navi10_ih_suspend(struct amdgpu_ip_block *ip_block)
+static int navi10_ih_suspend(void *handle)
 {
-	return navi10_ih_hw_fini(ip_block);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	return navi10_ih_hw_fini(adev);
 }
 
-static int navi10_ih_resume(struct amdgpu_ip_block *ip_block)
+static int navi10_ih_resume(void *handle)
 {
-	return navi10_ih_hw_init(ip_block);
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	return navi10_ih_hw_init(adev);
 }
 
-static bool navi10_ih_is_idle(struct amdgpu_ip_block *ip_block)
+static bool navi10_ih_is_idle(void *handle)
 {
 	/* todo */
 	return true;
 }
 
-static int navi10_ih_wait_for_idle(struct amdgpu_ip_block *ip_block)
+static int navi10_ih_wait_for_idle(void *handle)
 {
 	/* todo */
 	return -ETIMEDOUT;
 }
 
-static int navi10_ih_soft_reset(struct amdgpu_ip_block *ip_block)
+static int navi10_ih_soft_reset(void *handle)
 {
 	/* todo */
 	return 0;
@@ -666,25 +673,25 @@ static void navi10_ih_update_clockgating_state(struct amdgpu_device *adev,
 	}
 }
 
-static int navi10_ih_set_clockgating_state(struct amdgpu_ip_block *ip_block,
+static int navi10_ih_set_clockgating_state(void *handle,
 					   enum amd_clockgating_state state)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	navi10_ih_update_clockgating_state(adev,
 				state == AMD_CG_STATE_GATE);
 	return 0;
 }
 
-static int navi10_ih_set_powergating_state(struct amdgpu_ip_block *ip_block,
+static int navi10_ih_set_powergating_state(void *handle,
 					   enum amd_powergating_state state)
 {
 	return 0;
 }
 
-static void navi10_ih_get_clockgating_state(struct amdgpu_ip_block *ip_block, u64 *flags)
+static void navi10_ih_get_clockgating_state(void *handle, u64 *flags)
 {
-	struct amdgpu_device *adev = ip_block->adev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	if (!RREG32_SOC15(OSSSYS, 0, mmIH_CLK_CTRL))
 		*flags |= AMD_CG_SUPPORT_IH_CG;
@@ -693,6 +700,7 @@ static void navi10_ih_get_clockgating_state(struct amdgpu_ip_block *ip_block, u6
 static const struct amd_ip_funcs navi10_ih_ip_funcs = {
 	.name = "navi10_ih",
 	.early_init = navi10_ih_early_init,
+	.late_init = NULL,
 	.sw_init = navi10_ih_sw_init,
 	.sw_fini = navi10_ih_sw_fini,
 	.hw_init = navi10_ih_hw_init,
@@ -705,6 +713,8 @@ static const struct amd_ip_funcs navi10_ih_ip_funcs = {
 	.set_clockgating_state = navi10_ih_set_clockgating_state,
 	.set_powergating_state = navi10_ih_set_powergating_state,
 	.get_clockgating_state = navi10_ih_get_clockgating_state,
+	.dump_ip_state = NULL,
+	.print_ip_state = NULL,
 };
 
 static const struct amdgpu_ih_funcs navi10_ih_funcs = {

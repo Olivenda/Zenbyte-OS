@@ -1756,7 +1756,7 @@ MODULE_DEVICE_TABLE(of, sba_of_match);
 
 static struct platform_driver sba_driver = {
 	.probe = sba_probe,
-	.remove = sba_remove,
+	.remove_new = sba_remove,
 	.driver = {
 		.name = "bcm-sba-raid",
 		.of_match_table = sba_of_match,

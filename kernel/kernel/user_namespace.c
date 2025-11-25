@@ -238,7 +238,7 @@ EXPORT_SYMBOL(__put_user_ns);
 struct idmap_key {
 	bool map_up; /* true  -> id from kid; false -> kid from id */
 	u32 id; /* id to find */
-	u32 count;
+	u32 count; /* == 0 unless used with map_id_range_down() */
 };
 
 /*
@@ -343,19 +343,16 @@ u32 map_id_down(struct uid_gid_map *map, u32 id)
  * UID_GID_MAP_MAX_BASE_EXTENTS.
  */
 static struct uid_gid_extent *
-map_id_range_up_base(unsigned extents, struct uid_gid_map *map, u32 id, u32 count)
+map_id_up_base(unsigned extents, struct uid_gid_map *map, u32 id)
 {
 	unsigned idx;
-	u32 first, last, id2;
-
-	id2 = id + count - 1;
+	u32 first, last;
 
 	/* Find the matching extent */
 	for (idx = 0; idx < extents; idx++) {
 		first = map->extent[idx].lower_first;
 		last = first + map->extent[idx].count - 1;
-		if (id >= first && id <= last &&
-		    (id2 >= first && id2 <= last))
+		if (id >= first && id <= last)
 			return &map->extent[idx];
 	}
 	return NULL;
@@ -366,28 +363,28 @@ map_id_range_up_base(unsigned extents, struct uid_gid_map *map, u32 id, u32 coun
  * Can only be called if number of mappings exceeds UID_GID_MAP_MAX_BASE_EXTENTS.
  */
 static struct uid_gid_extent *
-map_id_range_up_max(unsigned extents, struct uid_gid_map *map, u32 id, u32 count)
+map_id_up_max(unsigned extents, struct uid_gid_map *map, u32 id)
 {
 	struct idmap_key key;
 
 	key.map_up = true;
-	key.count = count;
+	key.count = 1;
 	key.id = id;
 
 	return bsearch(&key, map->reverse, extents,
 		       sizeof(struct uid_gid_extent), cmp_map_id);
 }
 
-u32 map_id_range_up(struct uid_gid_map *map, u32 id, u32 count)
+u32 map_id_up(struct uid_gid_map *map, u32 id)
 {
 	struct uid_gid_extent *extent;
 	unsigned extents = map->nr_extents;
 	smp_rmb();
 
 	if (extents <= UID_GID_MAP_MAX_BASE_EXTENTS)
-		extent = map_id_range_up_base(extents, map, id, count);
+		extent = map_id_up_base(extents, map, id);
 	else
-		extent = map_id_range_up_max(extents, map, id, count);
+		extent = map_id_up_max(extents, map, id);
 
 	/* Map the id or note failure */
 	if (extent)
@@ -396,11 +393,6 @@ u32 map_id_range_up(struct uid_gid_map *map, u32 id, u32 count)
 		id = (u32) -1;
 
 	return id;
-}
-
-u32 map_id_up(struct uid_gid_map *map, u32 id)
-{
-	return map_id_range_up(map, id, 1);
 }
 
 /**

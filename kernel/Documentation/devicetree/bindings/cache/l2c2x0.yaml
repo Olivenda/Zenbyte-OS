@@ -100,8 +100,9 @@ properties:
       filter. Addresses in the filter window are directed to the M1 port. Other
       addresses will go to the M0 port.
     $ref: /schemas/types.yaml#/definitions/uint32-array
-    minItems: 2
-    maxItems: 2
+    items:
+      minItems: 2
+      maxItems: 2
 
   arm,io-coherent:
     description: indicates that the system is operating in an hardware

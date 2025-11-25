@@ -180,7 +180,7 @@ static struct platform_driver imx_dsp_driver = {
 		.name = "imx-dsp",
 	},
 	.probe = imx_dsp_probe,
-	.remove = imx_dsp_remove,
+	.remove_new = imx_dsp_remove,
 };
 builtin_platform_driver(imx_dsp_driver);
 

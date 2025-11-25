@@ -141,8 +141,9 @@ static int mxs_lradc_adc_read_single(struct iio_dev *iio_dev, int chan,
 	 * the same time, yet the code becomes horribly complicated. Therefore I
 	 * applied KISS principle here.
 	 */
-	if (!iio_device_claim_direct(iio_dev))
-		return -EBUSY;
+	ret = iio_device_claim_direct_mode(iio_dev);
+	if (ret)
+		return ret;
 
 	reinit_completion(&adc->completion);
 
@@ -191,7 +192,7 @@ err:
 	writel(LRADC_CTRL1_LRADC_IRQ_EN(0),
 	       adc->base + LRADC_CTRL1 + STMP_OFFSET_REG_CLR);
 
-	iio_device_release_direct(iio_dev);
+	iio_device_release_direct_mode(iio_dev);
 
 	return ret;
 }
@@ -274,8 +275,9 @@ static int mxs_lradc_adc_write_raw(struct iio_dev *iio_dev,
 			adc->scale_avail[chan->channel];
 	int ret;
 
-	if (!iio_device_claim_direct(iio_dev))
-		return -EBUSY;
+	ret = iio_device_claim_direct_mode(iio_dev);
+	if (ret)
+		return ret;
 
 	switch (m) {
 	case IIO_CHAN_INFO_SCALE:
@@ -298,7 +300,7 @@ static int mxs_lradc_adc_write_raw(struct iio_dev *iio_dev,
 		break;
 	}
 
-	iio_device_release_direct(iio_dev);
+	iio_device_release_direct_mode(iio_dev);
 
 	return ret;
 }
@@ -425,8 +427,7 @@ static irqreturn_t mxs_lradc_adc_trigger_handler(int irq, void *p)
 		j++;
 	}
 
-	iio_push_to_buffers_with_ts(iio, adc->buffer, sizeof(adc->buffer),
-				    pf->timestamp);
+	iio_push_to_buffers_with_timestamp(iio, adc->buffer, pf->timestamp);
 
 	iio_trigger_notify_done(iio->trig);
 
@@ -818,10 +819,10 @@ static void mxs_lradc_adc_remove(struct platform_device *pdev)
 
 static struct platform_driver mxs_lradc_adc_driver = {
 	.driver = {
-		.name = "mxs-lradc-adc",
+		.name	= "mxs-lradc-adc",
 	},
-	.probe = mxs_lradc_adc_probe,
-	.remove = mxs_lradc_adc_remove,
+	.probe	= mxs_lradc_adc_probe,
+	.remove_new = mxs_lradc_adc_remove,
 };
 module_platform_driver(mxs_lradc_adc_driver);
 

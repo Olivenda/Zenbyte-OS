@@ -2,9 +2,6 @@
 #ifndef BME680_H_
 #define BME680_H_
 
-#include <linux/pm.h>
-#include <linux/regmap.h>
-
 #define BME680_REG_CHIP_ID			0xD0
 #define   BME680_CHIP_ID_VAL			0x61
 #define BME680_REG_SOFT_RESET			0xE0
@@ -28,6 +25,8 @@
 #define   BME680_OSRS_TEMP_MASK			GENMASK(7, 5)
 #define   BME680_OSRS_PRESS_MASK		GENMASK(4, 2)
 #define   BME680_MODE_MASK			GENMASK(1, 0)
+#define     BME680_MODE_FORCED			1
+#define     BME680_MODE_SLEEP			0
 
 #define BME680_REG_CONFIG			0x75
 #define   BME680_FILTER_MASK			GENMASK(4, 2)
@@ -43,7 +42,6 @@
 #define   BME680_RHRANGE_MASK			GENMASK(5, 4)
 #define BME680_REG_RES_HEAT_VAL			0x00
 #define   BME680_RSERROR_MASK			GENMASK(7, 4)
-#define BME680_REG_IDAC_HEAT_0			0x50
 #define BME680_REG_RES_HEAT_0			0x5A
 #define BME680_REG_GAS_WAIT_0			0x64
 #define BME680_ADC_GAS_RES			GENMASK(15, 6)
@@ -65,11 +63,7 @@
 
 #define BME680_MEAS_TRIM_MASK			GENMASK(24, 4)
 
-/* Datasheet Section 1.1, Table 1 */
-#define BME680_STARTUP_TIME_US			2000
-
-#define BME680_NUM_CHANNELS			4
-#define BME680_NUM_BULK_READ_REGS		15
+#define BME680_STARTUP_TIME_US			5000
 
 /* Calibration Parameters */
 #define BME680_T2_LSB_REG	0x8A
@@ -81,7 +75,6 @@
 #define BME680_CALIB_RANGE_3_LEN               5
 
 extern const struct regmap_config bme680_regmap_config;
-extern const struct dev_pm_ops bme680_dev_pm_ops;
 
 int bme680_core_probe(struct device *dev, struct regmap *regmap,
 		      const char *name);

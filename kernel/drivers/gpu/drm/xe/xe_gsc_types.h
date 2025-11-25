@@ -13,7 +13,6 @@
 #include <linux/workqueue.h>
 
 #include "xe_uc_fw_types.h"
-#include "xe_device_types.h"
 
 struct xe_bo;
 struct xe_exec_queue;

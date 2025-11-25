@@ -143,7 +143,7 @@ struct max11410_state {
 	int irq;
 	struct {
 		u32 data __aligned(IIO_DMA_MINALIGN);
-		aligned_s64 ts;
+		s64 ts __aligned(8);
 	} scan;
 };
 
@@ -471,8 +471,9 @@ static int max11410_read_raw(struct iio_dev *indio_dev,
 
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_RAW:
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
 
 		mutex_lock(&state->lock);
 
@@ -480,7 +481,7 @@ static int max11410_read_raw(struct iio_dev *indio_dev,
 
 		mutex_unlock(&state->lock);
 
-		iio_device_release_direct(indio_dev);
+		iio_device_release_direct_mode(indio_dev);
 
 		if (ret)
 			return ret;
@@ -506,37 +507,12 @@ static int max11410_read_raw(struct iio_dev *indio_dev,
 	return -EINVAL;
 }
 
-static int __max11410_write_samp_freq(struct max11410_state *st,
-				      int val, int val2)
-{
-	int ret, i, reg_val, filter;
-
-	guard(mutex)(&st->lock);
-
-	ret = regmap_read(st->regmap, MAX11410_REG_FILTER, &reg_val);
-	if (ret)
-		return ret;
-
-	filter = FIELD_GET(MAX11410_FILTER_LINEF_MASK, reg_val);
-
-	for (i = 0; i < max11410_sampling_len[filter]; ++i) {
-		if (val == max11410_sampling_rates[filter][i][0] &&
-		    val2 == max11410_sampling_rates[filter][i][1])
-			break;
-	}
-	if (i == max11410_sampling_len[filter])
-		return -EINVAL;
-
-	return regmap_write_bits(st->regmap, MAX11410_REG_FILTER,
-				 MAX11410_FILTER_RATE_MASK, i);
-}
-
 static int max11410_write_raw(struct iio_dev *indio_dev,
 			      struct iio_chan_spec const *chan,
 			      int val, int val2, long mask)
 {
 	struct max11410_state *st = iio_priv(indio_dev);
-	int ret, gain;
+	int i, ret, reg_val, filter, gain;
 	u32 *scale_avail;
 
 	switch (mask) {
@@ -549,8 +525,9 @@ static int max11410_write_raw(struct iio_dev *indio_dev,
 		if (val != 0 || val2 == 0)
 			return -EINVAL;
 
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
 
 		/* Convert from INT_PLUS_MICRO to FRACTIONAL_LOG2 */
 		val2 = val2 * DIV_ROUND_CLOSEST(BIT(24), 1000000);
@@ -559,15 +536,38 @@ static int max11410_write_raw(struct iio_dev *indio_dev,
 
 		st->channels[chan->address].gain = clamp_val(gain, 0, 7);
 
-		iio_device_release_direct(indio_dev);
+		iio_device_release_direct_mode(indio_dev);
 
 		return 0;
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
 
-		ret = __max11410_write_samp_freq(st, val, val2);
-		iio_device_release_direct(indio_dev);
+		mutex_lock(&st->lock);
+
+		ret = regmap_read(st->regmap, MAX11410_REG_FILTER, &reg_val);
+		if (ret)
+			goto out;
+
+		filter = FIELD_GET(MAX11410_FILTER_LINEF_MASK, reg_val);
+
+		for (i = 0; i < max11410_sampling_len[filter]; ++i) {
+			if (val == max11410_sampling_rates[filter][i][0] &&
+			    val2 == max11410_sampling_rates[filter][i][1])
+				break;
+		}
+		if (i == max11410_sampling_len[filter]) {
+			ret = -EINVAL;
+			goto out;
+		}
+
+		ret = regmap_write_bits(st->regmap, MAX11410_REG_FILTER,
+					MAX11410_FILTER_RATE_MASK, i);
+
+out:
+		mutex_unlock(&st->lock);
+		iio_device_release_direct_mode(indio_dev);
 
 		return ret;
 	default:
@@ -632,8 +632,8 @@ static irqreturn_t max11410_trigger_handler(int irq, void *p)
 		goto out;
 	}
 
-	iio_push_to_buffers_with_ts(indio_dev, &st->scan, sizeof(st->scan),
-				    iio_get_time_ns(indio_dev));
+	iio_push_to_buffers_with_timestamp(indio_dev, &st->scan,
+					   iio_get_time_ns(indio_dev));
 
 out:
 	iio_trigger_notify_done(indio_dev->trig);

@@ -49,7 +49,6 @@ ALL_TESTS="
 	test_mirror_gretap_second
 "
 
-REQUIRE_TEAMD="yes"
 NUM_NETIFS=6
 source lib.sh
 source mirror_lib.sh

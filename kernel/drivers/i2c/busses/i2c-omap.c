@@ -1201,9 +1201,9 @@ omap_i2c_isr_thread(int this_irq, void *dev_id)
 }
 
 static const struct i2c_algorithm omap_i2c_algo = {
-	.xfer = omap_i2c_xfer_irq,
-	.xfer_atomic = omap_i2c_xfer_polling,
-	.functionality = omap_i2c_func,
+	.master_xfer	= omap_i2c_xfer_irq,
+	.master_xfer_atomic	= omap_i2c_xfer_polling,
+	.functionality	= omap_i2c_func,
 };
 
 static const struct i2c_adapter_quirks omap_i2c_quirks = {
@@ -1521,9 +1521,9 @@ err_mux_state_deselect:
 	if (omap->mux_state)
 		mux_state_deselect(omap->mux_state);
 err_put_pm:
+	pm_runtime_dont_use_autosuspend(omap->dev);
 	pm_runtime_put_sync(omap->dev);
 err_disable_pm:
-	pm_runtime_dont_use_autosuspend(omap->dev);
 	pm_runtime_disable(&pdev->dev);
 
 	return r;
@@ -1621,7 +1621,7 @@ static const struct dev_pm_ops omap_i2c_pm_ops = {
 
 static struct platform_driver omap_i2c_driver = {
 	.probe		= omap_i2c_probe,
-	.remove		= omap_i2c_remove,
+	.remove_new	= omap_i2c_remove,
 	.driver		= {
 		.name	= "omap_i2c",
 		.pm	= pm_ptr(&omap_i2c_pm_ops),

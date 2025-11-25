@@ -2210,6 +2210,8 @@ static const struct vb2_ops vpe_qops = {
 	.queue_setup	 = vpe_queue_setup,
 	.buf_prepare	 = vpe_buf_prepare,
 	.buf_queue	 = vpe_buf_queue,
+	.wait_prepare	 = vb2_ops_wait_prepare,
+	.wait_finish	 = vb2_ops_wait_finish,
 	.start_streaming = vpe_start_streaming,
 	.stop_streaming  = vpe_stop_streaming,
 };
@@ -2647,7 +2649,7 @@ MODULE_DEVICE_TABLE(of, vpe_of_match);
 
 static struct platform_driver vpe_pdrv = {
 	.probe		= vpe_probe,
-	.remove		= vpe_remove,
+	.remove_new	= vpe_remove,
 	.driver		= {
 		.name	= VPE_MODULE_NAME,
 		.of_match_table = of_match_ptr(vpe_of_match),

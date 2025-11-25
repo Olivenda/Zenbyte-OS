@@ -15,7 +15,6 @@ properties:
       - aspeed,ast2400-gpio
       - aspeed,ast2500-gpio
       - aspeed,ast2600-gpio
-      - aspeed,ast2700-gpio
 
   reg:
     maxItems: 1
@@ -26,7 +25,7 @@ properties:
 
   gpio-controller: true
   gpio-line-names:
-    minItems: 12
+    minItems: 36
     maxItems: 232
 
   gpio-ranges: true
@@ -43,14 +42,8 @@ properties:
     const: 2
 
   ngpios:
-    minimum: 12
+    minimum: 36
     maximum: 232
-
-patternProperties:
-  "-hog(-[0-9]+)?$":
-    type: object
-    required:
-      - gpio-hog
 
 required:
   - compatible
@@ -98,20 +91,6 @@ allOf:
           maxItems: 208
         ngpios:
           enum: [ 36, 208 ]
-      required:
-        - ngpios
-  - if:
-      properties:
-        compatible:
-          contains:
-            const: aspeed,ast2700-gpio
-    then:
-      properties:
-        gpio-line-names:
-          minItems: 12
-          maxItems: 216
-        ngpios:
-          enum: [ 12, 216 ]
       required:
         - ngpios
 

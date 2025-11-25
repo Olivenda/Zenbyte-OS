@@ -57,7 +57,7 @@ static void efi_retrieve_tcg2_eventlog(int version, efi_physical_addr_t log_loca
 	struct linux_efi_tpm_eventlog *log_tbl = NULL;
 	unsigned long first_entry_addr, last_entry_addr;
 	size_t log_size, last_entry_size;
-	u32 final_events_size = 0;
+	int final_events_size = 0;
 
 	first_entry_addr = (unsigned long) log_location;
 
@@ -110,9 +110,9 @@ static void efi_retrieve_tcg2_eventlog(int version, efi_physical_addr_t log_loca
 	 */
 	if (final_events_table && final_events_table->nr_events) {
 		struct tcg_pcr_event2_head *header;
-		u32 offset;
+		int offset;
 		void *data;
-		u32 event_size;
+		int event_size;
 		int i = final_events_table->nr_events;
 
 		data = (void *)final_events_table;
@@ -124,9 +124,6 @@ static void efi_retrieve_tcg2_eventlog(int version, efi_physical_addr_t log_loca
 			event_size = __calc_tpm2_event_size(header,
 						   (void *)(long)log_location,
 						   false);
-			/* If calc fails this is a malformed log */
-			if (!event_size)
-				break;
 			final_events_size += event_size;
 			i--;
 		}

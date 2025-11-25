@@ -21,9 +21,9 @@ def _enable_pp_allocation_fail():
     if not os.path.exists("/sys/kernel/debug/fail_function"):
         raise KsftSkipEx("Kernel built without function error injection (or DebugFS)")
 
-    if not os.path.exists("/sys/kernel/debug/fail_function/page_pool_alloc_netmems"):
+    if not os.path.exists("/sys/kernel/debug/fail_function/page_pool_alloc_pages"):
         with open("/sys/kernel/debug/fail_function/inject", "w") as fp:
-            fp.write("page_pool_alloc_netmems\n")
+            fp.write("page_pool_alloc_pages\n")
 
     _write_fail_config({
         "verbose": 0,
@@ -37,7 +37,7 @@ def _disable_pp_allocation_fail():
     if not os.path.exists("/sys/kernel/debug/fail_function"):
         return
 
-    if os.path.exists("/sys/kernel/debug/fail_function/page_pool_alloc_netmems"):
+    if os.path.exists("/sys/kernel/debug/fail_function/page_pool_alloc_pages"):
         with open("/sys/kernel/debug/fail_function/inject", "w") as fp:
             fp.write("\n")
 

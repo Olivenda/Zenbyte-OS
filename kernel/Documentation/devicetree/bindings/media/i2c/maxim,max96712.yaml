@@ -25,10 +25,7 @@ description: |
 
 properties:
   compatible:
-    items:
-      - enum:
-          - maxim,max96712
-          - maxim,max96724
+    const: maxim,max96712
 
   reg:
     description: I2C device address

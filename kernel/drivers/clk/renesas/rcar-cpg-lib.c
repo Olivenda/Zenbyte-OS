@@ -206,3 +206,4 @@ struct clk * __init cpg_rpcd2_clk_register(const char *name,
 
 	return clk;
 }
+

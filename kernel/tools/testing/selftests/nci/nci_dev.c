@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (C) 2021 Samsung Electronics
+ * Copyright (C) 2021 Samsung Electrnoics
  * Bongsu Jeon <bongsu.jeon@samsung.com>
  *
  * Test code for nci

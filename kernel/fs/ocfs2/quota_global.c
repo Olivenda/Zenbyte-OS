@@ -273,7 +273,7 @@ ssize_t ocfs2_quota_write(struct super_block *sb, int type,
 	if (new)
 		memset(bh->b_data, 0, sb->s_blocksize);
 	memcpy(bh->b_data + offset, data, len);
-	flush_dcache_folio(bh->b_folio);
+	flush_dcache_page(bh->b_page);
 	set_buffer_uptodate(bh);
 	unlock_buffer(bh);
 	ocfs2_set_buffer_uptodate(INODE_CACHE(gqinode), bh);

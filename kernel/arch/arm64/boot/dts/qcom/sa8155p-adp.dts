@@ -326,6 +326,7 @@
 
 	phy-handle = <&rgmii_phy>;
 	phy-mode = "rgmii";
+	max-speed = <1000>;
 
 	mdio {
 		compatible = "snps,dwmac-mdio";
@@ -382,12 +383,12 @@
 
 &remoteproc_adsp {
 	status = "okay";
-	firmware-name = "qcom/sa8155p/adsp.mbn";
+	firmware-name = "qcom/sa8155p/adsp.mdt";
 };
 
 &remoteproc_cdsp {
 	status = "okay";
-	firmware-name = "qcom/sa8155p/cdsp.mbn";
+	firmware-name = "qcom/sa8155p/cdsp.mdt";
 };
 
 &sdhc_2 {

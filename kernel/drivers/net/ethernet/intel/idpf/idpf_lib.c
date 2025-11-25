@@ -3,7 +3,6 @@
 
 #include "idpf.h"
 #include "idpf_virtchnl.h"
-#include "idpf_ptp.h"
 
 static const struct net_device_ops idpf_netdev_ops;
 
@@ -88,8 +87,6 @@ void idpf_intr_rel(struct idpf_adapter *adapter)
 	idpf_deinit_vector_stack(adapter);
 	kfree(adapter->msix_entries);
 	adapter->msix_entries = NULL;
-	kfree(adapter->rdma_msix_entries);
-	adapter->rdma_msix_entries = NULL;
 }
 
 /**
@@ -144,6 +141,22 @@ static int idpf_mb_intr_req_irq(struct idpf_adapter *adapter)
 	set_bit(IDPF_MB_INTR_MODE, adapter->flags);
 
 	return 0;
+}
+
+/**
+ * idpf_set_mb_vec_id - Set vector index for mailbox
+ * @adapter: adapter structure to access the vector chunks
+ *
+ * The first vector id in the requested vector chunks from the CP is for
+ * the mailbox
+ */
+static void idpf_set_mb_vec_id(struct idpf_adapter *adapter)
+{
+	if (adapter->req_vec_chunks)
+		adapter->mb_vector.v_idx =
+			le16_to_cpu(adapter->caps.mailbox_vector_id);
+	else
+		adapter->mb_vector.v_idx = 0;
 }
 
 /**
@@ -301,33 +314,13 @@ rel_lock:
  */
 int idpf_intr_req(struct idpf_adapter *adapter)
 {
-	u16 num_lan_vecs, min_lan_vecs, num_rdma_vecs = 0, min_rdma_vecs = 0;
 	u16 default_vports = idpf_get_default_vports(adapter);
 	int num_q_vecs, total_vecs, num_vec_ids;
-	int min_vectors, actual_vecs, err;
+	int min_vectors, v_actual, err;
 	unsigned int vector;
 	u16 *vecids;
-	int i;
 
 	total_vecs = idpf_get_reserved_vecs(adapter);
-	num_lan_vecs = total_vecs;
-	if (idpf_is_rdma_cap_ena(adapter)) {
-		num_rdma_vecs = idpf_get_reserved_rdma_vecs(adapter);
-		min_rdma_vecs = IDPF_MIN_RDMA_VEC;
-
-		if (!num_rdma_vecs) {
-			/* If idpf_get_reserved_rdma_vecs is 0, vectors are
-			 * pulled from the LAN pool.
-			 */
-			num_rdma_vecs = min_rdma_vecs;
-		} else if (num_rdma_vecs < min_rdma_vecs) {
-			dev_err(&adapter->pdev->dev,
-				"Not enough vectors reserved for RDMA (min: %u, current: %u)\n",
-				min_rdma_vecs, num_rdma_vecs);
-			return -EINVAL;
-		}
-	}
-
 	num_q_vecs = total_vecs - IDPF_MBX_Q_VEC;
 
 	err = idpf_send_alloc_vectors_msg(adapter, num_q_vecs);
@@ -338,76 +331,52 @@ int idpf_intr_req(struct idpf_adapter *adapter)
 		return -EAGAIN;
 	}
 
-	min_lan_vecs = IDPF_MBX_Q_VEC + IDPF_MIN_Q_VEC * default_vports;
-	min_vectors = min_lan_vecs + min_rdma_vecs;
-	actual_vecs = pci_alloc_irq_vectors(adapter->pdev, min_vectors,
-					    total_vecs, PCI_IRQ_MSIX);
-	if (actual_vecs < 0) {
-		dev_err(&adapter->pdev->dev, "Failed to allocate minimum MSIX vectors required: %d\n",
-			min_vectors);
-		err = actual_vecs;
+	min_vectors = IDPF_MBX_Q_VEC + IDPF_MIN_Q_VEC * default_vports;
+	v_actual = pci_alloc_irq_vectors(adapter->pdev, min_vectors,
+					 total_vecs, PCI_IRQ_MSIX);
+	if (v_actual < min_vectors) {
+		dev_err(&adapter->pdev->dev, "Failed to allocate MSIX vectors: %d\n",
+			v_actual);
+		err = -EAGAIN;
 		goto send_dealloc_vecs;
 	}
 
-	if (idpf_is_rdma_cap_ena(adapter)) {
-		if (actual_vecs < total_vecs) {
-			dev_warn(&adapter->pdev->dev,
-				 "Warning: %d vectors requested, only %d available. Defaulting to minimum (%d) for RDMA and remaining for LAN.\n",
-				 total_vecs, actual_vecs, IDPF_MIN_RDMA_VEC);
-			num_rdma_vecs = IDPF_MIN_RDMA_VEC;
-		}
-
-		adapter->rdma_msix_entries = kcalloc(num_rdma_vecs,
-						     sizeof(struct msix_entry),
-						     GFP_KERNEL);
-		if (!adapter->rdma_msix_entries) {
-			err = -ENOMEM;
-			goto free_irq;
-		}
-	}
-
-	num_lan_vecs = actual_vecs - num_rdma_vecs;
-	adapter->msix_entries = kcalloc(num_lan_vecs, sizeof(struct msix_entry),
+	adapter->msix_entries = kcalloc(v_actual, sizeof(struct msix_entry),
 					GFP_KERNEL);
+
 	if (!adapter->msix_entries) {
 		err = -ENOMEM;
-		goto free_rdma_msix;
+		goto free_irq;
 	}
 
-	adapter->mb_vector.v_idx = le16_to_cpu(adapter->caps.mailbox_vector_id);
+	idpf_set_mb_vec_id(adapter);
 
-	vecids = kcalloc(actual_vecs, sizeof(u16), GFP_KERNEL);
+	vecids = kcalloc(total_vecs, sizeof(u16), GFP_KERNEL);
 	if (!vecids) {
 		err = -ENOMEM;
 		goto free_msix;
 	}
 
-	num_vec_ids = idpf_get_vec_ids(adapter, vecids, actual_vecs,
+	num_vec_ids = idpf_get_vec_ids(adapter, vecids, total_vecs,
 				       &adapter->req_vec_chunks->vchunks);
-	if (num_vec_ids < actual_vecs) {
+	if (num_vec_ids < v_actual) {
 		err = -EINVAL;
 		goto free_vecids;
 	}
 
-	for (vector = 0; vector < num_lan_vecs; vector++) {
+	for (vector = 0; vector < v_actual; vector++) {
 		adapter->msix_entries[vector].entry = vecids[vector];
 		adapter->msix_entries[vector].vector =
 			pci_irq_vector(adapter->pdev, vector);
 	}
-	for (i = 0; i < num_rdma_vecs; vector++, i++) {
-		adapter->rdma_msix_entries[i].entry = vecids[vector];
-		adapter->rdma_msix_entries[i].vector =
-			pci_irq_vector(adapter->pdev, vector);
-	}
 
+	adapter->num_req_msix = total_vecs;
+	adapter->num_msix_entries = v_actual;
 	/* 'num_avail_msix' is used to distribute excess vectors to the vports
 	 * after considering the minimum vectors required per each default
 	 * vport
 	 */
-	adapter->num_avail_msix = num_lan_vecs - min_lan_vecs;
-	adapter->num_msix_entries = num_lan_vecs;
-	if (idpf_is_rdma_cap_ena(adapter))
-		adapter->num_rdma_msix_entries = num_rdma_vecs;
+	adapter->num_avail_msix = v_actual - min_vectors;
 
 	/* Fill MSIX vector lifo stack with vector indexes */
 	err = idpf_init_vector_stack(adapter);
@@ -429,9 +398,6 @@ free_vecids:
 free_msix:
 	kfree(adapter->msix_entries);
 	adapter->msix_entries = NULL;
-free_rdma_msix:
-	kfree(adapter->rdma_msix_entries);
-	adapter->rdma_msix_entries = NULL;
 free_irq:
 	pci_free_irq_vectors(adapter->pdev);
 send_dealloc_vecs:
@@ -805,10 +771,6 @@ static int idpf_cfg_netdev(struct idpf_vport *vport)
 
 	if (idpf_is_cap_ena_all(adapter, IDPF_RSS_CAPS, IDPF_CAP_RSS))
 		dflt_features |= NETIF_F_RXHASH;
-	if (idpf_is_cap_ena(adapter, IDPF_OTHER_CAPS,
-			    VIRTCHNL2_CAP_FLOW_STEER) &&
-	    idpf_vport_is_cap_ena(vport, VIRTCHNL2_VPORT_SIDEBAND_FLOW_STEER))
-		dflt_features |= NETIF_F_NTUPLE;
 	if (idpf_is_cap_ena_all(adapter, IDPF_CSUM_CAPS, IDPF_CAP_TX_CSUM_L4V4))
 		csum_offloads |= NETIF_F_IP_CSUM;
 	if (idpf_is_cap_ena_all(adapter, IDPF_CSUM_CAPS, IDPF_CAP_TX_CSUM_L4V6))
@@ -836,7 +798,6 @@ static int idpf_cfg_netdev(struct idpf_vport *vport)
 	netdev->vlan_features |= netdev->features | other_offloads;
 	netdev->hw_enc_features |= dflt_features | other_offloads;
 	idpf_set_ethtool_ops(netdev);
-	netif_set_affinity_auto(netdev);
 	SET_NETDEV_DEV(netdev, &adapter->pdev->dev);
 
 	/* carrier off on init to avoid Tx hangs */
@@ -884,17 +845,13 @@ static void idpf_remove_features(struct idpf_vport *vport)
 /**
  * idpf_vport_stop - Disable a vport
  * @vport: vport to disable
- * @rtnl: whether to take RTNL lock
  */
-static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
+static void idpf_vport_stop(struct idpf_vport *vport)
 {
 	struct idpf_netdev_priv *np = netdev_priv(vport->netdev);
 
 	if (np->state <= __IDPF_VPORT_DOWN)
 		return;
-
-	if (rtnl)
-		rtnl_lock();
 
 	netif_carrier_off(vport->netdev);
 	netif_tx_disable(vport->netdev);
@@ -917,9 +874,6 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
 	idpf_vport_queues_rel(vport);
 	idpf_vport_intr_rel(vport);
 	np->state = __IDPF_VPORT_DOWN;
-
-	if (rtnl)
-		rtnl_unlock();
 }
 
 /**
@@ -943,7 +897,7 @@ static int idpf_stop(struct net_device *netdev)
 	idpf_vport_ctrl_lock(netdev);
 	vport = idpf_netdev_to_vport(netdev);
 
-	idpf_vport_stop(vport, false);
+	idpf_vport_stop(vport);
 
 	idpf_vport_ctrl_unlock(netdev);
 
@@ -957,19 +911,15 @@ static int idpf_stop(struct net_device *netdev)
 static void idpf_decfg_netdev(struct idpf_vport *vport)
 {
 	struct idpf_adapter *adapter = vport->adapter;
-	u16 idx = vport->idx;
 
 	kfree(vport->rx_ptype_lkup);
 	vport->rx_ptype_lkup = NULL;
 
-	if (test_and_clear_bit(IDPF_VPORT_REG_NETDEV,
-			       adapter->vport_config[idx]->flags)) {
-		unregister_netdev(vport->netdev);
-		free_netdev(vport->netdev);
-	}
+	unregister_netdev(vport->netdev);
+	free_netdev(vport->netdev);
 	vport->netdev = NULL;
 
-	adapter->netdevs[idx] = NULL;
+	adapter->netdevs[vport->idx] = NULL;
 }
 
 /**
@@ -1033,10 +983,8 @@ static void idpf_vport_dealloc(struct idpf_vport *vport)
 	struct idpf_adapter *adapter = vport->adapter;
 	unsigned int i = vport->idx;
 
-	idpf_idc_deinit_vport_aux_device(vport->vdev_info);
-
 	idpf_deinit_mac_addr(vport);
-	idpf_vport_stop(vport, true);
+	idpf_vport_stop(vport);
 
 	if (!test_bit(IDPF_HR_RESET_IN_PROG, adapter->flags))
 		idpf_decfg_netdev(vport);
@@ -1377,9 +1325,8 @@ static void idpf_rx_init_buf_tail(struct idpf_vport *vport)
 /**
  * idpf_vport_open - Bring up a vport
  * @vport: vport to bring up
- * @rtnl: whether to take RTNL lock
  */
-static int idpf_vport_open(struct idpf_vport *vport, bool rtnl)
+static int idpf_vport_open(struct idpf_vport *vport)
 {
 	struct idpf_netdev_priv *np = netdev_priv(vport->netdev);
 	struct idpf_adapter *adapter = vport->adapter;
@@ -1389,9 +1336,6 @@ static int idpf_vport_open(struct idpf_vport *vport, bool rtnl)
 	if (np->state != __IDPF_VPORT_DOWN)
 		return -EBUSY;
 
-	if (rtnl)
-		rtnl_lock();
-
 	/* we do not allow interface up just yet */
 	netif_carrier_off(vport->netdev);
 
@@ -1399,7 +1343,7 @@ static int idpf_vport_open(struct idpf_vport *vport, bool rtnl)
 	if (err) {
 		dev_err(&adapter->pdev->dev, "Failed to allocate interrupts for vport %u: %d\n",
 			vport->vport_id, err);
-		goto err_rtnl_unlock;
+		return err;
 	}
 
 	err = idpf_vport_queues_alloc(vport);
@@ -1486,9 +1430,6 @@ static int idpf_vport_open(struct idpf_vport *vport, bool rtnl)
 		goto deinit_rss;
 	}
 
-	if (rtnl)
-		rtnl_unlock();
-
 	return 0;
 
 deinit_rss:
@@ -1505,10 +1446,6 @@ queues_rel:
 	idpf_vport_queues_rel(vport);
 intr_rel:
 	idpf_vport_intr_rel(vport);
-
-err_rtnl_unlock:
-	if (rtnl)
-		rtnl_unlock();
 
 	return err;
 }
@@ -1571,7 +1508,6 @@ void idpf_init_task(struct work_struct *work)
 	spin_lock_init(&vport_config->mac_filter_list_lock);
 
 	INIT_LIST_HEAD(&vport_config->user_config.mac_filter_list);
-	INIT_LIST_HEAD(&vport_config->user_config.flow_steer_list);
 
 	err = idpf_check_supported_desc_ids(vport);
 	if (err) {
@@ -1590,7 +1526,7 @@ void idpf_init_task(struct work_struct *work)
 	np = netdev_priv(vport->netdev);
 	np->state = __IDPF_VPORT_DOWN;
 	if (test_and_clear_bit(IDPF_VPORT_UP_REQUESTED, vport_config->flags))
-		idpf_vport_open(vport, true);
+		idpf_vport_open(vport);
 
 	/* Spawn and return 'idpf_init_task' work queue until all the
 	 * default vports are created
@@ -1603,22 +1539,13 @@ void idpf_init_task(struct work_struct *work)
 	}
 
 	for (index = 0; index < adapter->max_vports; index++) {
-		struct net_device *netdev = adapter->netdevs[index];
-		struct idpf_vport_config *vport_config;
-
-		vport_config = adapter->vport_config[index];
-
-		if (!netdev ||
-		    test_bit(IDPF_VPORT_REG_NETDEV, vport_config->flags))
-			continue;
-
-		err = register_netdev(netdev);
-		if (err) {
-			dev_err(&pdev->dev, "failed to register netdev for vport %d: %pe\n",
-				index, ERR_PTR(err));
-			continue;
+		if (adapter->netdevs[index] &&
+		    !test_bit(IDPF_VPORT_REG_NETDEV,
+			      adapter->vport_config[index]->flags)) {
+			register_netdev(adapter->netdevs[index]);
+			set_bit(IDPF_VPORT_REG_NETDEV,
+				adapter->vport_config[index]->flags);
 		}
-		set_bit(IDPF_VPORT_REG_NETDEV, vport_config->flags);
 	}
 
 	/* As all the required vports are created, clear the reset flag
@@ -1829,8 +1756,6 @@ static int idpf_init_hard_reset(struct idpf_adapter *adapter)
 	} else if (test_and_clear_bit(IDPF_HR_FUNC_RESET, adapter->flags)) {
 		bool is_reset = idpf_is_reset_detected(adapter);
 
-		idpf_idc_issue_reset_event(adapter->cdev_info);
-
 		idpf_set_vport_state(adapter);
 		idpf_vc_core_deinit(adapter);
 		if (!is_reset)
@@ -1877,10 +1802,6 @@ static int idpf_init_hard_reset(struct idpf_adapter *adapter)
 
 unlock_mutex:
 	mutex_unlock(&adapter->vport_ctrl_lock);
-
-	/* Wait until all vports are created to init RDMA CORE AUX */
-	if (!err)
-		err = idpf_idc_init(adapter);
 
 	return err;
 }
@@ -1965,9 +1886,6 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 		idpf_vport_calc_num_q_desc(new_vport);
 		break;
 	case IDPF_SR_MTU_CHANGE:
-		idpf_idc_vdev_mtu_event(vport->vdev_info,
-					IIDC_RDMA_EVENT_BEFORE_MTU_CHANGE);
-		break;
 	case IDPF_SR_RSC_CHANGE:
 		break;
 	default:
@@ -1980,7 +1898,7 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 		idpf_send_delete_queues_msg(vport);
 	} else {
 		set_bit(IDPF_VPORT_DEL_QUEUES, vport->flags);
-		idpf_vport_stop(vport, false);
+		idpf_vport_stop(vport);
 	}
 
 	idpf_deinit_rss(vport);
@@ -2010,9 +1928,11 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 		goto err_open;
 
 	if (current_state == __IDPF_VPORT_UP)
-		err = idpf_vport_open(vport, false);
+		err = idpf_vport_open(vport);
 
-	goto free_vport;
+	kfree(new_vport);
+
+	return err;
 
 err_reset:
 	idpf_send_add_queues_msg(vport, vport->num_txq, vport->num_complq,
@@ -2020,14 +1940,10 @@ err_reset:
 
 err_open:
 	if (current_state == __IDPF_VPORT_UP)
-		idpf_vport_open(vport, false);
+		idpf_vport_open(vport);
 
 free_vport:
 	kfree(new_vport);
-
-	if (reset_cause == IDPF_SR_MTU_CHANGE)
-		idpf_idc_vdev_mtu_event(vport->vdev_info,
-					IIDC_RDMA_EVENT_AFTER_MTU_CHANGE);
 
 	return err;
 }
@@ -2258,7 +2174,7 @@ static int idpf_open(struct net_device *netdev)
 	if (err)
 		goto unlock;
 
-	err = idpf_vport_open(vport, false);
+	err = idpf_vport_open(vport);
 
 unlock:
 	idpf_vport_ctrl_unlock(netdev);
@@ -2535,60 +2451,6 @@ void idpf_free_dma_mem(struct idpf_hw *hw, struct idpf_dma_mem *mem)
 	mem->pa = 0;
 }
 
-static int idpf_hwtstamp_set(struct net_device *netdev,
-			     struct kernel_hwtstamp_config *config,
-			     struct netlink_ext_ack *extack)
-{
-	struct idpf_vport *vport;
-	int err;
-
-	idpf_vport_ctrl_lock(netdev);
-	vport = idpf_netdev_to_vport(netdev);
-
-	if (!vport->link_up) {
-		idpf_vport_ctrl_unlock(netdev);
-		return -EPERM;
-	}
-
-	if (!idpf_ptp_is_vport_tx_tstamp_ena(vport) &&
-	    !idpf_ptp_is_vport_rx_tstamp_ena(vport)) {
-		idpf_vport_ctrl_unlock(netdev);
-		return -EOPNOTSUPP;
-	}
-
-	err = idpf_ptp_set_timestamp_mode(vport, config);
-
-	idpf_vport_ctrl_unlock(netdev);
-
-	return err;
-}
-
-static int idpf_hwtstamp_get(struct net_device *netdev,
-			     struct kernel_hwtstamp_config *config)
-{
-	struct idpf_vport *vport;
-
-	idpf_vport_ctrl_lock(netdev);
-	vport = idpf_netdev_to_vport(netdev);
-
-	if (!vport->link_up) {
-		idpf_vport_ctrl_unlock(netdev);
-		return -EPERM;
-	}
-
-	if (!idpf_ptp_is_vport_tx_tstamp_ena(vport) &&
-	    !idpf_ptp_is_vport_rx_tstamp_ena(vport)) {
-		idpf_vport_ctrl_unlock(netdev);
-		return 0;
-	}
-
-	*config = vport->tstamp_config;
-
-	idpf_vport_ctrl_unlock(netdev);
-
-	return 0;
-}
-
 static const struct net_device_ops idpf_netdev_ops = {
 	.ndo_open = idpf_open,
 	.ndo_stop = idpf_stop,
@@ -2601,6 +2463,4 @@ static const struct net_device_ops idpf_netdev_ops = {
 	.ndo_get_stats64 = idpf_get_stats64,
 	.ndo_set_features = idpf_set_features,
 	.ndo_tx_timeout = idpf_tx_timeout,
-	.ndo_hwtstamp_get = idpf_hwtstamp_get,
-	.ndo_hwtstamp_set = idpf_hwtstamp_set,
 };

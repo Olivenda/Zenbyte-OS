@@ -89,7 +89,7 @@ tfp410_connector_detect(struct drm_connector *connector, bool force)
 {
 	struct tfp410 *dvi = drm_connector_to_tfp410(connector);
 
-	return drm_bridge_detect(dvi->next_bridge, connector);
+	return drm_bridge_detect(dvi->next_bridge);
 }
 
 static const struct drm_connector_funcs tfp410_con_funcs = {
@@ -120,13 +120,12 @@ static void tfp410_hpd_callback(void *arg, enum drm_connector_status status)
 }
 
 static int tfp410_attach(struct drm_bridge *bridge,
-			 struct drm_encoder *encoder,
 			 enum drm_bridge_attach_flags flags)
 {
 	struct tfp410 *dvi = drm_bridge_to_tfp410(bridge);
 	int ret;
 
-	ret = drm_bridge_attach(encoder, dvi->next_bridge, bridge,
+	ret = drm_bridge_attach(bridge->encoder, dvi->next_bridge, bridge,
 				DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 	if (ret < 0)
 		return ret;
@@ -160,7 +159,7 @@ static int tfp410_attach(struct drm_bridge *bridge,
 	drm_display_info_set_bus_formats(&dvi->connector.display_info,
 					 &dvi->bus_format, 1);
 
-	drm_connector_attach_encoder(&dvi->connector, encoder);
+	drm_connector_attach_encoder(&dvi->connector, bridge->encoder);
 
 	return 0;
 }
@@ -341,14 +340,14 @@ static int tfp410_init(struct device *dev, bool i2c)
 		return -ENXIO;
 	}
 
-	dvi = devm_drm_bridge_alloc(dev, struct tfp410, bridge,
-				    &tfp410_bridge_funcs);
-	if (IS_ERR(dvi))
-		return PTR_ERR(dvi);
+	dvi = devm_kzalloc(dev, sizeof(*dvi), GFP_KERNEL);
+	if (!dvi)
+		return -ENOMEM;
 
 	dvi->dev = dev;
 	dev_set_drvdata(dev, dvi);
 
+	dvi->bridge.funcs = &tfp410_bridge_funcs;
 	dvi->bridge.of_node = dev->of_node;
 	dvi->bridge.timings = &dvi->timings;
 	dvi->bridge.type = DRM_MODE_CONNECTOR_DVID;
@@ -407,7 +406,7 @@ MODULE_DEVICE_TABLE(of, tfp410_match);
 
 static struct platform_driver tfp410_platform_driver = {
 	.probe	= tfp410_probe,
-	.remove = tfp410_remove,
+	.remove_new = tfp410_remove,
 	.driver	= {
 		.name		= "tfp410-bridge",
 		.of_match_table	= tfp410_match,
@@ -436,7 +435,7 @@ static void tfp410_i2c_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id tfp410_i2c_ids[] = {
-	{ "tfp410" },
+	{ "tfp410", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tfp410_i2c_ids);

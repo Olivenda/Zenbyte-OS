@@ -500,8 +500,10 @@ static int scx200_probe(struct platform_device *pdev)
 	struct resource *res;
 
 	res = platform_get_resource(pdev, IORESOURCE_IO, 0);
-	if (!res)
-		return dev_err_probe(&pdev->dev, -ENODEV, "can't fetch device resource info\n");
+	if (!res) {
+		dev_err(&pdev->dev, "can't fetch device resource info\n");
+		return -ENODEV;
+	}
 
 	iface = scx200_create_dev("CS5535", res->start, 0, &pdev->dev);
 	if (!iface)
@@ -534,7 +536,7 @@ static struct platform_driver scx200_pci_driver = {
 		.name = "cs5535-smb",
 	},
 	.probe = scx200_probe,
-	.remove = scx200_remove,
+	.remove_new = scx200_remove,
 };
 
 static const struct pci_device_id scx200_isa[] = {

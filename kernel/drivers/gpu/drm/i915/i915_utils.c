@@ -52,7 +52,7 @@ void cancel_timer(struct timer_list *t)
 	if (!timer_active(t))
 		return;
 
-	timer_delete(t);
+	del_timer(t);
 	WRITE_ONCE(t->expires, 0);
 }
 

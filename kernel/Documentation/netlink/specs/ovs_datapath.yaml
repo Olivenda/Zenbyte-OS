@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
----
+
 name: ovs_datapath
 version: 2
 protocol: genetlink-legacy
@@ -35,7 +35,8 @@ definitions:
         name: dispatch-upcall-per-cpu
         doc: Allow per-cpu dispatch of upcalls
   -
-    name: ovs-dp-stats
+    name: datapath-stats
+    enum-name: ovs-dp-stats
     type: struct
     members:
       -
@@ -51,7 +52,8 @@ definitions:
         name: n-flows
         type: u64
   -
-    name: ovs-dp-megaflow-stats
+    name: megaflow-stats
+    enum-name: ovs-dp-megaflow-stats
     type: struct
     members:
       -
@@ -86,11 +88,11 @@ attribute-sets:
       -
         name: stats
         type: binary
-        struct: ovs-dp-stats
+        struct: datapath-stats
       -
         name: megaflow-stats
         type: binary
-        struct: ovs-dp-megaflow-stats
+        struct: megaflow-stats
       -
         name: user-features
         type: u32

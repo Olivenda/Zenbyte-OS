@@ -371,25 +371,25 @@
 };
 
 &cp0_gpio2 {
-	sata-reset-hog {
+	sata_reset {
 		gpio-hog;
 		gpios = <1 GPIO_ACTIVE_HIGH>;
 		output-high;
 	};
 
-	lte-reset-hog {
+	lte_reset {
 		gpio-hog;
 		gpios = <2 GPIO_ACTIVE_LOW>;
 		output-low;
 	};
 
-	wlan_disable-hog {
+	wlan_disable {
 		gpio-hog;
 		gpios = <19 GPIO_ACTIVE_LOW>;
 		output-low;
 	};
 
-	lte-disable-hog {
+	lte_disable {
 		gpio-hog;
 		gpios = <21 GPIO_ACTIVE_LOW>;
 		output-low;
@@ -475,7 +475,7 @@
 
 	sata-port@1 {
 		phys = <&cp1_comphy0 1>;
-		status = "okay";
+		phy-names = "cp1-sata0-1-phy";
 	};
 };
 

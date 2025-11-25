@@ -53,7 +53,7 @@ struct update_props_workarea {
 static unsigned int nmi_wd_lpm_factor = 200;
 
 #ifdef CONFIG_SYSCTL
-static const struct ctl_table nmi_wd_lpm_factor_ctl_table[] = {
+static struct ctl_table nmi_wd_lpm_factor_ctl_table[] = {
 	{
 		.procname	= "nmi_wd_lpm_factor",
 		.data		= &nmi_wd_lpm_factor,

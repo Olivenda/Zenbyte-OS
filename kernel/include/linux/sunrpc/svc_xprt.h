@@ -53,7 +53,6 @@ struct svc_xprt {
 	struct svc_xprt_class	*xpt_class;
 	const struct svc_xprt_ops *xpt_ops;
 	struct kref		xpt_ref;
-	ktime_t			xpt_qtime;
 	struct list_head	xpt_list;
 	struct lwq_node		xpt_ready;
 	unsigned long		xpt_flags;
@@ -108,12 +107,6 @@ enum {
 				 * with rpcbind (TCP, UDP) on destroy
 				 */
 };
-
-/*
- * Maximum number of "tmp" connections - those without XPT_PEER_VALID -
- * permitted on any service.
- */
-#define XPT_MAX_TMP_CONN	64
 
 static inline void svc_xprt_set_valid(struct svc_xprt *xpt)
 {

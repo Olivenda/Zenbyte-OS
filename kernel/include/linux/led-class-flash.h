@@ -45,8 +45,6 @@ struct led_flash_ops {
 	int (*timeout_set)(struct led_classdev_flash *fled_cdev, u32 timeout);
 	/* get the flash LED fault */
 	int (*fault_get)(struct led_classdev_flash *fled_cdev, u32 *fault);
-	/* set flash duration */
-	int (*duration_set)(struct led_classdev_flash *fled_cdev, u32 duration);
 };
 
 /*
@@ -76,9 +74,6 @@ struct led_classdev_flash {
 
 	/* flash timeout value in microseconds along with its constraints */
 	struct led_flash_setting timeout;
-
-	/* flash timeout value in microseconds along with its constraints */
-	struct led_flash_setting duration;
 
 	/* LED Flash class sysfs groups */
 	const struct attribute_group *sysfs_groups[LED_FLASH_SYSFS_GROUPS_SIZE];
@@ -197,7 +192,7 @@ int led_update_flash_brightness(struct led_classdev_flash *fled_cdev);
  * @fled_cdev: the flash LED to set
  * @timeout: the flash timeout to set it to
  *
- * Set the flash strobe timeout.
+ * Set the flash strobe duration.
  *
  * Returns: 0 on success or negative error value on failure
  */
@@ -213,16 +208,5 @@ int led_set_flash_timeout(struct led_classdev_flash *fled_cdev, u32 timeout);
  * Returns: 0 on success or negative error value on failure
  */
 int led_get_flash_fault(struct led_classdev_flash *fled_cdev, u32 *fault);
-
-/**
- * led_set_flash_duration - set flash LED duration
- * @fled_cdev: the flash LED to set
- * @timeout: the flash duration to set it to
- *
- * Set the flash strobe duration.
- *
- * Returns: 0 on success or negative error value on failure
- */
-int led_set_flash_duration(struct led_classdev_flash *fled_cdev, u32 duration);
 
 #endif	/* __LINUX_FLASH_LEDS_H_INCLUDED */

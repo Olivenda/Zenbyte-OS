@@ -47,9 +47,11 @@ void bch2_bkey_packed_to_binary_text(struct printbuf *out,
 	}
 }
 
-static void __bch2_bkey_pack_verify(const struct bkey_packed *packed,
-				    const struct bkey *unpacked,
-				    const struct bkey_format *format)
+#ifdef CONFIG_BCACHEFS_DEBUG
+
+static void bch2_bkey_pack_verify(const struct bkey_packed *packed,
+				  const struct bkey *unpacked,
+				  const struct bkey_format *format)
 {
 	struct bkey tmp;
 
@@ -93,13 +95,11 @@ static void __bch2_bkey_pack_verify(const struct bkey_packed *packed,
 	}
 }
 
+#else
 static inline void bch2_bkey_pack_verify(const struct bkey_packed *packed,
-					 const struct bkey *unpacked,
-					 const struct bkey_format *format)
-{
-	if (static_branch_unlikely(&bch2_debug_check_bkey_unpack))
-		__bch2_bkey_pack_verify(packed, unpacked, format);
-}
+					const struct bkey *unpacked,
+					const struct bkey_format *format) {}
+#endif
 
 struct pack_state {
 	const struct bkey_format *format;
@@ -398,6 +398,7 @@ static bool set_inc_field_lossy(struct pack_state *state, unsigned field, u64 v)
 	return ret;
 }
 
+#ifdef CONFIG_BCACHEFS_DEBUG
 static bool bkey_packed_successor(struct bkey_packed *out,
 				  const struct btree *b,
 				  struct bkey_packed k)
@@ -454,6 +455,7 @@ static bool bkey_format_has_too_big_fields(const struct bkey_format *f)
 
 	return false;
 }
+#endif
 
 /*
  * Returns a packed key that compares <= in
@@ -470,7 +472,9 @@ enum bkey_pack_pos_ret bch2_bkey_pack_pos_lossy(struct bkey_packed *out,
 	const struct bkey_format *f = &b->format;
 	struct pack_state state = pack_state_init(f, out);
 	u64 *w = out->_data;
+#ifdef CONFIG_BCACHEFS_DEBUG
 	struct bpos orig = in;
+#endif
 	bool exact = true;
 	unsigned i;
 
@@ -523,18 +527,18 @@ enum bkey_pack_pos_ret bch2_bkey_pack_pos_lossy(struct bkey_packed *out,
 	out->format	= KEY_FORMAT_LOCAL_BTREE;
 	out->type	= KEY_TYPE_deleted;
 
-	if (static_branch_unlikely(&bch2_debug_check_bkey_unpack)) {
-		if (exact) {
-			BUG_ON(bkey_cmp_left_packed(b, out, &orig));
-		} else {
-			struct bkey_packed successor;
+#ifdef CONFIG_BCACHEFS_DEBUG
+	if (exact) {
+		BUG_ON(bkey_cmp_left_packed(b, out, &orig));
+	} else {
+		struct bkey_packed successor;
 
-			BUG_ON(bkey_cmp_left_packed(b, out, &orig) >= 0);
-			BUG_ON(bkey_packed_successor(&successor, b, *out) &&
-			       bkey_cmp_left_packed(b, &successor, &orig) < 0 &&
-			       !bkey_format_has_too_big_fields(f));
-		}
+		BUG_ON(bkey_cmp_left_packed(b, out, &orig) >= 0);
+		BUG_ON(bkey_packed_successor(&successor, b, *out) &&
+		       bkey_cmp_left_packed(b, &successor, &orig) < 0 &&
+		       !bkey_format_has_too_big_fields(f));
 	}
+#endif
 
 	return exact ? BKEY_PACK_POS_EXACT : BKEY_PACK_POS_SMALLER;
 }
@@ -623,13 +627,14 @@ struct bkey_format bch2_bkey_format_done(struct bkey_format_state *s)
 		}
 	}
 
-	if (static_branch_unlikely(&bch2_debug_check_bkey_unpack)) {
+#ifdef CONFIG_BCACHEFS_DEBUG
+	{
 		struct printbuf buf = PRINTBUF;
 
 		BUG_ON(bch2_bkey_format_invalid(NULL, &ret, 0, &buf));
 		printbuf_exit(&buf);
 	}
-
+#endif
 	return ret;
 }
 

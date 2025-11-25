@@ -3176,6 +3176,7 @@ err_pm_put:
 
 static void mt8195_afe_pcm_dev_remove(struct platform_device *pdev)
 {
+	pm_runtime_disable(&pdev->dev);
 	if (!pm_runtime_status_suspended(&pdev->dev))
 		mt8195_afe_runtime_suspend(&pdev->dev);
 }
@@ -3187,15 +3188,15 @@ static const struct of_device_id mt8195_afe_pcm_dt_match[] = {
 MODULE_DEVICE_TABLE(of, mt8195_afe_pcm_dt_match);
 
 static const struct dev_pm_ops mt8195_afe_pm_ops = {
-	RUNTIME_PM_OPS(mt8195_afe_runtime_suspend,
-		       mt8195_afe_runtime_resume, NULL)
+	SET_RUNTIME_PM_OPS(mt8195_afe_runtime_suspend,
+			   mt8195_afe_runtime_resume, NULL)
 };
 
 static struct platform_driver mt8195_afe_pcm_driver = {
 	.driver = {
 		   .name = "mt8195-audio",
 		   .of_match_table = mt8195_afe_pcm_dt_match,
-		   .pm = pm_ptr(&mt8195_afe_pm_ops),
+		   .pm = &mt8195_afe_pm_ops,
 	},
 	.probe = mt8195_afe_pcm_dev_probe,
 	.remove = mt8195_afe_pcm_dev_remove,

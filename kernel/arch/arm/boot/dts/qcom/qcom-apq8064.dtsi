@@ -36,58 +36,58 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		cpu0: cpu@0 {
+		CPU0: cpu@0 {
 			compatible = "qcom,krait";
 			enable-method = "qcom,kpss-acc-v1";
 			device_type = "cpu";
 			reg = <0>;
-			next-level-cache = <&l2>;
+			next-level-cache = <&L2>;
 			qcom,acc = <&acc0>;
 			qcom,saw = <&saw0>;
-			cpu-idle-states = <&cpu_spc>;
+			cpu-idle-states = <&CPU_SPC>;
 		};
 
-		cpu1: cpu@1 {
+		CPU1: cpu@1 {
 			compatible = "qcom,krait";
 			enable-method = "qcom,kpss-acc-v1";
 			device_type = "cpu";
 			reg = <1>;
-			next-level-cache = <&l2>;
+			next-level-cache = <&L2>;
 			qcom,acc = <&acc1>;
 			qcom,saw = <&saw1>;
-			cpu-idle-states = <&cpu_spc>;
+			cpu-idle-states = <&CPU_SPC>;
 		};
 
-		cpu2: cpu@2 {
+		CPU2: cpu@2 {
 			compatible = "qcom,krait";
 			enable-method = "qcom,kpss-acc-v1";
 			device_type = "cpu";
 			reg = <2>;
-			next-level-cache = <&l2>;
+			next-level-cache = <&L2>;
 			qcom,acc = <&acc2>;
 			qcom,saw = <&saw2>;
-			cpu-idle-states = <&cpu_spc>;
+			cpu-idle-states = <&CPU_SPC>;
 		};
 
-		cpu3: cpu@3 {
+		CPU3: cpu@3 {
 			compatible = "qcom,krait";
 			enable-method = "qcom,kpss-acc-v1";
 			device_type = "cpu";
 			reg = <3>;
-			next-level-cache = <&l2>;
+			next-level-cache = <&L2>;
 			qcom,acc = <&acc3>;
 			qcom,saw = <&saw3>;
-			cpu-idle-states = <&cpu_spc>;
+			cpu-idle-states = <&CPU_SPC>;
 		};
 
-		l2: l2-cache {
+		L2: l2-cache {
 			compatible = "cache";
 			cache-level = <2>;
 			cache-unified;
 		};
 
 		idle-states {
-			cpu_spc: cpu-spc {
+			CPU_SPC: cpu-spc {
 				compatible = "qcom,idle-state-spc",
 						"arm,idle-state";
 				entry-latency-us = <400>;
@@ -436,8 +436,8 @@
 			};
 		};
 
-		sps_sic_non_secure: interrupt-controller@12100000 {
-			compatible = "qcom,apq8064-sps-sic", "syscon";
+		sps_sic_non_secure: sps-sic-non-secure@12100000 {
+			compatible = "syscon";
 			reg = <0x12100000 0x10000>;
 		};
 
@@ -706,7 +706,7 @@
 			tsens_calib: calib@404 {
 				reg = <0x404 0x10>;
 			};
-			tsens_backup: backup-calib@414 {
+			tsens_backup: backup_calib@414 {
 				reg = <0x414 0x10>;
 			};
 		};
@@ -768,8 +768,7 @@
 				 <&dsi0_phy 0>,
 				 <&dsi1_phy 1>,
 				 <&dsi1_phy 0>,
-				 <&hdmi_phy>,
-				 <&mdp>;
+				 <&hdmi_phy>;
 			clock-names = "pxo",
 				      "pll3",
 				      "pll8_vote",
@@ -777,8 +776,7 @@
 				      "dsi1pllbyte",
 				      "dsi2pll",
 				      "dsi2pllbyte",
-				      "hdmipll",
-				      "lvdspll";
+				      "hdmipll";
 		};
 
 		l2cc: clock-controller@2011000 {
@@ -1122,7 +1120,7 @@
 		};
 
 		mmss_sfpb: syscon@5700000 {
-			compatible = "qcom,apq8064-mmss-sfpb", "syscon";
+			compatible = "syscon";
 			reg = <0x5700000 0x70>;
 		};
 
@@ -1437,19 +1435,13 @@
 				 <&mmcc MDP_AXI_CLK>,
 				 <&mmcc MDP_LUT_CLK>,
 				 <&mmcc HDMI_TV_CLK>,
-				 <&mmcc MDP_TV_CLK>,
-				 <&mmcc LVDS_CLK>,
-				 <&rpmcc RPM_PXO_CLK>;
+				 <&mmcc MDP_TV_CLK>;
 			clock-names = "core_clk",
 				      "iface_clk",
 				      "bus_clk",
 				      "lut_clk",
 				      "hdmi_clk",
-				      "tv_clk",
-				      "lcdc_clk",
-				      "pxo";
-
-			#clock-cells = <0>;
+				      "tv_clk";
 
 			iommus = <&mdp_port0 0
 				  &mdp_port0 2
@@ -1631,7 +1623,7 @@
 			clocks = <&rpmcc RPM_QDSS_CLK>;
 			clock-names = "apb_pclk";
 
-			cpu = <&cpu0>;
+			cpu = <&CPU0>;
 
 			out-ports {
 				port {
@@ -1649,7 +1641,7 @@
 			clocks = <&rpmcc RPM_QDSS_CLK>;
 			clock-names = "apb_pclk";
 
-			cpu = <&cpu1>;
+			cpu = <&CPU1>;
 
 			out-ports {
 				port {
@@ -1667,7 +1659,7 @@
 			clocks = <&rpmcc RPM_QDSS_CLK>;
 			clock-names = "apb_pclk";
 
-			cpu = <&cpu2>;
+			cpu = <&CPU2>;
 
 			out-ports {
 				port {
@@ -1685,7 +1677,7 @@
 			clocks = <&rpmcc RPM_QDSS_CLK>;
 			clock-names = "apb_pclk";
 
-			cpu = <&cpu3>;
+			cpu = <&CPU3>;
 
 			out-ports {
 				port {

@@ -24,7 +24,6 @@
 #include <linux/slab.h>
 #include <net/iucv/iucv.h>
 #include <linux/uaccess.h>
-#include <asm/machine.h>
 #include <asm/ebcdic.h>
 #include <asm/extmem.h>
 
@@ -457,7 +456,7 @@ static int __init mon_init(void)
 {
 	int rc;
 
-	if (!machine_is_vm()) {
+	if (!MACHINE_IS_VM) {
 		pr_err("The z/VM *MONITOR record device driver cannot be "
 		       "loaded without z/VM\n");
 		return -ENODEV;

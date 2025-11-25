@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
-#include <linux/export.h>
-#include <linux/module.h>
 #include <linux/objtool.h>
+#include <linux/module.h>
 #include <linux/sort.h>
 #include <asm/exception.h>
 #include <asm/orc_header.h>
@@ -400,7 +399,7 @@ bool unwind_next_frame(struct unwind_state *state)
 		return false;
 
 	/* Don't let modules unload while we're reading their ORC data. */
-	guard(rcu)();
+	preempt_disable();
 
 	if (is_entry_func(state->pc))
 		goto end;
@@ -515,12 +514,14 @@ bool unwind_next_frame(struct unwind_state *state)
 	if (!__kernel_text_address(state->pc))
 		goto err;
 
+	preempt_enable();
 	return true;
 
 err:
 	state->error = true;
 
 end:
+	preempt_enable();
 	state->stack_info.type = STACK_TYPE_UNKNOWN;
 	return false;
 }

@@ -106,7 +106,6 @@ struct snd_sof_pdata {
 	const char *fw_filename;
 	const char *tplg_filename_prefix;
 	const char *tplg_filename;
-	bool disable_function_topology;
 
 	/* loadable external libraries available under this directory */
 	const char *fw_lib_prefix;

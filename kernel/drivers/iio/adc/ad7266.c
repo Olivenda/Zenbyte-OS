@@ -86,9 +86,10 @@ static irqreturn_t ad7266_trigger_handler(int irq, void *p)
 	int ret;
 
 	ret = spi_read(st->spi, st->data.sample, 4);
-	if (ret == 0)
-		iio_push_to_buffers_with_ts(indio_dev, &st->data, sizeof(st->data),
-					    pf->timestamp);
+	if (ret == 0) {
+		iio_push_to_buffers_with_timestamp(indio_dev, &st->data,
+			    pf->timestamp);
+	}
 
 	iio_trigger_notify_done(indio_dev->trig);
 
@@ -152,10 +153,11 @@ static int ad7266_read_raw(struct iio_dev *indio_dev,
 
 	switch (m) {
 	case IIO_CHAN_INFO_RAW:
-		if (!iio_device_claim_direct(indio_dev))
-			return -EBUSY;
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
 		ret = ad7266_read_single(st, val, chan->address);
-		iio_device_release_direct(indio_dev);
+		iio_device_release_direct_mode(indio_dev);
 
 		if (ret < 0)
 			return ret;
@@ -381,7 +383,7 @@ static const char * const ad7266_gpio_labels[] = {
 
 static int ad7266_probe(struct spi_device *spi)
 {
-	const struct ad7266_platform_data *pdata = dev_get_platdata(&spi->dev);
+	struct ad7266_platform_data *pdata = spi->dev.platform_data;
 	struct iio_dev *indio_dev;
 	struct ad7266_state *st;
 	unsigned int i;

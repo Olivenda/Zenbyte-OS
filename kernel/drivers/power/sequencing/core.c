@@ -628,7 +628,7 @@ static int pwrseq_match_device(struct device *pwrseq_dev, void *data)
 		return 0;
 
 	ret = pwrseq->match(pwrseq, match_data->dev);
-	if (ret == PWRSEQ_NO_MATCH || ret < 0)
+	if (ret <= 0)
 		return ret;
 
 	/* We got the matching device, let's find the right target. */
@@ -651,7 +651,7 @@ static int pwrseq_match_device(struct device *pwrseq_dev, void *data)
 
 	match_data->desc->pwrseq = pwrseq_device_get(pwrseq);
 
-	return PWRSEQ_MATCH_OK;
+	return 1;
 }
 
 /**
@@ -684,7 +684,7 @@ struct pwrseq_desc *pwrseq_get(struct device *dev, const char *target)
 			       pwrseq_match_device);
 	if (ret < 0)
 		return ERR_PTR(ret);
-	if (ret == PWRSEQ_NO_MATCH)
+	if (ret == 0)
 		/* No device matched. */
 		return ERR_PTR(-EPROBE_DEFER);
 

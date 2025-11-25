@@ -138,7 +138,6 @@ static const u32 mt7915_offs[] = {
 	[AGG_ACR0]		= 0x084,
 	[AGG_ACR4]		= 0x08c,
 	[AGG_MRCR]		= 0x098,
-	[AGG_ATCR0]		= 0x0ec,
 	[AGG_ATCR1]		= 0x0f0,
 	[AGG_ATCR3]		= 0x0f4,
 	[LPON_UTTR0]		= 0x080,
@@ -213,7 +212,6 @@ static const u32 mt7916_offs[] = {
 	[AGG_ACR0]		= 0x054,
 	[AGG_ACR4]		= 0x05c,
 	[AGG_MRCR]		= 0x068,
-	[AGG_ATCR0]		= 0x1a4,
 	[AGG_ATCR1]		= 0x1a8,
 	[AGG_ATCR3]		= 0x080,
 	[LPON_UTTR0]		= 0x360,
@@ -587,9 +585,12 @@ static void mt7915_mmio_wed_update_rx_stats(struct mtk_wed_device *wed,
 
 	dev = container_of(wed, struct mt7915_dev, mt76.mmio.wed);
 
+	if (idx >= mt7915_wtbl_size(dev))
+		return;
+
 	rcu_read_lock();
 
-	wcid = mt76_wcid_ptr(dev, idx);
+	wcid = rcu_dereference(dev->mt76.wcid[idx]);
 	if (wcid) {
 		wcid->stats.rx_bytes += le32_to_cpu(stats->rx_byte_cnt);
 		wcid->stats.rx_packets += le32_to_cpu(stats->rx_pkt_cnt);

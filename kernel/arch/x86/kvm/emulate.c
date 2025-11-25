@@ -477,11 +477,8 @@ static int emulator_check_intercept(struct x86_emulate_ctxt *ctxt,
 		.dst_val    = ctxt->dst.val64,
 		.src_bytes  = ctxt->src.bytes,
 		.dst_bytes  = ctxt->dst.bytes,
-		.src_type   = ctxt->src.type,
-		.dst_type   = ctxt->dst.type,
 		.ad_bytes   = ctxt->ad_bytes,
-		.rip	    = ctxt->eip,
-		.next_rip   = ctxt->_eip,
+		.next_rip   = ctxt->eip,
 	};
 
 	return ctxt->ops->intercept(ctxt, &info, stage);

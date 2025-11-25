@@ -2357,7 +2357,7 @@ static void isp1362_hc_stop(struct usb_hcd *hcd)
 
 	pr_debug("%s:\n", __func__);
 
-	timer_delete_sync(&hcd->rh_timer);
+	del_timer_sync(&hcd->rh_timer);
 
 	spin_lock_irqsave(&isp1362_hcd->lock, flags);
 
@@ -2757,7 +2757,7 @@ static int isp1362_resume(struct platform_device *pdev)
 
 static struct platform_driver isp1362_driver = {
 	.probe = isp1362_probe,
-	.remove = isp1362_remove,
+	.remove_new = isp1362_remove,
 
 	.suspend = isp1362_suspend,
 	.resume = isp1362_resume,

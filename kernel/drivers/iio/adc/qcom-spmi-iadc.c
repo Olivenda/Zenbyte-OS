@@ -543,9 +543,7 @@ static int iadc_probe(struct platform_device *pdev)
 		else
 			return ret;
 	} else {
-		ret = devm_device_init_wakeup(iadc->dev);
-		if (ret)
-			return dev_err_probe(iadc->dev, ret, "Failed to init wakeup\n");
+		device_init_wakeup(iadc->dev, 1);
 	}
 
 	ret = iadc_update_offset(iadc);

@@ -91,6 +91,9 @@ struct atmel_pwm_chip {
 	 * hardware.
 	 */
 	u32 update_pending;
+
+	/* Protects .update_pending */
+	spinlock_t lock;
 };
 
 static inline struct atmel_pwm_chip *to_atmel_pwm_chip(struct pwm_chip *chip)
@@ -142,6 +145,8 @@ static void atmel_pwm_update_pending(struct atmel_pwm_chip *chip)
 
 static void atmel_pwm_set_pending(struct atmel_pwm_chip *chip, unsigned int ch)
 {
+	spin_lock(&chip->lock);
+
 	/*
 	 * Clear pending flags in hardware because otherwise there might still
 	 * be a stale flag in ISR.
@@ -149,11 +154,15 @@ static void atmel_pwm_set_pending(struct atmel_pwm_chip *chip, unsigned int ch)
 	atmel_pwm_update_pending(chip);
 
 	chip->update_pending |= (1 << ch);
+
+	spin_unlock(&chip->lock);
 }
 
 static int atmel_pwm_test_pending(struct atmel_pwm_chip *chip, unsigned int ch)
 {
 	int ret = 0;
+
+	spin_lock(&chip->lock);
 
 	if (chip->update_pending & (1 << ch)) {
 		atmel_pwm_update_pending(chip);
@@ -161,6 +170,8 @@ static int atmel_pwm_test_pending(struct atmel_pwm_chip *chip, unsigned int ch)
 		if (chip->update_pending & (1 << ch))
 			ret = 1;
 	}
+
+	spin_unlock(&chip->lock);
 
 	return ret;
 }
@@ -498,6 +509,7 @@ static int atmel_pwm_probe(struct platform_device *pdev)
 	atmel_pwm->data = of_device_get_match_data(&pdev->dev);
 
 	atmel_pwm->update_pending = 0;
+	spin_lock_init(&atmel_pwm->lock);
 
 	atmel_pwm->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(atmel_pwm->base))

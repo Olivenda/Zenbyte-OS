@@ -884,27 +884,25 @@ static int flow_type_to_traffic_type(u32 flow_type)
 	case ESP_V6_FLOW:
 		return MLX5_TT_IPV6_IPSEC_ESP;
 	case IPV4_FLOW:
-	case IP_USER_FLOW:
 		return MLX5_TT_IPV4;
 	case IPV6_FLOW:
-	case IPV6_USER_FLOW:
 		return MLX5_TT_IPV6;
 	default:
 		return -EINVAL;
 	}
 }
 
-int mlx5e_ethtool_set_rxfh_fields(struct mlx5e_priv *priv,
-				  const struct ethtool_rxfh_fields *nfc,
-				  struct netlink_ext_ack *extack)
+static int mlx5e_set_rss_hash_opt(struct mlx5e_priv *priv,
+				  struct ethtool_rxnfc *nfc)
 {
 	u8 rx_hash_field = 0;
 	u32 flow_type = 0;
-	u32 rss_idx;
+	u32 rss_idx = 0;
 	int err;
 	int tt;
 
-	rss_idx = nfc->rss_context;
+	if (nfc->flow_type & FLOW_RSS)
+		rss_idx = nfc->rss_context;
 
 	flow_type = flow_type_mask(nfc->flow_type);
 	tt = flow_type_to_traffic_type(flow_type);
@@ -941,15 +939,16 @@ int mlx5e_ethtool_set_rxfh_fields(struct mlx5e_priv *priv,
 	return err;
 }
 
-int mlx5e_ethtool_get_rxfh_fields(struct mlx5e_priv *priv,
-				  struct ethtool_rxfh_fields *nfc)
+static int mlx5e_get_rss_hash_opt(struct mlx5e_priv *priv,
+				  struct ethtool_rxnfc *nfc)
 {
 	int hash_field = 0;
 	u32 flow_type = 0;
-	u32 rss_idx;
+	u32 rss_idx = 0;
 	int tt;
 
-	rss_idx = nfc->rss_context;
+	if (nfc->flow_type & FLOW_RSS)
+		rss_idx = nfc->rss_context;
 
 	flow_type = flow_type_mask(nfc->flow_type);
 	tt = flow_type_to_traffic_type(flow_type);
@@ -985,6 +984,9 @@ int mlx5e_ethtool_set_rxnfc(struct mlx5e_priv *priv, struct ethtool_rxnfc *cmd)
 	case ETHTOOL_SRXCLSRLDEL:
 		err = mlx5e_ethtool_flow_remove(priv, cmd->fs.location);
 		break;
+	case ETHTOOL_SRXFH:
+		err = mlx5e_set_rss_hash_opt(priv, cmd);
+		break;
 	default:
 		err = -EOPNOTSUPP;
 		break;
@@ -1008,6 +1010,9 @@ int mlx5e_ethtool_get_rxnfc(struct mlx5e_priv *priv,
 		break;
 	case ETHTOOL_GRXCLSRLALL:
 		err = mlx5e_ethtool_get_all_flows(priv, info, rule_locs);
+		break;
+	case ETHTOOL_GRXFH:
+		err =  mlx5e_get_rss_hash_opt(priv, info);
 		break;
 	default:
 		err = -EOPNOTSUPP;

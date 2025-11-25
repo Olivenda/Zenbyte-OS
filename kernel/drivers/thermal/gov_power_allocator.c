@@ -322,8 +322,9 @@ power_actor_set_power(struct thermal_cooling_device *cdev,
 		return ret;
 
 	instance->target = clamp_val(state, instance->lower, instance->upper);
-
-	thermal_cdev_update_nocheck(cdev);
+	mutex_lock(&cdev->lock);
+	__thermal_cdev_update(cdev);
+	mutex_unlock(&cdev->lock);
 
 	return 0;
 }
@@ -354,19 +355,11 @@ static void divvy_up_power(struct power_actor *power, int num_actors,
 	u32 extra_power = 0;
 	int i;
 
-	if (!total_req_power) {
-		/*
-		 * Nobody requested anything, just give everybody
-		 * the maximum power
-		 */
-		for (i = 0; i < num_actors; i++) {
-			struct power_actor *pa = &power[i];
-
-			pa->granted_power = pa->max_power;
-		}
-
-		return;
-	}
+	/*
+	 * Prevent division by 0 if none of the actors request power.
+	 */
+	if (!total_req_power)
+		total_req_power = 1;
 
 	for (i = 0; i < num_actors; i++) {
 		struct power_actor *pa = &power[i];
@@ -557,17 +550,18 @@ static void allow_maximum_power(struct thermal_zone_device *tz)
 		cdev = instance->cdev;
 
 		instance->target = 0;
-		scoped_guard(cooling_dev, cdev) {
-			/*
-			 * Call for updating the cooling devices local stats and
-			 * avoid periods of dozen of seconds when those have not
-			 * been maintained.
-			 */
-			cdev->ops->get_requested_power(cdev, &req_power);
+		mutex_lock(&cdev->lock);
+		/*
+		 * Call for updating the cooling devices local stats and avoid
+		 * periods of dozen of seconds when those have not been
+		 * maintained.
+		 */
+		cdev->ops->get_requested_power(cdev, &req_power);
 
-			if (params->update_cdevs)
-				__thermal_cdev_update(cdev);
-		}
+		if (params->update_cdevs)
+			__thermal_cdev_update(cdev);
+
+		mutex_unlock(&cdev->lock);
 	}
 }
 

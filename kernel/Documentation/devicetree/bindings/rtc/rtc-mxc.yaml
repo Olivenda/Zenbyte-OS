@@ -14,13 +14,9 @@ maintainers:
 
 properties:
   compatible:
-    oneOf:
-      - const: fsl,imx1-rtc
-      - const: fsl,imx21-rtc
-      - items:
-          - enum:
-              - fsl,imx31-rtc
-          - const: fsl,imx21-rtc
+    enum:
+      - fsl,imx1-rtc
+      - fsl,imx21-rtc
 
   reg:
     maxItems: 1

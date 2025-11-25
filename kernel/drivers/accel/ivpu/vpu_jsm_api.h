@@ -22,7 +22,7 @@
 /*
  * Minor version changes when API backward compatibility is preserved.
  */
-#define VPU_JSM_API_VER_MINOR 29
+#define VPU_JSM_API_VER_MINOR 25
 
 /*
  * API header changed (field names, documentation, formatting) but API itself has not been changed
@@ -53,7 +53,8 @@
  * Engine indexes.
  */
 #define VPU_ENGINE_COMPUTE 0
-#define VPU_ENGINE_NB	   1
+#define VPU_ENGINE_COPY	   1
+#define VPU_ENGINE_NB	   2
 
 /*
  * VPU status values.
@@ -125,13 +126,11 @@ enum {
 	 * When set, indicates that job queue uses native fences (as inline commands
 	 * in job queue). Such queues may also use legacy fences (as commands in batch buffers).
 	 * When cleared, indicates the job queue only uses legacy fences.
-	 * NOTES:
-	 *   1. For queues using native fences, VPU expects that all jobs in the queue
-	 *      are immediately followed by an inline command object. This object is expected
-	 *      to be a fence signal command in most cases, but can also be a NOP in case the host
-	 *      does not need per-job fence signalling. Other inline commands objects can be
-	 *      inserted between "job and inline command" pairs.
-	 *  2. Native fence queues are only supported on VPU 40xx onwards.
+	 * NOTE: For queues using native fences, VPU expects that all jobs in the queue
+	 * are immediately followed by an inline command object. This object is expected
+	 * to be a fence signal command in most cases, but can also be a NOP in case the host
+	 * does not need per-job fence signalling. Other inline commands objects can be
+	 * inserted between "job and inline command" pairs.
 	 */
 	VPU_JOB_QUEUE_FLAGS_USE_NATIVE_FENCE_MASK = (1 << 1U),
 
@@ -276,8 +275,6 @@ struct vpu_inline_cmd {
 			u64 value;
 			/* User VA of the log buffer in which to add log entry on completion. */
 			u64 log_buffer_va;
-			/* NPU private data. */
-			u64 npu_private_data;
 		} fence;
 		/* Other commands do not have a payload. */
 		/* Payload definition for future inline commands can be inserted here. */
@@ -794,22 +791,12 @@ struct vpu_jsm_metric_streamer_update {
 	/** Metric group mask that identifies metric streamer instance. */
 	u64 metric_group_mask;
 	/**
-	 * Address and size of the buffer where the VPU will write metric data.
-	 * This member dictates how the update operation should perform:
-	 * 1. client needs information about the number of collected samples and the
-	 *   amount of data written to the current buffer
-	 * 2. client wants to switch to a new buffer
-	 *
-	 * Case 1. is identified by the buffer address being 0 or the same as the
-	 * currently used buffer address. In this case the buffer size is ignored and
-	 * the size of the current buffer is unchanged. The VPU will return an update
-	 * in the vpu_jsm_metric_streamer_done structure. The internal writing position
-	 * into the buffer is not changed.
-	 *
-	 * Case 2. is identified by the address being non-zero and differs from the
-	 * current buffer address. The VPU will immediately switch data collection to
-	 * the new buffer. Then the VPU will return an update in the
-	 * vpu_jsm_metric_streamer_done structure.
+	 * Address and size of the buffer where the VPU will write metric data. If
+	 * the buffer address is 0 or same as the currently used buffer the VPU will
+	 * continue writing metric data to the current buffer. In this case the
+	 * buffer size is ignored and the size of the current buffer is unchanged.
+	 * If the address is non-zero and differs from the current buffer address the
+	 * VPU will immediately switch data collection to the new buffer.
 	 */
 	u64 buffer_addr;
 	u64 buffer_size;
@@ -947,7 +934,6 @@ struct vpu_ipc_msg_payload_hws_priority_band_setup {
 	/*
 	 * Default quantum in 100ns units for scheduling across processes
 	 * within a priority band
-	 * Minimum value supported by NPU is 1ms (10000 in 100ns units).
 	 */
 	u32 process_quantum[VPU_HWS_NUM_PRIORITY_BANDS];
 	/*
@@ -960,10 +946,8 @@ struct vpu_ipc_msg_payload_hws_priority_band_setup {
 	 * in situations when it's starved by the focus band.
 	 */
 	u32 normal_band_percentage;
-	/*
-	 * TDR timeout value in milliseconds. Default value of 0 meaning no timeout.
-	 */
-	u32 tdr_timeout;
+	/* Reserved */
+	u32 reserved_0;
 };
 
 /*
@@ -1040,10 +1024,7 @@ struct vpu_ipc_msg_payload_hws_set_context_sched_properties {
 	s32 in_process_priority;
 	/* Zero padding / Reserved */
 	u32 reserved_1;
-	/*
-	 * Context quantum relative to other contexts of same priority in the same process
-	 * Minimum value supported by NPU is 1ms (10000 in 100ns units).
-	 */
+	/* Context quantum relative to other contexts of same priority in the same process */
 	u64 context_quantum;
 	/* Grace period when preempting context of the same priority within the same process */
 	u64 grace_period_same_priority;

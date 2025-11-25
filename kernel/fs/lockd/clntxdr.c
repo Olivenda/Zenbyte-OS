@@ -2,9 +2,8 @@
 /*
  * linux/fs/lockd/clntxdr.c
  *
- * XDR functions to encode/decode NLM version 1 and 3 RPC
- * arguments and results. NLM version 2 is not specified
- * by a standard, thus it is not implemented.
+ * XDR functions to encode/decode NLM version 3 RPC arguments and results.
+ * NLM version 3 is backwards compatible with NLM versions 1 and 2.
  *
  * NLM client-side only.
  *

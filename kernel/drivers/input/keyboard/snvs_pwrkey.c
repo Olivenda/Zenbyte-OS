@@ -27,8 +27,6 @@
 #define SNVS_HPSR_BTN		BIT(6)
 #define SNVS_LPSR_SPO		BIT(18)
 #define SNVS_LPCR_DEP_EN	BIT(5)
-#define SNVS_LPCR_BPT_SHIFT	16
-#define SNVS_LPCR_BPT_MASK	(3 << SNVS_LPCR_BPT_SHIFT)
 
 #define DEBOUNCE_TIME		30
 #define REPEAT_INTERVAL		60
@@ -46,8 +44,7 @@ struct pwrkey_drv_data {
 
 static void imx_imx_snvs_check_for_events(struct timer_list *t)
 {
-	struct pwrkey_drv_data *pdata = timer_container_of(pdata, t,
-							   check_timer);
+	struct pwrkey_drv_data *pdata = from_timer(pdata, t, check_timer);
 	struct input_dev *input = pdata->input;
 	u32 state;
 
@@ -107,7 +104,7 @@ static void imx_snvs_pwrkey_act(void *pdata)
 {
 	struct pwrkey_drv_data *pd = pdata;
 
-	timer_delete_sync(&pd->check_timer);
+	del_timer_sync(&pd->check_timer);
 }
 
 static int imx_snvs_pwrkey_probe(struct platform_device *pdev)
@@ -117,8 +114,6 @@ static int imx_snvs_pwrkey_probe(struct platform_device *pdev)
 	struct device_node *np;
 	struct clk *clk;
 	int error;
-	unsigned int val;
-	unsigned int bpt;
 	u32 vid;
 
 	/* Get SNVS register Page */
@@ -152,27 +147,6 @@ static int imx_snvs_pwrkey_probe(struct platform_device *pdev)
 	pdata->irq = platform_get_irq(pdev, 0);
 	if (pdata->irq < 0)
 		return -EINVAL;
-
-	error = of_property_read_u32(np, "power-off-time-sec", &val);
-	if (!error) {
-		switch (val) {
-		case 0:
-			bpt = 0x3;
-			break;
-		case 5:
-		case 10:
-		case 15:
-			bpt = (val / 5) - 1;
-			break;
-		default:
-			dev_err(&pdev->dev,
-				"power-off-time-sec %d out of range\n", val);
-			return -EINVAL;
-		}
-
-		regmap_update_bits(pdata->snvs, SNVS_LPCR_REG, SNVS_LPCR_BPT_MASK,
-				   bpt << SNVS_LPCR_BPT_SHIFT);
-	}
 
 	regmap_read(pdata->snvs, SNVS_HPVIDR1_REG, &vid);
 	pdata->minor_rev = vid & 0xff;

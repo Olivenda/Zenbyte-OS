@@ -5,6 +5,7 @@
  */
 
 #include <linux/skbuff.h>
+#include <crypto/hash.h>
 
 #include "rxe.h"
 #include "rxe_loc.h"
@@ -97,7 +98,7 @@ static void req_retry(struct rxe_qp *qp)
 
 void rnr_nak_timer(struct timer_list *t)
 {
-	struct rxe_qp *qp = timer_container_of(qp, t, rnr_nak_timer);
+	struct rxe_qp *qp = from_timer(qp, t, rnr_nak_timer);
 	unsigned long flags;
 
 	rxe_dbg_qp(qp, "nak timer fired\n");

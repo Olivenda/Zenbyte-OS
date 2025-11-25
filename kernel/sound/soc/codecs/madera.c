@@ -11,7 +11,6 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/tlv.h>
@@ -2776,7 +2775,7 @@ static int madera_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 		break;
 	case SND_SOC_DAIFMT_DSP_B:
 		if ((fmt & SND_SOC_DAIFMT_MASTER_MASK) !=
-		    SND_SOC_DAIFMT_CBP_CFP) {
+		    SND_SOC_DAIFMT_CBM_CFM) {
 			madera_aif_err(dai, "DSP_B not valid in slave mode\n");
 			return -EINVAL;
 		}
@@ -2787,7 +2786,7 @@ static int madera_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 		break;
 	case SND_SOC_DAIFMT_LEFT_J:
 		if ((fmt & SND_SOC_DAIFMT_MASTER_MASK) !=
-		    SND_SOC_DAIFMT_CBP_CFP) {
+		    SND_SOC_DAIFMT_CBM_CFM) {
 			madera_aif_err(dai, "LEFT_J not valid in slave mode\n");
 			return -EINVAL;
 		}
@@ -2800,15 +2799,15 @@ static int madera_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	}
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBC_CFC:
+	case SND_SOC_DAIFMT_CBS_CFS:
 		break;
-	case SND_SOC_DAIFMT_CBC_CFP:
+	case SND_SOC_DAIFMT_CBS_CFM:
 		lrclk |= MADERA_AIF1TX_LRCLK_MSTR;
 		break;
-	case SND_SOC_DAIFMT_CBP_CFC:
+	case SND_SOC_DAIFMT_CBM_CFS:
 		bclk |= MADERA_AIF1_BCLK_MSTR;
 		break;
-	case SND_SOC_DAIFMT_CBP_CFP:
+	case SND_SOC_DAIFMT_CBM_CFM:
 		bclk |= MADERA_AIF1_BCLK_MSTR;
 		lrclk |= MADERA_AIF1TX_LRCLK_MSTR;
 		break;
@@ -3966,7 +3965,7 @@ static int madera_enable_fll(struct madera_fll *fll)
 	}
 
 	madera_fll_dbg(fll, "Enabling FLL, initially %s\n",
-		       str_enabled_disabled(already_enabled));
+		       already_enabled ? "enabled" : "disabled");
 
 	if (fll->fout < MADERA_FLL_MIN_FOUT ||
 	    fll->fout > MADERA_FLL_MAX_FOUT) {
@@ -4253,7 +4252,7 @@ static int madera_enable_fll_ao(struct madera_fll *fll,
 		pm_runtime_get_sync(madera->dev);
 
 	madera_fll_dbg(fll, "Enabling FLL_AO, initially %s\n",
-		       str_enabled_disabled(already_enabled));
+		       already_enabled ? "enabled" : "disabled");
 
 	/* FLL_AO_HOLD must be set before configuring any registers */
 	regmap_update_bits(fll->madera->regmap,
@@ -4577,7 +4576,7 @@ static int madera_fllhj_enable(struct madera_fll *fll)
 		pm_runtime_get_sync(madera->dev);
 
 	madera_fll_dbg(fll, "Enabling FLL, initially %s\n",
-		       str_enabled_disabled(already_enabled));
+		       already_enabled ? "enabled" : "disabled");
 
 	/* FLLn_HOLD must be set before configuring any registers */
 	regmap_update_bits(fll->madera->regmap,

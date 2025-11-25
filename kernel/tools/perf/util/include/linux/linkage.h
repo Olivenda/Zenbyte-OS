@@ -132,8 +132,4 @@
         SYM_TYPED_START(name, SYM_L_GLOBAL, SYM_A_ALIGN)
 #endif
 
-#ifndef SYM_PIC_ALIAS
-#define SYM_PIC_ALIAS(sym)	SYM_ALIAS(__pi_ ## sym, sym, SYM_T_FUNC, SYM_L_GLOBAL)
-#endif
-
 #endif	/* PERF_LINUX_LINKAGE_H_ */

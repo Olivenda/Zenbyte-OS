@@ -328,7 +328,6 @@ static bool fence_is_active(const struct i915_fence_reg *fence)
 
 static struct i915_fence_reg *fence_find(struct i915_ggtt *ggtt)
 {
-	struct intel_display *display = ggtt->vm.i915->display;
 	struct i915_fence_reg *active = NULL;
 	struct i915_fence_reg *fence, *fn;
 
@@ -354,7 +353,7 @@ static struct i915_fence_reg *fence_find(struct i915_ggtt *ggtt)
 	}
 
 	/* Wait for completion of pending flips which consume fences */
-	if (intel_has_pending_fb_unpin(display))
+	if (intel_has_pending_fb_unpin(ggtt->vm.i915))
 		return ERR_PTR(-EAGAIN);
 
 	return ERR_PTR(-ENOBUFS);
@@ -750,7 +749,7 @@ static void swizzle_page(struct page *page)
 	char *vaddr;
 	int i;
 
-	vaddr = kmap_local_page(page);
+	vaddr = kmap(page);
 
 	for (i = 0; i < PAGE_SIZE; i += 128) {
 		memcpy(temp, &vaddr[i], 64);
@@ -758,7 +757,7 @@ static void swizzle_page(struct page *page)
 		memcpy(&vaddr[i + 64], temp, 64);
 	}
 
-	kunmap_local(vaddr);
+	kunmap(page);
 }
 
 /**

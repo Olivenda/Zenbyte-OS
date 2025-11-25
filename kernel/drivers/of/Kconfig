@@ -2,12 +2,6 @@
 config DTC
 	bool
 
-config GENERIC_BUILTIN_DTB
-	bool
-
-config BUILTIN_DTB_ALL
-	bool
-
 menuconfig OF
 	bool "Device Tree and Open Firmware support"
 	help
@@ -117,7 +111,7 @@ config OF_OVERLAY_KUNIT_TEST
 	tristate "Device Tree overlay KUnit tests" if !KUNIT_ALL_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
-	select DTC
+	select OF_OVERLAY
 	help
 	  This option builds KUnit unit tests for the device tree overlay code.
 

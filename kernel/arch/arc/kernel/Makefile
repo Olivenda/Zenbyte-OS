@@ -26,4 +26,4 @@ ifdef CONFIG_ISA_ARCOMPACT
 CFLAGS_fpu.o   += -mdpfp
 endif
 
-always-$(KBUILD_BUILTIN) := vmlinux.lds
+extra-y := vmlinux.lds

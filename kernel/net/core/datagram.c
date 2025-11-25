@@ -52,7 +52,6 @@
 #include <linux/pagemap.h>
 #include <linux/iov_iter.h>
 #include <linux/indirect_call_wrapper.h>
-#include <linux/crc32.h>
 
 #include <net/protocol.h>
 #include <linux/skbuff.h>
@@ -62,8 +61,7 @@
 #include <net/tcp_states.h>
 #include <trace/events/skb.h>
 #include <net/busy_poll.h>
-
-#include "devmem.h"
+#include <crypto/hash.h>
 
 /*
  *	Is a socket 'connection oriented' ?
@@ -165,7 +163,8 @@ done:
 	return skb;
 }
 
-struct sk_buff *__skb_try_recv_from_queue(struct sk_buff_head *queue,
+struct sk_buff *__skb_try_recv_from_queue(struct sock *sk,
+					  struct sk_buff_head *queue,
 					  unsigned int flags,
 					  int *off, int *err,
 					  struct sk_buff **last)
@@ -262,7 +261,7 @@ struct sk_buff *__skb_try_recv_datagram(struct sock *sk,
 		 * However, this function was correct in any case. 8)
 		 */
 		spin_lock_irqsave(&queue->lock, cpu_flags);
-		skb = __skb_try_recv_from_queue(queue, flags, off, &error,
+		skb = __skb_try_recv_from_queue(sk, queue, flags, off, &error,
 						last);
 		spin_unlock_irqrestore(&queue->lock, cpu_flags);
 		if (error)
@@ -483,37 +482,41 @@ short_copy:
 	return 0;
 }
 
-#ifdef CONFIG_NET_CRC32C
-static size_t crc32c_and_copy_to_iter(const void *addr, size_t bytes,
-				      void *_crcp, struct iov_iter *i)
+static size_t hash_and_copy_to_iter(const void *addr, size_t bytes, void *hashp,
+				    struct iov_iter *i)
 {
-	u32 *crcp = _crcp;
+#ifdef CONFIG_CRYPTO_HASH
+	struct ahash_request *hash = hashp;
+	struct scatterlist sg;
 	size_t copied;
 
 	copied = copy_to_iter(addr, bytes, i);
-	*crcp = crc32c(*crcp, addr, copied);
+	sg_init_one(&sg, addr, copied);
+	ahash_request_set_crypt(hash, &sg, NULL, copied);
+	crypto_ahash_update(hash);
 	return copied;
+#else
+	return 0;
+#endif
 }
 
 /**
- *	skb_copy_and_crc32c_datagram_iter - Copy datagram to an iovec iterator
- *		and update a CRC32C value.
+ *	skb_copy_and_hash_datagram_iter - Copy datagram to an iovec iterator
+ *          and update a hash.
  *	@skb: buffer to copy
  *	@offset: offset in the buffer to start copying from
  *	@to: iovec iterator to copy to
  *	@len: amount of data to copy from buffer to iovec
- *	@crcp: pointer to CRC32C value to update
- *
- *	Return: 0 on success, -EFAULT if there was a fault during copy.
+ *      @hash: hash request to update
  */
-int skb_copy_and_crc32c_datagram_iter(const struct sk_buff *skb, int offset,
-				      struct iov_iter *to, int len, u32 *crcp)
+int skb_copy_and_hash_datagram_iter(const struct sk_buff *skb, int offset,
+			   struct iov_iter *to, int len,
+			   struct ahash_request *hash)
 {
 	return __skb_datagram_iter(skb, offset, to, len, true,
-				   crc32c_and_copy_to_iter, crcp);
+			hash_and_copy_to_iter, hash);
 }
-EXPORT_SYMBOL(skb_copy_and_crc32c_datagram_iter);
-#endif /* CONFIG_NET_CRC32C */
+EXPORT_SYMBOL(skb_copy_and_hash_datagram_iter);
 
 static size_t simple_copy_to_iter(const void *addr, size_t bytes,
 		void *data __always_unused, struct iov_iter *i)
@@ -618,20 +621,6 @@ fault:
 }
 EXPORT_SYMBOL(skb_copy_datagram_from_iter);
 
-int skb_copy_datagram_from_iter_full(struct sk_buff *skb, int offset,
-				     struct iov_iter *from, int len)
-{
-	struct iov_iter_state state;
-	int ret;
-
-	iov_iter_save_state(from, &state);
-	ret = skb_copy_datagram_from_iter(skb, offset, from, len);
-	if (ret)
-		iov_iter_restore(from, &state);
-	return ret;
-}
-EXPORT_SYMBOL(skb_copy_datagram_from_iter_full);
-
 int zerocopy_fill_skb_from_iter(struct sk_buff *skb,
 				struct iov_iter *from, size_t length)
 {
@@ -703,50 +692,9 @@ int zerocopy_fill_skb_from_iter(struct sk_buff *skb,
 	return 0;
 }
 
-static int
-zerocopy_fill_skb_from_devmem(struct sk_buff *skb, struct iov_iter *from,
-			      int length,
-			      struct net_devmem_dmabuf_binding *binding)
-{
-	int i = skb_shinfo(skb)->nr_frags;
-	size_t virt_addr, size, off;
-	struct net_iov *niov;
-
-	/* Devmem filling works by taking an IOVEC from the user where the
-	 * iov_addrs are interpreted as an offset in bytes into the dma-buf to
-	 * send from. We do not support other iter types.
-	 */
-	if (iov_iter_type(from) != ITER_IOVEC &&
-	    iov_iter_type(from) != ITER_UBUF)
-		return -EFAULT;
-
-	while (length && iov_iter_count(from)) {
-		if (i == MAX_SKB_FRAGS)
-			return -EMSGSIZE;
-
-		virt_addr = (size_t)iter_iov_addr(from);
-		niov = net_devmem_get_niov_at(binding, virt_addr, &off, &size);
-		if (!niov)
-			return -EFAULT;
-
-		size = min_t(size_t, size, length);
-		size = min_t(size_t, size, iter_iov_len(from));
-
-		get_netmem(net_iov_to_netmem(niov));
-		skb_add_rx_frag_netmem(skb, i, net_iov_to_netmem(niov), off,
-				       size, PAGE_SIZE);
-		iov_iter_advance(from, size);
-		length -= size;
-		i++;
-	}
-
-	return 0;
-}
-
 int __zerocopy_sg_from_iter(struct msghdr *msg, struct sock *sk,
 			    struct sk_buff *skb, struct iov_iter *from,
-			    size_t length,
-			    struct net_devmem_dmabuf_binding *binding)
+			    size_t length)
 {
 	unsigned long orig_size = skb->truesize;
 	unsigned long truesize;
@@ -754,8 +702,6 @@ int __zerocopy_sg_from_iter(struct msghdr *msg, struct sock *sk,
 
 	if (msg && msg->msg_ubuf && msg->sg_from_iter)
 		ret = msg->sg_from_iter(skb, from, length);
-	else if (binding)
-		ret = zerocopy_fill_skb_from_devmem(skb, from, length, binding);
 	else
 		ret = zerocopy_fill_skb_from_iter(skb, from, length);
 
@@ -789,7 +735,7 @@ int zerocopy_sg_from_iter(struct sk_buff *skb, struct iov_iter *from)
 	if (skb_copy_datagram_from_iter(skb, 0, from, copy))
 		return -EFAULT;
 
-	return __zerocopy_sg_from_iter(NULL, NULL, skb, from, ~0U, NULL);
+	return __zerocopy_sg_from_iter(NULL, NULL, skb, from, ~0U);
 }
 EXPORT_SYMBOL(zerocopy_sg_from_iter);
 
@@ -920,22 +866,21 @@ fault:
 EXPORT_SYMBOL(skb_copy_and_csum_datagram_msg);
 
 /**
- *	datagram_poll_queue - same as datagram_poll, but on a specific receive
- *		queue
+ * 	datagram_poll - generic datagram poll
  *	@file: file struct
  *	@sock: socket
  *	@wait: poll table
- *	@rcv_queue: receive queue to poll
  *
- *	Performs polling on the given receive queue, handling shutdown, error,
- *	and connection state. This is useful for protocols that deliver
- *	userspace-bound packets through a custom queue instead of
- *	sk->sk_receive_queue.
+ *	Datagram poll: Again totally generic. This also handles
+ *	sequenced packet sockets providing the socket receive queue
+ *	is only ever holding data ready to receive.
  *
- *	Return: poll bitmask indicating the socket's current state
+ *	Note: when you *don't* use this routine for this protocol,
+ *	and you use a different write policy from sock_writeable()
+ *	then please supply your own write_space callback.
  */
-__poll_t datagram_poll_queue(struct file *file, struct socket *sock,
-			     poll_table *wait, struct sk_buff_head *rcv_queue)
+__poll_t datagram_poll(struct file *file, struct socket *sock,
+			   poll_table *wait)
 {
 	struct sock *sk = sock->sk;
 	__poll_t mask;
@@ -957,7 +902,7 @@ __poll_t datagram_poll_queue(struct file *file, struct socket *sock,
 		mask |= EPOLLHUP;
 
 	/* readable? */
-	if (!skb_queue_empty_lockless(rcv_queue))
+	if (!skb_queue_empty_lockless(&sk->sk_receive_queue))
 		mask |= EPOLLIN | EPOLLRDNORM;
 
 	/* Connection-based need to check for termination and startup */
@@ -978,28 +923,5 @@ __poll_t datagram_poll_queue(struct file *file, struct socket *sock,
 		sk_set_bit(SOCKWQ_ASYNC_NOSPACE, sk);
 
 	return mask;
-}
-EXPORT_SYMBOL(datagram_poll_queue);
-
-/**
- *	datagram_poll - generic datagram poll
- *	@file: file struct
- *	@sock: socket
- *	@wait: poll table
- *
- *	Datagram poll: Again totally generic. This also handles
- *	sequenced packet sockets providing the socket receive queue
- *	is only ever holding data ready to receive.
- *
- *	Note: when you *don't* use this routine for this protocol,
- *	and you use a different write policy from sock_writeable()
- *	then please supply your own write_space callback.
- *
- *	Return: poll bitmask indicating the socket's current state
- */
-__poll_t datagram_poll(struct file *file, struct socket *sock, poll_table *wait)
-{
-	return datagram_poll_queue(file, sock, wait,
-				   &sock->sk->sk_receive_queue);
 }
 EXPORT_SYMBOL(datagram_poll);

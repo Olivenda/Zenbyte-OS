@@ -268,19 +268,15 @@ static int p50_gpio_get(struct gpio_chip *gc, unsigned int offset)
 	return ret;
 }
 
-static int p50_gpio_set(struct gpio_chip *gc, unsigned int offset, int value)
+static void p50_gpio_set(struct gpio_chip *gc, unsigned int offset, int value)
 {
 	struct p50_gpio *p50 = gpiochip_get_data(gc);
-	int ret;
 
 	mutex_lock(&p50->lock);
 
-	ret = p50_send_mbox_cmd(p50, P50_MBOX_CMD_WRITE_GPIO,
-				gpio_params[offset], value);
+	p50_send_mbox_cmd(p50, P50_MBOX_CMD_WRITE_GPIO, gpio_params[offset], value);
 
 	mutex_unlock(&p50->lock);
-
-	return ret;
 }
 
 static int p50_gpio_probe(struct platform_device *pdev)
@@ -389,7 +385,7 @@ static struct platform_driver p50_gpio_driver = {
 		.name = DRIVER_NAME,
 	},
 	.probe = p50_gpio_probe,
-	.remove = p50_gpio_remove,
+	.remove_new = p50_gpio_remove,
 };
 
 /* Board setup */

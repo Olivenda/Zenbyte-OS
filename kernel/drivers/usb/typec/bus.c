@@ -454,7 +454,8 @@ static int typec_match(struct device *dev, const struct device_driver *driver)
 	const struct typec_device_id *id;
 
 	for (id = drv->id_table; id->svid; id++)
-		if (id->svid == altmode->svid)
+		if (id->svid == altmode->svid &&
+		    (id->mode == TYPEC_ANY_MODE || id->mode == altmode->mode))
 			return 1;
 	return 0;
 }
@@ -469,7 +470,8 @@ static int typec_uevent(const struct device *dev, struct kobj_uevent_env *env)
 	if (add_uevent_var(env, "MODE=%u", altmode->mode))
 		return -ENOMEM;
 
-	return add_uevent_var(env, "MODALIAS=typec:id%04X", altmode->svid);
+	return add_uevent_var(env, "MODALIAS=typec:id%04Xm%02X",
+			      altmode->svid, altmode->mode);
 }
 
 static int typec_altmode_create_links(struct altmode *alt)

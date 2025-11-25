@@ -142,9 +142,8 @@ void amdgpu_irq_disable_all(struct amdgpu_device *adev)
 				r = src->funcs->set(adev, src, k,
 						    AMDGPU_IRQ_STATE_DISABLE);
 				if (r)
-					dev_err(adev->dev,
-						"error disabling interrupt (%d)\n",
-						r);
+					DRM_ERROR("error disabling interrupt (%d)\n",
+						  r);
 			}
 		}
 	}
@@ -243,7 +242,7 @@ static bool amdgpu_msi_ok(struct amdgpu_device *adev)
 	return true;
 }
 
-void amdgpu_restore_msix(struct amdgpu_device *adev)
+static void amdgpu_restore_msix(struct amdgpu_device *adev)
 {
 	u16 ctrl;
 
@@ -316,7 +315,7 @@ int amdgpu_irq_init(struct amdgpu_device *adev)
 	adev->irq.irq = irq;
 	adev_to_drm(adev)->max_vblank_count = 0x00ffffff;
 
-	dev_dbg(adev->dev, "amdgpu: irq initialized.\n");
+	DRM_DEBUG("amdgpu: irq initialized.\n");
 	return 0;
 
 free_vectors:
@@ -462,10 +461,10 @@ void amdgpu_irq_dispatch(struct amdgpu_device *adev,
 	src_id = entry.src_id;
 
 	if (client_id >= AMDGPU_IRQ_CLIENTID_MAX) {
-		dev_dbg(adev->dev, "Invalid client_id in IV: %d\n", client_id);
+		DRM_DEBUG("Invalid client_id in IV: %d\n", client_id);
 
 	} else	if (src_id >= AMDGPU_MAX_IRQ_SRC_ID) {
-		dev_dbg(adev->dev, "Invalid src_id in IV: %d\n", src_id);
+		DRM_DEBUG("Invalid src_id in IV: %d\n", src_id);
 
 	} else if (((client_id == AMDGPU_IRQ_CLIENTID_LEGACY) ||
 		    (client_id == SOC15_IH_CLIENTID_ISP)) &&
@@ -473,21 +472,18 @@ void amdgpu_irq_dispatch(struct amdgpu_device *adev,
 		generic_handle_domain_irq(adev->irq.domain, src_id);
 
 	} else if (!adev->irq.client[client_id].sources) {
-		dev_dbg(adev->dev,
-			"Unregistered interrupt client_id: %d src_id: %d\n",
-			client_id, src_id);
+		DRM_DEBUG("Unregistered interrupt client_id: %d src_id: %d\n",
+			  client_id, src_id);
 
 	} else if ((src = adev->irq.client[client_id].sources[src_id])) {
 		r = src->funcs->process(adev, src, &entry);
 		if (r < 0)
-			dev_err(adev->dev, "error processing interrupt (%d)\n",
-				r);
+			DRM_ERROR("error processing interrupt (%d)\n", r);
 		else if (r)
 			handled = true;
 
 	} else {
-		dev_dbg(adev->dev,
-			"Unregistered interrupt src_id: %d of client_id:%d\n",
+		DRM_DEBUG("Unregistered interrupt src_id: %d of client_id:%d\n",
 			src_id, client_id);
 	}
 
@@ -623,10 +619,6 @@ int amdgpu_irq_get(struct amdgpu_device *adev, struct amdgpu_irq_src *src,
 int amdgpu_irq_put(struct amdgpu_device *adev, struct amdgpu_irq_src *src,
 		   unsigned int type)
 {
-	/* When the threshold is reached,the interrupt source may not be enabled.return -EINVAL */
-	if (amdgpu_ras_is_rma(adev) && !amdgpu_irq_enabled(adev, src, type))
-		return -EINVAL;
-
 	if (!adev->irq.installed)
 		return -ENOENT;
 
@@ -733,10 +725,10 @@ static const struct irq_domain_ops amdgpu_hw_irqdomain_ops = {
  */
 int amdgpu_irq_add_domain(struct amdgpu_device *adev)
 {
-	adev->irq.domain = irq_domain_create_linear(NULL, AMDGPU_MAX_IRQ_SRC_ID,
-						    &amdgpu_hw_irqdomain_ops, adev);
+	adev->irq.domain = irq_domain_add_linear(NULL, AMDGPU_MAX_IRQ_SRC_ID,
+						 &amdgpu_hw_irqdomain_ops, adev);
 	if (!adev->irq.domain) {
-		dev_err(adev->dev, "GPU irq add domain failed\n");
+		DRM_ERROR("GPU irq add domain failed\n");
 		return -ENODEV;
 	}
 

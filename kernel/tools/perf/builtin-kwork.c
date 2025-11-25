@@ -6,7 +6,6 @@
  */
 
 #include "builtin.h"
-#include "perf.h"
 
 #include "util/data.h"
 #include "util/evlist.h"
@@ -24,7 +23,7 @@
 
 #include <subcmd/pager.h>
 #include <subcmd/parse-options.h>
-#include <event-parse.h>
+#include <traceevent/event-parse.h>
 
 #include <errno.h>
 #include <inttypes.h>
@@ -1104,8 +1103,7 @@ static char *evsel__softirq_name(struct evsel *evsel, u64 num)
 	char *name = NULL;
 	bool found = false;
 	struct tep_print_flag_sym *sym = NULL;
-	const struct tep_event *tp_format = evsel__tp_format(evsel);
-	struct tep_print_arg *args = tp_format ? tp_format->print_fmt.args : NULL;
+	struct tep_print_arg *args = evsel->tp_format->print_fmt.args;
 
 	if ((args == NULL) || (args->next == NULL))
 		return NULL;
@@ -1804,7 +1802,7 @@ static int perf_kwork__read_events(struct perf_kwork *kwork)
 		return PTR_ERR(session);
 	}
 
-	symbol__init(perf_session__env(session));
+	symbol__init(&session->header.env);
 
 	if (perf_kwork__check_config(kwork, session) != 0)
 		goto out_delete;
@@ -1848,7 +1846,7 @@ static void process_skipped_events(struct perf_kwork *kwork,
 	}
 }
 
-static struct kwork_work *perf_kwork_add_work(struct perf_kwork *kwork,
+struct kwork_work *perf_kwork_add_work(struct perf_kwork *kwork,
 				       struct kwork_class *class,
 				       struct kwork_work *key)
 {
@@ -2346,7 +2344,6 @@ int cmd_kwork(int argc, const char **argv)
 		.all_runtime         = 0,
 		.all_count           = 0,
 		.nr_skipped_events   = { 0 },
-		.add_work            = perf_kwork_add_work,
 	};
 	static const char default_report_sort_order[] = "runtime, max, count";
 	static const char default_latency_sort_order[] = "avg, max, count";

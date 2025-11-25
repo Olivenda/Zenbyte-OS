@@ -10,7 +10,6 @@
  */
 
 #include <kunit/test.h>
-#include <kunit/visibility.h>
 #include <linux/bitops.h>
 #include <linux/ftrace.h>
 #include <linux/init.h>
@@ -133,20 +132,20 @@ static bool report_enabled(void)
 	return !test_and_set_bit(KASAN_BIT_REPORTED, &kasan_flags);
 }
 
-#if IS_ENABLED(CONFIG_KASAN_KUNIT_TEST)
+#if IS_ENABLED(CONFIG_KASAN_KUNIT_TEST) || IS_ENABLED(CONFIG_KASAN_MODULE_TEST)
 
-VISIBLE_IF_KUNIT bool kasan_save_enable_multi_shot(void)
+bool kasan_save_enable_multi_shot(void)
 {
 	return test_and_set_bit(KASAN_BIT_MULTI_SHOT, &kasan_flags);
 }
-EXPORT_SYMBOL_IF_KUNIT(kasan_save_enable_multi_shot);
+EXPORT_SYMBOL_GPL(kasan_save_enable_multi_shot);
 
-VISIBLE_IF_KUNIT void kasan_restore_multi_shot(bool enabled)
+void kasan_restore_multi_shot(bool enabled)
 {
 	if (!enabled)
 		clear_bit(KASAN_BIT_MULTI_SHOT, &kasan_flags);
 }
-EXPORT_SYMBOL_IF_KUNIT(kasan_restore_multi_shot);
+EXPORT_SYMBOL_GPL(kasan_restore_multi_shot);
 
 #endif
 
@@ -158,17 +157,17 @@ EXPORT_SYMBOL_IF_KUNIT(kasan_restore_multi_shot);
  */
 static bool kasan_kunit_executing;
 
-VISIBLE_IF_KUNIT void kasan_kunit_test_suite_start(void)
+void kasan_kunit_test_suite_start(void)
 {
 	WRITE_ONCE(kasan_kunit_executing, true);
 }
-EXPORT_SYMBOL_IF_KUNIT(kasan_kunit_test_suite_start);
+EXPORT_SYMBOL_GPL(kasan_kunit_test_suite_start);
 
-VISIBLE_IF_KUNIT void kasan_kunit_test_suite_end(void)
+void kasan_kunit_test_suite_end(void)
 {
 	WRITE_ONCE(kasan_kunit_executing, false);
 }
-EXPORT_SYMBOL_IF_KUNIT(kasan_kunit_test_suite_end);
+EXPORT_SYMBOL_GPL(kasan_kunit_test_suite_end);
 
 static bool kasan_kunit_test_suite_executing(void)
 {

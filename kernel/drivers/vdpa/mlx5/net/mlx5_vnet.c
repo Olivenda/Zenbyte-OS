@@ -573,8 +573,6 @@ static int cq_create(struct mlx5_vdpa_net *ndev, u16 idx, u32 num_ent)
 	vcq->mcq.set_ci_db = vcq->db.db;
 	vcq->mcq.arm_db = vcq->db.db + 1;
 	vcq->mcq.cqe_sz = 64;
-	vcq->mcq.comp = mlx5_vdpa_cq_comp;
-	vcq->cqe = num_ent;
 
 	err = cq_frag_buf_alloc(ndev, &vcq->buf, num_ent);
 	if (err)
@@ -614,6 +612,10 @@ static int cq_create(struct mlx5_vdpa_net *ndev, u16 idx, u32 num_ent)
 	if (err)
 		goto err_vec;
 
+	vcq->mcq.comp = mlx5_vdpa_cq_comp;
+	vcq->cqe = num_ent;
+	vcq->mcq.set_ci_db = vcq->db.db;
+	vcq->mcq.arm_db = vcq->db.db + 1;
 	mlx5_cq_arm(&mvq->cq.mcq, MLX5_CQ_DB_REQ_NOT, uar_page, mvq->cq.mcq.cons_index);
 	kfree(in);
 	return 0;
@@ -1950,7 +1952,7 @@ static int mlx5_vdpa_add_mac_vlan_rules(struct mlx5_vdpa_net *ndev, u8 *mac,
 		goto out_free;
 
 #if defined(CONFIG_MLX5_VDPA_STEERING_DEBUG)
-	dests[1].counter = node->ucast_counter.counter;
+	dests[1].counter_id = mlx5_fc_id(node->ucast_counter.counter);
 #endif
 	node->ucast_rule = mlx5_add_flow_rules(ndev->rxft, spec, &flow_act, dests, NUM_DESTS);
 	if (IS_ERR(node->ucast_rule)) {
@@ -1959,7 +1961,7 @@ static int mlx5_vdpa_add_mac_vlan_rules(struct mlx5_vdpa_net *ndev, u8 *mac,
 	}
 
 #if defined(CONFIG_MLX5_VDPA_STEERING_DEBUG)
-	dests[1].counter = node->mcast_counter.counter;
+	dests[1].counter_id = mlx5_fc_id(node->mcast_counter.counter);
 #endif
 
 	memset(dmac_c, 0, ETH_ALEN);

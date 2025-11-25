@@ -28,7 +28,7 @@
 #include <linux/slab.h>
 #include <linux/bit_spinlock.h>
 #include <linux/blkdev.h>
-#include <linux/crc32c.h>
+#include <crypto/hash.h>
 #endif
 
 #define journal_oom_retry 1
@@ -459,6 +459,7 @@ struct jbd2_revoke_table_s;
  * @h_ref: Reference count on this handle.
  * @h_err: Field for caller's use to track errors through large fs operations.
  * @h_sync: Flag for sync-on-close.
+ * @h_jdata: Flag to force data journaling.
  * @h_reserved: Flag for handle for reserved credits.
  * @h_aborted: Flag indicating fatal error on handle.
  * @h_type: For handle statistics.
@@ -490,6 +491,7 @@ struct jbd2_journal_handle
 
 	/* Flags [no locking] */
 	unsigned int	h_sync:		1;
+	unsigned int	h_jdata:	1;
 	unsigned int	h_reserved:	1;
 	unsigned int	h_aborted:	1;
 	unsigned int	h_type:		8;
@@ -698,6 +700,12 @@ struct transaction_s
 
 	/* Disk flush needs to be sent to fs partition [no locking] */
 	int			t_need_data_flush;
+
+	/*
+	 * For use by the filesystem to store fs-specific data
+	 * structures associated with the transaction
+	 */
+	struct list_head	t_private_list;
 };
 
 struct transaction_run_stats_s {
@@ -1234,6 +1242,13 @@ struct journal_s
 	void *j_private;
 
 	/**
+	 * @j_chksum_driver:
+	 *
+	 * Reference to checksum algorithm driver via cryptoapi.
+	 */
+	struct crypto_shash *j_chksum_driver;
+
+	/**
 	 * @j_csum_seed:
 	 *
 	 * Precomputed journal UUID checksum for seeding other checksums.
@@ -1380,6 +1395,9 @@ JBD2_FEATURE_INCOMPAT_FUNCS(fast_commit,	FAST_COMMIT)
 #define JBD2_FLUSHED	0x008	/* The journal superblock has been flushed */
 #define JBD2_LOADED	0x010	/* The journal superblock has been loaded */
 #define JBD2_BARRIER	0x020	/* Use IDE barriers */
+#define JBD2_ABORT_ON_SYNCDATA_ERR	0x040	/* Abort the journal on file
+						 * data write error in ordered
+						 * mode */
 #define JBD2_CYCLE_RECORD		0x080	/* Journal cycled record log on
 						 * clean and empty filesystem
 						 * logging area */
@@ -1396,6 +1414,7 @@ JBD2_FEATURE_INCOMPAT_FUNCS(fast_commit,	FAST_COMMIT)
  */
 
 /* Filing buffers */
+extern void jbd2_journal_unfile_buffer(journal_t *, struct journal_head *);
 extern bool __jbd2_journal_refile_buffer(struct journal_head *);
 extern void jbd2_journal_refile_buffer(journal_t *, struct journal_head *);
 extern void __jbd2_journal_file_buffer(struct journal_head *, transaction_t *, int);
@@ -1615,12 +1634,10 @@ extern void	   jbd2_journal_destroy_revoke_record_cache(void);
 extern void	   jbd2_journal_destroy_revoke_table_cache(void);
 extern int __init jbd2_journal_init_revoke_record_cache(void);
 extern int __init jbd2_journal_init_revoke_table_cache(void);
-struct jbd2_revoke_table_s *jbd2_journal_init_revoke_table(int hash_size);
-void jbd2_journal_destroy_revoke_table(struct jbd2_revoke_table_s *table);
 
 extern void	   jbd2_journal_destroy_revoke(journal_t *);
 extern int	   jbd2_journal_revoke (handle_t *, unsigned long long, struct buffer_head *);
-extern void	   jbd2_journal_cancel_revoke(handle_t *, struct journal_head *);
+extern int	   jbd2_journal_cancel_revoke(handle_t *, struct journal_head *);
 extern void	   jbd2_journal_write_revoke_records(transaction_t *transaction,
 						     struct list_head *log_bufs);
 
@@ -1723,13 +1740,20 @@ static inline int tid_geq(tid_t x, tid_t y)
 	return (difference >= 0);
 }
 
-extern int jbd2_journal_blocks_per_folio(struct inode *inode);
+extern int jbd2_journal_blocks_per_page(struct inode *inode);
 extern size_t journal_tag_bytes(journal_t *journal);
+
+static inline bool jbd2_journal_has_csum_v2or3_feature(journal_t *j)
+{
+	return jbd2_has_feature_csum2(j) || jbd2_has_feature_csum3(j);
+}
 
 static inline int jbd2_journal_has_csum_v2or3(journal_t *journal)
 {
-	return jbd2_has_feature_csum2(journal) ||
-	       jbd2_has_feature_csum3(journal);
+	WARN_ON_ONCE(jbd2_journal_has_csum_v2or3_feature(journal) &&
+		     journal->j_chksum_driver == NULL);
+
+	return journal->j_chksum_driver != NULL;
 }
 
 static inline int jbd2_journal_get_num_fc_blks(journal_superblock_t *jsb)
@@ -1766,9 +1790,28 @@ static inline unsigned long jbd2_log_space_left(journal_t *journal)
 #define BJ_Reserved	4	/* Buffer is reserved for access by journal */
 #define BJ_Types	5
 
-static inline u32 jbd2_chksum(u32 crc, const void *address, unsigned int length)
+/* JBD uses a CRC32 checksum */
+#define JBD_MAX_CHECKSUM_SIZE 4
+
+static inline u32 jbd2_chksum(journal_t *journal, u32 crc,
+			      const void *address, unsigned int length)
 {
-	return crc32c(crc, address, length);
+	struct {
+		struct shash_desc shash;
+		char ctx[JBD_MAX_CHECKSUM_SIZE];
+	} desc;
+	int err;
+
+	BUG_ON(crypto_shash_descsize(journal->j_chksum_driver) >
+		JBD_MAX_CHECKSUM_SIZE);
+
+	desc.shash.tfm = journal->j_chksum_driver;
+	*(u32 *)desc.ctx = crc;
+
+	err = crypto_shash_update(&desc.shash, address, length);
+	BUG_ON(err);
+
+	return *(u32 *)desc.ctx;
 }
 
 /* Return most recent uncommitted transaction */

@@ -38,7 +38,6 @@ static inline struct tpd12s015_device *to_tpd12s015(struct drm_bridge *bridge)
 }
 
 static int tpd12s015_attach(struct drm_bridge *bridge,
-			    struct drm_encoder *encoder,
 			    enum drm_bridge_attach_flags flags)
 {
 	struct tpd12s015_device *tpd = to_tpd12s015(bridge);
@@ -47,7 +46,7 @@ static int tpd12s015_attach(struct drm_bridge *bridge,
 	if (!(flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR))
 		return -EINVAL;
 
-	ret = drm_bridge_attach(encoder, tpd->next_bridge,
+	ret = drm_bridge_attach(bridge->encoder, tpd->next_bridge,
 				bridge, flags);
 	if (ret < 0)
 		return ret;
@@ -77,12 +76,6 @@ static enum drm_connector_status tpd12s015_detect(struct drm_bridge *bridge)
 		return connector_status_disconnected;
 }
 
-static enum drm_connector_status
-tpd12s015_bridge_detect(struct drm_bridge *bridge, struct drm_connector *connector)
-{
-	return tpd12s015_detect(bridge);
-}
-
 static void tpd12s015_hpd_enable(struct drm_bridge *bridge)
 {
 	struct tpd12s015_device *tpd = to_tpd12s015(bridge);
@@ -100,7 +93,7 @@ static void tpd12s015_hpd_disable(struct drm_bridge *bridge)
 static const struct drm_bridge_funcs tpd12s015_bridge_funcs = {
 	.attach			= tpd12s015_attach,
 	.detach			= tpd12s015_detach,
-	.detect			= tpd12s015_bridge_detect,
+	.detect			= tpd12s015_detect,
 	.hpd_enable		= tpd12s015_hpd_enable,
 	.hpd_disable		= tpd12s015_hpd_disable,
 };
@@ -122,13 +115,13 @@ static int tpd12s015_probe(struct platform_device *pdev)
 	struct gpio_desc *gpio;
 	int ret;
 
-	tpd = devm_drm_bridge_alloc(&pdev->dev, struct tpd12s015_device,
-				    bridge, &tpd12s015_bridge_funcs);
-	if (IS_ERR(tpd))
-		return PTR_ERR(tpd);
+	tpd = devm_kzalloc(&pdev->dev, sizeof(*tpd), GFP_KERNEL);
+	if (!tpd)
+		return -ENOMEM;
 
 	platform_set_drvdata(pdev, tpd);
 
+	tpd->bridge.funcs = &tpd12s015_bridge_funcs;
 	tpd->bridge.of_node = pdev->dev.of_node;
 	tpd->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
 	tpd->bridge.ops = DRM_BRIDGE_OP_DETECT;
@@ -202,7 +195,7 @@ MODULE_DEVICE_TABLE(of, tpd12s015_of_match);
 
 static struct platform_driver tpd12s015_driver = {
 	.probe	= tpd12s015_probe,
-	.remove = tpd12s015_remove,
+	.remove_new = tpd12s015_remove,
 	.driver	= {
 		.name	= "tpd12s015",
 		.of_match_table = tpd12s015_of_match,

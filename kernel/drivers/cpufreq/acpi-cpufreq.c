@@ -73,17 +73,20 @@ static unsigned int acpi_pstate_strict;
 
 static bool boost_state(unsigned int cpu)
 {
+	u32 lo, hi;
 	u64 msr;
 
 	switch (boot_cpu_data.x86_vendor) {
 	case X86_VENDOR_INTEL:
 	case X86_VENDOR_CENTAUR:
 	case X86_VENDOR_ZHAOXIN:
-		rdmsrq_on_cpu(cpu, MSR_IA32_MISC_ENABLE, &msr);
+		rdmsr_on_cpu(cpu, MSR_IA32_MISC_ENABLE, &lo, &hi);
+		msr = lo | ((u64)hi << 32);
 		return !(msr & MSR_IA32_MISC_ENABLE_TURBO_DISABLE);
 	case X86_VENDOR_HYGON:
 	case X86_VENDOR_AMD:
-		rdmsrq_on_cpu(cpu, MSR_K7_HWCR, &msr);
+		rdmsr_on_cpu(cpu, MSR_K7_HWCR, &lo, &hi);
+		msr = lo | ((u64)hi << 32);
 		return !(msr & MSR_K7_HWCR_CPB_DIS);
 	}
 	return false;
@@ -110,14 +113,14 @@ static int boost_set_msr(bool enable)
 		return -EINVAL;
 	}
 
-	rdmsrq(msr_addr, val);
+	rdmsrl(msr_addr, val);
 
 	if (enable)
 		val &= ~msr_mask;
 	else
 		val |= msr_mask;
 
-	wrmsrq(msr_addr, val);
+	wrmsrl(msr_addr, val);
 	return 0;
 }
 
@@ -910,17 +913,8 @@ static int acpi_cpufreq_cpu_init(struct cpufreq_policy *policy)
 		pr_warn(FW_WARN "P-state 0 is not max freq\n");
 
 	if (acpi_cpufreq_driver.set_boost) {
-		if (policy->boost_supported) {
-			/*
-			 * The firmware may have altered boost state while the
-			 * CPU was offline (for example during a suspend-resume
-			 * cycle).
-			 */
-			if (policy->boost_enabled != boost_state(cpu))
-				set_boost(policy, policy->boost_enabled);
-		} else {
-			policy->boost_supported = true;
-		}
+		set_boost(policy, acpi_cpufreq_driver.boost_enabled);
+		policy->boost_enabled = acpi_cpufreq_driver.boost_enabled;
 	}
 
 	return result;
@@ -963,6 +957,7 @@ static int acpi_cpufreq_resume(struct cpufreq_policy *policy)
 }
 
 static struct freq_attr *acpi_cpufreq_attr[] = {
+	&cpufreq_freq_attr_scaling_available_freqs,
 	&freqdomain_cpus,
 #ifdef CONFIG_X86_ACPI_CPUFREQ_CPB
 	&cpb,
@@ -1051,7 +1046,7 @@ static struct platform_driver acpi_cpufreq_platdrv = {
 	.driver = {
 		.name	= "acpi-cpufreq",
 	},
-	.remove = acpi_cpufreq_remove,
+	.remove_new	= acpi_cpufreq_remove,
 };
 
 static int __init acpi_cpufreq_init(void)

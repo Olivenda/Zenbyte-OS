@@ -1263,17 +1263,19 @@ static int da7280_suspend(struct device *dev)
 {
 	struct da7280_haptic *haptics = dev_get_drvdata(dev);
 
-	guard(mutex)(&haptics->input_dev->mutex);
+	mutex_lock(&haptics->input_dev->mutex);
 
 	/*
 	 * Make sure no new requests will be submitted while device is
 	 * suspended.
 	 */
-	scoped_guard(spinlock_irq, &haptics->input_dev->event_lock) {
-		haptics->suspended = true;
-	}
+	spin_lock_irq(&haptics->input_dev->event_lock);
+	haptics->suspended = true;
+	spin_unlock_irq(&haptics->input_dev->event_lock);
 
 	da7280_haptic_stop(haptics);
+
+	mutex_unlock(&haptics->input_dev->mutex);
 
 	return 0;
 }
@@ -1281,19 +1283,19 @@ static int da7280_suspend(struct device *dev)
 static int da7280_resume(struct device *dev)
 {
 	struct da7280_haptic *haptics = dev_get_drvdata(dev);
-	int error;
+	int retval;
 
-	guard(mutex)(&haptics->input_dev->mutex);
+	mutex_lock(&haptics->input_dev->mutex);
 
-	error = da7280_haptic_start(haptics);
-	if (error)
-		return error;
-
-	scoped_guard(spinlock_irq, &haptics->input_dev->event_lock) {
+	retval = da7280_haptic_start(haptics);
+	if (!retval) {
+		spin_lock_irq(&haptics->input_dev->event_lock);
 		haptics->suspended = false;
+		spin_unlock_irq(&haptics->input_dev->event_lock);
 	}
 
-	return 0;
+	mutex_unlock(&haptics->input_dev->mutex);
+	return retval;
 }
 
 #ifdef CONFIG_OF

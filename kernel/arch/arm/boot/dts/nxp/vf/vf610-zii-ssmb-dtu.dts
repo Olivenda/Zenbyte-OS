@@ -284,13 +284,13 @@
 		>;
 	};
 
-	pinctrl_gpio_phy9: pinctrl-gpio-phy9grp {
+	pinctrl_gpio_phy9: pinctrl-gpio-phy9 {
 		fsl,pins = <
 			VF610_PAD_PTB24__GPIO_94		0x219d
 		>;
 	};
 
-	pinctrl_gpio_switch0: pinctrl-gpio-switch0grp {
+	pinctrl_gpio_switch0: pinctrl-gpio-switch0 {
 		fsl,pins = <
 			VF610_PAD_PTB28__GPIO_98		0x219d
 		>;
@@ -310,7 +310,7 @@
 		>;
 	};
 
-	pinctrl_leds_debug: pinctrl-leds-debuggrp {
+	pinctrl_leds_debug: pinctrl-leds-debug {
 		fsl,pins = <
 			VF610_PAD_PTD3__GPIO_82			0x31c2
 		>;

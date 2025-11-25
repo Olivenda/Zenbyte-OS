@@ -7,6 +7,8 @@
  * Author: Tom Lendacky <thomas.lendacky@amd.com>
  */
 
+#define DISABLE_BRANCH_PROFILING
+
 #include <linux/linkage.h>
 #include <linux/init.h>
 #include <linux/mm.h>
@@ -40,9 +42,7 @@
  * section is later cleared.
  */
 u64 sme_me_mask __section(".data") = 0;
-SYM_PIC_ALIAS(sme_me_mask);
 u64 sev_status __section(".data") = 0;
-SYM_PIC_ALIAS(sev_status);
 u64 sev_check_data __section(".data") = 0;
 EXPORT_SYMBOL(sme_me_mask);
 
@@ -311,82 +311,59 @@ static int amd_enc_status_change_finish(unsigned long vaddr, int npages, bool en
 	return 0;
 }
 
-int prepare_pte_enc(struct pte_enc_desc *d)
-{
-	pgprot_t old_prot;
-
-	d->pfn = pg_level_to_pfn(d->pte_level, d->kpte, &old_prot);
-	if (!d->pfn)
-		return 1;
-
-	d->new_pgprot = old_prot;
-	if (d->encrypt)
-		pgprot_val(d->new_pgprot) |= _PAGE_ENC;
-	else
-		pgprot_val(d->new_pgprot) &= ~_PAGE_ENC;
-
-	/* If prot is same then do nothing. */
-	if (pgprot_val(old_prot) == pgprot_val(d->new_pgprot))
-		return 1;
-
-	d->pa = d->pfn << PAGE_SHIFT;
-	d->size = page_level_size(d->pte_level);
-
-	/*
-	 * In-place en-/decryption and physical page attribute change
-	 * from C=1 to C=0 or vice versa will be performed. Flush the
-	 * caches to ensure that data gets accessed with the correct
-	 * C-bit.
-	 */
-	if (d->va)
-		clflush_cache_range(d->va, d->size);
-	else
-		clflush_cache_range(__va(d->pa), d->size);
-
-	return 0;
-}
-
-void set_pte_enc_mask(pte_t *kpte, unsigned long pfn, pgprot_t new_prot)
-{
-	pte_t new_pte;
-
-	/* Change the page encryption mask. */
-	new_pte = pfn_pte(pfn, new_prot);
-	set_pte_atomic(kpte, new_pte);
-}
-
 static void __init __set_clr_pte_enc(pte_t *kpte, int level, bool enc)
 {
-	struct pte_enc_desc d = {
-		.kpte	     = kpte,
-		.pte_level   = level,
-		.encrypt     = enc
-	};
+	pgprot_t old_prot, new_prot;
+	unsigned long pfn, pa, size;
+	pte_t new_pte;
 
-	if (prepare_pte_enc(&d))
+	pfn = pg_level_to_pfn(level, kpte, &old_prot);
+	if (!pfn)
 		return;
+
+	new_prot = old_prot;
+	if (enc)
+		pgprot_val(new_prot) |= _PAGE_ENC;
+	else
+		pgprot_val(new_prot) &= ~_PAGE_ENC;
+
+	/* If prot is same then do nothing. */
+	if (pgprot_val(old_prot) == pgprot_val(new_prot))
+		return;
+
+	pa = pfn << PAGE_SHIFT;
+	size = page_level_size(level);
+
+	/*
+	 * We are going to perform in-place en-/decryption and change the
+	 * physical page attribute from C=1 to C=0 or vice versa. Flush the
+	 * caches to ensure that data gets accessed with the correct C-bit.
+	 */
+	clflush_cache_range(__va(pa), size);
 
 	/* Encrypt/decrypt the contents in-place */
 	if (enc) {
-		sme_early_encrypt(d.pa, d.size);
+		sme_early_encrypt(pa, size);
 	} else {
-		sme_early_decrypt(d.pa, d.size);
+		sme_early_decrypt(pa, size);
 
 		/*
 		 * ON SNP, the page state in the RMP table must happen
 		 * before the page table updates.
 		 */
-		early_snp_set_memory_shared((unsigned long)__va(d.pa), d.pa, 1);
+		early_snp_set_memory_shared((unsigned long)__va(pa), pa, 1);
 	}
 
-	set_pte_enc_mask(kpte, d.pfn, d.new_pgprot);
+	/* Change the page encryption mask. */
+	new_pte = pfn_pte(pfn, new_prot);
+	set_pte_atomic(kpte, new_pte);
 
 	/*
 	 * If page is set encrypted in the page table, then update the RMP table to
 	 * add this page as private.
 	 */
 	if (enc)
-		early_snp_set_memory_private((unsigned long)__va(d.pa), d.pa, 1);
+		early_snp_set_memory_private((unsigned long)__va(pa), pa, 1);
 }
 
 static int __init early_set_memory_enc_dec(unsigned long vaddr,
@@ -490,8 +467,6 @@ void __init sme_early_init(void)
 	x86_platform.guest.enc_status_change_finish  = amd_enc_status_change_finish;
 	x86_platform.guest.enc_tlb_flush_required    = amd_enc_tlb_flush_required;
 	x86_platform.guest.enc_cache_flush_required  = amd_enc_cache_flush_required;
-	x86_platform.guest.enc_kexec_begin	     = snp_kexec_begin;
-	x86_platform.guest.enc_kexec_finish	     = snp_kexec_finish;
 
 	/*
 	 * AMD-SEV-ES intercepts the RDMSR to read the X2APIC ID in the
@@ -541,9 +516,6 @@ void __init sme_early_init(void)
 	 * kernel mapped.
 	 */
 	snp_update_svsm_ca();
-
-	if (sev_status & MSR_AMD64_SNP_SECURE_TSC)
-		setup_force_cpu_cap(X86_FEATURE_TSC_RELIABLE);
 }
 
 void __init mem_encrypt_free_decrypted_mem(void)

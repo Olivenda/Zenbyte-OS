@@ -58,15 +58,6 @@ error:
 }
 EXPORT_SYMBOL(udp_sock_create4);
 
-static bool sk_saddr_any(struct sock *sk)
-{
-#if IS_ENABLED(CONFIG_IPV6)
-	return ipv6_addr_any(&sk->sk_v6_rcv_saddr);
-#else
-	return !sk->sk_rcv_saddr;
-#endif
-}
-
 void setup_udp_tunnel_sock(struct net *net, struct socket *sock,
 			   struct udp_tunnel_sock_cfg *cfg)
 {
@@ -89,12 +80,6 @@ void setup_udp_tunnel_sock(struct net *net, struct socket *sock,
 	udp_sk(sk)->gro_complete = cfg->gro_complete;
 
 	udp_tunnel_encap_enable(sk);
-
-	udp_tunnel_update_gro_rcv(sk, true);
-
-	if (!sk->sk_dport && !sk->sk_bound_dev_if && sk_saddr_any(sk) &&
-	    sk->sk_kern_sock)
-		udp_tunnel_update_gro_lookup(net, sk, true);
 }
 EXPORT_SYMBOL_GPL(setup_udp_tunnel_sock);
 
@@ -134,17 +119,15 @@ void udp_tunnel_notify_add_rx_port(struct socket *sock, unsigned short type)
 	struct udp_tunnel_info ti;
 	struct net_device *dev;
 
-	ASSERT_RTNL();
-
 	ti.type = type;
 	ti.sa_family = sk->sk_family;
 	ti.port = inet_sk(sk)->inet_sport;
 
-	for_each_netdev(net, dev) {
-		udp_tunnel_nic_lock(dev);
+	rcu_read_lock();
+	for_each_netdev_rcu(net, dev) {
 		udp_tunnel_nic_add_port(dev, &ti);
-		udp_tunnel_nic_unlock(dev);
 	}
+	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(udp_tunnel_notify_add_rx_port);
 
@@ -156,24 +139,22 @@ void udp_tunnel_notify_del_rx_port(struct socket *sock, unsigned short type)
 	struct udp_tunnel_info ti;
 	struct net_device *dev;
 
-	ASSERT_RTNL();
-
 	ti.type = type;
 	ti.sa_family = sk->sk_family;
 	ti.port = inet_sk(sk)->inet_sport;
 
-	for_each_netdev(net, dev) {
-		udp_tunnel_nic_lock(dev);
+	rcu_read_lock();
+	for_each_netdev_rcu(net, dev) {
 		udp_tunnel_nic_del_port(dev, &ti);
-		udp_tunnel_nic_unlock(dev);
 	}
+	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(udp_tunnel_notify_del_rx_port);
 
 void udp_tunnel_xmit_skb(struct rtable *rt, struct sock *sk, struct sk_buff *skb,
 			 __be32 src, __be32 dst, __u8 tos, __u8 ttl,
 			 __be16 df, __be16 src_port, __be16 dst_port,
-			 bool xnet, bool nocheck, u16 ipcb_flags)
+			 bool xnet, bool nocheck)
 {
 	struct udphdr *uh;
 
@@ -189,8 +170,7 @@ void udp_tunnel_xmit_skb(struct rtable *rt, struct sock *sk, struct sk_buff *skb
 
 	udp_set_csum(nocheck, skb, src, dst, skb->len);
 
-	iptunnel_xmit(sk, rt, skb, src, dst, IPPROTO_UDP, tos, ttl, df, xnet,
-		      ipcb_flags);
+	iptunnel_xmit(sk, rt, skb, src, dst, IPPROTO_UDP, tos, ttl, df, xnet);
 }
 EXPORT_SYMBOL_GPL(udp_tunnel_xmit_skb);
 

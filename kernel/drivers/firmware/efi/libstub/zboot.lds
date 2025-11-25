@@ -17,7 +17,6 @@ SECTIONS
 	.rodata : ALIGN(8) {
 		__efistub__gzdata_start = .;
 		*(.gzdata)
-		__efistub_payload_size = . - 4;
 		__efistub__gzdata_end = .;
 		*(.rodata* .init.rodata* .srodata*)
 
@@ -29,15 +28,7 @@ SECTIONS
 		. = _etext;
 	}
 
-        .sbat : ALIGN(4096) {
-		_sbat = .;
-		*(.sbat)
-		_esbat = ALIGN(4096);
-		. = _esbat;
-	}
-
 	.data : ALIGN(4096) {
-		_data = .;
 		*(.data* .init.data*)
 		_edata = ALIGN(512);
 		. = _edata;
@@ -58,6 +49,5 @@ SECTIONS
 PROVIDE(__efistub__gzdata_size =
 		ABSOLUTE(__efistub__gzdata_end - __efistub__gzdata_start));
 
-PROVIDE(__data_rawsize = ABSOLUTE(_edata - _data));
-PROVIDE(__data_size = ABSOLUTE(_end - _data));
-PROVIDE(__sbat_size = ABSOLUTE(_esbat - _sbat));
+PROVIDE(__data_rawsize = ABSOLUTE(_edata - _etext));
+PROVIDE(__data_size = ABSOLUTE(_end - _etext));

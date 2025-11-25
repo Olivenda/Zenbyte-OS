@@ -351,6 +351,8 @@
 	pmugrf: syscon@ff010000 {
 		compatible = "rockchip,px30-pmugrf", "syscon", "simple-mfd";
 		reg = <0x0 0xff010000 0x0 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
 
 		pmu_io_domains: io-domains {
 			compatible = "rockchip,px30-pmu-io-voltage-domain";
@@ -451,6 +453,8 @@
 	grf: syscon@ff140000 {
 		compatible = "rockchip,px30-grf", "syscon", "simple-mfd";
 		reg = <0x0 0xff140000 0x0 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
 
 		io_domains: io-domains {
 			compatible = "rockchip,px30-io-voltage-domain";
@@ -981,12 +985,6 @@
 		resets = <&cru SRST_GMAC_A>;
 		reset-names = "stmmaceth";
 		status = "disabled";
-
-		mdio: mdio {
-			compatible = "snps,dwmac-mdio";
-			#address-cells = <1>;
-			#size-cells = <0>;
-		};
 	};
 
 	sdmmc: mmc@ff370000 {
@@ -1133,6 +1131,8 @@
 		resets = <&cru SRST_MIPIDSI_HOST_P>;
 		reset-names = "apb";
 		rockchip,grf = <&grf>;
+		#address-cells = <1>;
+		#size-cells = <0>;
 		status = "disabled";
 
 		ports {
@@ -1263,8 +1263,10 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 
-			isp_in: port@0 {
+			port@0 {
 				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
 			};
 		};
 	};

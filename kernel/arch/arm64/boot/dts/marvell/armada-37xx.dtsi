@@ -11,6 +11,8 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 
 / {
+	model = "Marvell Armada 37xx SoC";
+	compatible = "marvell,armada3700";
 	interrupt-parent = <&gic>;
 	#address-cells = <2>;
 	#size-cells = <2>;
@@ -76,7 +78,7 @@
 		#size-cells = <2>;
 		ranges;
 
-		bus@d0000000 {
+		internal-regs@d0000000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
 			compatible = "simple-bus";

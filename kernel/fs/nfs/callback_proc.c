@@ -718,7 +718,7 @@ __be32 nfs4_callback_offload(void *data, void *dummy,
 
 	copy = kzalloc(sizeof(struct nfs4_copy_state), GFP_KERNEL);
 	if (!copy)
-		return cpu_to_be32(NFS4ERR_DELAY);
+		return htonl(NFS4ERR_SERVERFAULT);
 
 	spin_lock(&cps->clp->cl_lock);
 	rcu_read_lock();

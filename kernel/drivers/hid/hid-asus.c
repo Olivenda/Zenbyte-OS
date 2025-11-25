@@ -624,9 +624,6 @@ static void validate_mcu_fw_version(struct hid_device *hdev, int idProduct)
 		hid_warn(hdev,
 			"The MCU firmware version must be %d or greater to avoid issues with suspend.\n",
 			min_version);
-	} else {
-		set_ally_mcu_hack(ASUS_WMI_ALLY_MCU_HACK_DISABLED);
-		set_ally_mcu_powersave(true);
 	}
 }
 
@@ -1324,7 +1321,7 @@ static const __u8 *asus_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 
 	if (drvdata->quirks & QUIRK_G752_KEYBOARD &&
 		 *rsize == 75 && rdesc[61] == 0x15 && rdesc[62] == 0x00) {
-		/* report is missing usage minimum and maximum */
+		/* report is missing usage mninum and maximum */
 		__u8 *new_rdesc;
 		size_t new_size = *rsize + sizeof(asus_g752_fixed_rdesc);
 
@@ -1442,5 +1439,4 @@ static struct hid_driver asus_driver = {
 };
 module_hid_driver(asus_driver);
 
-MODULE_IMPORT_NS("ASUS_WMI");
 MODULE_LICENSE("GPL");

@@ -19,7 +19,6 @@
 #include <linux/platform_device.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 #include <linux/types.h>
 
 #include "virt-dma.h"
@@ -554,7 +553,7 @@ static irqreturn_t sun6i_dma_interrupt(int irq, void *dev_id)
 			continue;
 
 		dev_dbg(sdev->slave.dev, "DMA irq status %s: 0x%x\n",
-			str_high_low(i), status);
+			i ? "high" : "low", status);
 
 		writel(status, sdev->base + DMA_IRQ_STAT(i));
 
@@ -1489,7 +1488,7 @@ static void sun6i_dma_remove(struct platform_device *pdev)
 
 static struct platform_driver sun6i_dma_driver = {
 	.probe		= sun6i_dma_probe,
-	.remove		= sun6i_dma_remove,
+	.remove_new	= sun6i_dma_remove,
 	.driver = {
 		.name		= "sun6i-dma",
 		.of_match_table	= sun6i_dma_match,

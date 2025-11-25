@@ -8,7 +8,6 @@
 #include "fsverity_private.h"
 
 #include <linux/backing-dev.h>
-#include <linux/export.h>
 #include <linux/highmem.h>
 #include <linux/sched/signal.h>
 #include <linux/uaccess.h>

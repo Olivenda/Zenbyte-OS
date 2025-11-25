@@ -9,6 +9,7 @@
  */
 
 #include <linux/errno.h>
+#include <linux/fdtable.h>
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/mount.h>
@@ -27,12 +28,6 @@
 #include "include/path.h"
 #include "include/policy.h"
 #include "include/policy_ns.h"
-
-static const char * const CONFLICTING_ATTACH_STR = "conflicting profile attachments";
-static const char * const CONFLICTING_ATTACH_STR_IX =
-	"conflicting profile attachments - ix fallback";
-static const char * const CONFLICTING_ATTACH_STR_UX =
-	"conflicting profile attachments - ux fallback";
 
 /**
  * may_change_ptraced_domain - check if can change profile on ptraced task
@@ -93,7 +88,8 @@ static inline aa_state_t match_component(struct aa_profile *profile,
 					 struct aa_profile *tp,
 					 bool stack, aa_state_t state)
 {
-	struct aa_ruleset *rules = profile->label.rules[0];
+	struct aa_ruleset *rules = list_first_entry(&profile->rules,
+						    typeof(*rules), list);
 	const char *ns_name;
 
 	if (stack)
@@ -130,7 +126,8 @@ static int label_compound_match(struct aa_profile *profile,
 				aa_state_t state, bool subns, u32 request,
 				struct aa_perms *perms)
 {
-	struct aa_ruleset *rules = profile->label.rules[0];
+	struct aa_ruleset *rules = list_first_entry(&profile->rules,
+						    typeof(*rules), list);
 	struct aa_profile *tp;
 	struct label_it i;
 	struct path_cond cond = { };
@@ -158,8 +155,7 @@ next:
 		if (!state)
 			goto fail;
 	}
-	*perms = *(aa_lookup_condperms(current_fsuid(), rules->file, state,
-				       &cond));
+	*perms = *(aa_lookup_fperms(rules->file, state, &cond));
 	aa_apply_modes_to_perms(profile, perms);
 	if ((perms->allow & request) != request)
 		return -EACCES;
@@ -192,7 +188,8 @@ static int label_components_match(struct aa_profile *profile,
 				  aa_state_t start, bool subns, u32 request,
 				  struct aa_perms *perms)
 {
-	struct aa_ruleset *rules = profile->label.rules[0];
+	struct aa_ruleset *rules = list_first_entry(&profile->rules,
+						    typeof(*rules), list);
 	struct aa_profile *tp;
 	struct label_it i;
 	struct aa_perms tmp;
@@ -213,8 +210,7 @@ static int label_components_match(struct aa_profile *profile,
 	return 0;
 
 next:
-	tmp = *(aa_lookup_condperms(current_fsuid(), rules->file, state,
-				    &cond));
+	tmp = *(aa_lookup_fperms(rules->file, state, &cond));
 	aa_apply_modes_to_perms(profile, &tmp);
 	aa_perms_accum(perms, &tmp);
 	label_for_each_cont(i, label, tp) {
@@ -223,8 +219,7 @@ next:
 		state = match_component(profile, tp, stack, start);
 		if (!state)
 			goto fail;
-		tmp = *(aa_lookup_condperms(current_fsuid(), rules->file, state,
-					    &cond));
+		tmp = *(aa_lookup_fperms(rules->file, state, &cond));
 		aa_apply_modes_to_perms(profile, &tmp);
 		aa_perms_accum(perms, &tmp);
 	}
@@ -329,7 +324,7 @@ static int aa_xattrs_match(const struct linux_binprm *bprm,
 		size = vfs_getxattr_alloc(&nop_mnt_idmap, d, attach->xattrs[i],
 					  &value, value_size, GFP_KERNEL);
 		if (size >= 0) {
-			struct aa_perms *perms;
+			u32 index, perm;
 
 			/*
 			 * Check the xattr presence before value. This ensure
@@ -341,8 +336,9 @@ static int aa_xattrs_match(const struct linux_binprm *bprm,
 			/* Check xattr value */
 			state = aa_dfa_match_len(attach->xmatch->dfa, state,
 						 value, size);
-			perms = aa_lookup_perms(attach->xmatch, state);
-			if (!(perms->allow & MAY_EXEC)) {
+			index = ACCEPT_TABLE(attach->xmatch->dfa)[state];
+			perm = attach->xmatch->perms[index].allow;
+			if (!(perm & MAY_EXEC)) {
 				ret = -EINVAL;
 				goto out;
 			}
@@ -420,14 +416,15 @@ restart:
 		if (attach->xmatch->dfa) {
 			unsigned int count;
 			aa_state_t state;
-			struct aa_perms *perms;
+			u32 index, perm;
 
 			state = aa_dfa_leftmatch(attach->xmatch->dfa,
 					attach->xmatch->start[AA_CLASS_XMATCH],
 					name, &count);
-			perms = aa_lookup_perms(attach->xmatch, state);
+			index = ACCEPT_TABLE(attach->xmatch->dfa)[state];
+			perm = attach->xmatch->perms[index].allow;
 			/* any accepting state means a valid match. */
-			if (perms->allow & MAY_EXEC) {
+			if (perm & MAY_EXEC) {
 				int ret = 0;
 
 				if (count < candidate_len)
@@ -488,7 +485,7 @@ restart:
 
 	if (!candidate || conflict) {
 		if (conflict)
-			*info = CONFLICTING_ATTACH_STR;
+			*info = "conflicting profile attachments";
 		rcu_read_unlock();
 		return NULL;
 	}
@@ -517,7 +514,8 @@ static const char *next_name(int xtype, const char *name)
 struct aa_label *x_table_lookup(struct aa_profile *profile, u32 xindex,
 				const char **name)
 {
-	struct aa_ruleset *rules = profile->label.rules[0];
+	struct aa_ruleset *rules = list_first_entry(&profile->rules,
+						    typeof(*rules), list);
 	struct aa_label *label = NULL;
 	u32 xtype = xindex & AA_X_TYPE_MASK;
 	int index = xindex & AA_X_INDEX_MASK;
@@ -571,12 +569,12 @@ static struct aa_label *x_to_label(struct aa_profile *profile,
 				   const char **lookupname,
 				   const char **info)
 {
+	struct aa_ruleset *rules = list_first_entry(&profile->rules,
+						    typeof(*rules), list);
 	struct aa_label *new = NULL;
 	struct aa_label *stack = NULL;
 	struct aa_ns *ns = profile->ns;
 	u32 xtype = xindex & AA_X_TYPE_MASK;
-	/* Used for info checks during fallback handling */
-	const char *old_info = NULL;
 
 	switch (xtype) {
 	case AA_X_NONE:
@@ -613,32 +611,12 @@ static struct aa_label *x_to_label(struct aa_profile *profile,
 			/* (p|c|n)ix - don't change profile but do
 			 * use the newest version
 			 */
-			if (*info == CONFLICTING_ATTACH_STR) {
-				*info = CONFLICTING_ATTACH_STR_IX;
-			} else {
-				old_info = *info;
-				*info = "ix fallback";
-			}
+			*info = "ix fallback";
 			/* no profile && no error */
 			new = aa_get_newest_label(&profile->label);
 		} else if (xindex & AA_X_UNCONFINED) {
 			new = aa_get_newest_label(ns_unconfined(profile->ns));
-			if (*info == CONFLICTING_ATTACH_STR) {
-				*info = CONFLICTING_ATTACH_STR_UX;
-			} else {
-				old_info = *info;
-				*info = "ux fallback";
-			}
-		}
-		/* We set old_info on the code paths above where overwriting
-		 * could have happened, so now check if info was set by
-		 * find_attach as well (i.e. whether we actually overwrote)
-		 * and warn accordingly.
-		 */
-		if (old_info && old_info != CONFLICTING_ATTACH_STR) {
-			pr_warn_ratelimited(
-				"AppArmor: find_attach (from profile %s) audit info \"%s\" dropped",
-				profile->base.hname, old_info);
+			*info = "ux fallback";
 		}
 	}
 
@@ -662,9 +640,9 @@ static struct aa_label *profile_transition(const struct cred *subj_cred,
 					   char *buffer, struct path_cond *cond,
 					   bool *secure_exec)
 {
-	struct aa_ruleset *rules = profile->label.rules[0];
+	struct aa_ruleset *rules = list_first_entry(&profile->rules,
+						    typeof(*rules), list);
 	struct aa_label *new = NULL;
-	struct aa_profile *new_profile = NULL;
 	const char *info = NULL, *name = NULL, *target = NULL;
 	aa_state_t state = rules->file->start[AA_CLASS_FILE];
 	struct aa_perms perms = {};
@@ -680,7 +658,7 @@ static struct aa_label *profile_transition(const struct cred *subj_cred,
 	if (error) {
 		if (profile_unconfined(profile) ||
 		    (profile->label.flags & FLAG_IX_ON_NAME_ERROR)) {
-			AA_DEBUG(DEBUG_DOMAIN, "name lookup ix on error");
+			AA_DEBUG("name lookup ix on error");
 			error = 0;
 			new = aa_get_newest_label(&profile->label);
 		}
@@ -691,27 +669,11 @@ static struct aa_label *profile_transition(const struct cred *subj_cred,
 	if (profile_unconfined(profile)) {
 		new = find_attach(bprm, profile->ns,
 				  &profile->ns->base.profiles, name, &info);
-		/* info set -> something unusual that we should report
-		 * Currently this is only conflicting attachments, but other
-		 * infos added in the future should also be logged by default
-		 * and only excluded on a case-by-case basis
-		 */
-		if (info) {
-			/* Because perms is never used again after this audit
-			 * we don't need to care about clobbering it
-			 */
-			perms.audit |= MAY_EXEC;
-			perms.allow |= MAY_EXEC;
-			/* Don't cause error if auditing fails */
-			(void) aa_audit_file(subj_cred, profile, &perms,
-				OP_EXEC, MAY_EXEC, name, target, new, cond->uid,
-				info, error);
-		}
 		if (new) {
-			AA_DEBUG(DEBUG_DOMAIN, "unconfined attached to new label");
+			AA_DEBUG("unconfined attached to new label");
 			return new;
 		}
-		AA_DEBUG(DEBUG_DOMAIN, "unconfined exec no attachment");
+		AA_DEBUG("unconfined exec no attachment");
 		return aa_get_newest_label(&profile->label);
 	}
 
@@ -722,33 +684,18 @@ static struct aa_label *profile_transition(const struct cred *subj_cred,
 		new = x_to_label(profile, bprm, name, perms.xindex, &target,
 				 &info);
 		if (new && new->proxy == profile->label.proxy && info) {
-			/* Force audit on conflicting attachment fallback
-			 * Because perms is never used again after this audit
-			 * we don't need to care about clobbering it
-			 */
-			if (info == CONFLICTING_ATTACH_STR_IX
-			    || info == CONFLICTING_ATTACH_STR_UX)
-				perms.audit |= MAY_EXEC;
 			/* hack ix fallback - improve how this is detected */
 			goto audit;
 		} else if (!new) {
-			if (info) {
-				pr_warn_ratelimited(
-					"AppArmor: %s (from profile %s) audit info \"%s\" dropped on missing transition",
-					__func__, profile->base.hname, info);
-			}
-			info = "profile transition not found";
-			/* remove MAY_EXEC to audit as failure or complaint */
-			perms.allow &= ~MAY_EXEC;
-			if (COMPLAIN_MODE(profile)) {
-				/* create null profile instead of failing */
-				goto create_learning_profile;
-			}
 			error = -EACCES;
+			info = "profile transition not found";
+			/* remove MAY_EXEC to audit as failure */
+			perms.allow &= ~MAY_EXEC;
 		}
 	} else if (COMPLAIN_MODE(profile)) {
-create_learning_profile:
 		/* no exec permission - learning mode */
+		struct aa_profile *new_profile = NULL;
+
 		new_profile = aa_new_learning_profile(profile, false, name,
 						      GFP_KERNEL);
 		if (!new_profile) {
@@ -769,8 +716,8 @@ create_learning_profile:
 
 	if (!(perms.xindex & AA_X_UNSAFE)) {
 		if (DEBUG_ON) {
-			dbg_printk("apparmor: setting AT_SECURE for %s profile=",
-				   name);
+			dbg_printk("apparmor: scrubbing environment variables"
+				   " for %s profile=", name);
 			aa_label_printk(new, GFP_KERNEL);
 			dbg_printk("\n");
 		}
@@ -795,7 +742,8 @@ static int profile_onexec(const struct cred *subj_cred,
 			  char *buffer, struct path_cond *cond,
 			  bool *secure_exec)
 {
-	struct aa_ruleset *rules = profile->label.rules[0];
+	struct aa_ruleset *rules = list_first_entry(&profile->rules,
+						    typeof(*rules), list);
 	aa_state_t state = rules->file->start[AA_CLASS_FILE];
 	struct aa_perms perms = {};
 	const char *xname = NULL, *info = "change_profile onexec";
@@ -810,7 +758,7 @@ static int profile_onexec(const struct cred *subj_cred,
 		/* change_profile on exec already granted */
 		/*
 		 * NOTE: Domain transitions from unconfined are allowed
-		 * even when no_new_privs is set because this always results
+		 * even when no_new_privs is set because this aways results
 		 * in a further reduction of permissions.
 		 */
 		return 0;
@@ -821,7 +769,7 @@ static int profile_onexec(const struct cred *subj_cred,
 	if (error) {
 		if (profile_unconfined(profile) ||
 		    (profile->label.flags & FLAG_IX_ON_NAME_ERROR)) {
-			AA_DEBUG(DEBUG_DOMAIN, "name lookup ix on error");
+			AA_DEBUG("name lookup ix on error");
 			error = 0;
 		}
 		xname = bprm->filename;
@@ -848,8 +796,8 @@ static int profile_onexec(const struct cred *subj_cred,
 
 	if (!(perms.xindex & AA_X_UNSAFE)) {
 		if (DEBUG_ON) {
-			dbg_printk("apparmor: setting AT_SECURE for %s label=",
-				   xname);
+			dbg_printk("apparmor: scrubbing environment "
+				   "variables for %s label=", xname);
 			aa_label_printk(onexec, GFP_KERNEL);
 			dbg_printk("\n");
 		}
@@ -880,19 +828,33 @@ static struct aa_label *handle_onexec(const struct cred *subj_cred,
 	AA_BUG(!bprm);
 	AA_BUG(!buffer);
 
-	/* TODO: determine how much we want to loosen this */
-	error = fn_for_each_in_ns(label, profile,
-			profile_onexec(subj_cred, profile, onexec, stack,
-				       bprm, buffer, cond, unsafe));
-	if (error)
-		return ERR_PTR(error);
+	if (!stack) {
+		error = fn_for_each_in_ns(label, profile,
+				profile_onexec(subj_cred, profile, onexec, stack,
+					       bprm, buffer, cond, unsafe));
+		if (error)
+			return ERR_PTR(error);
+		new = fn_label_build_in_ns(label, profile, GFP_KERNEL,
+				aa_get_newest_label(onexec),
+				profile_transition(subj_cred, profile, bprm,
+						   buffer,
+						   cond, unsafe));
 
-	new = fn_label_build_in_ns(label, profile, GFP_KERNEL,
-			stack ? aa_label_merge(&profile->label, onexec,
-					       GFP_KERNEL)
-			      : aa_get_newest_label(onexec),
-			profile_transition(subj_cred, profile, bprm,
-					   buffer, cond, unsafe));
+	} else {
+		/* TODO: determine how much we want to loosen this */
+		error = fn_for_each_in_ns(label, profile,
+				profile_onexec(subj_cred, profile, onexec, stack, bprm,
+					       buffer, cond, unsafe));
+		if (error)
+			return ERR_PTR(error);
+		new = fn_label_build_in_ns(label, profile, GFP_KERNEL,
+				aa_label_merge(&profile->label, onexec,
+					       GFP_KERNEL),
+				profile_transition(subj_cred, profile, bprm,
+						   buffer,
+						   cond, unsafe));
+	}
+
 	if (new)
 		return new;
 
@@ -981,7 +943,7 @@ int apparmor_bprm_creds_for_exec(struct linux_binprm *bprm)
 	 *
 	 * NOTE: Domain transitions from unconfined and to stacked
 	 * subsets are allowed even when no_new_privs is set because this
-	 * always results in a further reduction of permissions.
+	 * aways results in a further reduction of permissions.
 	 */
 	if ((bprm->unsafe & LSM_UNSAFE_NO_NEW_PRIVS) &&
 	    !unconfined(label) &&
@@ -1005,8 +967,8 @@ int apparmor_bprm_creds_for_exec(struct linux_binprm *bprm)
 
 	if (unsafe) {
 		if (DEBUG_ON) {
-			dbg_printk("setting AT_SECURE for %s label=",
-				   bprm->filename);
+			dbg_printk("scrubbing environment variables for %s "
+				   "label=", bprm->filename);
 			aa_label_printk(new, GFP_KERNEL);
 			dbg_printk("\n");
 		}
@@ -1016,8 +978,8 @@ int apparmor_bprm_creds_for_exec(struct linux_binprm *bprm)
 	if (label->proxy != new->proxy) {
 		/* when transitioning clear unsafe personality bits */
 		if (DEBUG_ON) {
-			dbg_printk("apparmor: clearing unsafe personality bits. %s label=",
-				   bprm->filename);
+			dbg_printk("apparmor: clearing unsafe personality "
+				   "bits. %s label=", bprm->filename);
 			aa_label_printk(new, GFP_KERNEL);
 			dbg_printk("\n");
 		}
@@ -1243,24 +1205,10 @@ int aa_change_hat(const char *hats[], int count, u64 token, int flags)
 	if (task_no_new_privs(current) && !unconfined(label) && !ctx->nnp)
 		ctx->nnp = aa_get_label(label);
 
-	/* return -EPERM when unconfined doesn't have children to avoid
-	 * changing the traditional error code for unconfined.
-	 */
 	if (unconfined(label)) {
-		struct label_it i;
-		bool empty = true;
-
-		rcu_read_lock();
-		label_for_each_in_ns(i, labels_ns(label), label, profile) {
-			empty &= list_empty(&profile->base.profiles);
-		}
-		rcu_read_unlock();
-
-		if (empty) {
-			info = "unconfined can not change_hat";
-			error = -EPERM;
-			goto fail;
-		}
+		info = "unconfined can not change_hat";
+		error = -EPERM;
+		goto fail;
 	}
 
 	if (count) {
@@ -1285,8 +1233,7 @@ int aa_change_hat(const char *hats[], int count, u64 token, int flags)
 		if (task_no_new_privs(current) && !unconfined(label) &&
 		    !aa_label_is_unconfined_subset(new, ctx->nnp)) {
 			/* not an apparmor denial per se, so don't log it */
-			AA_DEBUG(DEBUG_DOMAIN,
-				 "no_new_privs - change_hat denied");
+			AA_DEBUG("no_new_privs - change_hat denied");
 			error = -EPERM;
 			goto out;
 		}
@@ -1307,8 +1254,7 @@ int aa_change_hat(const char *hats[], int count, u64 token, int flags)
 		if (task_no_new_privs(current) && !unconfined(label) &&
 		    !aa_label_is_unconfined_subset(previous, ctx->nnp)) {
 			/* not an apparmor denial per se, so don't log it */
-			AA_DEBUG(DEBUG_DOMAIN,
-				 "no_new_privs - change_hat denied");
+			AA_DEBUG("no_new_privs - change_hat denied");
 			error = -EPERM;
 			goto out;
 		}
@@ -1353,7 +1299,8 @@ static int change_profile_perms_wrapper(const char *op, const char *name,
 					struct aa_label *target, bool stack,
 					u32 request, struct aa_perms *perms)
 {
-	struct aa_ruleset *rules = profile->label.rules[0];
+	struct aa_ruleset *rules = list_first_entry(&profile->rules,
+						    typeof(*rules), list);
 	const char *info = NULL;
 	int error = 0;
 
@@ -1413,7 +1360,7 @@ int aa_change_profile(const char *fqname, int flags)
 
 	if (!fqname || !*fqname) {
 		aa_put_label(label);
-		AA_DEBUG(DEBUG_DOMAIN, "no profile name");
+		AA_DEBUG("no profile name");
 		return -EINVAL;
 	}
 
@@ -1532,8 +1479,7 @@ check:
 		if (task_no_new_privs(current) && !unconfined(label) &&
 		    !aa_label_is_unconfined_subset(new, ctx->nnp)) {
 			/* not an apparmor denial per se, so don't log it */
-			AA_DEBUG(DEBUG_DOMAIN,
-				 "no_new_privs - change_hat denied");
+			AA_DEBUG("no_new_privs - change_hat denied");
 			error = -EPERM;
 			goto out;
 		}

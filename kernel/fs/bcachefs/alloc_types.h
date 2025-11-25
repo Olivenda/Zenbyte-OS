@@ -8,6 +8,21 @@
 #include "clock_types.h"
 #include "fifo.h"
 
+struct bucket_alloc_state {
+	enum {
+		BTREE_BITMAP_NO,
+		BTREE_BITMAP_YES,
+		BTREE_BITMAP_ANY,
+	}	btree_bitmap;
+
+	u64	buckets_seen;
+	u64	skipped_open;
+	u64	skipped_need_journal_commit;
+	u64	skipped_nocow;
+	u64	skipped_nouse;
+	u64	skipped_mi_btree_bitmap;
+};
+
 #define BCH_WATERMARKS()		\
 	x(stripe)			\
 	x(normal)			\
@@ -74,7 +89,6 @@ struct dev_stripe_state {
 	x(stopped)			\
 	x(waiting_io)			\
 	x(waiting_work)			\
-	x(runnable)			\
 	x(running)
 
 enum write_point_state {
@@ -110,7 +124,6 @@ struct write_point {
 		enum write_point_state	state;
 		u64			last_state_change;
 		u64			time[WRITE_POINT_STATE_NR];
-		u64			last_runtime;
 	} __aligned(SMP_CACHE_BYTES);
 };
 

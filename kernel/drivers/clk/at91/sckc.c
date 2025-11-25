@@ -12,8 +12,6 @@
 #include <linux/of_address.h>
 #include <linux/io.h>
 
-#include <dt-bindings/clock/at91.h>
-
 #define SLOW_CLOCK_FREQ		32768
 #define SLOWCK_SW_CYCLES	5
 #define SLOWCK_SW_TIME_USEC	((SLOWCK_SW_CYCLES * USEC_PER_SEC) / \
@@ -472,7 +470,7 @@ static void __init of_sam9x60_sckc_setup(struct device_node *np)
 {
 	void __iomem *regbase = of_iomap(np, 0);
 	struct clk_hw_onecell_data *clk_data;
-	struct clk_hw *slow_rc, *slow_osc, *hw;
+	struct clk_hw *slow_rc, *slow_osc;
 	const char *xtal_name;
 	const struct clk_hw *parent_hws[2];
 	static struct clk_parent_data parent_data = {
@@ -508,19 +506,19 @@ static void __init of_sam9x60_sckc_setup(struct device_node *np)
 
 	/* MD_SLCK and TD_SLCK. */
 	clk_data->num = 2;
-	hw = clk_hw_register_fixed_rate_parent_hw(NULL, "md_slck", slow_rc,
-						  0, 32768);
-	if (IS_ERR(hw))
+	clk_data->hws[0] = clk_hw_register_fixed_rate_parent_hw(NULL, "md_slck",
+								slow_rc,
+								0, 32768);
+	if (IS_ERR(clk_data->hws[0]))
 		goto clk_data_free;
-	clk_data->hws[SCKC_MD_SLCK] = hw;
 
 	parent_hws[0] = slow_rc;
 	parent_hws[1] = slow_osc;
-	hw = at91_clk_register_sam9x5_slow(regbase, "td_slck", parent_hws,
-					   2, &at91sam9x60_bits);
-	if (IS_ERR(hw))
+	clk_data->hws[1] = at91_clk_register_sam9x5_slow(regbase, "td_slck",
+							 parent_hws, 2,
+							 &at91sam9x60_bits);
+	if (IS_ERR(clk_data->hws[1]))
 		goto unregister_md_slck;
-	clk_data->hws[SCKC_TD_SLCK] = hw;
 
 	ret = of_clk_add_hw_provider(np, of_clk_hw_onecell_get, clk_data);
 	if (WARN_ON(ret))
@@ -529,9 +527,9 @@ static void __init of_sam9x60_sckc_setup(struct device_node *np)
 	return;
 
 unregister_td_slck:
-	at91_clk_unregister_sam9x5_slow(clk_data->hws[SCKC_TD_SLCK]);
+	at91_clk_unregister_sam9x5_slow(clk_data->hws[1]);
 unregister_md_slck:
-	clk_hw_unregister(clk_data->hws[SCKC_MD_SLCK]);
+	clk_hw_unregister(clk_data->hws[0]);
 clk_data_free:
 	kfree(clk_data);
 unregister_slow_osc:

@@ -713,16 +713,7 @@ static void init_host_aspm(struct tegra_pcie_dw *pcie)
 
 static void init_debugfs(struct tegra_pcie_dw *pcie)
 {
-	struct device *dev = pcie->dev;
-	char *name;
-
-	name = devm_kasprintf(dev, GFP_KERNEL, "%pOFP", dev->of_node);
-	if (!name)
-		return;
-
-	pcie->debugfs = debugfs_create_dir(name, NULL);
-
-	debugfs_create_devm_seqfile(dev, "aspm_state_cnt", pcie->debugfs,
+	debugfs_create_devm_seqfile(pcie->dev, "aspm_state_cnt", pcie->debugfs,
 				    aspm_state_cnt);
 }
 #else
@@ -1036,12 +1027,12 @@ retry_link:
 	return 0;
 }
 
-static bool tegra_pcie_dw_link_up(struct dw_pcie *pci)
+static int tegra_pcie_dw_link_up(struct dw_pcie *pci)
 {
 	struct tegra_pcie_dw *pcie = to_tegra_pcie(pci);
 	u32 val = dw_pcie_readw_dbi(pci, pcie->pcie_cap_base + PCI_EXP_LNKSTA);
 
-	return val & PCI_EXP_LNKSTA_DLLLA;
+	return !!(val & PCI_EXP_LNKSTA_DLLLA);
 }
 
 static void tegra_pcie_dw_stop_link(struct dw_pcie *pci)
@@ -1657,6 +1648,7 @@ static void tegra_pcie_deinit_controller(struct tegra_pcie_dw *pcie)
 static int tegra_pcie_config_rp(struct tegra_pcie_dw *pcie)
 {
 	struct device *dev = pcie->dev;
+	char *name;
 	int ret;
 
 	pm_runtime_enable(dev);
@@ -1686,6 +1678,13 @@ static int tegra_pcie_config_rp(struct tegra_pcie_dw *pcie)
 		goto fail_host_init;
 	}
 
+	name = devm_kasprintf(dev, GFP_KERNEL, "%pOFP", dev->of_node);
+	if (!name) {
+		ret = -ENOMEM;
+		goto fail_host_init;
+	}
+
+	pcie->debugfs = debugfs_create_dir(name, NULL);
 	init_debugfs(pcie);
 
 	return ret;
@@ -2519,7 +2518,7 @@ static const struct dev_pm_ops tegra_pcie_dw_pm_ops = {
 
 static struct platform_driver tegra_pcie_dw_driver = {
 	.probe = tegra_pcie_dw_probe,
-	.remove = tegra_pcie_dw_remove,
+	.remove_new = tegra_pcie_dw_remove,
 	.shutdown = tegra_pcie_dw_shutdown,
 	.driver = {
 		.name	= "tegra194-pcie",
