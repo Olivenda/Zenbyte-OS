@@ -4,4 +4,5 @@
 mount -t sysfs /sys /sys
 mount -t proc /proc /proc
 mount -t devtmpfs /dev /dev
+mkdir /mnt
 
