@@ -1,0 +1,15 @@
+"systemctl" can run a "main" foreground process as follows:
+
+    systemctl init apache2
+
+---
+
+Service templates are not fully supported. For example, the default
+"postfix" instance on Debian is "postfix@-.service" and the following
+workaround is required to start it by "systemctl" command:
+
+  ln -sv /lib/systemd/system/postfix@.service /etc/systemd/system/postfix@-.service
+
+See the following upstream bug report for details:
+
+  https://github.com/gdraheim/docker-systemctl-replacement/issues/62
