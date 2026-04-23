@@ -1,0 +1,5 @@
+rootfs/
+iso/boot/initramfs.img
+iso/boot/vmlinuz
+*.iso
+Kernel/
