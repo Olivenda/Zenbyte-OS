@@ -1,0 +1,926 @@
+2026-04-23T20:33:21+0000 [57418] INFO [librepo] Downloading: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/Packages/l/libusb1-1.0.29-1.fc41.x86_64.rpm
+2026-04-23T20:33:21+0000 [57418] DEBUG [librepo] prepare_next_transfer: Resume ignored, existing file was not originally being downloaded by Librepo
+2026-04-23T20:33:21+0000 [57418] DEBUG [librepo] Transfer finished: Packages/s/sudo-1.9.17-2.p1.fc41.x86_64.rpm (Effective url: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/Packages/s/sudo-1.9.17-2.p1.fc41.x86_64.rpm)
+2026-04-23T20:33:21+0000 [57418] DEBUG [librepo] check_finished_transfer_checksum: Checksum (sha256) 2ab84ff9896dd43f90851bda0bc421478302c7eb3c6422fdaab5da8e06dfed4a is OK
+2026-04-23T20:33:21+0000 [57418] DEBUG [librepo] Selecting mirror for: Packages/x/xxhash-libs-0.8.3-1.fc41.x86_64.rpm
+2026-04-23T20:33:21+0000 [57418] INFO [librepo] Downloading: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/Packages/x/xxhash-libs-0.8.3-1.fc41.x86_64.rpm
+2026-04-23T20:33:21+0000 [57418] DEBUG [librepo] prepare_next_transfer: Resume ignored, existing file was not originally being downloaded by Librepo
+2026-04-23T20:33:21+0000 [57418] DEBUG [librepo] Transfer finished: Packages/h/hwdata-0.401-1.fc41.noarch.rpm (Effective url: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/Packages/h/hwdata-0.401-1.fc41.noarch.rpm)
+2026-04-23T20:33:21+0000 [57418] DEBUG [librepo] check_finished_transfer_checksum: Checksum (sha256) 7b504bafaace81e94d3a2a8905d22a87ffb7aea37773277b516491cba66d1d2b is OK
+2026-04-23T20:33:21+0000 [57418] DEBUG [librepo] Selecting mirror for: Packages/p/pciutils-libs-3.14.0-1.fc41.x86_64.rpm
+2026-04-23T20:33:21+0000 [57418] INFO [librepo] Downloading: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/Packages/p/pciutils-libs-3.14.0-1.fc41.x86_64.rpm
+2026-04-23T20:33:21+0000 [57418] DEBUG [librepo] prepare_next_transfer: Resume ignored, existing file was not originally being downloaded by Librepo
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] Transfer finished: Packages/x/xxhash-libs-0.8.3-1.fc41.x86_64.rpm (Effective url: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/Packages/x/xxhash-libs-0.8.3-1.fc41.x86_64.rpm)
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] check_finished_transfer_checksum: Checksum (sha256) 0af75b53095c8a3f1f4e22b093f0fcbe8a62cbdf8bf62df43dd2838028b949fd is OK
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] Selecting mirror for: Packages/n/ntfs-3g-system-compression-1.0-17.fc41.x86_64.rpm
+2026-04-23T20:33:22+0000 [57418] INFO [librepo] Downloading: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/releases/41/Everything/x86_64/os/Packages/n/ntfs-3g-system-compression-1.0-17.fc41.x86_64.rpm
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] prepare_next_transfer: Resume ignored, existing file was not originally being downloaded by Librepo
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] Transfer finished: Packages/l/libusb1-1.0.29-1.fc41.x86_64.rpm (Effective url: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/Packages/l/libusb1-1.0.29-1.fc41.x86_64.rpm)
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] check_finished_transfer_checksum: Checksum (sha256) 73726df1a5866c7635aa44834131f4fb5602c872a0ef60eef270a0e5f8f45b75 is OK
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] Selecting mirror for: Packages/n/nano-default-editor-8.1-1.fc41.noarch.rpm
+2026-04-23T20:33:22+0000 [57418] INFO [librepo] Downloading: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/releases/41/Everything/x86_64/os/Packages/n/nano-default-editor-8.1-1.fc41.noarch.rpm
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] prepare_next_transfer: Resume ignored, existing file was not originally being downloaded by Librepo
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] Transfer finished: Packages/p/pciutils-libs-3.14.0-1.fc41.x86_64.rpm (Effective url: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/Packages/p/pciutils-libs-3.14.0-1.fc41.x86_64.rpm)
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] check_finished_transfer_checksum: Checksum (sha256) b35b0a6a593759bce0f0be4575bb7cf367e5033cb6cb22411d329c7d64f17bfd is OK
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] Selecting mirror for: Packages/s/sudo-python-plugin-1.9.17-2.p1.fc41.x86_64.rpm
+2026-04-23T20:33:22+0000 [57418] INFO [librepo] Downloading: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/Packages/s/sudo-python-plugin-1.9.17-2.p1.fc41.x86_64.rpm
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] prepare_next_transfer: Resume ignored, existing file was not originally being downloaded by Librepo
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] Transfer finished: Packages/n/ntfs-3g-system-compression-1.0-17.fc41.x86_64.rpm (Effective url: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/releases/41/Everything/x86_64/os/Packages/n/ntfs-3g-system-compression-1.0-17.fc41.x86_64.rpm)
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] check_finished_transfer_checksum: Checksum (sha256) 9f8b842d9294324218e191440face67668b079ff5a76d87f45d5221c71330c45 is OK
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] Transfer finished: Packages/n/nano-default-editor-8.1-1.fc41.noarch.rpm (Effective url: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/releases/41/Everything/x86_64/os/Packages/n/nano-default-editor-8.1-1.fc41.noarch.rpm)
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] check_finished_transfer_checksum: Checksum (sha256) 5233b0a363243248f2de22f517b89750f22d6d1981b73c2ce553ec81add36a26 is OK
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] Transfer finished: Packages/s/sudo-python-plugin-1.9.17-2.p1.fc41.x86_64.rpm (Effective url: https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/Packages/s/sudo-python-plugin-1.9.17-2.p1.fc41.x86_64.rpm)
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] check_finished_transfer_checksum: Checksum (sha256) b26e4abf7c5b7054a11aa536bd10e8a6a91f9ebe303e11b378149983112b2ff5 is OK
+2026-04-23T20:33:22+0000 [57418] DEBUG [librepo] lr_download_packages: Restoring an old SIGINT handler
+2026-04-23T20:33:22+0000 [57418] WARNING [rpm] /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/e2fsprogs-1.47.1-6.fc41.x86_64.rpm: Header OpenPGP V4 RSA/SHA256 signature, Schlüssel-ID d0622462e99d6ad1: NOKEY
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback verify start, total 46
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-common-2.12-25.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/hwdata-0.401-1.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/ntfs-3g-libs-2022.10.3-9.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/file-libs-5.45-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/file-5.45-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/fuse3-libs-3.16.2-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/nano-8.1-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-pc-modules-2.12-25.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/pciutils-libs-3.14.0-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/xxhash-libs-0.8.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/libusb1-1.0.29-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/sudo-1.9.17-2.p1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/openssh-9.9p1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libndp-1.9-2.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/NetworkManager-libnm-1.50.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libtextstyle-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-libs-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-envsubst-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-runtime-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-tools-minimal-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/os-prober-1.81-8.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-tools-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/which-2.21-42.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libss-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/e2fsprogs-libs-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/e2fsprogs-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-pc-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/NetworkManager-1.50.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/openssh-server-9.9p1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/sudo-python-plugin-1.9.17-2.p1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/usbutils-017-3.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/rsync-3.4.1-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/pciutils-3.14.0-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/nano-default-editor-8.1-1.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/ntfs-3g-2022.10.3-9.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/ntfs-3g-system-compression-1.0-17.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/lshw-B.02.20-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/tmux-3.5a-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/screen-5.0.1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/smartmontools-7.5-3.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/parted-3.6-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/lsscsi-0.32-12.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/dmidecode-3.6-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/hdparm-9.65-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/bzip2-1.0.8-19.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/dosfstools-4.2-13.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback verify stop, total 46
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback transaction start, total 46
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback transaction stop, total 46
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-common-2.12-25.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/hwdata-0.401-1.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/ntfs-3g-libs-2022.10.3-9.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/file-libs-5.45-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/file-5.45-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/fuse3-libs-3.16.2-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/nano-8.1-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-pc-modules-2.12-25.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/pciutils-libs-3.14.0-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/xxhash-libs-0.8.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/libusb1-1.0.29-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/sudo-1.9.17-2.p1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/openssh-9.9p1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libndp-1.9-2.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/NetworkManager-libnm-1.50.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libtextstyle-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-libs-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-envsubst-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-runtime-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-tools-minimal-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/os-prober-1.81-8.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-tools-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/which-2.21-42.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libss-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/e2fsprogs-libs-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/e2fsprogs-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-pc-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/NetworkManager-1.50.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/openssh-server-9.9p1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/sudo-python-plugin-1.9.17-2.p1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/usbutils-017-3.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/rsync-3.4.1-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/pciutils-3.14.0-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/nano-default-editor-8.1-1.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/ntfs-3g-2022.10.3-9.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/ntfs-3g-system-compression-1.0-17.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/lshw-B.02.20-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/tmux-3.5a-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/screen-5.0.1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/smartmontools-7.5-3.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/parted-3.6-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/lsscsi-0.32-12.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/dmidecode-3.6-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/hdparm-9.65-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/bzip2-1.0.8-19.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/dosfstools-4.2-13.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback verify start, total 46
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-common-2.12-25.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/hwdata-0.401-1.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/ntfs-3g-libs-2022.10.3-9.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/file-libs-5.45-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/file-5.45-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/fuse3-libs-3.16.2-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/nano-8.1-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-pc-modules-2.12-25.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/pciutils-libs-3.14.0-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/xxhash-libs-0.8.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/libusb1-1.0.29-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/sudo-1.9.17-2.p1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/openssh-9.9p1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libndp-1.9-2.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/NetworkManager-libnm-1.50.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libtextstyle-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-libs-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-envsubst-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-runtime-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-tools-minimal-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/os-prober-1.81-8.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-tools-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/which-2.21-42.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libss-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/e2fsprogs-libs-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/e2fsprogs-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-pc-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/NetworkManager-1.50.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/openssh-server-9.9p1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/sudo-python-plugin-1.9.17-2.p1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/usbutils-017-3.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/rsync-3.4.1-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/pciutils-3.14.0-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/nano-default-editor-8.1-1.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/ntfs-3g-2022.10.3-9.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/ntfs-3g-system-compression-1.0-17.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/lshw-B.02.20-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/tmux-3.5a-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/screen-5.0.1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/smartmontools-7.5-3.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/parted-3.6-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/lsscsi-0.32-12.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/dmidecode-3.6-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/hdparm-9.65-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/bzip2-1.0.8-19.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/dosfstools-4.2-13.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback verify stop, total 46
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback transaction start, total 46
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback transaction stop, total 46
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-common-2.12-25.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "grub2-common-1:2.12-25.fc41.noarch" total 6449352
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "grub2-common-1:2.12-25.fc41.noarch" amount 6449352 total 6449352
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/hwdata-0.401-1.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "hwdata-0:0.401-1.fc41.noarch" total 10080756
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "hwdata-0:0.401-1.fc41.noarch" amount 10080756 total 10080756
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/ntfs-3g-libs-2022.10.3-9.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "ntfs-3g-libs-2:2022.10.3-9.fc41.x86_64" total 378948
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "ntfs-3g-libs-2:2022.10.3-9.fc41.x86_64" amount 378948 total 378948
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/file-libs-5.45-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "file-libs-0:5.45-7.fc41.x86_64" total 10416596
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "file-libs-0:5.45-7.fc41.x86_64" amount 10416596 total 10416596
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/file-5.45-7.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "file-0:5.45-7.fc41.x86_64" total 107532
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "file-0:5.45-7.fc41.x86_64" amount 107532 total 107532
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/fuse3-libs-3.16.2-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "fuse3-libs-0:3.16.2-4.fc41.x86_64" total 289396
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "fuse3-libs-0:3.16.2-4.fc41.x86_64" amount 289396 total 289396
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/nano-8.1-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "nano-0:8.1-1.fc41.x86_64" total 3007532
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "nano-0:8.1-1.fc41.x86_64" amount 3007532 total 3007532
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-pc-modules-2.12-25.fc41.noarch.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "grub2-pc-modules-1:2.12-25.fc41.noarch" total 3374104
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "grub2-pc-modules-1:2.12-25.fc41.noarch" amount 3374104 total 3374104
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/pciutils-libs-3.14.0-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "pciutils-libs-0:3.14.0-1.fc41.x86_64" total 107084
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "pciutils-libs-0:3.14.0-1.fc41.x86_64" amount 107084 total 107084
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/xxhash-libs-0.8.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "xxhash-libs-0:0.8.3-1.fc41.x86_64" total 92048
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "xxhash-libs-0:0.8.3-1.fc41.x86_64" amount 92048 total 92048
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/libusb1-1.0.29-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "libusb1-0:1.0.29-1.fc41.x86_64" total 176748
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "libusb1-0:1.0.29-1.fc41.x86_64" amount 176748 total 176748
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/sudo-1.9.17-2.p1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "sudo-0:1.9.17-2.p1.fc41.x86_64" total 5360708
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "sudo-0:1.9.17-2.p1.fc41.x86_64" amount 5360708 total 5360708
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/openssh-9.9p1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "openssh-0:9.9p1-4.fc41.x86_64" total 1448480
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "openssh-0:9.9p1-4.fc41.x86_64" amount 1448480 total 1448480
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libndp-1.9-2.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "libndp-0:1.9-2.fc41.x86_64" total 89996
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "libndp-0:1.9-2.fc41.x86_64" amount 89996 total 89996
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/NetworkManager-libnm-1.50.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "NetworkManager-libnm-1:1.50.3-1.fc41.x86_64" total 10429988
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "NetworkManager-libnm-1:1.50.3-1.fc41.x86_64" amount 10429988 total 10429988
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libtextstyle-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "libtextstyle-0:0.22.5-6.fc41.x86_64" total 201172
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "libtextstyle-0:0.22.5-6.fc41.x86_64" amount 201172 total 201172
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-libs-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "gettext-libs-0:0.22.5-6.fc41.x86_64" total 1757824
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "gettext-libs-0:0.22.5-6.fc41.x86_64" amount 1757824 total 1757824
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-envsubst-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "gettext-envsubst-0:0.22.5-6.fc41.x86_64" total 78172
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "gettext-envsubst-0:0.22.5-6.fc41.x86_64" amount 78172 total 78172
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/gettext-runtime-0.22.5-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "gettext-runtime-0:0.22.5-6.fc41.x86_64" total 502496
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "gettext-runtime-0:0.22.5-6.fc41.x86_64" amount 502496 total 502496
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-tools-minimal-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "grub2-tools-minimal-1:2.12-25.fc41.x86_64" total 3136460
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "grub2-tools-minimal-1:2.12-25.fc41.x86_64" amount 3136460 total 3136460
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/os-prober-1.81-8.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "os-prober-0:1.81-8.fc41.x86_64" total 123888
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "os-prober-0:1.81-8.fc41.x86_64" amount 123888 total 123888
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-tools-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback start %pre scriptlet "grub2-tools-1:2.12-25.fc41.x86_64"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback stop %pre scriptlet "grub2-tools-1:2.12-25.fc41.x86_64" return code 0
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "grub2-tools-1:2.12-25.fc41.x86_64" total 8107056
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "grub2-tools-1:2.12-25.fc41.x86_64" amount 8107056 total 8107056
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback start %post scriptlet "grub2-tools-1:2.12-25.fc41.x86_64"
+2026-04-23T20:33:22+0000 [57418] INFO [scriptlet] ⚠️ /proc/ is not mounted. This is not a supported mode of operation. Please fix
+2026-04-23T20:33:22+0000 [57418] INFO [scriptlet] your invocation environment to mount /proc/ and /sys/ properly. Proceeding anyway.
+2026-04-23T20:33:22+0000 [57418] INFO [scriptlet] Your mileage may vary.
+2026-04-23T20:33:22+0000 [57418] INFO [scriptlet] Created symlink '/etc/systemd/user/timers.target.wants/grub-boot-success.timer' → '/usr/lib/systemd/user/grub-boot-success.timer'.
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback stop %post scriptlet "grub2-tools-1:2.12-25.fc41.x86_64" return code 0
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/which-2.21-42.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "which-0:2.21-42.fc41.x86_64" total 84404
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "which-0:2.21-42.fc41.x86_64" amount 84404 total 84404
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/libss-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "libss-0:1.47.1-6.fc41.x86_64" total 78188
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "libss-0:1.47.1-6.fc41.x86_64" amount 78188 total 78188
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/e2fsprogs-libs-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "e2fsprogs-libs-0:1.47.1-6.fc41.x86_64" total 553920
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "e2fsprogs-libs-0:1.47.1-6.fc41.x86_64" amount 553920 total 553920
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/e2fsprogs-1.47.1-6.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "e2fsprogs-0:1.47.1-6.fc41.x86_64" total 4761752
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "e2fsprogs-0:1.47.1-6.fc41.x86_64" amount 4761752 total 4761752
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/grub2-pc-2.12-25.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install start "grub2-pc-1:2.12-25.fc41.x86_64" total 568
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback install stop "grub2-pc-1:2.12-25.fc41.x86_64" amount 568 total 568
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/NetworkManager-1.50.3-1.fc41.x86_64.rpm"
+2026-04-23T20:33:22+0000 [57418] INFO RPM callback start %pre scriptlet "NetworkManager-1:1.50.3-1.fc41.x86_64"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback stop %pre scriptlet "NetworkManager-1:1.50.3-1.fc41.x86_64" return code 0
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "NetworkManager-1:1.50.3-1.fc41.x86_64" total 6025376
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "NetworkManager-1:1.50.3-1.fc41.x86_64" amount 6025376 total 6025376
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback start %post scriptlet "NetworkManager-1:1.50.3-1.fc41.x86_64"
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] ⚠️ /proc/ is not mounted. This is not a supported mode of operation. Please fix
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] your invocation environment to mount /proc/ and /sys/ properly. Proceeding anyway.
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] Your mileage may vary.
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] Created symlink '/etc/systemd/system/multi-user.target.wants/NetworkManager.service' → '/usr/lib/systemd/system/NetworkManager.service'.
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] Created symlink '/etc/systemd/system/dbus-org.freedesktop.nm-dispatcher.service' → '/usr/lib/systemd/system/NetworkManager-dispatcher.service'.
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] Created symlink '/etc/systemd/system/network-online.target.wants/NetworkManager-wait-online.service' → '/usr/lib/systemd/system/NetworkManager-wait-online.service'.
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback stop %post scriptlet "NetworkManager-1:1.50.3-1.fc41.x86_64" return code 0
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/openssh-server-9.9p1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback start sysusers scriptlet "openssh-server-0:9.9p1-4.fc41.x86_64"
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] Creating group 'sshd' with GID 74.
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] Creating user 'sshd' (Privilege-separated SSH) with UID 74 and GID 74.
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback stop sysusers scriptlet "openssh-server-0:9.9p1-4.fc41.x86_64" return code 0
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback start %pre scriptlet "openssh-server-0:9.9p1-4.fc41.x86_64"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback stop %pre scriptlet "openssh-server-0:9.9p1-4.fc41.x86_64" return code 0
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "openssh-server-0:9.9p1-4.fc41.x86_64" total 1490648
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "openssh-server-0:9.9p1-4.fc41.x86_64" amount 1490648 total 1490648
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback start %post scriptlet "openssh-server-0:9.9p1-4.fc41.x86_64"
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] ⚠️ /proc/ is not mounted. This is not a supported mode of operation. Please fix
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] your invocation environment to mount /proc/ and /sys/ properly. Proceeding anyway.
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] Your mileage may vary.
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] Created symlink '/etc/systemd/system/multi-user.target.wants/sshd.service' → '/usr/lib/systemd/system/sshd.service'.
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback stop %post scriptlet "openssh-server-0:9.9p1-4.fc41.x86_64" return code 0
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/sudo-python-plugin-1.9.17-2.p1.fc41.x86_64.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "sudo-python-plugin-0:1.9.17-2.p1.fc41.x86_64" total 107676
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "sudo-python-plugin-0:1.9.17-2.p1.fc41.x86_64" amount 107676 total 107676
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/usbutils-017-3.fc41.x86_64.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "usbutils-0:017-3.fc41.x86_64" total 330752
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "usbutils-0:017-3.fc41.x86_64" amount 330752 total 330752
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/rsync-3.4.1-1.fc41.x86_64.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "rsync-0:3.4.1-1.fc41.x86_64" total 794316
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "rsync-0:3.4.1-1.fc41.x86_64" amount 794316 total 794316
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/pciutils-3.14.0-1.fc41.x86_64.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "pciutils-0:3.14.0-1.fc41.x86_64" total 306692
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "pciutils-0:3.14.0-1.fc41.x86_64" amount 306692 total 306692
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/nano-default-editor-8.1-1.fc41.noarch.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "nano-default-editor-0:8.1-1.fc41.noarch" total 1384
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "nano-default-editor-0:8.1-1.fc41.noarch" amount 1384 total 1384
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/ntfs-3g-2022.10.3-9.fc41.x86_64.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "ntfs-3g-2:2022.10.3-9.fc41.x86_64" total 340568
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "ntfs-3g-2:2022.10.3-9.fc41.x86_64" amount 340568 total 340568
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/ntfs-3g-system-compression-1.0-17.fc41.x86_64.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "ntfs-3g-system-compression-0:1.0-17.fc41.x86_64" total 50892
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "ntfs-3g-system-compression-0:1.0-17.fc41.x86_64" amount 50892 total 50892
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/lshw-B.02.20-4.fc41.x86_64.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "lshw-0:B.02.20-4.fc41.x86_64" total 882976
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "lshw-0:B.02.20-4.fc41.x86_64" amount 882976 total 882976
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/tmux-3.5a-7.fc41.x86_64.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "tmux-0:3.5a-7.fc41.x86_64" total 1263152
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "tmux-0:3.5a-7.fc41.x86_64" amount 1263152 total 1263152
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback start %post scriptlet "tmux-0:3.5a-7.fc41.x86_64"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback stop %post scriptlet "tmux-0:3.5a-7.fc41.x86_64" return code 0
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/screen-5.0.1-4.fc41.x86_64.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback start sysusers scriptlet "screen-0:5.0.1-4.fc41.x86_64"
+2026-04-23T20:33:23+0000 [57418] INFO [scriptlet] Creating group 'screen' with GID 84.
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback stop sysusers scriptlet "screen-0:5.0.1-4.fc41.x86_64" return code 0
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "screen-0:5.0.1-4.fc41.x86_64" total 968548
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "screen-0:5.0.1-4.fc41.x86_64" amount 968548 total 968548
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/packages/smartmontools-7.5-3.fc41.x86_64.rpm"
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install start "smartmontools-1:7.5-3.fc41.x86_64" total 2400500
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback install stop "smartmontools-1:7.5-3.fc41.x86_64" amount 2400500 total 2400500
+2026-04-23T20:33:23+0000 [57418] INFO RPM callback start %post scriptlet "smartmontools-1:7.5-3.fc41.x86_64"
+2026-04-23T20:33:24+0000 [57418] INFO [scriptlet] ⚠️ /proc/ is not mounted. This is not a supported mode of operation. Please fix
+2026-04-23T20:33:24+0000 [57418] INFO [scriptlet] your invocation environment to mount /proc/ and /sys/ properly. Proceeding anyway.
+2026-04-23T20:33:24+0000 [57418] INFO [scriptlet] Your mileage may vary.
+2026-04-23T20:33:24+0000 [57418] INFO [scriptlet] Created symlink '/etc/systemd/system/multi-user.target.wants/smartd.service' → '/usr/lib/systemd/system/smartd.service'.
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback stop %post scriptlet "smartmontools-1:7.5-3.fc41.x86_64" return code 0
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/parted-3.6-7.fc41.x86_64.rpm"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install start "parted-0:3.6-7.fc41.x86_64" total 2614240
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install stop "parted-0:3.6-7.fc41.x86_64" amount 2614240 total 2614240
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/lsscsi-0.32-12.fc41.x86_64.rpm"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install start "lsscsi-0:0.32-12.fc41.x86_64" total 133880
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install stop "lsscsi-0:0.32-12.fc41.x86_64" amount 133880 total 133880
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/dmidecode-3.6-4.fc41.x86_64.rpm"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install start "dmidecode-1:3.6-4.fc41.x86_64" total 245636
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install stop "dmidecode-1:3.6-4.fc41.x86_64" amount 245636 total 245636
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/hdparm-9.65-6.fc41.x86_64.rpm"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install start "hdparm-0:9.65-6.fc41.x86_64" total 195308
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install stop "hdparm-0:9.65-6.fc41.x86_64" amount 195308 total 195308
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/bzip2-1.0.8-19.fc41.x86_64.rpm"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install start "bzip2-0:1.0.8-19.fc41.x86_64" total 102564
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install stop "bzip2-0:1.0.8-19.fc41.x86_64" amount 102564 total 102564
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback open file "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/packages/dosfstools-4.2-13.fc41.x86_64.rpm"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install start "dosfstools-0:4.2-13.fc41.x86_64" total 251620
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback install stop "dosfstools-0:4.2-13.fc41.x86_64" amount 251620 total 251620
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback close file
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback start %posttrans scriptlet "grub2-common-1:2.12-25.fc41.noarch"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback stop %posttrans scriptlet "grub2-common-1:2.12-25.fc41.noarch" return code 0
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback start %triggerin scriptlet "glibc-common-0:2.40-28.fc41.x86_64"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback stop %triggerin scriptlet "glibc-common-0:2.40-28.fc41.x86_64" return code 0
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback start %triggerin scriptlet "systemd-0:256.17-1.fc41.x86_64"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback stop %triggerin scriptlet "systemd-0:256.17-1.fc41.x86_64" return code 0
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback start %triggerin scriptlet "systemd-0:256.17-1.fc41.x86_64"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback stop %triggerin scriptlet "systemd-0:256.17-1.fc41.x86_64" return code 0
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback start %triggerin scriptlet "systemd-udev-0:256.17-1.fc41.x86_64"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback stop %triggerin scriptlet "systemd-udev-0:256.17-1.fc41.x86_64" return code 0
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback start %triggerin scriptlet "systemd-0:256.17-1.fc41.x86_64"
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback stop %triggerin scriptlet "systemd-0:256.17-1.fc41.x86_64" return code 0
+2026-04-23T20:33:24+0000 [57418] INFO RPM callback start %triggerin scriptlet "systemd-0:256.17-1.fc41.x86_64"
+2026-04-23T20:33:25+0000 [57418] INFO RPM callback stop %triggerin scriptlet "systemd-0:256.17-1.fc41.x86_64" return code 0
+2026-04-23T20:33:25+0000 [57418] INFO DNF5 ist fertig
+2026-04-23T20:33:44+0000 [57591] INFO --- DNF5 wurde mit den Argumenten gestartet: "dnf remove --installroot=/home/oli/Dokumente/Zenbyte-OS/rootfs --nogpgcheck -y dnf" ---
+2026-04-23T20:33:44+0000 [57591] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/builddep_cmd_plugin.so"
+2026-04-23T20:33:44+0000 [57591] INFO Loaded dnf5 plugin "builddep" ("/usr/lib64/dnf5/plugins/builddep_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:33:44+0000 [57591] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/changelog_cmd_plugin.so"
+2026-04-23T20:33:44+0000 [57591] INFO Loaded dnf5 plugin "changelog" ("/usr/lib64/dnf5/plugins/changelog_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:33:44+0000 [57591] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/config-manager_cmd_plugin.so"
+2026-04-23T20:33:44+0000 [57591] INFO Loaded dnf5 plugin "config-manager" ("/usr/lib64/dnf5/plugins/config-manager_cmd_plugin.so") version "0.1.0"
+2026-04-23T20:33:44+0000 [57591] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/copr_cmd_plugin.so"
+2026-04-23T20:33:44+0000 [57591] INFO Loaded dnf5 plugin "copr" ("/usr/lib64/dnf5/plugins/copr_cmd_plugin.so") version "0.1.0"
+2026-04-23T20:33:44+0000 [57591] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/needs_restarting_cmd_plugin.so"
+2026-04-23T20:33:44+0000 [57591] INFO Loaded dnf5 plugin "needs_restarting" ("/usr/lib64/dnf5/plugins/needs_restarting_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:33:44+0000 [57591] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/repoclosure_cmd_plugin.so"
+2026-04-23T20:33:44+0000 [57591] INFO Loaded dnf5 plugin "repoclosure" ("/usr/lib64/dnf5/plugins/repoclosure_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:33:44+0000 [57591] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/repomanage_cmd_plugin.so"
+2026-04-23T20:33:44+0000 [57591] INFO Loaded dnf5 plugin "repomanage" ("/usr/lib64/dnf5/plugins/repomanage_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:33:44+0000 [57591] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/reposync_cmd_plugin.so"
+2026-04-23T20:33:44+0000 [57591] INFO Loaded dnf5 plugin "reposync" ("/usr/lib64/dnf5/plugins/reposync_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:33:44+0000 [57591] DEBUG Loading plugin library file="/usr/lib64/libdnf5/plugins/expired-pgp-keys.so"
+2026-04-23T20:33:44+0000 [57591] INFO Loaded libdnf plugin "expired-pgp-keys" ("/usr/lib64/libdnf5/plugins/expired-pgp-keys.so"), version="1.0.0"
+2026-04-23T20:33:44+0000 [57591] DEBUG Trying to load more plugins using the "expired-pgp-keys" plugin.
+2026-04-23T20:33:44+0000 [57591] DEBUG End of loading plugins using the "expired-pgp-keys" plugin.
+2026-04-23T20:33:44+0000 [57591] DEBUG Loading plugin library file="/usr/lib64/libdnf5/plugins/notify_packagekit.so"
+2026-04-23T20:33:44+0000 [57591] INFO Loaded libdnf plugin "notify_packagekit" ("/usr/lib64/libdnf5/plugins/notify_packagekit.so"), version="1.3.4"
+2026-04-23T20:33:44+0000 [57591] DEBUG Trying to load more plugins using the "notify_packagekit" plugin.
+2026-04-23T20:33:44+0000 [57591] DEBUG End of loading plugins using the "notify_packagekit" plugin.
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "fedora-cisco-openh264" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264"
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "fedora-cisco-openh264-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264-debuginfo"
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "fedora-cisco-openh264-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264-source"
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "updates-testing" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing"
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "updates-testing-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing-debuginfo"
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "updates-testing-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing-source"
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "updates" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates"
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "updates-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates-debuginfo"
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "updates-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates-source"
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "fedora" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora"
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "fedora-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora-debuginfo"
+2026-04-23T20:33:44+0000 [57591] DEBUG Creating repo "fedora-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora-source"
+2026-04-23T20:33:44+0000 [57591] DEBUG Loading system repo rpmdb from root "/home/oli/Dokumente/Zenbyte-OS/rootfs"
+2026-04-23T20:33:44+0000 [57591] DEBUG Rewriting repo "@System" with added file provides
+2026-04-23T20:33:44+0000 [57591] DEBUG Rewriting repo "@System" with added file provides
+2026-04-23T20:33:44+0000 [57591] WARNING Keine Pakete zum Entfernen für Argument: dnf
+2026-04-23T20:33:44+0000 [57591] DEBUG Failed to find rpm package of a running kernel in sack
+2026-04-23T20:34:45+0000 [57744] INFO --- DNF5 wurde mit den Argumenten gestartet: "dnf remove --installroot=/home/oli/Dokumente/Zenbyte-OS/rootfs --nogpgcheck -y dnf5 libdnf5 libdnf5-cli" ---
+2026-04-23T20:34:45+0000 [57744] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/builddep_cmd_plugin.so"
+2026-04-23T20:34:45+0000 [57744] INFO Loaded dnf5 plugin "builddep" ("/usr/lib64/dnf5/plugins/builddep_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:34:45+0000 [57744] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/changelog_cmd_plugin.so"
+2026-04-23T20:34:45+0000 [57744] INFO Loaded dnf5 plugin "changelog" ("/usr/lib64/dnf5/plugins/changelog_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:34:45+0000 [57744] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/config-manager_cmd_plugin.so"
+2026-04-23T20:34:45+0000 [57744] INFO Loaded dnf5 plugin "config-manager" ("/usr/lib64/dnf5/plugins/config-manager_cmd_plugin.so") version "0.1.0"
+2026-04-23T20:34:45+0000 [57744] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/copr_cmd_plugin.so"
+2026-04-23T20:34:45+0000 [57744] INFO Loaded dnf5 plugin "copr" ("/usr/lib64/dnf5/plugins/copr_cmd_plugin.so") version "0.1.0"
+2026-04-23T20:34:45+0000 [57744] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/needs_restarting_cmd_plugin.so"
+2026-04-23T20:34:45+0000 [57744] INFO Loaded dnf5 plugin "needs_restarting" ("/usr/lib64/dnf5/plugins/needs_restarting_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:34:45+0000 [57744] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/repoclosure_cmd_plugin.so"
+2026-04-23T20:34:45+0000 [57744] INFO Loaded dnf5 plugin "repoclosure" ("/usr/lib64/dnf5/plugins/repoclosure_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:34:45+0000 [57744] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/repomanage_cmd_plugin.so"
+2026-04-23T20:34:45+0000 [57744] INFO Loaded dnf5 plugin "repomanage" ("/usr/lib64/dnf5/plugins/repomanage_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:34:45+0000 [57744] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/reposync_cmd_plugin.so"
+2026-04-23T20:34:45+0000 [57744] INFO Loaded dnf5 plugin "reposync" ("/usr/lib64/dnf5/plugins/reposync_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:34:45+0000 [57744] DEBUG Loading plugin library file="/usr/lib64/libdnf5/plugins/expired-pgp-keys.so"
+2026-04-23T20:34:45+0000 [57744] INFO Loaded libdnf plugin "expired-pgp-keys" ("/usr/lib64/libdnf5/plugins/expired-pgp-keys.so"), version="1.0.0"
+2026-04-23T20:34:45+0000 [57744] DEBUG Trying to load more plugins using the "expired-pgp-keys" plugin.
+2026-04-23T20:34:45+0000 [57744] DEBUG End of loading plugins using the "expired-pgp-keys" plugin.
+2026-04-23T20:34:45+0000 [57744] DEBUG Loading plugin library file="/usr/lib64/libdnf5/plugins/notify_packagekit.so"
+2026-04-23T20:34:45+0000 [57744] INFO Loaded libdnf plugin "notify_packagekit" ("/usr/lib64/libdnf5/plugins/notify_packagekit.so"), version="1.3.4"
+2026-04-23T20:34:45+0000 [57744] DEBUG Trying to load more plugins using the "notify_packagekit" plugin.
+2026-04-23T20:34:45+0000 [57744] DEBUG End of loading plugins using the "notify_packagekit" plugin.
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "fedora-cisco-openh264" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264"
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "fedora-cisco-openh264-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264-debuginfo"
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "fedora-cisco-openh264-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264-source"
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "updates-testing" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing"
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "updates-testing-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing-debuginfo"
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "updates-testing-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing-source"
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "updates" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates"
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "updates-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates-debuginfo"
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "updates-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates-source"
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "fedora" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora"
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "fedora-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora-debuginfo"
+2026-04-23T20:34:45+0000 [57744] DEBUG Creating repo "fedora-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora-source"
+2026-04-23T20:34:45+0000 [57744] DEBUG Loading system repo rpmdb from root "/home/oli/Dokumente/Zenbyte-OS/rootfs"
+2026-04-23T20:34:45+0000 [57744] DEBUG Rewriting repo "@System" with added file provides
+2026-04-23T20:34:45+0000 [57744] DEBUG Rewriting repo "@System" with added file provides
+2026-04-23T20:34:45+0000 [57744] DEBUG Failed to find rpm package of a running kernel in sack
+2026-04-23T20:34:45+0000 [57744] ERROR Problem: Die Operation würde dazu führen, dass die folgenden geschützten Pakete entfernt werden: dnf5
+2026-04-23T20:35:00+0000 [57805] INFO --- DNF5 wurde mit den Argumenten gestartet: "dnf remove --installroot=/home/oli/Dokumente/Zenbyte-OS/rootfs --nogpgcheck --setopt=protected_packages= -y dnf5 libdnf5 libdnf5-cli" ---
+2026-04-23T20:35:00+0000 [57805] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/builddep_cmd_plugin.so"
+2026-04-23T20:35:00+0000 [57805] INFO Loaded dnf5 plugin "builddep" ("/usr/lib64/dnf5/plugins/builddep_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:35:00+0000 [57805] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/changelog_cmd_plugin.so"
+2026-04-23T20:35:00+0000 [57805] INFO Loaded dnf5 plugin "changelog" ("/usr/lib64/dnf5/plugins/changelog_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:35:00+0000 [57805] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/config-manager_cmd_plugin.so"
+2026-04-23T20:35:00+0000 [57805] INFO Loaded dnf5 plugin "config-manager" ("/usr/lib64/dnf5/plugins/config-manager_cmd_plugin.so") version "0.1.0"
+2026-04-23T20:35:00+0000 [57805] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/copr_cmd_plugin.so"
+2026-04-23T20:35:00+0000 [57805] INFO Loaded dnf5 plugin "copr" ("/usr/lib64/dnf5/plugins/copr_cmd_plugin.so") version "0.1.0"
+2026-04-23T20:35:00+0000 [57805] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/needs_restarting_cmd_plugin.so"
+2026-04-23T20:35:00+0000 [57805] INFO Loaded dnf5 plugin "needs_restarting" ("/usr/lib64/dnf5/plugins/needs_restarting_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:35:00+0000 [57805] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/repoclosure_cmd_plugin.so"
+2026-04-23T20:35:00+0000 [57805] INFO Loaded dnf5 plugin "repoclosure" ("/usr/lib64/dnf5/plugins/repoclosure_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:35:00+0000 [57805] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/repomanage_cmd_plugin.so"
+2026-04-23T20:35:00+0000 [57805] INFO Loaded dnf5 plugin "repomanage" ("/usr/lib64/dnf5/plugins/repomanage_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:35:00+0000 [57805] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/reposync_cmd_plugin.so"
+2026-04-23T20:35:00+0000 [57805] INFO Loaded dnf5 plugin "reposync" ("/usr/lib64/dnf5/plugins/reposync_cmd_plugin.so") version "1.0.0"
+2026-04-23T20:35:00+0000 [57805] DEBUG Loading plugin library file="/usr/lib64/libdnf5/plugins/expired-pgp-keys.so"
+2026-04-23T20:35:00+0000 [57805] INFO Loaded libdnf plugin "expired-pgp-keys" ("/usr/lib64/libdnf5/plugins/expired-pgp-keys.so"), version="1.0.0"
+2026-04-23T20:35:00+0000 [57805] DEBUG Trying to load more plugins using the "expired-pgp-keys" plugin.
+2026-04-23T20:35:00+0000 [57805] DEBUG End of loading plugins using the "expired-pgp-keys" plugin.
+2026-04-23T20:35:00+0000 [57805] DEBUG Loading plugin library file="/usr/lib64/libdnf5/plugins/notify_packagekit.so"
+2026-04-23T20:35:00+0000 [57805] INFO Loaded libdnf plugin "notify_packagekit" ("/usr/lib64/libdnf5/plugins/notify_packagekit.so"), version="1.3.4"
+2026-04-23T20:35:00+0000 [57805] DEBUG Trying to load more plugins using the "notify_packagekit" plugin.
+2026-04-23T20:35:00+0000 [57805] DEBUG End of loading plugins using the "notify_packagekit" plugin.
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "fedora-cisco-openh264" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264"
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "fedora-cisco-openh264-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264-debuginfo"
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "fedora-cisco-openh264-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264-source"
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "updates-testing" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing"
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "updates-testing-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing-debuginfo"
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "updates-testing-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing-source"
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "updates" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates"
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "updates-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates-debuginfo"
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "updates-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates-source"
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "fedora" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora"
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "fedora-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora-debuginfo"
+2026-04-23T20:35:00+0000 [57805] DEBUG Creating repo "fedora-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora-source"
+2026-04-23T20:35:00+0000 [57805] DEBUG Loading system repo rpmdb from root "/home/oli/Dokumente/Zenbyte-OS/rootfs"
+2026-04-23T20:35:00+0000 [57805] DEBUG Rewriting repo "@System" with added file provides
+2026-04-23T20:35:00+0000 [57805] DEBUG Rewriting repo "@System" with added file provides
+2026-04-23T20:35:00+0000 [57805] DEBUG Failed to find rpm package of a running kernel in sack
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback transaction start, total 16
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback transaction stop, total 16
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback transaction start, total 16
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback transaction stop, total 16
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "bash-completion-1:2.16-1.fc41.noarch" total 1055
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "bash-completion-1:2.16-1.fc41.noarch" amount 1055 total 1055
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback start %preun scriptlet "dnf5-0:5.2.17.0-1.fc41.x86_64"
+2026-04-23T20:35:00+0000 [57805] INFO [scriptlet] Removed '/etc/systemd/system/timers.target.wants/dnf-makecache.timer'.
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback stop %preun scriptlet "dnf5-0:5.2.17.0-1.fc41.x86_64" return code 0
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "dnf5-0:5.2.17.0-1.fc41.x86_64" total 156
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "dnf5-0:5.2.17.0-1.fc41.x86_64" amount 156 total 156
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback start %postun scriptlet "dnf5-0:5.2.17.0-1.fc41.x86_64"
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback stop %postun scriptlet "dnf5-0:5.2.17.0-1.fc41.x86_64" return code 0
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "libdnf5-cli-0:5.2.17.0-1.fc41.x86_64" total 29
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "libdnf5-cli-0:5.2.17.0-1.fc41.x86_64" amount 29 total 29
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "libdnf5-0:5.2.17.0-1.fc41.x86_64" total 56
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "libdnf5-0:5.2.17.0-1.fc41.x86_64" amount 56 total 56
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "libsolv-0:0.7.35-1.fc41.x86_64" total 12
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "libsolv-0:0.7.35-1.fc41.x86_64" amount 12 total 12
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "rpm-plugin-audit-0:4.20.1-1.fc41.x86_64" total 6
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "rpm-plugin-audit-0:4.20.1-1.fc41.x86_64" amount 6 total 6
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "libmodulemd-0:2.15.2-1.fc41.x86_64" total 16
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "libmodulemd-0:2.15.2-1.fc41.x86_64" amount 16 total 16
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "librepo-0:1.20.0-1.fc41.x86_64" total 8
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "librepo-0:1.20.0-1.fc41.x86_64" amount 8 total 8
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "rpm-0:4.20.1-1.fc41.x86_64" total 275
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "rpm-0:4.20.1-1.fc41.x86_64" amount 275 total 275
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "rpm-libs-0:4.20.1-1.fc41.x86_64" total 10
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "rpm-libs-0:4.20.1-1.fc41.x86_64" amount 10 total 10
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "lua-libs-0:5.4.8-1.fc41.x86_64" total 8
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "lua-libs-0:5.4.8-1.fc41.x86_64" amount 8 total 8
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "rpm-sequoia-0:1.7.0-5.fc41.x86_64" total 9
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "rpm-sequoia-0:1.7.0-5.fc41.x86_64" amount 9 total 9
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "zchunk-libs-0:1.5.1-1.fc41.x86_64" total 9
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "zchunk-libs-0:1.5.1-1.fc41.x86_64" amount 9 total 9
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "libyaml-0:0.2.5-16.fc41.x86_64" total 9
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "libyaml-0:0.2.5-16.fc41.x86_64" amount 9 total 9
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "fmt-0:11.0.2-2.fc41.x86_64" total 10
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "fmt-0:11.0.2-2.fc41.x86_64" amount 10 total 10
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall start "sdbus-cpp-0:1.5.0-3.fc41.x86_64" total 11
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback uninstall stop "sdbus-cpp-0:1.5.0-3.fc41.x86_64" amount 11 total 11
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback start %triggerpostun scriptlet "glibc-common-0:2.40-28.fc41.x86_64"
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback stop %triggerpostun scriptlet "glibc-common-0:2.40-28.fc41.x86_64" return code 0
+2026-04-23T20:35:00+0000 [57805] INFO RPM callback start %triggerpostun scriptlet "systemd-0:256.17-1.fc41.x86_64"
+2026-04-23T20:35:01+0000 [57805] INFO RPM callback stop %triggerpostun scriptlet "systemd-0:256.17-1.fc41.x86_64" return code 0
+2026-04-23T20:35:01+0000 [57805] INFO RPM callback start %triggerpostun scriptlet "systemd-0:256.17-1.fc41.x86_64"
+2026-04-23T20:35:01+0000 [57805] INFO RPM callback stop %triggerpostun scriptlet "systemd-0:256.17-1.fc41.x86_64" return code 0
+2026-04-23T20:35:01+0000 [57805] INFO DNF5 ist fertig
+2026-04-24T10:40:31+0000 [11358] INFO --- DNF5 wurde mit den Argumenten gestartet: "dnf install --installroot=/home/oli/Dokumente/Zenbyte-OS/rootfs --releasever=41 --nogpgcheck -y parted e2fsprogs grub2-pc" ---
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/builddep_cmd_plugin.so"
+2026-04-24T10:40:31+0000 [11358] INFO Loaded dnf5 plugin "builddep" ("/usr/lib64/dnf5/plugins/builddep_cmd_plugin.so") version "1.0.0"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/changelog_cmd_plugin.so"
+2026-04-24T10:40:31+0000 [11358] INFO Loaded dnf5 plugin "changelog" ("/usr/lib64/dnf5/plugins/changelog_cmd_plugin.so") version "1.0.0"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/config-manager_cmd_plugin.so"
+2026-04-24T10:40:31+0000 [11358] INFO Loaded dnf5 plugin "config-manager" ("/usr/lib64/dnf5/plugins/config-manager_cmd_plugin.so") version "0.1.0"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/copr_cmd_plugin.so"
+2026-04-24T10:40:31+0000 [11358] INFO Loaded dnf5 plugin "copr" ("/usr/lib64/dnf5/plugins/copr_cmd_plugin.so") version "0.1.0"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/needs_restarting_cmd_plugin.so"
+2026-04-24T10:40:31+0000 [11358] INFO Loaded dnf5 plugin "needs_restarting" ("/usr/lib64/dnf5/plugins/needs_restarting_cmd_plugin.so") version "1.0.0"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/repoclosure_cmd_plugin.so"
+2026-04-24T10:40:31+0000 [11358] INFO Loaded dnf5 plugin "repoclosure" ("/usr/lib64/dnf5/plugins/repoclosure_cmd_plugin.so") version "1.0.0"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/repomanage_cmd_plugin.so"
+2026-04-24T10:40:31+0000 [11358] INFO Loaded dnf5 plugin "repomanage" ("/usr/lib64/dnf5/plugins/repomanage_cmd_plugin.so") version "1.0.0"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading plugin file="/usr/lib64/dnf5/plugins/reposync_cmd_plugin.so"
+2026-04-24T10:40:31+0000 [11358] INFO Loaded dnf5 plugin "reposync" ("/usr/lib64/dnf5/plugins/reposync_cmd_plugin.so") version "1.0.0"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading plugin library file="/usr/lib64/libdnf5/plugins/expired-pgp-keys.so"
+2026-04-24T10:40:31+0000 [11358] INFO Loaded libdnf plugin "expired-pgp-keys" ("/usr/lib64/libdnf5/plugins/expired-pgp-keys.so"), version="1.0.0"
+2026-04-24T10:40:31+0000 [11358] DEBUG Trying to load more plugins using the "expired-pgp-keys" plugin.
+2026-04-24T10:40:31+0000 [11358] DEBUG End of loading plugins using the "expired-pgp-keys" plugin.
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading plugin library file="/usr/lib64/libdnf5/plugins/notify_packagekit.so"
+2026-04-24T10:40:31+0000 [11358] INFO Loaded libdnf plugin "notify_packagekit" ("/usr/lib64/libdnf5/plugins/notify_packagekit.so"), version="1.3.4"
+2026-04-24T10:40:31+0000 [11358] DEBUG Trying to load more plugins using the "notify_packagekit" plugin.
+2026-04-24T10:40:31+0000 [11358] DEBUG End of loading plugins using the "notify_packagekit" plugin.
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "fedora-cisco-openh264" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264"
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "fedora-cisco-openh264-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264-debuginfo"
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "fedora-cisco-openh264-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-cisco-openh264.repo" section "fedora-cisco-openh264-source"
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "updates-testing" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing"
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "updates-testing-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing-debuginfo"
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "updates-testing-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates-testing.repo" section "updates-testing-source"
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "updates" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates"
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "updates-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates-debuginfo"
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "updates-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora-updates.repo" section "updates-source"
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "fedora" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora"
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "fedora-debuginfo" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora-debuginfo"
+2026-04-24T10:40:31+0000 [11358] DEBUG Creating repo "fedora-source" from config file "/home/oli/Dokumente/Zenbyte-OS/rootfs/etc/yum.repos.d/fedora.repo" section "fedora-source"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading system repo rpmdb from root "/home/oli/Dokumente/Zenbyte-OS/rootfs"
+2026-04-24T10:40:31+0000 [11358] INFO [librepo] Librepo version: 1.20.0 with CURL_GLOBAL_ACK_EINTR support (libcurl/8.15.0 OpenSSL/3.5.4 zlib/1.3.1.zlib-ng brotli/1.2.0 libidn2/2.3.8 libpsl/0.21.5 libssh/0.11.4/openssl/zlib nghttp2/1.66.0 OpenLDAP/2.6.13)
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] Current date: 2026-04-24T12:40:31+0200
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Using dir: /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-cisco-openh264-1e5e9f1be3093a1f
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Using own SIGINT handler
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Preparing internal mirrorlist
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Local metalink.xml found at /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-cisco-openh264-1e5e9f1be3093a1f/metalink.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Parsing metalink.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Mirrors from metalink:
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://codecs.fedoraproject.org/openh264/41/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Metalink parsed
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Finalizing internal mirrorlist
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Finalizing mirrors reported via LRI_MIRRORS
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Downloading/Locating yum repo
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local: Locating repo..
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local_load_base: Found local metalink: /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-cisco-openh264-1e5e9f1be3093a1f/metalink.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local_load_base: Parsing repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local_load_base: Repomd revision: 1742921832
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local: Repository was successfully located
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checking checksum of /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-cisco-openh264-1e5e9f1be3093a1f/repodata/3312e38eec7c482f21fc5679bd65e8b0bde727db9107f62149f0c3951d890252-primary.xml.zst (expected: 3312e38eec7c482f21fc5679bd65e8b0bde727db9107f62149f0c3951d890252 [sha256])
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_checksum_fd_compare: Using mtime cached in xattr: [user.librepo.checksum.mtime] 1776955470573353923
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_checksum_fd_compare: Using checksum cached in xattr: [user.librepo.checksum.sha256] 3312e38eec7c482f21fc5679bd65e8b0bde727db9107f62149f0c3951d890252
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checksum check - Passed
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Restoring an old SIGINT handler
+2026-04-24T10:40:31+0000 [11358] DEBUG Using cache for repo "fedora-cisco-openh264"
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Using dir: /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Using own SIGINT handler
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Preparing internal mirrorlist
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Local metalink.xml found at /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/metalink.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Parsing metalink.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Mirrors from metalink:
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://ftp-stud.hs-esslingen.de/fedora-archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://fedora-archive.ip-connect.info/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://fedora-archive.ip-connect.info/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://fedora-archive.ip-connect.info/fedora-archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://mirror.flo.c-f.ro/fedora/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://fedora-archive.mirror.liquidtelecom.com/fedora-buffet/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://fedora-archive.mirror.liquidtelecom.com/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://fedora-archive.mirror.liquidtelecom.com/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://mirror.math.princeton.edu/pub/fedora-archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://mirror.math.princeton.edu/pub/fedora-archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://d2lzkl7pfhq30w.cloudfront.net/pub/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://dl.fedoraproject.org/pub/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://dl.fedoraproject.org/pub/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Metalink parsed
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Finalizing internal mirrorlist
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Finalizing mirrors reported via LRI_MIRRORS
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Downloading/Locating yum repo
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local: Locating repo..
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local_load_base: Found local metalink: /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/metalink.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local_load_base: Parsing repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local_load_base: Repomd revision: 1765762665
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] Found primary_zck so using instead of primary
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] Found updateinfo_zck so using instead of updateinfo
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local: Repository was successfully located
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checking checksum of /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/repodata/01e6d34b69c1d41f9eb15f2c50ff317097f646e5868ccb3265b9a2012f5d9ebd-primary.xml.zck (expected: 62ca75a3728dd018d30036a897fc37ec00f8410edd2e2324aa0a1662e2c92f4c [sha256])
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checksum check - Passed
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checking checksum of /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/repodata/8800efb3de5b38042091ae5e083d5559b14474f91fbe29190ee2b530d4522edd-comps-Everything.x86_64.xml.zst (expected: 8800efb3de5b38042091ae5e083d5559b14474f91fbe29190ee2b530d4522edd [sha256])
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_checksum_fd_compare: Using mtime cached in xattr: [user.librepo.checksum.mtime] 1776955473638398730
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_checksum_fd_compare: Using checksum cached in xattr: [user.librepo.checksum.sha256] 8800efb3de5b38042091ae5e083d5559b14474f91fbe29190ee2b530d4522edd
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checksum check - Passed
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checking checksum of /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/repodata/77d63ebd6e818b554b006e89691e5cebd5028722aecfe7300c20d6dd18c635d3-updateinfo.xml.zck (expected: 9bf0a026a53ffec0e71b2c319419e96df4a164ff60b2a08cd99baf1bd3fb3a87 [sha256])
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checksum check - Passed
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Restoring an old SIGINT handler
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Using dir: /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Using own SIGINT handler
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Preparing internal mirrorlist
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Local metalink.xml found at /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/metalink.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Parsing metalink.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Mirrors from metalink:
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://ftp-stud.hs-esslingen.de/fedora-archive/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://mirror.flo.c-f.ro/fedora/archive/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://fedora-archive.ip-connect.info/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://fedora-archive.ip-connect.info/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://fedora-archive.ip-connect.info/fedora-archive/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://mirror.math.princeton.edu/pub/fedora-archive/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://mirror.math.princeton.edu/pub/fedora-archive/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://fedora-archive.mirror.liquidtelecom.com/fedora-buffet/archive/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://fedora-archive.mirror.liquidtelecom.com/archive/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://fedora-archive.mirror.liquidtelecom.com/archive/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://d2lzkl7pfhq30w.cloudfront.net/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://dl.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://dl.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Metalink parsed
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Finalizing internal mirrorlist
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Finalizing mirrors reported via LRI_MIRRORS
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Downloading/Locating yum repo
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local: Locating repo..
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local_load_base: Found local metalink: /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/metalink.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local_load_base: Parsing repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local_load_base: Repomd revision: 1729778159
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] Found primary_zck so using instead of primary
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_use_local: Repository was successfully located
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checking checksum of /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/repodata/3973367e3877b70900ae12d5074f025c99015ab5bc829d2cfbf6fa5d7a0cd0e2-primary.xml.zck (expected: 0fa5bbf09227b15125f3563a31672d862306724cb48d708ca4d02858cfffe484 [sha256])
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading solv cache file: "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-cisco-openh264-1e5e9f1be3093a1f/solv/fedora-cisco-openh264.solv"
+2026-04-24T10:40:31+0000 [11358] DEBUG No updateinfo metadata available for repo "fedora-cisco-openh264"
+2026-04-24T10:40:31+0000 [11358] DEBUG No group metadata available for repo "fedora-cisco-openh264"
+2026-04-24T10:40:31+0000 [11358] DEBUG No modules metadata available for repo fedora-cisco-openh264
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checksum check - Passed
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checking checksum of /home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/repodata/e0139f84a99188422fc0b0ce898b3eea06ee4b9702158c5a24adc70047c5a760-comps-Everything.x86_64.xml.gz (expected: e0139f84a99188422fc0b0ce898b3eea06ee4b9702158c5a24adc70047c5a760 [sha256])
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_checksum_fd_compare: Using mtime cached in xattr: [user.librepo.checksum.mtime] 1776955470285349713
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_checksum_fd_compare: Using checksum cached in xattr: [user.librepo.checksum.sha256] e0139f84a99188422fc0b0ce898b3eea06ee4b9702158c5a24adc70047c5a760
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_yum_check_checksum_of_md_record: Checksum check - Passed
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_perform: Restoring an old SIGINT handler
+2026-04-24T10:40:31+0000 [11358] DEBUG Using cache for repo "fedora"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading solv cache file: "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/solv/fedora.solv"
+2026-04-24T10:40:31+0000 [11358] TRACE countme: no event for repo "updates": window already counted
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_download: No targets
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Preparing internal mirrorlist
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_download: Target: https://mirrors.fedoraproject.org/metalink?repo=updates-released-f41&arch=x86_64 (-)
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] Selecting mirror for: https://mirrors.fedoraproject.org/metalink?repo=updates-released-f41&arch=x86_64
+2026-04-24T10:40:31+0000 [11358] INFO [librepo] Downloading: https://mirrors.fedoraproject.org/metalink?repo=updates-released-f41&arch=x86_64
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_download: Downloading started
+2026-04-24T10:40:31+0000 [11358] DEBUG No updateinfo metadata available for repo "fedora"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading solv cache file: "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/fedora-7efbab3c1dbcd0d4/solv/fedora-group.solvx"
+2026-04-24T10:40:31+0000 [11358] DEBUG No modules metadata available for repo fedora
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] Transfer finished: https://mirrors.fedoraproject.org/metalink?repo=updates-released-f41&arch=x86_64 (Effective url: https://mirrors.fedoraproject.org/metalink?repo=updates-released-f41&arch=x86_64)
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Parsing metalink.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Mirrors from metalink:
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://ftp-stud.hs-esslingen.de/fedora-archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://ftp-stud.hs-esslingen.de/pub/Mirrors/archive.fedoraproject.org/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://fedora-archive.ip-connect.info/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://fedora-archive.ip-connect.info/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://fedora-archive.ip-connect.info/fedora-archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://mirror.flo.c-f.ro/fedora/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://d2lzkl7pfhq30w.cloudfront.net/pub/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://fedora-archive.mirror.liquidtelecom.com/fedora-buffet/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://fedora-archive.mirror.liquidtelecom.com/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://fedora-archive.mirror.liquidtelecom.com/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://mirror.math.princeton.edu/pub/fedora-archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   rsync://mirror.math.princeton.edu/pub/fedora-archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   https://dl.fedoraproject.org/pub/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo]   http://dl.fedoraproject.org/pub/archive/fedora/linux/updates/41/Everything/x86_64/repodata/repomd.xml
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_metalink: Metalink parsed
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Finalizing internal mirrorlist
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_handle_prepare_internal_mirrorlist: Finalizing mirrors reported via LRI_MIRRORS
+2026-04-24T10:40:31+0000 [11358] DEBUG [librepo] lr_download: No targets
+2026-04-24T10:40:31+0000 [11358] DEBUG Sync check: repo "updates" in sync, metalink checksums match
+2026-04-24T10:40:31+0000 [11358] DEBUG Using cache for repo "updates". It is expired, but matches the original.
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading solv cache file: "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/solv/updates.solv"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading solv cache file: "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/solv/updates-updateinfo.solvx"
+2026-04-24T10:40:31+0000 [11358] DEBUG Loading solv cache file: "/home/oli/Dokumente/Zenbyte-OS/rootfs/var/cache/libdnf5/updates-e19adde8fd271134/solv/updates-group.solvx"
+2026-04-24T10:40:31+0000 [11358] DEBUG No modules metadata available for repo updates
+2026-04-24T10:40:31+0000 [11358] DEBUG Rewriting repo "@System" with added file provides
+2026-04-24T10:40:31+0000 [11358] DEBUG Rewriting repo "fedora-cisco-openh264" with added file provides
+2026-04-24T10:40:31+0000 [11358] DEBUG Rewriting repo "updates" with added file provides
+2026-04-24T10:40:31+0000 [11358] DEBUG Rewriting repo "@System" with added file provides
+2026-04-24T10:40:31+0000 [11358] DEBUG Rewriting repo "fedora" with added file provides
+2026-04-24T10:40:31+0000 [11358] WARNING Das Paket "parted-3.6-7.fc41.x86_64" ist bereits installiert.
+2026-04-24T10:40:31+0000 [11358] WARNING Das Paket "e2fsprogs-1.47.1-6.fc41.x86_64" ist bereits installiert.
+2026-04-24T10:40:31+0000 [11358] WARNING Das Paket "grub2-pc-1:2.12-25.fc41.x86_64" ist bereits installiert.
+2026-04-24T10:40:31+0000 [11358] DEBUG Failed to find rpm package of a running kernel in sack

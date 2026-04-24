@@ -1,0 +1,201 @@
+Linux utility for listing SCSI devices.
+
+Changelog for released lsscsi-0.32 [20210505] [svn: r167]
+  - improve NVMe device parsing (e.g. /dev/nvme0c1n2)
+  - print nr_hw_queues when available for SCSI hosts
+  - Remove blank line after NVMe device name with -HL
+  - collect_disk_wwn_nodes: Fix WWN string copy
+  - make WWN printing for NVMe more consistent with
+    output from SCSI devices (e.g. with -u and -t)
+  - logic to select best SCSI id (--scsi_id) to output
+  - clean up warnings for gcc-10
+  - build with autoconf 2.70
+
+Changelog for released lsscsi-0.31 [20200220] [svn: r160]
+  - cleanup gcc-8 warnings, no cleanup needed for gcc-9
+  - fix issue where host managed ZBC devices don't
+    output their size. [Fix also for RBC and CD/DVD.]
+  - exclude NVMe listings when --classic given
+  - fix hex counting issues
+  - supply "-" for generic NVMe device one line output
+    so 'lsscsi -gb' output is consistent
+
+Changelog for released lsscsi-0.30 [20180612] [svn: r154]
+  - add support for NVMe devices and controllers
+    - to build without: ./configure --disable-nvme-supp
+    - deselect at runtime: lsscsi --no-nvme
+    - deselect SCSI devices at runtime: lsscsi N
+  - add --brief for tuple + device_name(s) only
+  - add --pdt (-D) for device type in hex
+  - extend --size (-s) so when given three times
+    the size as a logical block count is output
+  - add --sz-lbs (-S) that is equivalent to '-sss'
+    when used twice adds comma then logical block size
+  - '-w' now decodes 128 bit WWN without truncation
+  - /dev/disk/by-id/wwn- is not guaranteed to be
+    persistent (or stable); instead use
+    /dev/disk/by-id/scsi-
+  - '-t' on a FC host was not printing the comma
+    separator resulting in garbled output, fix
+  - debian: bump compat file contents from 7 to 10
+
+Changelog for released lsscsi-0.29 [20160514] [svn: r137]
+  - '-u' now decodes locally assigned UUIDs (spc5r08)
+  - as last try use T10 Vendor ID for lu name
+  - if no lu name found, print 'none'
+  - change '-uuu' to output the full lu name followed
+    by the normal fields (which were skipped before)
+  - add 'U' option, same action as '-uuu'
+  - '-UU' prefixes lu names with 'eui.', 'naa.', etc
+  - if '-s' given twice, lu size is base 2 related
+  - if very long [h:c:t:l] then append space
+  - print_enclosure_device() for FCP may be useless,
+    comment out while checking ...
+  - with '-t' print 0x0000000000000000 for non-SAS
+    device in SAS domain
+  - autogen.sh: upgrade to 20091223 version
+  - automake: upgrade to 1.15 (ubuntu 16.04)
+
+Changelog for released lsscsi-0.28 [20140930] [svn: r120]
+  - fix handling of scsi_level 0 (no compliance)
+  - add SRP transport identifier
+  - add --unit option for LU identifier (>= lk 3.15)
+  - add (S)ATA transport identifier (>= lk 3.15)
+  - make USB transport ids more consistent
+  - fix FC transport id missing comma
+  - add pdt strings for security manager and zbc
+  - upgrade automake to version 1.14.1
+
+Changelog for released lsscsi-0.27 [20130508] [svn: r111]
+  - rework buffer handling for systems with many disks
+  - add --lunhex option for displaying LUNs in hex
+  - accept LUNs from sysfs as large as a 64 bit unsigned
+    decimal number (largest was signed 32 bit decimal)
+  - accept LSSCSI_LUNHEX_OPT environment variable
+  - add scsi_id option for /dev/disk/by-id/scsi*
+
+Changelog for released lsscsi-0.26 [20120131] [svn: r97]
+  - add 'fcoe' transport indicator
+  - add '--wwn' option, datamine /dev/disk/by-id/wwn*
+  - move lsscsi.c into src directory
+
+Changelog for released lsscsi-0.25 [20110509] [svn: r92]
+  - add sas_port and fc_remote_ports transport information
+  - print enclosure_device entry
+  - add '--size' option to show size of disks
+  - add '--protmode' option to show protection information mode
+
+Changelog for released lsscsi-0.24 [20100612] [svn: r83]
+Version 0.24 2010/06/12 [svn: r83]
+  - FC transport syntax changes (colon to slash)
+  - add "(null)" to the currently accepted "<NULL>" as
+    the string representation of NULL
+  - add AM_MAINTAINER_MODE to configure.ac
+  - scandir() library function has changed its signature
+    in its 4th argument, use newer (non-void) variant
+
+<< Retrospectively changed "version" to "release" in this file >>
+Version 0.23 2009/12/01 [svn: r76]
+  - remove /proc/mounts scan for sysfs mount point, assume
+    /sys unless overridden by re-instated '--sysfsroot' option
+
+Version 0.22 2008/12/26 [svn: r71]
+  - add protection information (see CREDITS file)
+  - add USB transport type with USB device name
+  - add ATA and SATA transport types (crude: by driver name)
+
+Version 0.21 2008/7/10 [svn: r64]
+  - more sysfs scanning work needed for lk 2.6.26
+
+Version 0.20 2008/7/9 [svn: r43]
+  - Handle SCSI midlayer rework circa lk 2.6.25/26
+    - this fix needed if CONFIG_SYSFS_DEPRECATED_V2 is not
+      defined in the kernel build (lk 2.6.26)
+  - clean superfluous files from package
+
+Version 0.19 2007/1/25 [svn: r37]
+  - add transport information (target + initiator)
+    - start with FC, SAS, SPI, iSCSI and SBP
+    - alter ISCSI for 2.6.20 changes
+  - SAS fix for lk 2.6.20 (SYSFS_DEPRECATED=n)
+  - enhance host name search when proc_name is "<NULL>"
+  - implement filter option for '--hosts'
+    - accept 'host<n>' as first item in filter to mean host <n>
+  - output more host attributes when '-Hll' given
+  - add '--list' (or '-L') option output attribute=value
+    entries, one per line
+
+Version 0.18 2006/3/24
+  - cope with dropping of 'generic' symlink post lk 2.6.16
+  - anticipate the future removal of 'tape' symlink
+
+Version 0.17 2006/2/6
+  - fix disappearance of block device names in lk 2.6.16-rc1
+
+Version 0.16 2005/12/30
+  - clean up peripheral device type naming
+  - properly identify osst and changer devices
+  - add debian build directory
+
+Version 0.15 2005/6/29
+  - option '-ll' gives more attributes and '-lll' gives attributes
+    one per line
+  - change reporting if device node:
+    - use "match major+minor" with "/dev" directory (default)
+    - use synthetic device node names when '--kname' given
+      {this was the default in earlier versions}
+  - add filtering, sync with lk 2.6.12
+    {e.g. 'lsscsi 1' lists all SCSI devices on host1}
+  - convert to autotools
+  - builds on version 0.13 (does not use libsysfs)
+    {because dlist_sort_custom() does not have filter() callback}
+
+Version 0.14 2004/9/20
+  - version of 0.13 based on libsysfs-1.20
+
+Version 0.13 2004/8/20
+  - add 'timeout' to long device option output
+  - quiet (unless verbose) if no mid level (hence no SCSI devices or hosts)
+
+Version 0.12 2004/5/9
+  - rework for lk 2.6.6
+  - add proc_name for hosts
+  - replace 'online' with 'state' for scsi devices
+  - add '-d' option to output device node's major and minor numbers
+
+Version 0.11 2004/1/9
+  - rework for lk 2.6.1
+  - drop "--name" argument
+
+Version 0.10 2003/5/6
+  - adjust HBA listing (-H) for new struct scsi_host in lk 2.5.69++
+
+Version 0.09 2003/4/4
+  - fix up sorting
+  - add GPL + copyright notice
+
+Version 0.08 2003/3/2
+  - start to add host listing support (requires >= lk 2.5.63)
+
+Version 0.07 2003/2/10
+  - sysfs changes name of current_queue_depth in lk 2.5.60
+
+Version 0.06 2003/1/20
+  - fixes of osst devices
+  - use "cd" rather than "CDROM" for short peripheral type name
+
+Version 0.05 2003/1/19
+  - output st and osst device names (rather than "-")
+  - support --generic and --classic together
+  - output type (SCSI peripheral type) with --long
+
+Version 0.04 2003/1/14
+  - make sure a st device list only once (needed for lk 2.5.57)
+
+Version 0.03 2003/1/9
+  - fix Makefile to create man page directory on install
+  - add logic for scsi_level output
+  - add --generic (-g) switch to output scsi generic device file name
+
+Version 0.02 2002/12/18
+  - first entry in CHANGELOG

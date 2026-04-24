@@ -1,0 +1,26 @@
+#!/bin/bash
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev
+
+for IFACE in $(ls /sys/class/net/ | grep -v lo); do
+  ip link set $IFACE up
+  dhclient $IFACE &
+done
+
+clear
+echo "================================"
+echo "   Willkommen bei ZenbyteOS"
+echo "================================"
+echo ""
+echo "1) System starten"
+echo "2) ZenbyteOS installieren"
+echo ""
+read -p "Wahl: " CHOICE
+
+if [ "$CHOICE" == "2" ]; then
+  /install.sh
+  exec /bin/bash
+else
+  exec /usr/lib/systemd/systemd
+fi

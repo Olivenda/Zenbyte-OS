@@ -1,0 +1,12 @@
+This version of the libxcrypt package ships the libcrypt.so.2
+library and does not provide the legacy API functions that have
+been provided by glibc's libcrypt.so.1.  The removed functions
+by name are encrypt, encrypt_r, setkey, setkey_r, and fcrypt.
+
+If you are using a third-party application that links against
+those functions, or that is linked against glibc's libcrypt,
+you may need to install the libxcrypt-compat package manually.
+
+All existing binary executables linked against glibc's libcrypt
+should work unmodified with the libcrypt.so.1 library supplied
+by the libxcrypt-compat package.

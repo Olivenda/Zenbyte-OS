@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# For dhclient/dhclient-script debugging.
+# Copy this into /etc/dhcp/ and make it executable.
+# Run 'dhclient -d <interface>' to see info passed from dhclient to dhclient-script.
+# See also HOOKS section in dhclient-script(8) man page.
+
+echo "interface: "
+echo "reason: "
+
+( set -o posix ; set ) | grep "old_"
+( set -o posix ; set ) | grep "new_"
+( set -o posix ; set ) | grep "alias_"
+( set -o posix ; set ) | grep "requested_"

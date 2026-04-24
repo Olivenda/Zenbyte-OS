@@ -1,0 +1,1399 @@
+2024-06-21  Werner Koch  <wk@gnupg.org>
+
+	Release 1.6.7.
+	+ commit b14e68b97df754b2bb7a90bb904d143d8e896afb
+
+
+	Allow for an empty Subject in certs.
+	+ commit f2e2f320c9de969e4e29861788ba590a03a0f4d8
+	* src/ber-decoder.c (match_der): Add hack for an empty subject.
+
+2024-06-14  NIIBE Yutaka  <gniibe@fsij.org>
+
+	Update gpg-error.m4.
+	+ commit f43a21b2c53ed0a95a5ad6572549eaa4123146f5
+
+
+2024-06-13  NIIBE Yutaka  <gniibe@fsij.org>
+
+	Apply spell fixes from GnuPG.
+	+ commit 364e67effbf47c58550c3e3eda13d783fd25ffc0
+	* src/ksba.m4: Fix from GnuPG.
+
+	m4: Update gpg-error.m4 from gpg-error master.
+	+ commit f63a9c36505210fb5696849b13170020c0f2752f
+	* m4/gpg-error.m4: Update.
+	* m4/libgcrypt.m4: Remove, we don't use libgcrypt.
+
+	ksba.m4: Fix setting/using GPG_ERROR_CONFIG.
+	+ commit 95dda84002f6e23f2770cdf63921f0bac1459d76
+	ksba.m4 (_AM_PATH_GPGRT_CONFIG): Don't set GPG_ERROR_CONFIG and
+	gpg_error_config_version.
+
+2024-05-14  NIIBE Yutaka  <gniibe@fsij.org>
+
+	Fix the previous commit.
+	+ commit b02b0bea7d62a352a21678a247bcb20b5a9fbf39
+
+
+	m4: Include _AM_PATH_GPGRT_CONFIG definition.
+	+ commit c910b8b136b89b134632ce1f317d856790b93fd3
+	* src/ksba.m4: Find gpgrt-config.
+
+2024-05-08  NIIBE Yutaka  <gniibe@fsij.org>
+
+	Use unsigned int for 1-bit flags.
+	+ commit a7aab2553d316eaa484e76167151157d7923a60d
+	* src/asn1-func.h (struct node_flag_s): Use unsigned int for
+	bit fields.
+
+2024-02-23  Werner Koch  <wk@gnupg.org>
+
+	Release 1.6.6.
+	+ commit 3a4382259c3c6e7ef38cd33626fe2c1da282f816
+
+
+2024-02-14  Jakub Jelen  <jjelen@redhat.com>
+
+	der-builder: Fix possible uninitialized variable.
+	+ commit 75e94db38ccd9ed166b40fb2d8aaed7c094cff69
+	* src/der-builder.c (_ksba_der_builder_get): Initialize ERR.
+
+2023-11-16  Werner Koch  <wk@gnupg.org>
+
+	Release 1.6.5.
+	+ commit 7b3e4785e54280d1a13c5bc839bdc6722d898ac7
+
+
+2023-11-14  Werner Koch  <wk@gnupg.org>
+
+	Add Brainpool curve detection using parameters with compressed BP.
+	+ commit eb23f853f178f8d381254e2cb03c0ebff57828d6
+	* src/keyinfo.c (ecdomainparm_to_name): Add variants for Brainpool.
+
+2023-11-01  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Remove HAVE_W32CE_SYSTEM.
+	+ commit bce1c52b260da063c6198fe270cd46baf1368d9e
+	* configure.ac (HAVE_W32CE_SYSTEM): Remove.
+
+2023-09-01  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Change the default for --with-libtool-modification.
+	+ commit 2c4551c0c405a736e1b3953b2a58ec5104c52083
+	* configure.ac (--with-libtool-modification): default=never.
+
+2023-08-16  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: New configure option --with-libtool-modification.
+	+ commit e0a46b490926879b5519e2e8dfb97226ec024817
+	* Makefile.am (EXTRA_DIST): Add build-aux/libtool-patch.sed.
+	* build-aux/libtool-patch.sed: New.
+	* configure.ac (--with-libtool-modification): New.
+	* build-aux/ltmain.sh: Revert our own local modification.
+
+2023-06-19  Werner Koch  <wk@gnupg.org>
+
+	Release 1.6.4.
+	+ commit 557999424ebd13e70d6fc17e648a5dd2a06f440b
+
+
+	Correctly detect write errors while creating CMS objects.
+	+ commit 9ced7706f2738128aa5068727ea348c44f42e16e
+	* src/cms.c (write_encrypted_cont): Take care of write errors.
+
+2023-05-16  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Sync libtool from libgpg-error for 64-bit Windows.
+	+ commit a920c2ff1a723031e8c6b8b61632bad46a740c83
+	* build-aux/ltmain.hs: Update from libgpg-error.
+
+2023-05-12  NIIBE Yutaka  <gniibe@fsij.org>
+
+	tests: Use -no-fast-install LDFLAGS for Windows.
+	+ commit 74fb95dbaf70d97b67793b29497b1e7b29a5e2f1
+	* tests/Makefile.am [HAVE_W32_SYSTEM] (AM_LDFLAGS): Conditionalize.
+
+2023-04-05  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Update gpg-error.m4.
+	+ commit 53b9fa1d58ba522ca0eea4fe460719722e6e1ef5
+	* m4/gpg-error.m4: Update from libgpg-error master.
+
+2022-12-06  Werner Koch  <wk@gnupg.org>
+
+	Release 1.6.3.
+	+ commit bffa9b346071725363a483db547e7dced9721cb5
+
+
+2022-11-23  Werner Koch  <wk@gnupg.org>
+
+	Fix an integer overflow in the CRL signature parser.
+	+ commit f61a5ea4e0f6a80fd4b28ef0174bee77793cf070
+	* src/crl.c (parse_signature): N+N2 now checked for overflow.
+
+	* src/ocsp.c (parse_response_extensions): Do not accept too large
+	values.
+	(parse_single_extensions): Ditto.
+
+2022-11-02  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Update m4/libgcrypt.m4.
+	+ commit 4076b60f7cef4fddc3d30f6e6d4078081dbc7167
+	* m4/libgcrypt.m4: Update from libgcrypt master.
+
+2022-11-01  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Prefer gpgrt-config when available.
+	+ commit 13307b22882a220d206341e1196e74fd37418c2f
+	* src/ksba.m4: Overriding the decision by --with-libksba-prefix, use
+	gpgrt-config ksba when gpgrt-config is available.
+
+2022-10-24  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Update gpg-error.m4.
+	+ commit c3c1627f34234e3d54fe1f3411ac499dd7e3b3b0
+	* m4/gpg-error.m4: Update from libgpg-error 1.46.
+
+2022-10-07  Werner Koch  <wk@gnupg.org>
+
+	Release 1.6.2.
+	+ commit 29814959fe2b65c6d4ac35dea261006a8cad3661
+
+
+2022-10-05  Werner Koch  <wk@gnupg.org>
+
+	Detect a possible overflow directly in the TLV parser.
+	+ commit 4b7d9cd4a018898d7714ce06f3faf2626c14582b
+	* src/ber-help.c (_ksba_ber_read_tl): Check for overflow of a commonly
+	used sum.
+
+2022-09-16  Werner Koch  <wk@gnupg.org>
+
+	Release 1.6.1.
+	+ commit d3c1e063d708a46ef39152256f8b1ea466b61be0
+
+
+2022-07-19  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Update config.guess and config.sub.
+	+ commit 466837db84fb318eaaee1aba6cc3939c16a3e2ba
+	* build-aux/config.guess: Update from upstream.
+	* build-aux/config.sub: Ditto.
+
+	build: Support cross compile.
+	+ commit ca9a04569020c51719ab45ebd35a3cbb1f35c6aa
+	* configure.ac (AX_CC_FOR_BUILD): New.
+	* m4/ax_cc_for_build.m4: New.
+	* src/Makefile.am: Use EXEEXT_FOR_BUILD.
+
+2022-06-28  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Update gpg-error.m4.
+	+ commit e51d5c7ce81fe3f90039ad970fbb82f751a645fc
+	* m4/gpg-error.m4: Update from libgpg-error.
+
+2022-03-31  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: When no gpg-error-config, not install ksba-config.
+	+ commit 41000330cdba87afdf9ea0b481e0260dab262a54
+	* configure.ac (USE_GPGRT_CONFIG): New.
+	* src/Makefile.am [USE_GPGRT_CONFIG]: Conditionalize the install
+	of ksba-config.
+
+2022-03-22  NIIBE Yutaka  <gniibe@fsij.org>
+
+	Fix test of t-cms-parser.
+	+ commit e751d1fa01bd3e593eeccbeffb729176a59ca28c
+	* tests/t-cms-parser.c (one_file): Open the file with binary flag.
+
+2022-02-26  Werner Koch  <wk@gnupg.org>
+
+	ocsp: Accept a server not responding with a nonce.
+	+ commit 24992a4a7a61d93759e1dbd104b845903d4589bf
+	* src/ocsp.h (struct ksba_ocsp_s): Remove good_nonce.
+	* src/ocsp.c (parse_response_extensions): No not set good_nonce.
+	(ksba_ocsp_parse_response): Simplify the check.
+
+	ocsp: Fix detecting the right response item.
+	+ commit c9cde18bc84a1b3bb7de22ca80264c418ffd0fee
+	* src/ocsp.c (ksba_ocsp_prepare_request): Store the value of the
+	integer.
+
+2021-12-22  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Update for newer autoconf.
+	+ commit 51b565054096926dc97fc2ebb72c7de05a127dff
+	* configure.ac (AC_PREREQ): Require >= 2.69.
+	(AC_HEADER_STDC): Remove.
+
+2021-11-29  NIIBE Yutaka  <gniibe@fsij.org>
+
+	Silence warning for ksba_isotime_t.
+	+ commit 64ef3144abee7afbc93a87e960b9a79c7b43cfca
+	* src/time.c (_ksba_current_time): Let it return the result.
+
+	Fix ksba.pc to use HTTPS for the URL.
+	+ commit 4898212c705a49da0384ac8f1b44f2d6592a990e
+	* src/ksba.pc.in: Use https.
+
+2021-11-10  NIIBE Yutaka  <gniibe@fsij.org>
+
+	libtool: Link without -flat_namespace for macOS.
+	+ commit 0d7a62c355ea18031daf00490da9f7c9f33683c3
+	* m4/libtool.m4: Not setting 10.0 to MACOSX_DEPLOYMENT_TARGET when not
+	defined.  Only specify -flat_namespace to linker for specific
+	(older) versions and hosts.
+
+2021-10-13  NIIBE Yutaka  <gniibe@fsij.org>
+
+	ASN.1 parser: Provide token table (no more %token-table).
+	+ commit f3b7dd4167779f2694e932ad7c2adba98ff9a21d
+	* src/asn1-parse.y (%token-table): Remove.
+	(token_table): New.
+	(yylex): Use token_table.
+
+2021-09-22  Andreas Metzler  <ametzler@bebt.de>
+
+	build: Use automake primitives to install libksba.def.
+	+ commit ce1de8cb2bcd712381f77519de4da87af42879a4
+	* src/Makekefile.am: Do not use explicit $INSTALL to install
+	libksba.def, fixes windows parallel build error.
+
+2021-08-18  Werner Koch  <wk@gnupg.org>
+
+	Avoid warnings about NULL ptr deref in ASN.1 helpers.
+	+ commit c242f31b6d520a7f87bf36782e4b5c8da7dc045d
+	* src/asn1-func.c (_ksba_asn_set_value): Add extra asserts.  Fix the
+	VALTYPE_BOOL case, which is actually not in Libksba.
+
+2021-08-05  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Simplify configure.ac.
+	+ commit 379e787a965148fa5613ccd4e2b8c3c00feb45d9
+	* configure.ac (AC_CHECK_HEADERS): Remove string.h.
+	(AC_CHECK_FUNCS): Remove memmove, strchr, strtol and strtoul.
+
+2021-06-10  Werner Koch  <wk@gnupg.org>
+
+	Release 1.6.0.
+	+ commit 6b3573afb03afd4560f78bec73ec192e09fdd9d5
+
+
+2021-06-02  Werner Koch  <wk@gnupg.org>
+
+	Support Authenticated-Enveloped-Data Content Type.
+	+ commit 81fdcd680c127cbc7cfb977aa43aa45ffce0f5fc
+	* src/cms.h (struct ksba_cms_s): Remove struct data which was not
+	used.  Add struct authdata.
+	* src/cms.asn (AuthEnvelopedData): New.
+	(id-authEnvelopedData): New.
+	* src/ksba.h.in (ksba_content_type_t): Add KSBA_CT_AUTHENVELOPED_DATA.
+	* src/cms.c (content_handlers): Ditto.
+	(ksba_cms_release): Free the new fields.
+	(ksba_cms_get_message_digest): Hack to return authtag.
+	(ct_parse_signed_data): Remove useless condition which was always true.
+	* src/cms-parser.c (parse_encrypted_content_info): Add arg
+	r_algo_parmtype.
+	(_ksba_cms_parse_enveloped_data_part_1): Detect GCM with AES and parse
+	the parameters.
+	(_ksba_cms_parse_enveloped_data_part_2): Parse the MAC part and store
+	it for retrieval by ksba_cms_get_message_digest.
+	* tests/t-cms-parser.c (one_file): Handle authdata.
+
+2021-05-27  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: _DARWIN_C_SOURCE should be 1.
+	+ commit a375a3d20e831c58c3b87abb41f3a8e8b723d985
+	* configure.ac (*-apple-darwin*): Set _DARWIN_C_SOURCE 1.
+
+2021-05-18  Werner Koch  <wk@gnupg.org>
+
+	Support password based decryption.
+	+ commit cb7f2484a09cbe3cddcee6d2a752148df937cf0e
+	* src/cms.asn (RecipientInfo): Add pwri element.
+	(PasswordRecipientInfo): New.
+	* src/keyinfo.c (get_algorithm): Add arg to specify the expected tag.
+	Change all callers.
+	(_ksba_parse_algorithm_identifier3): New to specify the expected tag.
+	* src/cms.c: Include stringbuf.h.
+	(ksba_cms_get_issuer_serial): Return an error code for pwri.
+	(ksba_cms_get_enc_val): Add special code for pwri.
+
+	* tests/t-cms-parser.c (one_file): Detect pwri recipients.
+
+2021-04-21  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Update gpg-error.m4.
+	+ commit 72f19cdabfb26bf51c6a4ea2e17154adf7e5a96b
+	* m4/gpg-error.m4: Update from libgpg-error.
+
+2021-04-20  Jakub Jelen  <jjelen@redhat.com>
+
+	Fixes for static analysis reports.
+	+ commit fbb1f303198b5ff0cc7012eaef210ad2cf22edb5
+	* tests/t-oid.c (main): Reset freed pointer for next iteration.
+	* src/time.c (_ksba_current_time): Use snprintf to avoid buffer overrun.
+	* src/asn1-func.c (_ksba_asn_expand_object_id): Initialize NAME2.
+	* src/ber-help.c (_ksba_ber_count_tl): Mark identical branches as
+	intentional for coverity.
+
+2021-04-06  Werner Koch  <wk@gnupg.org>
+
+	Release 1.5.1.
+	+ commit 1015bea2f8a55b965dee29e17118bc73c2deca39
+
+
+	build: Add the usual release targets.
+	+ commit 1050939435548baa30a8ba8c20b7824ec7b2841e
+	* Makefile.am (release, sign-release): New targets.
+
+2021-02-22  Werner Koch  <wk@gnupg.org>
+
+	Support Brainpoolp256r1 and Brainpoolp384r1 with ECDomainParameters.
+	+ commit 4243085d7d4361d8900010ed32018985b133f958
+	* src/keyinfo.c (ecdomainparm_to_name): Two more entries.
+
+2021-02-01  Werner Koch  <wk@gnupg.org>
+
+	Support Brainpoolp512r1 certs specified with ECDomainParameters.
+	+ commit e51873b567d9f9cce708d191b29f09d56ea16f2d
+	* src/keyinfo.c (ecdomainparm_to_name): New table.
+	(_ksba_keyinfo_to_sexp): Support ECDomainParameter lookup.
+
+2020-12-21  Werner Koch  <wk@gnupg.org>
+
+	Fix a possible segv in case of an unknown CMS object.
+	+ commit fe03ab4c14e71cb08210159a943a6edded6cdc4d
+	* src/cms.c (ksba_cms_get_enc_val): Fix strcmp.
+
+2020-11-18  Werner Koch  <wk@gnupg.org>
+
+	Release 1.5.0.
+	+ commit 9c0a818cd89cf90e87a3fdf5f7b2d82062645229
+	* configure.ac: Set LT version to C21/A13/R0.
+
+	Add SPDX identifiers.
+	+ commit b426d2216583b8165abe89900578e0dbf9590571
+	* src/version.c (cright_blurb): New.
+	(ksba_check_version): Detect request for the cright blurb.
+
+	Allow for NDEF list of certs and CRLs in CMS.
+	+ commit b6438e768cf969a74b985bf2686d7cf0b4323355
+	* src/cms-parser.c (_ksba_cms_parse_signed_data_part_2): Fix endtag
+	detection.
+
+	* tests/t-cms-parser.c (main): Allow several files on the command line
+	and add more files to the default invocation.
+
+2020-11-18  NIIBE Yutaka  <gniibe@fsij.org>
+
+	m4: Update with newer autoconf constructs.
+	+ commit 1ef7f310d8bb0990d2c7a65f34ffa46f77c5d35d
+	* src/ksba.m4: Replace AC_HELP_STRING to AS_HELP_STRING.
+
+	build: Update to newer autoconf constructs.
+	+ commit 0d46f2c000c45147db9a2c418248108bf444afb9
+	* configure.ac (AC_INIT): Use 'https://'.
+	Use AC_CONFIG_HEADERS instead of AM_CONFIG_HEADER.
+	Use AC_USE_SYSTEM_EXTENSIONS instead of AC_GNU_SOURCE.
+	Use AS_HELP_STRING instead of AC_HELP_STRING.
+	* gl/m4/onceonly_2_57.m4: Remove.
+	* m4/gpg-error.m4: Update from libgpg-error.
+	* m4/libtool.m4: Update from libgpg-error.
+	* m4/libgcrypt.m4: Update from libgcrypt.
+
+	build: Use modern Autoconf check for type.
+	+ commit 60b32609ae7f7940c11117cb545c571356743624
+	* configure.ac (u32): Use AC_CHECK_TYPES.
+	* m4/Makefile.am (EXTRA_DIST): Update.
+	* m4/gnupg-typedef.m4: Remove.
+	* tests/sha1.c: Use HAVE_TYPE_U32.
+
+2020-06-17  Werner Koch  <wk@gnupg.org>
+
+	Support TR-03111 plain format ECDSA signature verification.
+	+ commit 486fb0257d08c9a90571aa8433c1c61b53dda4fe
+	* src/keyinfo.c (sig_algo_table): Add ECDSA algos from TR-03111.
+	(cryptval_to_sexp): Support plain ecdsa format.
+
+2020-05-28  Werner Koch  <wk@gnupg.org>
+
+	Let ksba_cms_identify detect the new OpenPGP keyblock content.
+	+ commit 5cdf0b5b0f1994405c8689ceaee76126755dcd1c
+	* src/ksba.h.in (KSBA_CT_OPENPGP_KEYBLOCK): New.
+	* src/cms.c: Add to table.
+	* tests/t-cms-parser.c (one_file): Ditto.
+
+2020-05-19  Werner Koch  <wk@gnupg.org>
+
+	Release 1.4.0.
+	+ commit f30f604700d37f1932d399ab2fb552713007117f
+
+
+2020-05-18  Werner Koch  <wk@gnupg.org>
+
+	Finish creation of ECDSA and EdDSA certificates.
+	+ commit 71a2f1e87790cc4fccd4e5e60ffd368fbfd85bb2
+	* src/keyinfo.c (_ksba_keyinfo_from_sexp): Skip writing curve
+	parameter in algoinfo mode.
+	(PKALGO_NONE): New.
+	(curve_names): Add field pkalgo and set for rfc8410 algos.
+	(get_ecc_curve_oid): New arg r_pkalgo.
+	(_ksba_keyinfo_from_sexp): Take are of a forced algo.  Add code path
+	for rfc8410 public key.
+	* src/certreq.h (struct ksba_certreq_s): Add flag 'is_ecc'.
+	* src/certreq.c (ksba_certreq_add_extension): Set that flag.
+	(ksba_certreq_set_sig_val): Use sig_val.is_ecc also for EdDSA.
+	(build_cri): Rewrite using the DER builder.
+
+2020-05-15  Werner Koch  <wk@gnupg.org>
+
+	Allow direct construction of encapsulated octet and bit strings.
+	+ commit 2605a994a2c7a4c06e7a2efb69e620fd687359ba
+	* src/ksba.h.in (KSBA_CLASS_ENCAPSULATE): New pseudo class.
+	* src/der-builder.c (struct item_s): Add field 'encapsulate'. Change
+	'class' to a 2 bit field.  Decrease size of 'hdrlen' to 10 bits which
+	is more than enough.
+	(_ksba_der_builder_reset): Clear 'encapsulate'.
+	(_ksba_der_add_ptr): Mask CLASS to avoid possible compiler warnings.
+	(add_val_core): Ditto.
+	(_ksba_der_add_tag): Ditto.  Set ENCAPSULATE.
+	(compute_lengths): Account for extra octet.
+	(_ksba_der_builder_get): Implement encapsulated data.
+
+	* tests/t-der-builder.c (test_der_builder): Add test cases for
+	encapsulated data.
+
+2020-05-14  Werner Koch  <wk@gnupg.org>
+
+	Publish constants for the DER builder.
+	+ commit 0e0fad9335ba8afe319fdb36e735533cff71a2b4
+	* src/ksba.h.in (KSBA_CLASS_): New constants.
+	(KSBA_TYPE_): New constants.
+	* src/der-builder.c (struct item_s): Increase size of HDRLEN and TAG.
+	(count_tl, write_tl): Support tags > 30.
+
+	* tests/t-der-builder.c: New
+	* tests/Makefile.am (TESTS): Add file.
+
+	Simplify the ksba_keyinfo_from_sexp function.
+	+ commit 88647cd33059129dca6d17434208d5f68108daf3
+	* src/keyinfo.c: Include der-builder.h
+	(get_ecc_curve_oid): Change to return a string.
+	(oid_from_buffer): Ditto.
+	(_ksba_keyinfo_from_sexp): Rewrite.
+
+	Fix DER builder to a allow a single primitive element.
+	+ commit 31c42e7568a7532f8fb5d291f5c4a26594d74ad4
+	* src/der-builder.c (_ksba_der_builder_get): Allow a single item.
+
+	Fold duplicated code in keyinfo.c into one function.
+	+ commit fae738f23b5bfde8fa25b6759fd1aac6809b40ca
+	* src/keyinfo.c (_ksba_algoinfo_from_sexp): Remove.
+	(_ksba_keyinfo_from_sexp): Add arg algoinfomode
+	* src/certreq.c (ksba_certreq_add_subject): Adjust for change.
+	(ksba_certreq_set_serial): Use _ksba_keyinfo_from_sexp in
+	algoinfomode.
+
+	* tests/cert-basic.c (one_file): Adjust for change.
+
+2020-05-14  Trammell Hudson  <hudson@trmm.net>
+
+	Fix qsort handler to reproducible sort the string table.
+	+ commit cdbced98819dd0b1478db1bb82bbc249d52e32ae
+	* src/asn1-gentables.c (cmp_string): Comapre the strings if they have
+	the same length.
+
+2020-05-12  Werner Koch  <wk@gnupg.org>
+
+	New API to construct arbitrary DER objects in memory.
+	+ commit 30d35448cd585156a0461f02934a356894e6867b
+	* src/der-builder.h (struct ksba_der_s, ksba_der_t): Move to ...
+	* src/ksba.h.in: here.
+	(ksba_der_release): New.
+	(ksba_der_builder_new): New.
+	(ksba_der_builder_reset): New.
+	(ksba_der_add_ptr): New.
+	(ksba_der_add_val): New.
+	(ksba_der_add_int): New.
+	(ksba_der_add_oid): New.
+	(ksba_der_add_bts): New.
+	(ksba_der_add_der): New.
+	(ksba_der_add_tag): New.
+	(ksba_der_add_end): New.
+	(ksba_der_builder_get): New.
+	* src/libksba.def: Add new functions.
+	* src/libksba.vers: Ditto.
+	* src/visibility.c: Add wrapper.
+	* src/visibility.h (ksba_der_add_val): Add usual macro magic.
+
+	Allow parsing of EdDSA certificates.
+	+ commit 60943d9f18162c7a55a635b122888b9f53690e77
+	* src/keyinfo.c (sig_algo_table): Remove unused params for EdDSA
+	algos.
+	(_ksba_keyinfo_to_sexp): Add curve to EdDSA algos.
+	(cryptval_to_sexp): Add special handling for EdDSA algos.
+
+2020-05-11  Werner Koch  <wk@gnupg.org>
+
+	Support creation of ECDSA signed data.
+	+ commit cda81bec2e141f67e6ee905eac0e719abb7ef20c
+	* src/der-builder.c (_ksba_der_add_int): New.
+	* src/cms.h (struct sig_val_s): Add struct ecc.
+	* src/cms.c (ksba_cms_release): Release ecc.
+	(ksba_cms_set_sig_val): Support ecdsa.
+	(build_signed_data_rest): Ditto.
+
+	* tests/samples/ecdsa-sample1.p7s: New.
+	* tests/samples/ecdsa-sample1.p7s.asn: New.
+	* tests/samples/rsa-sample1.p7s: New.
+	* tests/samples/rsa-sample1.p7s.asn: New.
+
+2020-05-04  Werner Koch  <wk@gnupg.org>
+
+	Support creation of ECDH enveloped data object (part 2 of 2)
+	+ commit 8ade151b10480cb03998669e928cfd2e159531c0
+	* src/cms.c (build_enveloped_data_header): Write out ECDH info.
+
+	Add a dedicated BIT STRING function to the new DER builder.
+	+ commit be1b4416afc3d646b43c5541b2d79036b6e7cdaf
+	* src/der-builder.c (_ksba_der_add_bts): New.
+
+2020-05-01  Werner Koch  <wk@gnupg.org>
+
+	Support creation of ECDH enveloped data object (part 1)
+	+ commit 0ddfbb464e0a86164768bd42e3e02a07f06dca62
+	* src/cms.h (struct enc_val_s): Add new fields for ECDH.
+	* src/cms.c: Include der-builder.h
+	(log_sexp): New but commented debug helper.
+	(ksba_cms_release): Free new ECDH values.
+	(ksba_cms_set_enc_val): Support ECDH.
+	(build_enveloped_data_header): Rewrite to make use of the new DER
+	builder.
+
+	Add a new DER builder for internal use.
+	+ commit cf49d3e60a67180fcb1b9005d910f015b388cf3c
+	* src/der-builder.c: New.
+	* src/der-builder.h: New.
+	* src/util.c (_ksba_reallocarray): New.
+
+	Add new internal function to get the encoded issuer.
+	+ commit 9c52d0787e0d0e78c8f10523a1c12fd83126393b
+	* src/cert.c (_ksba_cert_get_issuer_dn_ptr): New.
+	(_ksba_cert_get_serial_ptr): Return the full DER encoding and not just
+	the value.
+	* src/ocsp.c (ksba_ocsp_prepare_request): Adjust for this change.
+
+	Add RSA encrypted sample file.
+	+ commit 0aee4bf128097cbce7e26b76a06d41045fd9d26a
+
+
+	Move ASN.1 constants to a separate header.
+	+ commit d1ca2c8b65da20f5c407a1c9aad721ace4de460e
+	* src/asn1-func.h: Factor constants out to ...
+	* src/asn1-constants.h: new.
+	* src/Makefile.am (libksba_la_SOURCES): Add new file.
+
+2020-04-21  Werner Koch  <wk@gnupg.org>
+
+	Support parsing of the CMS KeyAgreeRecipientInfo.
+	+ commit 401dc58d3d55ed58a0ac4e1f286a7e19ed9e956c
+	* src/cms-parser.c (_ksba_cms_parse_enveloped_data_part_1): Decode at
+	the RecipientInfo level.
+	* src/cms.c (ksba_cms_get_issuer_serial): Adjust for this change.
+	Support KeyAgreeRecipientInfo.
+	(ksba_cms_get_enc_val): Ditto.
+	(dbg_print_sexp): New commented debug helper.
+	* src/keyinfo.c (enc_algo_table): Add and entry of ECDH.
+	(_ksba_parse_algorithm_identifier2): Make R_NREAD optional.
+	(cryptval_to_sexp): Add args to support ECDH.
+	(_ksba_sigval_to_sexp): Adjust for this.
+	(_ksba_encval_to_sexp): Ditto.
+	(_ksba_encval_kari_to_sexp): New.
+
+	* tests/t-cms-parser.c (one_file): Print the enc-val.
+
+	* tests/samples/ecdh-sample1.p7m: New sample.
+	* tests/samples/ecdh-sample1.p7m.asn: And a dump with some comments.
+
+	Extend the parser to better handle CHOICE elements.
+	+ commit d07733cf94a255ae804f1964e0fd769f2b337965
+	* src/asn1-func.c (find_node): Support '+' operator.
+	* src/ber-decoder.c (find_anchor_node): Support CHOICE tag.
+	(decoder_next): Set the outer sequence length also for context tags.
+
+2020-04-14  Werner Koch  <wk@gnupg.org>
+
+	Allow for Null hash algo parameters on rsaPSS and add pss flag.
+	+ commit 17a09f41fc4b26b7af839be2b9666c94e5a22097
+	* src/ber-help.c (_ksba_parse_optional_null): New.
+	* src/ber-help.h (parse_optional_null): New macro.
+	* src/crl.c (ksba_crl_get_sig_val): Insert a "pss" flag.
+	* src/keyinfo.c (cryptval_to_sexp): Ditto.
+	(_ksba_keyinfo_get_pss_info): Allow for NULL parameter.
+
+2020-04-09  Werner Koch  <wk@gnupg.org>
+
+	Support rsaPSS also for CRLs.
+	+ commit e6e9858970ed37f4d1b82b63868f2f855b4509fe
+	* src/crl.c: Include stringbuf.h
+	(ksba_crl_get_sig_val): Extend to return PSS parameter.
+
+	* tests/t-crl-parser.c (one_file): Print parameter.
+
+	Refactor PSS parameter parsing.
+	+ commit 5c08d7ea8e0f6945082c1c6947aa333b6d36d789
+	* src/keyinfo.c (cryptval_to_sexp): Move pssRSA parser to ...
+	(_ksba_keyinfo_get_pss_info): new.
+
+	Merge copies of stringbuf functions into one new header.
+	+ commit 641fc8b6deac2262978c5212fd0d41b6d0a07277
+	* src/stringbuf.h: New.
+	* src/Makefile.am (libksba_la_SOURCES): Add it.
+	* src/dn.c: Move stringbuf functions to new file.
+	* src/keyinfo.c: Ditto.
+
+2020-04-08  Werner Koch  <wk@gnupg.org>
+
+	Add read-only support for rsaPSS.
+	+ commit f5695be600abe905476f45808ef7df850d9a4dae
+	* src/ber-help.c (_ksba_parse_context_tag): Minor tweak in the
+	returned error codes.
+	* src/keyinfo.c (SUPPORTED_RSAPSS): New.
+	(pk_algo_table): Add rsaPSS.
+	(sig_algo_table): Add rsaPSS.
+	(put_stringbuf_uint): New.
+	(cryptval_to_sexp): Parse out the rsaPSS parameters.
+
+	Remove duplicated code and make parse wrappers internally available.
+	+ commit 152d04749cceeaccf309a3b150000da09aa503b5
+	* src/ber-help.c (_ksba_parse_sequence): New.  Code taken from ocsp.c
+	or crl.c and function name prefixed with _ksba_.
+	(_ksba_parse_context_tag): Ditto.
+	(_ksba_parse_enumerated): Ditto.
+	(_ksba_parse_integer): Ditto.
+	(_ksba_parse_octet_string): Ditto.
+	(_ksba_parse_optional_boolean): Ditto.
+	(_ksba_parse_object_id_into_str): Ditto.
+	(_ksba_parse_asntime_into_isotime): Ditto.
+	* src/ber-help.h: Add new prototypes and macros fro easier use.
+	(parse_skip): Moved from ocsp.c and crl.c as inline to here.
+	* src/crl.c: Remove parse fucntions.
+	* src/ocsp.c: Remove parse fucntions.
+
+	* src/Makefile.am (ber_dump_SOURCES): Add time.c
+
+2020-04-03  Werner Koch  <wk@gnupg.org>
+
+	Very minor patch cleanup.
+	+ commit 1119068b2e9f3bc1555dcc78fa54716733470b01
+	* src/keyinfo.c (pkalgo_t): Remove trailing comma
+
+2020-03-31  NIIBE Yutaka  <gniibe@fsij.org>
+
+	ecc: Add Ed25519 and Ed448 public key support.
+	+ commit 2625e13bc9d5ed1292eacba38683e5f3b1371237
+	* src/keyinfo.c (PKALGO_ED25519, PKALGO_ED448): New.
+	(PKALGO_X25519, PKALGO_X448): New for future.
+	(pk_algo_table): Add
+	(sig_algo_table): New entries for Ed25519 and Ed448 for future.
+	(_ksba_keyinfo_from_sexp): Add handling for Ed25519 and Ed448.
+
+2020-03-30  Werner Koch  <wk@gnupg.org>
+
+	Allow optional elements in keyinfo objects.
+	+ commit 1e903fe558bd6583c5447fbebe2ef019229dbfdc
+	* src/keyinfo.c (_ksba_keyinfo_from_sexp): Allow for optiona elements.
+	(_ksba_algoinfo_from_sexp): Ditto.
+
+2020-01-21  Werner Koch  <wk@gnupg.org>
+
+	tests: Implement option --to-str for t-dn-parser.
+	+ commit bf52cfb8f2b624fb4e24b4bc1089f74429b70b5a
+	* tests/t-dnparser.c (main): Implement option.
+
+2019-08-20  NIIBE Yutaka  <gniibe@fsij.org>
+
+	pkgconfig: Fix ksba.pc.
+	+ commit 3df0cd32e3b21b7da96a93d1f84d6cb6a77b89be
+	* src/ksba.pc.in (Cflags, Libs): Have flags.
+
+2019-07-22  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Use {CFLAGS,CPPFLAGS,LDFLAGS}_FOR_BUILD for helper program.
+	+ commit b92ec7f502d9a1107ac69dacce9ff684f5ae1c07
+	* src/Makefile.am: Add {CFLAGS,CPPFLAGS,LDFLAGS}_FOR_BUILD for
+	asn1-gentables.
+
+2019-04-26  Werner Koch  <wk@gnupg.org>
+
+	Add support for authenticode signing.
+	+ commit 1f0afa452e1276c98c2932e7247e36e0d74cc306
+	* src/cms.c (content_handlers): Add KSBA_CT_SPC_IND_DATA_CTX.
+
+	Add constants KSBA_VERSION and KSBA_VERSION_NUMBER.
+	+ commit 158539fd0c82522665fc4be86ba32f7f8553bc9b
+	* src/ksba.h: Rename to ...
+	* src/ksba.h.in: this.
+	(KSBA_VERSION, KSBA_VERSION_NUMBER): New.
+	* configure.ac (VERSION_NUMBER): Set it.
+	(AC_CONFIG_FILES): Add ksba.h
+
+2019-03-06  NIIBE Yutaka  <gniibe@fsij.org>
+
+	Update libgcrypt.m4.
+	+ commit 09a4cfae14397605bb32ddd4449b47d32e5090ab
+	* m4/libgcrypt.m4: Update from libgcrypt master.
+
+2019-02-27  NIIBE Yutaka  <gniibe@fsij.org>
+
+	Revert wrong fix for ECDSA.
+	+ commit f37361f86d2228aa5c5b09db188b8c6ba33cc435
+	* src/certreq.c (ksba_certreq_set_sig_val): Add back MSB handling of
+	0x80 for ECDSA.
+
+	Don't remove leading zero byte.
+	+ commit 9fea74575085352daec89b64bd36db5df9a05fb8
+	* src/cms.c (ksba_cms_set_sig_val): Don't remove leading zero byte.
+	(ksba_cms_set_enc_val): Likewise.
+	* src/certreq.c (ksba_certreq_set_sig_val): Likewise for RSA.
+
+2019-02-26  NIIBE Yutaka  <gniibe@fsij.org>
+
+	Fixing ECDSA, support EdDSA signatures in CSRs.
+	+ commit 5d9278f3d13050eddd68d8a1c490274a4f631f5f
+	* src/certreq.c (ksba_certreq_set_sig_val): Remove MSB handling of
+	0x80 for ECDSA, because it is done by GnuPG.
+
+	Distinguishing EdDSA signature in libgcrypt format, make a signature
+	simply concatinate r and s.
+
+2019-02-14  Damien Goutte-Gattat via Gnupg-devel  <gnupg-devel@gnupg.org>
+
+	Support multi-valued signatures in CSRs.
+	+ commit 98882064f45778927d38c6fdbe008f5858b36813
+	* src/certreq.c (ksba_certreq_set_sig_val): Support signatures
+	made of several values.
+
+2019-01-16  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: With LD_LIBRARY_PATH defined, use --disable-new-dtags.
+	+ commit 3f99f332ada603468eb30d77649c4fdf84b383e6
+	* configure.ac (LDADD_FOR_TESTS_KLUDGE): New for --disable-new-dtags.
+	* tests/Makefile.am (LDADD): Use LDADD_FOR_TESTS_KLUDGE.
+
+2018-11-13  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Update autogen.rc.
+	+ commit c37cdbd0f1b4a682799e0661178e392227cca938
+	* autogen.rc: Remove obsolete --with-gpg-error-prefix option.
+
+2018-11-08  NIIBE Yutaka  <gniibe@fsij.org>
+
+	Add annotation for fall through path.
+	+ commit 3f5dcb5ff6721b0c70c8b0e320e4fd58f1c2cada
+	* src/ber-decoder.c (decoder_next): Add FALLTHROUGH.
+
+2018-11-02  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Update gpg-error.m4 and ksba.m4.
+	+ commit 5a7c0d8667ceddf7820131865dad0ab850e5c3a4
+	* m4/gpg-error.m4: Update to 2018-11-02.
+	* src/ksba.m4: Add AC_MSG_NOTICE.
+
+2018-10-29  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Update gpg-error.m4 and ksba.m4.
+	+ commit 9917a23a6c8177f79bdd8da031d3b7135b597c91
+	* m4/gpg-error.m4: Update to 2018-10-29.
+	* src/ksba.m4: Follow the change of gpgrt-config.
+
+2018-10-26  NIIBE Yutaka  <gniibe@fsij.org>
+
+	ksba.m4: Fix calling by gpgrt-config.
+	+ commit 825a4a9e93655b136dd2eee685e0e67aca912a01
+	* src/ksba.m4: Fix condition and use "ksba" for *.pc.
+
+	ksba.m4: Better backward compatibility.
+	+ commit d3fdae7a299a0514b90dbb7f45a0d08ee5d93078
+	* m4/gpg-error.m4: Update.
+	* src/ksba.m4: Don't assume ksba-config is newer.
+	Fix KSBA_CONFIG which used LIBKSBA_CONFIG wrongly.
+
+	build: Fix ksba.m4.
+	+ commit 910c148825d50798689998ed760b658f2aeeee64
+	* src/ksba.m4: Use AC_PATH_PROG to detect ksba-config.
+
+	build: Improve ksba.m4.
+	+ commit f0116c07d0d89fc7114dedeb3fc638ab9dae2254
+	* src/ksba.m4: Don't try gpgrt-config when LIBKSBA_CONFIG set.  Fall
+	back to detecting ksba-config, when gpgrt-config doesn't work well.
+
+	build: Relax build requirements.
+	+ commit a32a50c7726ee7c6ac320d99b9ab42f073960cc9
+	* m4/gpg-error.m4: Update from libgpg-error 1.33.
+	* src/ksba.m4: Don't require AM_PATH_GPG_ERROR.  Use GPGRT_CONFIG when
+	it is confirmed that it is available and working well.
+	* configure.ac (AM_PATH_GPG_ERROR): No requirement for newer version
+	(It was because of new gpgrt-config which supports *.pc files).
+
+2018-10-25  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Require libgpg-error >= 1.33.
+	+ commit 07cf4a9ab6f1a7b68aeda39ba03691e713254418
+	* configure.ac (NEED_GPG_ERROR_VERSION): Require >= 1.33.
+	* m4/gpg-error.m4: Update from libgpg-error 1.33.
+	* src/ksba.m4: Fix to support --with-libksba-prefix.
+
+2018-10-24  NIIBE Yutaka  <gniibe@fsij.org>
+
+	build: Fix ksba.pc.
+	+ commit 4754816d10a38ebe97acd2f3bfaa835055566696
+	* src/ksba.pc.in: Fix typo.
+
+	build: Fix previous commit.
+	+ commit 5a21f7465ca2aadfb3877a53f6536859b6973463
+
+
+	build: Compatibility to pkg-config.
+	+ commit dfc3ad5c6e97cc11de4faa19de59203ae8d5eb1a
+	* src/ksba-config.in: Support --variable and --modversion.
+
+	build: Make ksba.m4 use gpg-error-config.
+	+ commit ce5247c0f3fcbe8a1e70c33ab4c83d807aecce63
+	* src/ksba.m4: Use gpg-error-config.
+
+	build: Provide libassuan.pc, generated by configure.
+	+ commit d0016a76942eb58748182ad282c03d5cd7a0dc86
+	* configure.ac (PACKAGE, VERSION): Remove.
+	Generate src/ksba.pc.
+	* src/Makefile.am (pkgconfigdir, pkgconfig_DATA): New.
+	* src/ksba-config.in: Use @PACKAGE_VERSION@.
+	* src/ksba.pc.in: New.
+
+	build: Update gpg-error.m4 from libgpg-error.
+	+ commit ec4e838ca91849b493f7ea77074e4415ed6a2d4a
+	* m4/gpg-error.m4: Update from libgpg-error 1.33.
+
+2018-10-23  Werner Koch  <wk@gnupg.org>
+
+	Fix error detection in the CMS parser which may led to a NULL-deref.
+	+ commit a1ce3c17ee0d44ba8c7c9553824ba55b7950e930
+	* src/cms.c (build_signed_data_rest): Fix c+p bug.
+
+	Use only one .PHONY target in a Makefile.
+	+ commit d56bddc68db86878e1b3497362407c994c2841ca
+	* Makefile.am (.PHONY): Move to the end.
+
+	Fix test for existence of the signing_time.
+	+ commit a0bbba1c49286f09c5f2eb3cd788938fac2ed252
+	* src/cms.c (build_signed_data_attributes): Fix test.
+
+2017-08-22  Marcus Brinkmann  <marcus.brinkmann@ruhr-uni-bochum.de>
+
+	Fix make distcheck.
+	+ commit af99234b21c98ad1a4eaf2b72fb52de67beba9d3
+	* configure.ac: Revert last change and define HAVE_GCOV if not
+	in maintainer mode.
+	* tests/detached-sig.csm: New file.
+	* tests/Makefile.am (EXTRA_DIST): Add detached-sig.csm.
+	* tests/t-cms-parser.c (main): Use detached-sig.csm as test file.
+
+2017-08-18  Marcus Brinkmann  <marcus.brinkmann@ruhr-uni-bochum.de>
+
+	Fix non-maintainer build.
+	+ commit 457d2f0c6a1fea394de6d48afb1c1c0189c52878
+	* configure.ac: Always check for gcov program to make sure
+	the automake variable is defined.
+
+	Fix all compiler warnings.
+	+ commit 982faa2c354a2d23ffd4a0bad584e145faf809bc
+	* src/asn1-parse.y (import_defs, identifier_list): Comment out unused part
+	of the grammar that causes a shift-reduce conflict.
+	* src/cms-parser.c (_ksba_cms_parse_enveloped_data_part_1): Initialize
+	some variables to help suppress uninitialized use warning.
+	* src/crl.c (oidstr_issuingDistributionPoint): Comment out unused OID.
+	* src/gen-help.h (ksba_asn_parse_file, ksba_asn_tree_dump): Add declarations.
+
+2017-08-15  Kai Michaelis  <kai@gnupg.org>
+
+	Fix memory leaks in ksba_cms_identify and tests.
+	+ commit a1d9b046aec8cedda16a9e24eb8d2ed021f68d5d
+	* tests/t-reader.c: free prepend_srcdir() result.
+	* tests/t-cms-parser: ditto & release writer instance.
+	* src/cms.c: fix mem leak in ksba_cms_identify().
+
+2017-08-10  Kai Michaelis  <kai@gnupg.org>
+
+	Enable CMS parser test.
+	+ commit 39e633d6d224cafa83d884865ac4e372709d91b7
+	* tests/Makefile.am: add t-cms-parser to the list of tests.
+	* tests/t-cms-parser.c: change default test file to something that
+	  exists.
+
+	Generate coverage information.
+	+ commit 3e029a4ed0059116febe05924a14009ca622e3c5
+	* autogen.sh: add options --coverage and --report to help w/ coverage
+	info collection and reporting.
+	* m4/gcov.m4: new file. Boilerplate for locating gcov et.al.
+	* Makefile.am: add coverage-report target
+
+	GnuPG-Bud-Id: 3050
+
+2017-08-09  Kai Michaelis  <kai@gnupg.org>
+
+	Add missing include.
+	+ commit ad36a28e3a0580c1a9547843c03e1af172681efc
+	* src/reader.c: include unistd.h
+
+	Don't use decls in for-loop headers.
+	+ commit 707862ab44fb6cca79dacbf866a7066d941b92fc
+	libksba compiles w/ C90
+
+	Add missing fd support to ksba_reader_t.
+	+ commit c7f4ef5b5ebc8d6be2c56f14da999a36735a2eba
+	* src/reader.c: add branches for READER_TYPE_FD
+	* tests/t-reader.c: tests for above
+
+2017-06-19  Marcus Brinkmann  <marcus.brinkmann@ruhr-uni-bochum.de>
+
+	configure: Add flag to disable documentation build.
+	+ commit ab23f39a91b5c16eda2d9d581f9bf2ab2da39cf2
+	* configure.ac: Add new option --disable-doc.
+	(BUILD_DOC): New automake conditional.
+	* Makefile.am (SUBDIRS): Make doc optional based on BUILD_DOC.
+	(DISTCHECK_CONFIGURE_FLAGS): New variable.
+
+	Signed-Off-By: Marcus Brinkmann <mb@g10code.com>
+
+2017-04-20  Andre Heinecke  <aheinecke@intevation.de>
+
+	tests: Open testfile in binary mode.
+	+ commit 3bb0c54fe47eb72e1e7be93de8775b37045de34d
+	* tests/t-crl-parser.c (one_file): Read file in binary mode.
+
+2017-03-08  Justus Winter  <justus@g10code.com>
+
+	build: Use macOS' compatibility macros to enable all features.
+	+ commit 561d03a008150c201ece22b29c97b24a1f6bf590
+	* configure.ac: On macOS, use the compatibility macros to expose every
+	feature of the libc.  This is the equivalent of _GNU_SOURCE on GNU
+	libc.
+
+2016-10-14  Werner Koch  <wk@gnupg.org>
+
+	Let configure print a note if Yacc is not Bison.
+	+ commit 100ed5092aec0afe16ca7a4fe660602745e92a36
+	* m4/ax_prog_bison.m4: New.
+	* m4/Makefile.am (EXTRA_DIST): Add it.
+	* configure.ac: Test for Bison and print a note.
+
+2016-08-22  Werner Koch  <wk@gnupg.org>
+
+	Release 1.3.5.
+	+ commit 25cc42cf61a56e01f1bd72883e452f691dda8309
+	* configure.ac: Set LT version to C19/A/11/R6.
+
+	Use size_t for the result of fread.
+	+ commit 68fba3d8d7757b7f7ed75fdebd2b91299943503b
+	* src/reader.c (ksba_reader_read): Make 'n' and size_t.
+
+	Limit allocation in the BER decoder to 16 MiB.
+	+ commit 89d898346b75337ec2546c672ea720c5c956b53a
+	* src/ber-decoder.c (MAX_IMAGE_LENGTH): New.
+	(decoder_next): Limit allcoation to MAX_IMAGE_LENGTH.
+	(_ksba_ber_decoder_dump, _ksba_ber_decoder_decode): Ditto.
+
+2016-07-17  Tomáš Trnka  <tomastrnka@gmx.com>
+
+	Encode OCSP nonce value as an octet string (RFC 6960)
+	+ commit eb7833b8720cd0831c78d42e993ca878cecf27bc
+	* src/ocsp.c (ksba_ocsp_set_nonce): Stop removing the sign bit.
+	 (write_request_extensions): Encode nonce as octet string.
+	 (parse_response_extensions): Decode nonce as octet string.
+
+2016-07-13  Werner Koch  <wk@gnupg.org>
+
+	build: Update config.{guess,sub} to {2016-05-15,2016-06-20}.
+	+ commit ee203f948a6573809672d9e61177145a13b3987d
+	* build-aux/config.guess: Update.
+	* build-aux/config.sub: Update.
+
+2016-06-27  Werner Koch  <wk@gnupg.org>
+
+	tests: Fix a memory leak.
+	+ commit 995d2e34932143cc9888db779cb3ecd92ae6e32e
+	* tests/t-oid.c (test_oid_to_str): Free STR.
+
+	Use modern error macros and fix a missing assignment.
+	+ commit b60e5140f85fc00cd131ab635d4202693759abe1
+	* src/ocsp.c: Remove errno.h.  Replace gpg_error_from_errno(errno) by
+	gpg_error_from_syserror ().
+	(parse_response): Ditto.  Return direct becuase static analyzer may
+	not grasp that  gpg_error_from_syserror will never return false.
+	(ksba_ocsp_get_responder_id): Actually return an error for NO_DATA.
+
+	Detect invalid RDN names and avoid a read from uninitialized variable.
+	+ commit 7243a3c6ed1635eef45b567b37a025e4a5e0dc51
+	* src/dn.c (parse_rdn): Bail out for an invalid name.
+
+2016-05-25  Werner Koch  <wk@gnupg.org>
+	    Pascal Cuoq  <cuoq@trust-in-soft.com>
+
+	Fix OOB read in parse_distribution_point.
+	+ commit 43f890f37b514757db5653608ec59b5a74e8e092
+	* src/cert.c (parse_distribution_point): Check TI.length.
+
+2016-05-11  Werner Koch  <wk@gnupg.org>
+
+	Make sure that ASN.1 data is stored in an all-initialized buffer.
+	+ commit 2a9fc5654df497b91ab9b64e946c1e19371888e5
+	* src/ber-decoder.c (decoder_next): Clear the image buffer.
+
+2016-05-03  Werner Koch  <wk@gnupg.org>
+
+	Release 1.3.4.
+	+ commit 3a92e8c8939767d19aaa48f051d721d582ab0eff
+	* configure.ac: Set LT version to C19/A11/R5.
+
+	Update config.{guess,sub} to 2016-04-02 and 2016-03-30.
+	+ commit 8290fabdb260e228c3b89706c88caf90da77358b
+	* build-aux/config.guess: Update.
+	* build-aux/config.sub: Update.
+
+	Create an SWDB file during "make distcheck"
+	+ commit ec820ebbb05cbc0d5ee00f086364ecaf3efa54cb
+	* Makefile.am (distcheck-hook): New.
+
+	Fix an undefined return value in ksba_cert_get_digest_algo.
+	+ commit 3f74c2cc0068d0b3584627af73c8c42ce720a826
+	* src/cert.c (ksba_cert_get_digest_algo): Set ALGO in the error case.
+	* tests/cert-basic.c (one_file): Take care of printf which does not
+	handle NULL for %s
+
+	Fix an OOB read access in _ksba_dn_to_str.
+	+ commit 6be61daac047d8e6aa941eb103f8e71a1d4e3c75
+	* src/dn.c (append_utf8_value): Use a straightforward check to fix an
+	off-by-one.
+
+	Fix possible read access beyond the buffer.
+	+ commit a7eed17a0b2a1c09ef986f3b4b323cd31cea2b64
+	* src/ber-help.c (_ksba_ber_parse_tl): Add extra sanity check.
+	* src/cert.c (ksba_cert_get_cert_policies): Check TLV given length
+	against buffer length.
+	(ksba_cert_get_ext_key_usages): Ditto.
+	* src/ocsp.c (parse_asntime_into_isotime): Ditto.
+
+2015-10-28  Werner Koch  <wk@gnupg.org>
+
+	Add more curves to the name->OID table.
+	+ commit 3d968bbffc3a0acda890e342fbbfa5b34a26085e
+	* src/keyinfo.c (curve_names): Add more curves.
+
+	Fix lookup of ECC OIDs by name.
+	+ commit 9df0ac3a4afa0272dbff08d17e9064f13be95814
+	* src/keyinfo.c (get_ecc_curve_oid): Fix obviously never tested table
+	lookup.
+
+2015-08-25  Werner Koch  <wk@gnupg.org>
+
+	Add configure option --enable-build-timestamp.
+	+ commit 538188812ace9594aad92a9b0f73b75e5ffc4526
+	* configure.ac (BUILD_TIMESTAMP): Set to "<none>" by default.  Add
+	ac_define_unquoted.
+
+2015-04-10  Werner Koch  <wk@gnupg.org>
+
+	Release 1.3.3.
+	+ commit b46ea28e82d67a2072817294115360fd3e1ab20c
+
+
+2015-04-09  Werner Koch  <wk@gnupg.org>
+
+	Do not abort on decoder stack overflow.
+	+ commit 07116a314f4dcd4d96990bbd74db95a03a9f650a
+	* src/ber-decoder.c (push_decoder_state, pop_decoder_state): Return an
+	error code.
+	(set_error): Prefix error message with "ksba:". Act on new return code.
+	(decoder_next): Act on new return code.
+
+	Fix integer overflow in the BER decoder.
+	+ commit aea7b6032865740478ca4b706850a5217f1c3887
+	* src/ber-decoder.c (ber_decoder_s): Change val.length from int to
+	size_t.
+	(sum_a1_a2_gt_b, sum_a1_a2_ge_b): New.
+	(decoder_next): Check for integer overflow.  Use new sum function for
+	size check.
+	(_ksba_ber_decoder_dump): Use size_t for n to match change of
+	val.length.  Adjust printf fomrat.  Check for integer overflow and use
+	gpg_error_from_syserror instead of GPG_ERR_ENOMEM.
+	(_ksba_ber_decoder_decode): Use new sum function for size check.
+	Check for integer overflow.  Use size_t for n to match change of
+	val.length.
+
+2015-04-08  Werner Koch  <wk@gnupg.org>
+
+	Fix encoding of invalid utf-8 strings in dn.c.
+	+ commit 243d12fdec66a4360fbb3e307a046b39b5b4ffc3
+	* src/dn.c (append_quoted, append_atv): Use snprintf.
+	(append_utf8_value): Fix invalid encoding handling.
+
+2015-01-30  Werner Koch  <wk@gnupg.org>
+
+	w32: Use -static-libgcc to avoid linking to libgcc_s_sjlj-1.dll.
+	+ commit 792f4b36f998beba3515b776e8ca76ecbf20e468
+	* src/Makefile.am (extra_ltoptions): New.
+	(libksba_la_LDFLAGS): Use it.
+
+	Update ASN.1 grammar for newer Bison versions.
+	+ commit 569f3da664de81638bcb322d6e9380f3ff16f70c
+	* src/asn1-parse.y (YYERROR_VERBOSE): Replace by ...
+	(%define parse.error.verbose): this.
+	(YYPARSE_PARM, YYLEX_PARM): Replace by ...
+	(%parm): this.
+	(%pure_parser): Replace by ...
+	(%define api.pure full): this.
+	(yyerror): Add arg parm.
+
+2015-01-28  Werner Koch  <wk@gnupg.org>
+
+	Require automake 1.14 and update build-aux files.
+	+ commit 32b3a47a358d694332450f9c2487a88aedc46ca7
+	* Makefile.am (AUTOMAKE_OPTIONS): Move to ...
+	* configure.ac (AM_INIT_AUTOMAKE: here.  Add serial-tests.
+
+2014-11-25  Werner Koch  <wk@gnupg.org>
+
+	Release 1.3.2.
+	+ commit 02079b56b8d0d922bb84981270fafbc36637b417
+	* configure.ac: Set LT version to C19/A11/R3.
+
+	build: Update version number magic.
+	+ commit 00ef765bc1aff709e990f9fd984e25aa8e09f482
+	* autogen.sh: Update from gnupg master.
+	* configure.ac: Change for new init style.  Create VERSION.
+	* Makefile.am (dist-hook): Do no create VERSION
+
+	Fix buffer overflow in ksba_oid_to_str.
+	+ commit f715b9e156dfa99ae829fc694e5a0abd23ef97d7
+	* src/oid.c (ksba_oid_to_str): Fix unsigned underflow.
+
+	* tests/Makefile.am (noinst_PROGRAMS): Move t-oid to ..
+	(TESTS): here.
+	* tests/t-oid.c (test_oid_to_str): New.
+	(main): Run the new tests by default.  The former functionality
+	requires the use of one of the new options.
+
+2014-09-25  Werner Koch  <wk@gnupg.org>
+
+	Strip CRs while building the oid translation table.
+	+ commit 6692de1398629061d405099bb22e9480475928af
+	* tests/Makefile.am (oidtranstbl.h): Strip CRs
+
+2014-09-18  Werner Koch  <wk@gnupg.org>
+
+	Release 1.3.1.
+	+ commit 447784c718c817ab8036af7d81ce5a6bbb1f1df0
+	* configure.ac: Set LT version to C19/A11/R2.
+
+2014-07-22  Dmitry Eremin-Solenikov  <dbaryshkov@gmail.com>
+
+	Fix two memory leaks in cert-basic test.
+	+ commit 4486cb8228eeaefccc800e550cae4cd4701967c1
+	* tests/cert-basic.c (one_file): always free public key and der2.
+
+	Enable optional valgrind for testsuite.
+	+ commit 64902148236af8f39397bfaf6b5494b342027948
+	* configure.ac: Enable gnulib valgrind module.
+	* gl/m4/gnulib.m4: Enable valgrind module.
+	* tests/Makefile.am: Enable valgrind as LOG_COMPILER.
+	* gl/m4/valgrind-tests.m4: New
+
+	Fix memory leak in crl parsing code.
+	+ commit 42aca4c9e575d44436e82e2e6bad6c967f12f21b
+	* src/crl.c (store_one_entry_extension): Free memory at oid variable -
+	  otherwise libksba leaks memory on crl parsing.
+
+	Adapt mkoidtbl script to newer dumpasn1 database format.
+	+ commit 21cf824e1547d94f898946715b525e7d41de5899
+	* tests/mkoidtbl.awk: optionally parse oid at OID line.
+
+	Reuse common test functions in cert-basic test.
+	+ commit 70bb73e5da9be83ec170829d7cdab5a1da89d408
+	* tests/cert-basic.c (xmalloc, print_hex, print_sexp, print_time,
+	  print_dn): Drop.
+
+	tests: fix print_sexp and print_sexp_hex functions.
+	+ commit ce85db73a9330371d456ccd6a49a8682c31d0ed4
+	* tests/t-common.h (print_sexp, print_sexp_hex): advance pointer on
+	  closing brace.
+
+	tests: Pass -no-install to libtool.
+	+ commit 7f9e09611fce8466a98f53c5dfe4bebb398c708f
+	* tests/Makefile.am: add AM_LDFLAGS = -no-install
+
+2014-04-15  Werner Koch  <wk@gnupg.org>
+
+	tests: Fix warning about unused var.
+	+ commit 5b79ad34ea2d7a86cfe465c81ff6bcd7fc1c06fc
+	* tests/t-dnparser.c (main): Drop unneeded var INPUTLEN.
+
+	Fix possible segv if NULL is passed as cert.
+	+ commit 6fd166870237d5b913fb59cb2a4356fed1734efa
+	* src/cert.c (ksba_cert_get_digest_algo): Fix !cert case.
+
+2014-01-10  Werner Koch  <wk@gnupg.org>
+
+	Remove cruft.
+	+ commit f73e671406eefa96aba98f609cb68a9caae6bb7a
+	* autogen.rc: Remove cruft.
+
+	Use the generic autogen.sh script.
+	+ commit 3943ea7f7dd739dc2c259b76a569a46259d47c43
+	* Makefile.am (EXTRA_DIST): Add autogen.rc.
+	* autogen.rc: New.
+	* autogen.sh: Update from current GnuPG.
+	* ltmain.sh: Move to build-aux/.
+	* compile: Ditto.
+	* config.guess: Ditto.
+	* config.sub: Ditto.
+	* depcomp: Ditto.
+	* doc/mdate-sh: Ditto.
+	* doc/texinfo.tex: Ditto.
+	* install-sh: Ditto.
+	* missing: Ditto.
+	* ylwrap: Ditto.
+	* configure.ac (AC_CONFIG_AUX_DIR): New.
+
+2014-01-08  Werner Koch  <wk@gnupg.org>
+
+	Add --enable-silent-rules stuff.
+	+ commit 629c1f0b16b12418711516de3bef5298ab45fe12
+	* configure.ac: Add AM_SILENT_RULES.
+
+	Fix libtool 2.4.2 to correctly detect .def files.
+	+ commit a7b75d6e8e8af79eab9ece7a4061ea48eab8a81d
+	* ltmain.sh (sed_uncomment_deffile): New.
+	(orig_export_symbols): Uncomment def file before testing for EXPORTS.
+	* m4/libtool.m4: Do the same for the generated code.
+
+2013-12-10  David 'Digit' Turner  <digit@google.com>
+
+	Update libtool to support Android.
+	+ commit d69cde444b2a4b106b4d8c6857efe7d5e8ce18fc
+	* m4/libtool.m4: Add "linux*android*" case.  Taken from the libtool
+	repository.
+
+2013-12-10  Werner Koch  <wk@gnupg.org>
+
+	Add build support for ppc64le.
+	+ commit a34986a19b2d597cfa3fac099abe243ce1a896a5
+	* config.guess, config.sub: Update to latest version (2013-11-29).
+	* m4/libtool.m4: Add patches for ppc64le.
+
+	Fix duplicate definition of TRUE and FALSE in grammar file.
+	+ commit ab3fe5dccd5bd814f9e2db943380b28598f8cb7a
+	* src/asn1-parse.y (YYPRINT): Define.
+	(%token-table): Define.
+	(TRUE,FALSE,BOOLEAN): Prefix these tokens with "ksba_" to avoid name
+	conflicts.
+	(key_word, key_word_token): Remove arrays.
+	(%token): Add literal strings to almost all tokens.
+	(yylex): Use yytname array for keyword lookup.
+
+2012-11-16  Werner Koch  <wk@gnupg.org>
+
+	Improve parsing of the GIT revision number.
+	+ commit 7b9662f2bf28feb575c4b2b181d88ca61ad43d53
+	* configure.ac (mmm4_revision): Use git rev-parse.
+
+	Fix non-portable use of chmod in autogen.sh.
+	+ commit c18bf9d08d95a73192e12580ce5eae3454c07c0d
+	* autogen.sh: Remove option -c from chmod.
+
+2012-09-27  Werner Koch  <wk@gnupg.org>
+
+	Release 1.3.0.
+	+ commit ea8487406ecafbcf190008b6c8a5c8e7c63ed6b8
+	* configure.ac: Set LT version to C19/A11/R1.
+
+2012-09-26  Werner Koch  <wk@gnupg.org>
+
+	Update build helper scripts.
+	+ commit 1533a9662128fca669eeb661308939cdc8e5d74b
+	* config.guess, config.sub: Update to version 2012-07-31.
+	* ltmain.sh: Update to version 2.4.2.
+	* install-sh, m4/libtool.m4, m4/ltoptions.m4, m4/ltversion.m4
+	* m4/lt~obsolete.m4: Update to autoconf 2.69 versions.
+
+	Adjust for stricter autoconf requirements.
+	+ commit 3e71347052593f4ba3312eb31e932765be1c93ec
+	* configure.ac: Fix usage of AC_LANG_PROGRAM.
+
+	Do not distribute a copy of gitlog-to-changelog.
+	+ commit 5d60c0f340584b280762864fc1cb65013c55503d
+	* Makefile.am (AUTOMAKE_OPTIONS): Do not create a tar.gz.
+	(gen-ChangeLog): Require an installed gitlog-to-changelog.
+	* build-aux/gitlog-to-changelog: Remove.
+
+	Allow building with w64-mingw32.
+	+ commit 3776ae8f4ea642ad6ac0af726e90492e6f82eb5f
+	* autogen.sh <--build-w32>: Support the w64-mingw32 toolchain.  Also
+	prepare for 64 bit building.
+
+	Switch to the new automagic beta numbering scheme.
+	+ commit 120d58757d43d10278d4f5ec4126bc18d2ccd28a
+	* configure.ac: Add all the required m4 magic.
+
+	Change library license to LGPLv3+/GPLv2+.
+	+ commit d4333eefc945750613ac9483a41793b5971e3cfe
+	* COPYING.GPLv2, COPYING.GPLv3, COPYING.LGPLv3: New.
+	* COPYING: Replace text by a reference to the new files.
+	* AUTHORS: Update copyright, license, and maintainer information.
+	* Makefile.am (EXTRA_DIST): Distribute the new files.
+
+	Remove unused or useless files.
+	+ commit 9abb7c027e9501012f96393c80607c4ad6a8a38f
+	* src/asn1-parse.h: Remove empty file.
+	* src/asn1-parse.y: Do not include asn1-parse.h.
+
+2011-12-06  Werner Koch  <wk@gnupg.org>
+
+	Allow to set subject and issuer.
+	+ commit aa6cbc8332e59ad94b104b51ea59784f17e522f6
+	* src/certreq.c (ksba_certreq_set_issuer): Do not check the subject.
+
+2011-12-01  Werner Koch  <wk@gnupg.org>
+
+	Post release updates.
+	+ commit 3f957f48388756732b5795b77b65d5ab7c0c8298
+
+
+	Generate the ChangeLog from commit logs.
+	+ commit 1120a33155aa3246b6aeed2dcd6a1315969c632d
+	* build-aux/gitlog-to-changelog: New script.  Taken from gnulib.
+	* build-aux/git-log-fix: New file.
+	* build-aux/git-log-footer: New file.
+	* doc/HACKING: New file.
+	* ChangeLog: New file.
+	* Makefile.am (EXTRA_DIST): Add new files.
+	(gen-ChangeLog): New.
+	(dist-hook): Run gen-ChangeLog.
+	* autogen.sh: Install commit-msg hook for git.
+
+	Rename all ChangeLog files to ChangeLog-2011.
+
+2011-12-01  Werner Koch  <wk@gnupg.org>
+
+	NB: Changes done before December 1st, 2011 are described in
+	per directory files named ChangeLog-2011.  See doc/HACKING for
+	details.
+
+        -----
+	Copyright (C) 2011 g10 Code GmbH
+
+	Copying and distribution of this file and/or the original GIT
+	commit log messages, with or without modification, are
+	permitted provided the copyright notice and this notice are
+	preserved.

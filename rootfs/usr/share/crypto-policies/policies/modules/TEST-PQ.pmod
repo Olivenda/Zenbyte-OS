@@ -1,0 +1,66 @@
+# An experimental subpolicy enabling all the currently available
+# post-quantum and hybrid algorithms.
+# Not for production use.
+# May disappear with the next update.
+
+group = +P384-MLKEM1024
+group = +P521-MLKEM1024
+group = +MLKEM1024
+group = +P256-MLKEM768
+group = +X25519-MLKEM768
+group = +MLKEM768-X25519
+group = +MLKEM1024-X448
+group = +X448-MLKEM768
+group = +P384-MLKEM768
+group = +MLKEM768
+group = +X25519-MLKEM512
+group = +P256-MLKEM512
+group = +MLKEM512
+group = +P256-KYBER768
+group = +X25519-KYBER768
+#group = +KYBER768  # We don't want to support pure KYBER in groups.
+
+sign = +RSA3072-SPHINCSSHAKE128FSIMPLE
+sign = +P256-SPHINCSSHAKE128FSIMPLE
+sign = +SPHINCSSHAKE128FSIMPLE
+sign = +P384-SPHINCSSHA2192FSIMPLE
+sign = +SPHINCSSHA2192FSIMPLE
+sign = +RSA3072-SPHINCSSHA2128SSIMPLE
+sign = +P256-SPHINCSSHA2128SSIMPLE
+sign = +SPHINCSSHA2128SSIMPLE
+sign = +RSA3072-SPHINCSSHA2128FSIMPLE
+sign = +P256-SPHINCSSHA2128FSIMPLE
+sign = +SPHINCSSHA2128FSIMPLE
+sign = +P521-FALCONPADDED1024
+sign = +FALCONPADDED1024
+sign = +P521-FALCON1024
+sign = +FALCON1024
+sign = +RSA3072-FALCONPADDED512
+sign = +P256-FALCONPADDED512
+sign = +FALCONPADDED512
+sign = +RSA3072-FALCON512
+sign = +P256-FALCON512
+sign = +FALCON512
+sign = +MLDSA87-ED448
+sign = +MLDSA87-BP384
+sign = +MLDSA87-P384
+sign = +P521-MLDSA87
+sign = +MLDSA87
+sign = +MLDSA65-ED25519
+sign = +MLDSA65-BP256
+sign = +MLDSA65-P256
+sign = +MLDSA65-RSA3072
+sign = +MLDSA65-PSS3072
+sign = +P384-MLDSA65
+sign = +MLDSA65
+sign = +MLDSA44-BP256
+sign = +MLDSA44-P256
+sign = +MLDSA44-ED25519
+sign = +MLDSA44-RSA2048
+sign = +MLDSA44-PSS2048
+sign = +RSA3072-MLDSA44
+sign = +P256-MLDSA44
+sign = +MLDSA44
+
+key_exchange = +SNTRUP
+key_exchange = +KEM-ECDH

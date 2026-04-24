@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<metalink version="3.0" xmlns="http://www.metalinker.org/" type="dynamic" pubdate="Thu, 23 Apr 2026 14:44:28 GMT" generator="mirrormanager" xmlns:mm0="http://fedorahosted.org/mirrormanager">
+ <files>
+  <file name="repomd.xml">
+   <mm0:timestamp>1765802084</mm0:timestamp>
+   <size>3820</size>
+   <verification>
+    <hash type="md5">da483b625413e6e81a926300c4410215</hash>
+    <hash type="sha1">5ec5fb140a55a152719f645be20a53616ca87966</hash>
+    <hash type="sha256">145a7ee25641f4ca0b0652b44e760386e14ff4e647aeee437793247c079fbe0b</hash>
+    <hash type="sha512">8235ead530a9bd5a080a3ccab18db052086c06a04950b6d34e5d1a83a3f80d9b2ca735be9a9e07a464354cf8b4c1a298e6031c5c5a9d09d7c840b91e377e5d4f</hash>
+   </verification>
+   <resources maxconnections="1">
+    <url protocol="https" type="https" location="DE" preference="100">https://mirror1.hs-esslingen.de/pub/Mirrors/archive.rpmfusion.org/free-archive/fedora/updates/41/x86_64/repodata/repomd.xml</url>
+    <url protocol="http" type="http" location="DE" preference="100">http://mirror1.hs-esslingen.de/pub/Mirrors/archive.rpmfusion.org/free-archive/fedora/updates/41/x86_64/repodata/repomd.xml</url>
+    <url protocol="rsync" type="rsync" location="DE" preference="100">rsync://mirror1.hs-esslingen.de/archive.rpmfusion.org/free-archive/fedora/updates/41/x86_64/repodata/repomd.xml</url>
+    <url protocol="https" type="https" location="UA" preference="99">https://rpmfusion-archive.ip-connect.vn.ua/free-archive/fedora/updates/41/x86_64/repodata/repomd.xml</url>
+    <url protocol="http" type="http" location="UA" preference="99">http://rpmfusion-archive.ip-connect.vn.ua/free-archive/fedora/updates/41/x86_64/repodata/repomd.xml</url>
+    <url protocol="rsync" type="rsync" location="UA" preference="99">rsync://rpmfusion-archive.ip-connect.vn.ua/rpmfusion-archive/free-archive/fedora/updates/41/x86_64/repodata/repomd.xml</url>
+    <url protocol="rsync" type="rsync" location="UA" preference="98">rsync://rpmfusion-archive.ip-connect.info/rpmfusion-archive/free-archive/fedora/updates/41/x86_64/repodata/repomd.xml</url>
+    <url protocol="http" type="http" location="UA" preference="98">http://rpmfusion-archive.ip-connect.info/free-archive/fedora/updates/41/x86_64/repodata/repomd.xml</url>
+    <url protocol="https" type="https" location="UA" preference="98">https://rpmfusion-archive.ip-connect.info/free-archive/fedora/updates/41/x86_64/repodata/repomd.xml</url>
+   </resources>
+  </file>
+ </files>
+</metalink>

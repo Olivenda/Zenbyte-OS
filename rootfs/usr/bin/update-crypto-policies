@@ -1,0 +1,3 @@
+#!/usr/bin/sh
+
+exec "/usr/share/crypto-policies/python/update-crypto-policies.py" "$@"

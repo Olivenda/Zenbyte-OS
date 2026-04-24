@@ -1,0 +1,138 @@
+Version 0.6.2
+* fixed RESOURCE_LEAK (CWE-772) and UNINIT (CWE-457)
+
+Version 0.6.1
+* Reading lines which are greater than BUFSIZ.
+
+Version 0.6.0
+* Supporting Linux Userspace API (UAPI) Group
+  chapter "Configuration Files Specification".
+  See: https://uapi-group.org/specifications/specs/configuration_files_specification/
+
+Version 0.5.3
+* Added bindings for python3 and C#
+* Supporting Linux Userspace API (UAPI) Group
+  chapter "Configuration Files Specification".
+  See: https://uapi-group.org/specifications/specs/configuration_files_specification/
+
+Version 0.5.2
+* Fixed build for aarch64 and gcc13.
+* Making the output verbose when a test fails.
+* Fixed a stack-buffer-overflow vulnerability in "econf_writeFile" function.
+* Fixed a stack-buffer-overflow vulnerability in "read_file" function.
+
+Version 0.5.1
+* Reading files in /usr/_vendor_/_example_._suffix_.d/* regardless
+  there is a /etc/_example_._suffix_ file.
+
+Version 0.5.0
+* API calls econf_read*WithCallback supporting a general (void *)
+  argument for user defined data with which the callback function is
+  called.
+* Tagged following functions deprecated:
+  econf_requireOwner, econf_requireGroup, econf_requirePermissions,
+  econf_followSymlinks, econf_reset_security_settings
+  Use one of the econf_read*WithCallback functions instead.
+
+Version 0.4.9
+* new API calls:
+  ** econf_readFileWithCallback
+     Has the same functionality like econf_readFile. The user
+     can additionally define a callback in order to check the parsed file.
+  ** econf_readDirsWithCallback
+     Has the same functionality like econf_readDirs. The user
+     can additionally define a callback in order e.g. to check all parsed file.
+  ** econf_readDirsHistoryWithCallback
+     Has the same functionality like econf_readDirsHistory.
+     The user can additionally define a callback in order e.g. to check
+     all parsed file.
+
+Version 0.4.8
+* Parsing files which are containing keys only.
+  All delimiters are allowed now : "", " =", " ", "=".
+  But the user should use "" in order to be distinct.
+* /usr/etc/shells.d/<file_name> will not be parsed if
+  /etc/shells.d/<file_name> is defined too.
+
+Version 0.4.7
+* econftool:
+  Adapted compile options regarding LTO (Link Time Optimization).
+
+Version 0.4.6
+* econftool:
+  ** Parsing error: Reporting file and line nr.
+  ** --delimeters=spaces Taking all kind of spaces for delimiter 
+* libeconf:
+  Fixed bnc#1198165: Parsing files correctly which have space characters
+  AND none space characters as delimiters.
+
+Version 0.4.5
+* econftool:
+  ** New call "syntax" for checking the configuration files only.
+     Returns an error string with line number if an error occurs.
+  ** New options "--comment" and "--delimeters"
+  ** Parsing one file only if needed.
+
+Version 0.4.4
+* Fixed i586 build
+Version 0.4.3
+* Reading numbers with different bases (e.g. oktal) (bsc#1193632).
+Version 0.4.2
+* CMake fixes regarding document installation.
+* Fixed different issues while writing string values to file.
+* Writing comments to file too.
+* Fixed memory leaks.
+* Fixed crash while merging values.
+
+Version 0.4.1
+* CMake fixes regarding installation of econftool and man pages.
+
+Version 0.4.0
+* Man pages libeconf.3 and econftool.8.
+* Handling multiline strings.
+* Added libeconf_ext which returns more information like
+  line_nr, comments, path of the configuration file,...
+* Econftool, an command line interface for handling configuration
+  files.
+* Generating HTML API documentation with doxygen.
+* Improving error handling and semantic file check.
+* Joining entries with the same key to one single entry if
+  env variable ECONF_JOIN_SAME_ENTRIES has been set.
+* new API call: econf_readDirsHistory (showing ALL locations)
+* new API call: econf_getPath (absolute path of the configuration file)
+
+Version 0.3.8
+* Convert the build to include CMake as an option, remove autotools
+
+Version 0.3.7
+* Fix issues identified with i586 build thanks to the move to meson
+
+Version 0.3.6
+* Add C++ compatibility and Add support for Meson
+
+Version 0.3.5
+* Initial Haiku Port
+* Bugfix: helpers.c - Check for empty value (NULL pointer) before calling strdup.
+
+Version 0.3.4
+* Fix parsing of quoted strings, and values starting with delimiters
+* Fix buffer overflow in econf_readDirs
+
+Version 0.3.3
+* Reset *key_file to NULL after free
+
+Version 0.3.2
+* Bugfix for merging empty configuration files
+
+Version 0.3.1
+* Bugfix for writing files (Set delimiter in readFile)
+
+Version 0.3.0
+* New parser
+* Add econf_get*ValueDef functions
+
+Version 0.2.0
+* Reading of files is stable now
+
+Version 0.1.0
+* Initial release

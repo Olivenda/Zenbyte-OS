@@ -1,0 +1,18 @@
+This package increases the default limit of the ancillary buffer size
+per kernel socket defined in `net.core.optmem_max` to 81920 bytes.
+
+For this preset to become active it requires a reboot after the
+installation of this package.  You can also manually increase this
+limit by invocing `sysctl net.core.optmem_max=81920` as the
+super-user, e.g. using `su` or `sudo` on the terminal.
+
+This is done to provide consumers of the new Linux Kernel Crypto API
+User Space Interface a well sufficient and reasonable maximum limit
+by default, especially when using AIO with a larger amount of IOVECs.
+
+For further information about the AF_ALG kernel socket and AIO, see
+the discussion at the kernel-crypto mailing-list:
+https://www.mail-archive.com/linux-crypto@vger.kernel.org/msg30417.html
+
+See the instructions given in '/usr/lib/sysctl.d/50-default.conf',
+if you need or want to override the preset made by this package.

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<metalink version="3.0" xmlns="http://www.metalinker.org/" type="dynamic" pubdate="Thu, 23 Apr 2026 14:44:28 GMT" generator="mirrormanager" xmlns:mm0="http://fedorahosted.org/mirrormanager">
+ <files>
+  <file name="repomd.xml">
+   <mm0:timestamp>1730015365</mm0:timestamp>
+   <size>3822</size>
+   <verification>
+    <hash type="md5">3c62eecb1c35ab7b3a9efae59c0272e6</hash>
+    <hash type="sha1">a0b05dd9baa0b4c360121d729b4c4f18e3988b32</hash>
+    <hash type="sha256">6afdea9c16061fb9fac6bd2f171c6db8cd8aa8df94ad49ed27faae7c979a4ef5</hash>
+    <hash type="sha512">f65f4916d9ab6284609553df12c590d7d96485f27c77dbd16aab0e337fcbaeecfafd2cac62c692175bd63ce378eb1763278dc7b4d1f72d5be518ab0071f26cc0</hash>
+   </verification>
+   <resources maxconnections="1">
+    <url protocol="https" type="https" location="DE" preference="100">https://mirror1.hs-esslingen.de/pub/Mirrors/archive.rpmfusion.org/free-archive/fedora/releases/41/Everything/x86_64/os/repodata/repomd.xml</url>
+    <url protocol="http" type="http" location="DE" preference="100">http://mirror1.hs-esslingen.de/pub/Mirrors/archive.rpmfusion.org/free-archive/fedora/releases/41/Everything/x86_64/os/repodata/repomd.xml</url>
+    <url protocol="rsync" type="rsync" location="DE" preference="100">rsync://mirror1.hs-esslingen.de/archive.rpmfusion.org/free-archive/fedora/releases/41/Everything/x86_64/os/repodata/repomd.xml</url>
+    <url protocol="https" type="https" location="UA" preference="99">https://rpmfusion-archive.ip-connect.vn.ua/free-archive/fedora/releases/41/Everything/x86_64/os/repodata/repomd.xml</url>
+    <url protocol="http" type="http" location="UA" preference="99">http://rpmfusion-archive.ip-connect.vn.ua/free-archive/fedora/releases/41/Everything/x86_64/os/repodata/repomd.xml</url>
+    <url protocol="rsync" type="rsync" location="UA" preference="99">rsync://rpmfusion-archive.ip-connect.vn.ua/rpmfusion-archive/free-archive/fedora/releases/41/Everything/x86_64/os/repodata/repomd.xml</url>
+    <url protocol="rsync" type="rsync" location="UA" preference="98">rsync://rpmfusion-archive.ip-connect.info/rpmfusion-archive/free-archive/fedora/releases/41/Everything/x86_64/os/repodata/repomd.xml</url>
+    <url protocol="http" type="http" location="UA" preference="98">http://rpmfusion-archive.ip-connect.info/free-archive/fedora/releases/41/Everything/x86_64/os/repodata/repomd.xml</url>
+    <url protocol="https" type="https" location="UA" preference="98">https://rpmfusion-archive.ip-connect.info/free-archive/fedora/releases/41/Everything/x86_64/os/repodata/repomd.xml</url>
+   </resources>
+  </file>
+ </files>
+</metalink>

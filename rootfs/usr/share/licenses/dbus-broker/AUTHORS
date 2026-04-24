@@ -1,0 +1,48 @@
+LICENSE:
+        Licensed under the Apache License, Version 2.0 (the "License");
+        you may not use this file except in compliance with the License.
+        You may obtain a copy of the License at
+
+                http://www.apache.org/licenses/LICENSE-2.0
+
+        Unless required by applicable law or agreed to in writing, software
+        distributed under the License is distributed on an "AS IS" BASIS,
+        WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+        See the License for the specific language governing permissions and
+        limitations under the License.
+
+COPYRIGHT: (ordered alphabetically)
+        Copyright (C) 2016-2023 Red Hat, Inc.
+        Copyright (C) 2023 David Rheinsberg <david@readahead.eu>
+        Copyright (C) 2023 Tom Gundersen <teg@jklm.no>
+
+AUTHORS: (ordered alphabetically)
+        Allison Karlitskaya <allison.karlitskaya@redhat.com>
+        Camron Carter <reefoe@proton.me>
+        Chris Paulson-Ellis <chris.paulson-ellis@motorolasolutions.com>
+        Chris PeBenito <chpebeni@linux.microsoft.com>
+        Daniel Rusek <mail@asciiwolf.com>
+        Daniele Nicolodi <daniele@grinta.net>
+        David Rheinsberg <david.rheinsberg@gmail.com>
+        Evgeny Vereshchagin <evvers@ya.ru>
+        Frantisek Sumsal <frantisek@sumsal.cz>
+        Georg Müller <georgmueller@gmx.net>
+        Hugo Osvaldo Barrera <hugo@barrera.io>
+        Jacob Alzén <jacob.alzen@gmail.com>
+        Jake Dane
+        Lily Danzig <ldenardo@dealerinspire.com>
+        Khem Raj <raj.khem@gmail.com>
+        Laurent Bigonville <bigon@bigon.be>
+        Luca Boccassi <luca.boccassi@microsoft.com>
+        Marc-Antoine Perennou <Marc-Antoine@Perennou.com>
+        Marcus Sundberg <marcus.sundberg@aptilo.com>
+        Mark Esler <mark.esler@canonical.com>
+        Michal Schmidt <mschmidt@redhat.com>
+        Mike Gilbert <floppym@gentoo.org>
+        msizanoen1 <msizanoen@qtmlabs.xyz>
+        Stefan Agner <stefan@agner.ch>
+        Thomas Mühlbacher <tmuehlbacher@posteo.net>
+        Tim Gates <tim.gates@iress.com>
+        Tom Gundersen <teg@jklm.no>
+        Yanko Kaneti <yaneti@declera.com>
+        Zbigniew Jędrzejewski-Szmek <zbyszek@in.waw.pl>
