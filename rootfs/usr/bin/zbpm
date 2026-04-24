@@ -1,6 +1,6 @@
 #!/bin/bash
 
-REPO="http://192.168.178.71:8080/pkgs"
+REPO="https://zbpm.cronodevelopment.com/pkgs"
 DB="/var/lib/zbpm"
 INSTALLED="$DB/installed"
 PKGDIR="/tmp/zbpm-tmp"
@@ -20,14 +20,34 @@ usage() {
 
 install_pkg() {
   PKG="$1"
-  VERSION="$2"
-  echo "-> Suche $PKG..."
-  URL="$REPO/$PKG.tar.gz"
+  VERSION="$(curl -fsSL $REPO/index.txt 2>/dev/null | grep "^$PKG " | awk '{print $2}')"
 
-  echo "-> Lade herunter: $URL"
-  curl -fsSL "$URL" -o "$PKGDIR/$PKG.tar.gz" || {
+  if [ -f "$INSTALLED/$PKG" ]; then
+    LOCAL_VER=$(cat "$INSTALLED/$PKG")
+    if [ "$LOCAL_VER" = "$VERSION" ]; then
+      echo "-> $PKG bereits installiert ($VERSION)."
+      return 0
+    fi
+  fi
+
+  # Dependencies zuerst installieren
+  DEPS=$(curl -fsSL "$REPO/$PKG.deps" 2>/dev/null | tr -d '\n')
+  if [ -n "$DEPS" ]; then
+    echo "-> Abhängigkeiten für $PKG: $DEPS"
+    for DEP in $DEPS; do
+      if [ ! -f "$INSTALLED/$DEP" ]; then
+        echo "-> Installiere Abhängigkeit: $DEP"
+        install_pkg "$DEP"
+      else
+        echo "-> Abhängigkeit bereits vorhanden: $DEP"
+      fi
+    done
+  fi
+
+  echo "-> Lade herunter: $REPO/$PKG.tar.gz"
+  curl -fsSL "$REPO/$PKG.tar.gz" -o "$PKGDIR/$PKG.tar.gz" || {
     echo "FEHLER: Paket $PKG nicht gefunden."
-    exit 1
+    return 1
   }
 
   echo "-> Installiere $PKG..."
@@ -37,7 +57,6 @@ install_pkg() {
     bash "$DB/scripts/$PKG.post"
   fi
 
-  # Version speichern
   echo "$VERSION" > "$INSTALLED/$PKG"
   echo "-> $PKG $VERSION erfolgreich installiert."
   rm -f "$PKGDIR/$PKG.tar.gz"
@@ -73,7 +92,7 @@ update_all() {
     LOCAL_VER=$(cat "$INSTALLED/$PKG" 2>/dev/null)
     if [ -n "$REMOTE_VER" ] && [ "$REMOTE_VER" != "$LOCAL_VER" ]; then
       echo "-> Update verfügbar: $PKG ($LOCAL_VER -> $REMOTE_VER)"
-      install_pkg "$PKG" "$REMOTE_VER"
+      install_pkg "$PKG"
       UPDATES=$((UPDATES+1))
     fi
   done
@@ -103,7 +122,7 @@ info_pkg() {
 }
 
 case "$1" in
-  install) install_pkg "$2" "$(curl -fsSL $REPO/index.txt 2>/dev/null | grep "^$2 " | awk '{print $2}')" ;;
+  install) install_pkg "$2" ;;
   remove)  remove_pkg "$2" ;;
   update)  update_all ;;
   list)    list_installed ;;
