@@ -1,0 +1,5 @@
+[Seat:*]
+autologin-user=root
+autologin-session=xfce
+user-session=xfce
+greeter-session=lightdm-gtk-greeter

@@ -39,7 +39,9 @@ version = "1.0"
 "dracut.x86_64" = {reason = "Dependency"}
 "e2fsprogs-libs.x86_64" = {reason = "Dependency"}
 "e2fsprogs.x86_64" = {reason = "User"}
+"elfutils-default-yama-scope.noarch" = {reason = "Dependency"}
 "elfutils-libelf.x86_64" = {reason = "Dependency"}
+"elfutils-libs.x86_64" = {reason = "Dependency"}
 "expat.x86_64" = {reason = "Dependency"}
 "fastfetch.x86_64" = {reason = "User"}
 "fedora-gpg-keys.noarch" = {reason = "Dependency"}
@@ -51,6 +53,7 @@ version = "1.0"
 "file.x86_64" = {reason = "Dependency"}
 "filesystem.x86_64" = {reason = "Dependency"}
 "findutils.x86_64" = {reason = "Dependency"}
+"fonts-filesystem.noarch" = {reason = "Dependency"}
 "fuse3-libs.x86_64" = {reason = "Dependency"}
 "gawk-all-langpacks.x86_64" = {reason = "Weak Dependency"}
 "gawk.x86_64" = {reason = "Dependency"}
@@ -115,6 +118,10 @@ version = "1.0"
 "libcom_err.x86_64" = {reason = "Dependency"}
 "libcurl.x86_64" = {reason = "Dependency"}
 "libeconf.x86_64" = {reason = "Dependency"}
+"liberation-fonts-all.noarch" = {reason = "User"}
+"liberation-mono-fonts.noarch" = {reason = "Dependency"}
+"liberation-sans-fonts.noarch" = {reason = "Dependency"}
+"liberation-serif-fonts.noarch" = {reason = "Dependency"}
 "libevent.x86_64" = {reason = "Dependency"}
 "libfdisk.x86_64" = {reason = "Dependency"}
 "libffi.x86_64" = {reason = "Dependency"}
@@ -156,6 +163,7 @@ version = "1.0"
 "libuuid.x86_64" = {reason = "Dependency"}
 "libverto.x86_64" = {reason = "Dependency"}
 "libxcrypt.x86_64" = {reason = "Dependency"}
+"libxkbcommon.x86_64" = {reason = "Dependency"}
 "libxml2.x86_64" = {reason = "Dependency"}
 "libzstd.x86_64" = {reason = "Dependency"}
 "linux-firmware-whence.noarch" = {reason = "Dependency"}
@@ -242,6 +250,7 @@ version = "1.0"
 "wget2.x86_64" = {reason = "Dependency"}
 "which.x86_64" = {reason = "Dependency"}
 "whois-nls.noarch" = {reason = "Dependency"}
+"xkeyboard-config.noarch" = {reason = "Dependency"}
 "xxhash-libs.x86_64" = {reason = "Dependency"}
 "xz-libs.x86_64" = {reason = "Dependency"}
 "xz.x86_64" = {reason = "Dependency"}

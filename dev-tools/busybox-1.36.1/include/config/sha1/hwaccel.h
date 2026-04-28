@@ -1,1 +1,0 @@
-#define CONFIG_SHA1_HWACCEL 1

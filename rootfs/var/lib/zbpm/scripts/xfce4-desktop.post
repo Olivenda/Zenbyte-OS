@@ -1,0 +1,23 @@
+#!/bin/bash
+echo "-> Konfiguriere XFCE..."
+
+# LightDM config
+mkdir -p /etc/lightdm
+cat > /etc/lightdm/lightdm.conf << LDEOF
+[Seat:*]
+autologin-user=root
+autologin-session=xfce
+user-session=xfce
+greeter-session=lightdm-gtk-greeter
+LDEOF
+
+# xinitrc
+cat > /root/.xinitrc << XINITEOF
+exec startxfce4
+XINITEOF
+
+# LightDM aktivieren
+systemctl enable lightdm 2>/dev/null
+systemctl enable NetworkManager 2>/dev/null
+
+echo "-> XFCE konfiguriert! Bitte neu starten."

@@ -36,3 +36,10 @@ systemd-oom:!*::
 systemd-coredump:!*::
 systemd-timesync:!*::
 sshd:!*::
+screen:!*::
+wsdd:!::
+polkitd:!*::
+rtkit:!*::
+lightdm:!*::
+pulse-access:!::
+pulse-rt:!::

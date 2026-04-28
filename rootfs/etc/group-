@@ -36,3 +36,10 @@ systemd-oom:x:998:
 systemd-coredump:x:997:
 systemd-timesync:x:996:
 sshd:x:74:
+screen:x:84:
+wsdd:x:995:
+polkitd:x:114:
+rtkit:x:172:
+lightdm:x:994:
+pulse-access:x:993:
+pulse-rt:x:992:

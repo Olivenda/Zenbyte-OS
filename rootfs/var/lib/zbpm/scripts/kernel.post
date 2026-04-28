@@ -1,14 +1,30 @@
 #!/bin/bash
-echo "-> Kernel 7.0.0-zenbyte installiert"
+echo "-> Kernel 7.0.1-zenbyte installiert"
 echo "-> Aktualisiere Grub..."
-cat > /boot/grub2/grub.cfg << GRUBEOF
+
+# Neuesten Kernel finden
+KERNEL=$(ls /boot/vmlinuz-* 2>/dev/null | sort -V | tail -1)
+
+if [ -n "$KERNEL" ]; then
+  cp "$KERNEL" /boot/vmlinuz
+  
+  # Grub updaten - beide mögliche Pfade
+  for GRUBCFG in /boot/grub2/grub.cfg /boot/grub/grub.cfg; do
+    if [ -f "$GRUBCFG" ]; then
+      PART=$(findmnt -n -o SOURCE /)
+      cat > "$GRUBCFG" << GRUBEOF
 set timeout=5
 set default=0
 
 menuentry "ZenbyteOS 1.0" {
-    linux /boot/vmlinuz-7.0.0-zenbyte root=/dev/sda1 rw quiet
+    linux /boot/vmlinuz root=$PART rw quiet selinux=0
     initrd /boot/initramfs.img
 }
 GRUBEOF
-echo "7.0.0-zenbyte" > /var/lib/zbpm/installed/kernel
+      echo "-> Grub aktualisiert: $GRUBCFG"
+    fi
+  done
+fi
+
+echo "7.0.1-zenbyte" > /var/lib/zbpm/installed/kernel
 echo "-> Neustart erforderlich!"

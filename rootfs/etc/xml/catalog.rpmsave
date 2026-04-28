@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!DOCTYPE catalog PUBLIC "-//OASIS//DTD Entity Resolution XML Catalog V1.0//EN" "http://www.oasis-open.org/committees/entity/release/1.0/catalog.dtd">
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <system systemId="http://www.w3.org/2001/xml.xsd" uri="file:///usr/share/xml/xml.xsd"/>
+  <system systemId="http://www.w3.org/2009/01/xml.xsd" uri="file:///usr/share/xml/xml.xsd"/>
+  <system systemId="http://www.w3.org/TR/xmldsig-core/xmldsig-core-schema.xsd" uri="file:///usr/share/xml/xmldsig-core-schema.xsd"/>
+  <uri name="http://www.w3.org/2001/xml.xsd" uri="file:///usr/share/xml/xml.xsd"/>
+  <uri name="http://www.w3.org/2009/01/xml.xsd" uri="file:///usr/share/xml/xml.xsd"/>
+  <uri name="http://www.w3.org/TR/xmldsig-core/xmldsig-core-schema.xsd" uri="file:///usr/share/xml/xmldsig-core-schema.xsd"/>
+  <delegatePublic publicIdStartString="-//OASIS//ENTITIES DocBook XML" catalog="file:///etc/sgml/docbook/xmlcatalog"/>
+  <delegatePublic publicIdStartString="-//OASIS//DTD DocBook XML" catalog="file:///etc/sgml/docbook/xmlcatalog"/>
+  <delegatePublic publicIdStartString="ISO 8879:1986" catalog="file:///etc/sgml/docbook/xmlcatalog"/>
+  <delegateSystem systemIdStartString="http://www.oasis-open.org/docbook/" catalog="file:///etc/sgml/docbook/xmlcatalog"/>
+  <delegateURI uriStartString="http://www.oasis-open.org/docbook/" catalog="file:///etc/sgml/docbook/xmlcatalog"/>
+  <public publicId="-//W3C//DTD XMLSchema 200102//EN" uri="file:///usr/share/xml/XMLSchema.dtd"/>
+  <public publicId="-//W3C//DTD XMLSCHEMA 200102//EN" uri="file:///usr/share/xml/XMLSchema.dtd"/>
+  <system systemId="http://www.w3.org/2001/XMLSchema.dtd" uri="file:///usr/share/xml/XMLSchema.dtd"/>
+</catalog>

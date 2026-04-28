@@ -3,14 +3,236 @@
 REPO="https://zbpm.cronodevelopment.com/pkgs"
 DB="/var/lib/zbpm"
 INSTALLED="$DB/installed"
-PKGDIR="/tmp/zbpm-tmp"
+MANIFESTS="$DB/manifests"
+PKGDIR="/var/cache/zbpm"
+mkdir -p "$PKGDIR"
 
-mkdir -p "$DB" "$INSTALLED" "$PKGDIR"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+mkdir -p "$DB" "$INSTALLED" "$MANIFESTS" "$PKGDIR"
+
+info()    { echo -e "${CYAN}[zbpm]${NC} $*"; }
+success() { echo -e "${GREEN}[ok]${NC}   $*"; }
+warn()    { echo -e "${YELLOW}[warn]${NC} $*"; }
+err()     { echo -e "${RED}[err]${NC}  $*"; }
+
+get_remote_version() {
+  curl -fsSL "$REPO/index.txt" 2>/dev/null | grep "^$1 " | awk '{print $2}'
+}
+
+get_deps() {
+  curl -fsSL "$REPO/$1.deps" 2>/dev/null | tr -d '\n' | tr -s ' '
+}
+
+# Sammelt alle Pakete die installiert werden müssen (rekursiv)
+collect_pkgs() {
+  local PKG="$1"
+  local VERSION="$(get_remote_version $PKG)"
+
+  if [ -z "$VERSION" ]; then
+    err "Paket $PKG nicht im Repo gefunden."
+    return
+  fi
+
+  if [ -f "$INSTALLED/$PKG" ]; then
+    LOCAL_VER=$(cat "$INSTALLED/$PKG")
+    if [ "$LOCAL_VER" = "$VERSION" ]; then
+      return
+    fi
+  fi
+
+  # Erst deps sammeln
+  local DEPS="$(get_deps $PKG)"
+  if [ -n "$DEPS" ]; then
+    for DEP in $DEPS; do
+      collect_pkgs "$DEP"
+    done
+  fi
+
+  # Dann das Paket selbst hinzufügen falls noch nicht in der Liste
+  if ! echo "$INSTALL_LIST" | grep -q "^$PKG$"; then
+    INSTALL_LIST="$INSTALL_LIST
+$PKG"
+  fi
+}
+
+do_install() {
+  local PKG="$1"
+  local VERSION="$(get_remote_version $PKG)"
+
+  if [ -f "$INSTALLED/$PKG" ]; then
+    LOCAL_VER=$(cat "$INSTALLED/$PKG")
+    if [ "$LOCAL_VER" = "$VERSION" ]; then
+      warn "$PKG bereits installiert ($VERSION)."
+      return 0
+    fi
+  fi
+
+  info "Lade herunter: $REPO/$PKG.tar.gz"
+  curl -fsSL "$REPO/$PKG.tar.gz" -o "$PKGDIR/$PKG.tar.gz" || {
+    err "$PKG konnte nicht geladen werden."
+    return 1
+  }
+
+  info "Installiere $PKG $VERSION..."
+  tar -tzf "$PKGDIR/$PKG.tar.gz" | grep -v '/$' | sed 's|^\./|/|' > "$MANIFESTS/$PKG"
+  tar -xzf "$PKGDIR/$PKG.tar.gz" -C /
+
+  [ -f "$DB/scripts/$PKG.post" ] && bash "$DB/scripts/$PKG.post"
+
+  echo "$VERSION" > "$INSTALLED/$PKG"
+  success "$PKG $VERSION installiert."
+  rm -f "$PKGDIR/$PKG.tar.gz"
+}
+
+install_pkg() {
+  local PKGS=("$@")
+  if [ ${#PKGS[@]} -eq 0 ]; then
+    err "Kein Paket angegeben."
+    return 1
+  fi
+
+  # Alle Pakete + deps sammeln
+  INSTALL_LIST=""
+  for PKG in "${PKGS[@]}"; do
+    info "Löse Abhängigkeiten für $PKG..."
+    collect_pkgs "$PKG"
+  done
+
+  # Leere Zeilen entfernen
+  INSTALL_LIST=$(echo "$INSTALL_LIST" | grep -v '^$')
+
+  if [ -z "$INSTALL_LIST" ]; then
+    warn "Alle Pakete bereits installiert."
+    return
+  fi
+
+  echo ""
+  echo -e "${BOLD}Folgende Pakete werden installiert:${NC}"
+  while read -r PKG; do
+    VERSION="$(get_remote_version $PKG)"
+    echo -e "  ${GREEN}•${NC} $PKG ${CYAN}$VERSION${NC}"
+  done <<< "$INSTALL_LIST"
+  echo ""
+
+  read -p "Fortfahren? [j/N]: " ans
+  if [[ "$ans" != "j" && "$ans" != "J" ]]; then
+    info "Abgebrochen."
+    return
+  fi
+
+  while read -r PKG; do
+    do_install "$PKG"
+  done <<< "$INSTALL_LIST"
+
+  success "Alle Pakete installiert."
+}
+
+remove_pkg() {
+  PKG="$1"
+  if [ ! -f "$INSTALLED/$PKG" ]; then
+    err "$PKG ist nicht installiert."
+    return 1
+  fi
+
+  VER=$(cat "$INSTALLED/$PKG")
+  echo ""
+  echo -e "${BOLD}Paket wird entfernt:${NC}"
+  echo -e "  ${RED}•${NC} $PKG $VER"
+  echo ""
+
+  read -p "Wirklich entfernen? [j/N]: " ans
+  if [[ "$ans" != "j" && "$ans" != "J" ]]; then
+    info "Abgebrochen."
+    return
+  fi
+
+  if [ -f "$MANIFESTS/$PKG" ]; then
+    local count=0
+    while read -r FILE; do
+      if [ -f "$FILE" ]; then
+        rm -f "$FILE"
+        count=$((count+1))
+      fi
+    done < "$MANIFESTS/$PKG"
+    rm -f "$MANIFESTS/$PKG"
+    info "$count Dateien entfernt."
+  else
+    warn "Kein Manifest — nur DB-Eintrag wird entfernt."
+  fi
+
+  rm -f "$INSTALLED/$PKG"
+  success "$PKG entfernt."
+}
+
+update_all() {
+  info "Prüfe Updates..."
+  curl -fsSL "$REPO/index.txt" -o "$PKGDIR/index.txt" 2>/dev/null || {
+    err "Kein Zugriff auf Repo."
+    return 1
+  }
+
+  local UPDATE_PKGS=()
+  echo ""
+  echo -e "${BOLD}Verfügbare Updates:${NC}"
+
+  for PKG in $(ls "$INSTALLED/" 2>/dev/null); do
+    REMOTE_VER=$(grep "^$PKG " "$PKGDIR/index.txt" | awk '{print $2}')
+    LOCAL_VER=$(cat "$INSTALLED/$PKG" 2>/dev/null)
+    if [ -n "$REMOTE_VER" ] && [ "$REMOTE_VER" != "$LOCAL_VER" ]; then
+      echo -e "  ${GREEN}•${NC} $PKG  ${RED}$LOCAL_VER${NC} → ${GREEN}$REMOTE_VER${NC}"
+      UPDATE_PKGS+=("$PKG")
+    fi
+  done
+
+  if [ ${#UPDATE_PKGS[@]} -eq 0 ]; then
+    success "System ist aktuell."
+    return
+  fi
+
+  echo ""
+  read -p "Alle Updates installieren? [j/N]: " ans
+  if [[ "$ans" != "j" && "$ans" != "J" ]]; then
+    info "Abgebrochen."
+    return
+  fi
+
+  for PKG in "${UPDATE_PKGS[@]}"; do
+    do_install "$PKG"
+  done
+  success "Alle Updates installiert."
+}
+
+list_installed() {
+  echo ""
+  echo -e "${BOLD}Installierte Pakete:${NC}"
+  for PKG in $(ls "$INSTALLED/" 2>/dev/null); do
+    VER=$(cat "$INSTALLED/$PKG")
+    echo -e "  ${GREEN}•${NC} $PKG ${CYAN}$VER${NC}"
+  done
+}
+
+search_pkg() {
+  echo ""
+  info "Suche nach: $1"
+  curl -fsSL "$REPO/index.txt" 2>/dev/null | grep -i "$1" | while read line; do
+    echo -e "  ${GREEN}•${NC} $line"
+  done
+}
+
+info_pkg() {
+  curl -fsSL "$REPO/$1.info" 2>/dev/null || err "Keine Info verfügbar."
+}
 
 usage() {
-  echo "ZenbyteOS Package Manager (zbpm)"
+  echo -e "${BOLD}ZenbyteOS Package Manager (zbpm) v1.6${NC}"
   echo ""
-  echo "  zbpm install <paket>"
+  echo "  zbpm install <paket> [paket2]..."
   echo "  zbpm remove  <paket>"
   echo "  zbpm update"
   echo "  zbpm list"
@@ -18,111 +240,8 @@ usage() {
   echo "  zbpm info    <paket>"
 }
 
-install_pkg() {
-  PKG="$1"
-  VERSION="$(curl -fsSL $REPO/index.txt 2>/dev/null | grep "^$PKG " | awk '{print $2}')"
-
-  if [ -f "$INSTALLED/$PKG" ]; then
-    LOCAL_VER=$(cat "$INSTALLED/$PKG")
-    if [ "$LOCAL_VER" = "$VERSION" ]; then
-      echo "-> $PKG bereits installiert ($VERSION)."
-      return 0
-    fi
-  fi
-
-  # Dependencies zuerst installieren
-  DEPS=$(curl -fsSL "$REPO/$PKG.deps" 2>/dev/null | tr -d '\n')
-  if [ -n "$DEPS" ]; then
-    echo "-> Abhängigkeiten für $PKG: $DEPS"
-    for DEP in $DEPS; do
-      if [ ! -f "$INSTALLED/$DEP" ]; then
-        echo "-> Installiere Abhängigkeit: $DEP"
-        install_pkg "$DEP"
-      else
-        echo "-> Abhängigkeit bereits vorhanden: $DEP"
-      fi
-    done
-  fi
-
-  echo "-> Lade herunter: $REPO/$PKG.tar.gz"
-  curl -fsSL "$REPO/$PKG.tar.gz" -o "$PKGDIR/$PKG.tar.gz" || {
-    echo "FEHLER: Paket $PKG nicht gefunden."
-    return 1
-  }
-
-  echo "-> Installiere $PKG..."
-  tar -xzf "$PKGDIR/$PKG.tar.gz" -C /
-
-  if [ -f "$DB/scripts/$PKG.post" ]; then
-    bash "$DB/scripts/$PKG.post"
-  fi
-
-  echo "$VERSION" > "$INSTALLED/$PKG"
-  echo "-> $PKG $VERSION erfolgreich installiert."
-  rm -f "$PKGDIR/$PKG.tar.gz"
-}
-
-remove_pkg() {
-  PKG="$1"
-  if [ ! -f "$INSTALLED/$PKG" ]; then
-    echo "FEHLER: $PKG ist nicht installiert."
-    exit 1
-  fi
-
-  if [ -f "$DB/manifests/$PKG" ]; then
-    while read -r FILE; do
-      rm -f "$FILE"
-    done < "$DB/manifests/$PKG"
-  fi
-
-  rm -f "$INSTALLED/$PKG"
-  echo "-> $PKG entfernt."
-}
-
-update_all() {
-  echo "-> Prüfe Updates von $REPO..."
-  curl -fsSL "$REPO/index.txt" -o "$PKGDIR/index.txt" || {
-    echo "FEHLER: Kein Zugriff auf Repo."
-    exit 1
-  }
-
-  UPDATES=0
-  for PKG in $(ls "$INSTALLED/"); do
-    REMOTE_VER=$(grep "^$PKG " "$PKGDIR/index.txt" | awk '{print $2}')
-    LOCAL_VER=$(cat "$INSTALLED/$PKG" 2>/dev/null)
-    if [ -n "$REMOTE_VER" ] && [ "$REMOTE_VER" != "$LOCAL_VER" ]; then
-      echo "-> Update verfügbar: $PKG ($LOCAL_VER -> $REMOTE_VER)"
-      install_pkg "$PKG"
-      UPDATES=$((UPDATES+1))
-    fi
-  done
-
-  if [ "$UPDATES" -eq 0 ]; then
-    echo "-> System ist aktuell."
-  fi
-}
-
-list_installed() {
-  echo "Installierte Pakete:"
-  for PKG in $(ls "$INSTALLED/" 2>/dev/null); do
-    VER=$(cat "$INSTALLED/$PKG")
-    echo "  $PKG $VER"
-  done
-}
-
-search_pkg() {
-  PKG="$1"
-  echo "-> Suche in Repo nach: $PKG"
-  curl -fsSL "$REPO/index.txt" 2>/dev/null | grep "$PKG" || echo "Keine Treffer."
-}
-
-info_pkg() {
-  PKG="$1"
-  curl -fsSL "$REPO/$PKG.info" 2>/dev/null || echo "Keine Info verfügbar."
-}
-
 case "$1" in
-  install) install_pkg "$2" ;;
+  install) shift; install_pkg "$@" ;;
   remove)  remove_pkg "$2" ;;
   update)  update_all ;;
   list)    list_installed ;;

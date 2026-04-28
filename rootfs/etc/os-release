@@ -2,3 +2,4 @@ NAME="ZenbyteOS"
 ID=zenbyteos
 VERSION="1.0"
 PRETTY_NAME="ZenbyteOS 1.0"
+HOME_URL="https://zbpm.cronodevelopment.com"
