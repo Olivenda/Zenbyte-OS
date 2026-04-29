@@ -5,8 +5,6 @@ echo "-> Konfiguriere XFCE..."
 mkdir -p /etc/lightdm
 cat > /etc/lightdm/lightdm.conf << LDEOF
 [Seat:*]
-autologin-user=root
-autologin-session=xfce
 user-session=xfce
 greeter-session=lightdm-gtk-greeter
 LDEOF

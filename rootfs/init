@@ -1,26 +1,102 @@
 #!/bin/bash
-mount -t proc proc /proc
-mount -t sysfs sys /sys
-mount -t devtmpfs dev /dev
+# /init — ZenbyteOS early init
+# Läuft als PID 1. Kernel übergibt Kontrolle direkt an dieses Script.
 
-for IFACE in $(ls /sys/class/net/ | grep -v lo); do
-  ip link set $IFACE up
-  dhclient $IFACE &
+# ─── Grundlegende Dateisysteme mounten ────────────────────────────────────────
+mount -t proc     proc    /proc
+mount -t sysfs    sysfs   /sys
+mount -t devtmpfs devtmpfs /dev
+mount -t tmpfs    tmpfs   /tmp
+mount -t tmpfs    tmpfs   /run
+
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts
+mount -t tmpfs  tmpfs  /dev/shm
+
+# ─── Kernel-Meldungen unterdrücken (kein Spam auf dem Bildschirm) ─────────────
+echo 3 > /proc/sys/kernel/printk 2>/dev/null || true
+
+# ─── Netzwerk hochfahren ──────────────────────────────────────────────────────
+ip link set lo up 2>/dev/null || true
+
+for IFACE in $(ls /sys/class/net/ 2>/dev/null | grep -v lo); do
+  ip link set "$IFACE" up 2>/dev/null || true
+  # dhclient im Hintergrund, Fehler ignorieren wenn nicht vorhanden
+  if command -v dhclient &>/dev/null; then
+    dhclient "$IFACE" &>/dev/null &
+  elif command -v udhcpc &>/dev/null; then
+    udhcpc -i "$IFACE" -b 2>/dev/null &
+  fi
 done
 
+# ─── Konsole vorbereiten ──────────────────────────────────────────────────────
 clear
-echo "================================"
-echo "   Willkommen bei ZenbyteOS"
-echo "================================"
-echo ""
-echo "1) System starten"
-echo "2) ZenbyteOS installieren"
-echo ""
-read -p "Wahl: " CHOICE
+export TERM=linux
+stty sane 2>/dev/null || true
 
-if [ "$CHOICE" == "2" ]; then
-  /install.sh
-  exec /bin/bash
-else
-  exec /usr/lib/systemd/systemd
-fi
+# ─── Boot-Menü ────────────────────────────────────────────────────────────────
+while true; do
+  clear
+  echo ""
+  echo "  ╔══════════════════════════════════╗"
+  echo "  ║       Welcome to ZenbyteOS       ║"
+  echo "  ╚══════════════════════════════════╝"
+  echo ""
+  echo "  1)  System starten"
+  echo "  2)  ZenbyteOS installieren"
+  echo "  3)  Shell (Recovery)"
+  echo ""
+  read -rp "  Auswahl [1-3]: " CHOICE
+
+  case "$CHOICE" in
+
+    1)
+      echo ""
+      echo "  Starte System..."
+      sleep 1
+
+      # systemd bevorzugen, fallback auf andere init-Systeme
+      if [ -x /usr/lib/systemd/systemd ]; then
+        exec /usr/lib/systemd/systemd
+      elif [ -x /lib/systemd/systemd ]; then
+        exec /lib/systemd/systemd
+      elif [ -x /sbin/init ]; then
+        exec /sbin/init
+      else
+        echo "  [FEHLER] Kein Init-System gefunden!"
+        echo "  Falle zurück auf Shell..."
+        sleep 2
+        exec /bin/bash
+      fi
+      ;;
+
+    2)
+      echo ""
+      if [ -x /install.sh ]; then
+        bash /install.sh
+        echo ""
+        echo "  Installation abgeschlossen."
+        echo "  Drücke Enter um ins Menü zurückzukehren..."
+        read -r
+      else
+        echo "  [FEHLER] /install.sh nicht gefunden!"
+        sleep 2
+      fi
+      ;;
+
+    3)
+      echo ""
+      echo "  Recovery Shell — 'exit' um ins Menü zurückzukehren."
+      echo ""
+      exec /bin/bash --login
+      # Falls bash beendet wird, Menü neu starten (while true)
+      ;;
+
+    *)
+      echo ""
+      echo "  Ungültige Eingabe."
+      sleep 1
+      ;;
+
+  esac
+done

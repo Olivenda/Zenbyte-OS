@@ -1,251 +1,469 @@
 #!/bin/bash
+# zbpm - ZenbyteOS Package Manager
+
+set -euo pipefail
 
 REPO="https://zbpm.cronodevelopment.com/pkgs"
 DB="/var/lib/zbpm"
 INSTALLED="$DB/installed"
 MANIFESTS="$DB/manifests"
 PKGDIR="/var/cache/zbpm"
-mkdir -p "$PKGDIR"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BLUE='\033[0;34m'; BOLD='\033[1m'; DIM='\033[2m'; NC='\033[0m'
+info()  { echo -e "${CYAN}[zbpm]${NC} $*"; }
+ok()    { echo -e "${GREEN}[ok]${NC}   $*"; }
+warn()  { echo -e "${YELLOW}[!]${NC}    $*"; }
+err()   { echo -e "${RED}[err]${NC}  $*"; }
 
 mkdir -p "$DB" "$INSTALLED" "$MANIFESTS" "$PKGDIR"
 
-info()    { echo -e "${CYAN}[zbpm]${NC} $*"; }
-success() { echo -e "${GREEN}[ok]${NC}   $*"; }
-warn()    { echo -e "${YELLOW}[warn]${NC} $*"; }
-err()     { echo -e "${RED}[err]${NC}  $*"; }
+# ══════════════════════════════════════════════════════════════════════════════
+# PROGRESS BARS
+# ══════════════════════════════════════════════════════════════════════════════
+
+BAR_W=30   # Breite des Balkens in Zeichen
+
+# draw_progress <aktuell> <gesamt> <label> <phase>
+# Überschreibt die aktuelle Zeile ohne Newline.
+draw_progress() {
+  local CUR="$1" TOT="$2" LABEL="$3" PHASE="${4:-}"
+  local PCT=0 FILLED=0 EMPTY=0
+  [ "$TOT" -gt 0 ] && PCT=$(( CUR * 100 / TOT ))
+  [ "$TOT" -gt 0 ] && FILLED=$(( BAR_W * CUR / TOT ))
+  EMPTY=$(( BAR_W - FILLED ))
+
+  # Balken aufbauen
+  local B_FILL="" B_EMPTY=""
+  local i=0
+  while [ $i -lt $FILLED ]; do B_FILL="${B_FILL}█"; i=$((i+1)); done
+  i=0
+  while [ $i -lt $EMPTY  ]; do B_EMPTY="${B_EMPTY}░"; i=$((i+1)); done
+
+  # Label kürzen
+  local LBL="$LABEL"
+  [ ${#LBL} -gt 22 ] && LBL="${LBL:0:21}…"
+
+  local PHASE_OUT=""
+  [ -n "$PHASE" ] && PHASE_OUT="${DIM}${PHASE}${NC} "
+
+  printf "\r  ${PHASE_OUT}${BOLD}%-22s${NC}  ${CYAN}[${GREEN}%s${DIM}%s${CYAN}]${NC}  ${BOLD}%3d%%${NC}  ${DIM}(%d/%d)${NC}" \
+    "$LBL" "$B_FILL" "$B_EMPTY" "$PCT" "$CUR" "$TOT"
+}
+
+# Schließt die Fortschrittszeile mit 100% ab und macht Newline
+finish_progress() {
+  local LABEL="$1" TOT="$2"
+  local B_FILL=""
+  local i=0
+  while [ $i -lt $BAR_W ]; do B_FILL="${B_FILL}█"; i=$((i+1)); done
+  local LBL="$LABEL"
+  [ ${#LBL} -gt 22 ] && LBL="${LBL:0:21}…"
+  printf "\r  ${BOLD}%-22s${NC}  ${CYAN}[${GREEN}%s${CYAN}]${NC}  ${GREEN}${BOLD}100%%${NC}  ${DIM}(%d/%d)${NC}\n" \
+    "$LBL" "$B_FILL" "$TOT" "$TOT"
+}
+
+# Spinner für unbekannte Dauer (Dep-Auflösung, Index laden)
+_SPIN_PID=""
+spin_start() {
+  local MSG="$1"
+  ( local F=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') i=0
+    while true; do
+      printf "\r  ${CYAN}%s${NC}  %s " "${F[$i]}" "$MSG"
+      i=$(( (i+1) % 10 )); sleep 0.08
+    done ) &
+  _SPIN_PID=$!
+}
+spin_stop() {
+  [ -n "$_SPIN_PID" ] && kill "$_SPIN_PID" 2>/dev/null; wait "$_SPIN_PID" 2>/dev/null || true
+  _SPIN_PID=""; printf "\r\033[K"
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SCHUTZLISTE
+# ══════════════════════════════════════════════════════════════════════════════
+
+PROTECTED_PATHS=(
+  /etc/passwd /etc/passwd-
+  /etc/shadow /etc/shadow-
+  /etc/group  /etc/group-
+  /etc/gshadow /etc/gshadow-
+  /etc/sudoers /etc/sudoers.d
+  /etc/pam.d /etc/security
+  /etc/login.defs /etc/securetty
+  /etc/nsswitch.conf
+  /etc/ld.so.conf /etc/ld.so.conf.d /etc/ld.so.cache
+  /etc/os-release /etc/hostname /etc/hosts
+  /etc/hosts.allow /etc/hosts.deny
+  /etc/fstab /etc/crypttab /etc/mtab
+  /etc/locale.conf /etc/vconsole.conf
+  /etc/timezone /etc/localtime
+  /etc/machine-id /etc/machine-info /etc/adjtime
+  /etc/environment /etc/shells
+  /etc/subuid /etc/subgid
+  /etc/NetworkManager/system-connections
+  /etc/systemd/network /etc/systemd/system /etc/systemd/user
+  /etc/grub.d /etc/grub2.cfg /etc/default/grub
+  /etc/ssh/ssh_host_rsa_key /etc/ssh/ssh_host_rsa_key.pub
+  /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key.pub
+  /usr/bin/sudo /usr/bin/su
+)
+
+_build_grep_pattern() {
+  printf '%s\n' "${PROTECTED_PATHS[@]}" \
+    | sed 's|^/||; s|[.[\*^$]|\\&|g' \
+    | awk '{print "^"$0"(/|$)"}' \
+    | paste -sd'|'
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REPO
+# ══════════════════════════════════════════════════════════════════════════════
 
 get_remote_version() {
   curl -fsSL "$REPO/index.txt" 2>/dev/null | grep "^$1 " | awk '{print $2}'
 }
 
 get_deps() {
-  curl -fsSL "$REPO/$1.deps" 2>/dev/null | tr -d '\n' | tr -s ' '
+  curl -fsSL "$REPO/$1.deps" 2>/dev/null | tr -d '\n' | tr -s ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
-# Sammelt alle Pakete die installiert werden müssen (rekursiv)
+# ══════════════════════════════════════════════════════════════════════════════
+# ABHÄNGIGKEITEN SAMMELN
+# ══════════════════════════════════════════════════════════════════════════════
+
 collect_pkgs() {
   local PKG="$1"
-  local VERSION="$(get_remote_version $PKG)"
+  local VERSION
+  VERSION="$(get_remote_version "$PKG")"
 
   if [ -z "$VERSION" ]; then
-    err "Paket $PKG nicht im Repo gefunden."
+    err "Paket '$PKG' nicht im Repo gefunden."
     return
   fi
 
   if [ -f "$INSTALLED/$PKG" ]; then
     LOCAL_VER=$(cat "$INSTALLED/$PKG")
-    if [ "$LOCAL_VER" = "$VERSION" ]; then
-      return
-    fi
+    [ "$LOCAL_VER" = "$VERSION" ] && return
   fi
 
-  # Erst deps sammeln
-  local DEPS="$(get_deps $PKG)"
+  local DEPS
+  DEPS="$(get_deps "$PKG")"
   if [ -n "$DEPS" ]; then
     for DEP in $DEPS; do
       collect_pkgs "$DEP"
     done
   fi
 
-  # Dann das Paket selbst hinzufügen falls noch nicht in der Liste
-  if ! echo "$INSTALL_LIST" | grep -q "^$PKG$"; then
-    INSTALL_LIST="$INSTALL_LIST
-$PKG"
+  if ! echo "$INSTALL_LIST" | grep -qx "$PKG"; then
+    INSTALL_LIST="$INSTALL_LIST"$'\n'"$PKG"
   fi
 }
 
-do_install() {
-  local PKG="$1"
-  local VERSION="$(get_remote_version $PKG)"
+# ══════════════════════════════════════════════════════════════════════════════
+# SICHERES ENTPACKEN
+# ══════════════════════════════════════════════════════════════════════════════
 
-  if [ -f "$INSTALLED/$PKG" ]; then
-    LOCAL_VER=$(cat "$INSTALLED/$PKG")
-    if [ "$LOCAL_VER" = "$VERSION" ]; then
-      warn "$PKG bereits installiert ($VERSION)."
-      return 0
-    fi
+safe_extract() {
+  local TARBALL="$1"
+  local MANIFEST_TMP="$2"
+
+  local FILELIST SKIPLIST
+  FILELIST=$(mktemp /tmp/zbpm-files-XXXXXX)
+  SKIPLIST=$(mktemp /tmp/zbpm-skip-XXXXXX)
+
+  tar -tzf "$TARBALL" 2>/dev/null \
+    | sed 's|^\./||' | grep -v '^$' > "$FILELIST"
+
+  local GREP_PATTERN
+  GREP_PATTERN=$(_build_grep_pattern)
+
+  local INSTALL_FILES SKIPPED
+  INSTALL_FILES=$(grep -vE "$GREP_PATTERN" "$FILELIST" || true)
+  SKIPPED=$(grep -cE "$GREP_PATTERN" "$FILELIST" 2>/dev/null || echo 0)
+
+  [ "${SKIPPED:-0}" -gt 0 ] && warn "  $SKIPPED systemkritische Datei(en) übersprungen."
+
+  if [ -z "$INSTALL_FILES" ]; then
+    rm -f "$FILELIST" "$SKIPLIST"; return 0
   fi
 
-  info "Lade herunter: $REPO/$PKG.tar.gz"
-  curl -fsSL "$REPO/$PKG.tar.gz" -o "$PKGDIR/$PKG.tar.gz" || {
-    err "$PKG konnte nicht geladen werden."
-    return 1
-  }
+  echo "$INSTALL_FILES" > "$SKIPLIST"
+  tar -xzf "$TARBALL" -C / --files-from="$SKIPLIST" \
+    --no-overwrite-dir --keep-directory-symlink 2>/dev/null || true
 
-  info "Installiere $PKG $VERSION..."
-  tar -tzf "$PKGDIR/$PKG.tar.gz" | grep -v '/$' | sed 's|^\./|/|' > "$MANIFESTS/$PKG"
-  tar -xzf "$PKGDIR/$PKG.tar.gz" -C /
-
-  [ -f "$DB/scripts/$PKG.post" ] && bash "$DB/scripts/$PKG.post"
-
-  echo "$VERSION" > "$INSTALLED/$PKG"
-  success "$PKG $VERSION installiert."
-  rm -f "$PKGDIR/$PKG.tar.gz"
+  echo "$INSTALL_FILES" | grep -v '/$' | sed 's|^|/|' > "$MANIFEST_TMP"
+  rm -f "$FILELIST" "$SKIPLIST"
 }
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DOWNLOAD MIT FORTSCHRITTSBALKEN
+# ══════════════════════════════════════════════════════════════════════════════
+
+# download_pkgs <pkg1> <pkg2> ...
+# Lädt alle Pakete nacheinander herunter und zeigt einen Gesamtbalken.
+download_pkgs() {
+  local PKGS=("$@")
+  local TOTAL=${#PKGS[@]}
+  local DONE=0
+
+  echo ""
+  echo -e "  ${BOLD}Herunterladen…${NC}"
+  echo ""
+
+  draw_progress 0 "$TOTAL" "Starte..." "↓"
+
+  for PKG in "${PKGS[@]}"; do
+    local VERSION
+    VERSION="$(get_remote_version "$PKG")"
+    draw_progress "$DONE" "$TOTAL" "$PKG $VERSION" "↓"
+
+    curl -fsSL "$REPO/$PKG.tar.gz" -o "$PKGDIR/$PKG.tar.gz" 2>/dev/null || {
+      printf "\n"
+      err "$PKG konnte nicht geladen werden."
+      return 1
+    }
+
+    DONE=$((DONE + 1))
+    draw_progress "$DONE" "$TOTAL" "$PKG $VERSION" "↓"
+  done
+
+  finish_progress "Alle Downloads" "$TOTAL"
+  echo ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INSTALLIEREN MIT FORTSCHRITTSBALKEN
+# ══════════════════════════════════════════════════════════════════════════════
+
+# install_pkgs_with_progress <pkg1> <pkg2> ...
+# Installiert alle bereits heruntergeladenen Pakete mit Gesamtbalken.
+install_pkgs_with_progress() {
+  local PKGS=("$@")
+  local TOTAL=${#PKGS[@]}
+  local DONE=0
+
+  echo -e "  ${BOLD}Installieren…${NC}"
+  echo ""
+
+  draw_progress 0 "$TOTAL" "Starte..." "▶"
+
+  for PKG in "${PKGS[@]}"; do
+    local VERSION
+    VERSION="$(get_remote_version "$PKG")"
+
+    draw_progress "$DONE" "$TOTAL" "$PKG $VERSION" "▶"
+
+    local MANIFEST_TMP
+    MANIFEST_TMP=$(mktemp)
+    safe_extract "$PKGDIR/$PKG.tar.gz" "$MANIFEST_TMP"
+    mv "$MANIFEST_TMP" "$MANIFESTS/$PKG"
+
+    [ -f "$DB/scripts/$PKG.post" ] && bash "$DB/scripts/$PKG.post" 2>/dev/null || true
+
+    echo "$VERSION" > "$INSTALLED/$PKG"
+    protect_system
+
+    rm -f "$PKGDIR/$PKG.tar.gz"
+    DONE=$((DONE + 1))
+    draw_progress "$DONE" "$TOTAL" "$PKG $VERSION" "▶"
+  done
+
+  finish_progress "Alle Pakete" "$TOTAL"
+  echo ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INSTALL BEFEHL
+# ══════════════════════════════════════════════════════════════════════════════
 
 install_pkg() {
   local PKGS=("$@")
-  if [ ${#PKGS[@]} -eq 0 ]; then
-    err "Kein Paket angegeben."
-    return 1
-  fi
+  [ ${#PKGS[@]} -eq 0 ] && err "Kein Paket angegeben." && return 1
 
-  # Alle Pakete + deps sammeln
+  # ── Abhängigkeiten auflösen ─────────────────────────────────────────────
+  echo ""
+  spin_start "Löse Abhängigkeiten auf..."
   INSTALL_LIST=""
   for PKG in "${PKGS[@]}"; do
-    info "Löse Abhängigkeiten für $PKG..."
     collect_pkgs "$PKG"
   done
+  spin_stop
 
-  # Leere Zeilen entfernen
-  INSTALL_LIST=$(echo "$INSTALL_LIST" | grep -v '^$')
+  INSTALL_LIST=$(echo "$INSTALL_LIST" | grep -v '^$' || true)
 
   if [ -z "$INSTALL_LIST" ]; then
-    warn "Alle Pakete bereits installiert."
+    ok "Alle Pakete sind bereits aktuell installiert."
     return
   fi
 
+  # Liste als Array
+  local PKG_ARRAY=()
+  while IFS= read -r P; do PKG_ARRAY+=("$P"); done <<< "$INSTALL_LIST"
+  local PKG_COUNT=${#PKG_ARRAY[@]}
+
+  # ── Übersicht ───────────────────────────────────────────────────────────
+  echo -e "  ${BOLD}Folgende Pakete werden installiert:${NC}"
+  for P in "${PKG_ARRAY[@]}"; do
+    local V; V="$(get_remote_version "$P")"
+    echo -e "    ${GREEN}•${NC} $P ${DIM}$V${NC}"
+  done
   echo ""
-  echo -e "${BOLD}Folgende Pakete werden installiert:${NC}"
-  while read -r PKG; do
-    VERSION="$(get_remote_version $PKG)"
-    echo -e "  ${GREEN}•${NC} $PKG ${CYAN}$VERSION${NC}"
-  done <<< "$INSTALL_LIST"
-  echo ""
+  read -rp "  Fortfahren? [j/N]: " ans
+  [[ "$ans" != "j" && "$ans" != "J" ]] && info "Abgebrochen." && return
 
-  read -p "Fortfahren? [j/N]: " ans
-  if [[ "$ans" != "j" && "$ans" != "J" ]]; then
-    info "Abgebrochen."
-    return
-  fi
+  # ── Phase 1: Alle Downloads ─────────────────────────────────────────────
+  download_pkgs "${PKG_ARRAY[@]}"
 
-  while read -r PKG; do
-    do_install "$PKG"
-  done <<< "$INSTALL_LIST"
+  # ── Phase 2: Alle Installationen ────────────────────────────────────────
+  install_pkgs_with_progress "${PKG_ARRAY[@]}"
 
-  success "Alle Pakete installiert."
+  ok "Fertig — ${BOLD}$PKG_COUNT${NC} Paket(e) installiert."
 }
 
-remove_pkg() {
-  PKG="$1"
-  if [ ! -f "$INSTALLED/$PKG" ]; then
-    err "$PKG ist nicht installiert."
-    return 1
-  fi
-
-  VER=$(cat "$INSTALLED/$PKG")
-  echo ""
-  echo -e "${BOLD}Paket wird entfernt:${NC}"
-  echo -e "  ${RED}•${NC} $PKG $VER"
-  echo ""
-
-  read -p "Wirklich entfernen? [j/N]: " ans
-  if [[ "$ans" != "j" && "$ans" != "J" ]]; then
-    info "Abgebrochen."
-    return
-  fi
-
-  if [ -f "$MANIFESTS/$PKG" ]; then
-    local count=0
-    while read -r FILE; do
-      if [ -f "$FILE" ]; then
-        rm -f "$FILE"
-        count=$((count+1))
-      fi
-    done < "$MANIFESTS/$PKG"
-    rm -f "$MANIFESTS/$PKG"
-    info "$count Dateien entfernt."
-  else
-    warn "Kein Manifest — nur DB-Eintrag wird entfernt."
-  fi
-
-  rm -f "$INSTALLED/$PKG"
-  success "$PKG entfernt."
-}
+# ══════════════════════════════════════════════════════════════════════════════
+# UPDATE BEFEHL
+# ══════════════════════════════════════════════════════════════════════════════
 
 update_all() {
-  info "Prüfe Updates..."
+  spin_start "Prüfe Updates..."
   curl -fsSL "$REPO/index.txt" -o "$PKGDIR/index.txt" 2>/dev/null || {
-    err "Kein Zugriff auf Repo."
-    return 1
+    spin_stop; err "Kein Zugriff auf Repo."; return 1
   }
+  spin_stop
 
   local UPDATE_PKGS=()
   echo ""
-  echo -e "${BOLD}Verfügbare Updates:${NC}"
+  echo -e "  ${BOLD}Verfügbare Updates:${NC}"
 
   for PKG in $(ls "$INSTALLED/" 2>/dev/null); do
-    REMOTE_VER=$(grep "^$PKG " "$PKGDIR/index.txt" | awk '{print $2}')
-    LOCAL_VER=$(cat "$INSTALLED/$PKG" 2>/dev/null)
+    local REMOTE_VER LOCAL_VER
+    REMOTE_VER=$(grep "^$PKG " "$PKGDIR/index.txt" 2>/dev/null | awk '{print $2}' || true)
+    LOCAL_VER=$(cat "$INSTALLED/$PKG" 2>/dev/null || true)
     if [ -n "$REMOTE_VER" ] && [ "$REMOTE_VER" != "$LOCAL_VER" ]; then
-      echo -e "  ${GREEN}•${NC} $PKG  ${RED}$LOCAL_VER${NC} → ${GREEN}$REMOTE_VER${NC}"
+      echo -e "    ${GREEN}•${NC} $PKG  ${DIM}$LOCAL_VER${NC} → ${CYAN}$REMOTE_VER${NC}"
       UPDATE_PKGS+=("$PKG")
     fi
   done
 
   if [ ${#UPDATE_PKGS[@]} -eq 0 ]; then
-    success "System ist aktuell."
-    return
+    ok "System ist aktuell."; return
   fi
 
   echo ""
-  read -p "Alle Updates installieren? [j/N]: " ans
-  if [[ "$ans" != "j" && "$ans" != "J" ]]; then
-    info "Abgebrochen."
-    return
+  read -rp "  Alle Updates installieren? [j/N]: " ans
+  [[ "$ans" != "j" && "$ans" != "J" ]] && info "Abgebrochen." && return
+
+  download_pkgs "${UPDATE_PKGS[@]}"
+  install_pkgs_with_progress "${UPDATE_PKGS[@]}"
+  ok "${#UPDATE_PKGS[@]} Paket(e) aktualisiert."
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REMOVE
+# ══════════════════════════════════════════════════════════════════════════════
+
+remove_pkg() {
+  local PKG="$1"
+  [ ! -f "$INSTALLED/$PKG" ] && err "$PKG ist nicht installiert." && return 1
+
+  local VER; VER=$(cat "$INSTALLED/$PKG")
+  echo ""
+  echo -e "  ${BOLD}Paket wird entfernt:${NC}  ${RED}$PKG $VER${NC}"
+  echo ""
+  read -rp "  Wirklich entfernen? [j/N]: " ans
+  [[ "$ans" != "j" && "$ans" != "J" ]] && info "Abgebrochen." && return
+
+  if [ -f "$MANIFESTS/$PKG" ]; then
+    local count=0
+    local GREP_PATTERN
+    GREP_PATTERN=$(_build_grep_pattern)
+    while IFS= read -r FILE; do
+      echo "$FILE" | grep -qE "$GREP_PATTERN" 2>/dev/null && continue
+      [ -f "$FILE" ] && rm -f "$FILE" && count=$((count+1))
+    done < "$MANIFESTS/$PKG"
+    rm -f "$MANIFESTS/$PKG"
+    info "$count Datei(en) entfernt."
+  else
+    warn "Kein Manifest — nur DB-Eintrag wird entfernt."
   fi
 
-  for PKG in "${UPDATE_PKGS[@]}"; do
-    do_install "$PKG"
-  done
-  success "Alle Updates installiert."
+  rm -f "$INSTALLED/$PKG"
+  ok "$PKG entfernt."
 }
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SYSTEMSCHUTZ
+# ══════════════════════════════════════════════════════════════════════════════
+
+protect_system() {
+  chown root:root /etc/sudoers 2>/dev/null && chmod 440  /etc/sudoers 2>/dev/null || true
+  chown root:root /usr/bin/sudo 2>/dev/null && chmod 4755 /usr/bin/sudo 2>/dev/null || true
+  chown root:root /usr/bin/su   2>/dev/null && chmod 4755 /usr/bin/su   2>/dev/null || true
+  chmod 644 /etc/passwd  2>/dev/null || true
+  chmod 640 /etc/shadow  2>/dev/null || true
+  chmod 644 /etc/group   2>/dev/null || true
+  chmod 640 /etc/gshadow 2>/dev/null || true
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SONSTIGE BEFEHLE
+# ══════════════════════════════════════════════════════════════════════════════
 
 list_installed() {
   echo ""
-  echo -e "${BOLD}Installierte Pakete:${NC}"
+  echo -e "  ${BOLD}Installierte Pakete:${NC}"
+  local found=0
   for PKG in $(ls "$INSTALLED/" 2>/dev/null); do
-    VER=$(cat "$INSTALLED/$PKG")
-    echo -e "  ${GREEN}•${NC} $PKG ${CYAN}$VER${NC}"
+    echo -e "    ${GREEN}•${NC} $PKG  ${DIM}$(cat "$INSTALLED/$PKG")${NC}"
+    found=1
   done
+  [ "$found" -eq 0 ] && info "Keine Pakete installiert."
 }
 
 search_pkg() {
   echo ""
-  info "Suche nach: $1"
-  curl -fsSL "$REPO/index.txt" 2>/dev/null | grep -i "$1" | while read line; do
-    echo -e "  ${GREEN}•${NC} $line"
-  done
+  spin_start "Suche nach: $1"
+  local RESULTS
+  RESULTS=$(curl -fsSL "$REPO/index.txt" 2>/dev/null | grep -i "$1" || true)
+  spin_stop
+  if [ -z "$RESULTS" ]; then
+    info "Keine Ergebnisse für '$1'."
+  else
+    echo -e "  ${BOLD}Ergebnisse für '${CYAN}$1${NC}${BOLD}':${NC}"
+    echo "$RESULTS" | while IFS= read -r line; do
+      echo -e "    ${GREEN}•${NC} $line"
+    done
+  fi
 }
 
 info_pkg() {
-  curl -fsSL "$REPO/$1.info" 2>/dev/null || err "Keine Info verfügbar."
+  curl -fsSL "$REPO/$1.info" 2>/dev/null || err "Keine Info für '$1' verfügbar."
 }
 
 usage() {
-  echo -e "${BOLD}ZenbyteOS Package Manager (zbpm) v1.6${NC}"
-  echo ""
-  echo "  zbpm install <paket> [paket2]..."
-  echo "  zbpm remove  <paket>"
-  echo "  zbpm update"
-  echo "  zbpm list"
-  echo "  zbpm search  <paket>"
-  echo "  zbpm info    <paket>"
+  echo -e ""
+  echo -e "  ${BOLD}ZenbyteOS Package Manager (zbpm)${NC}"
+  echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "  ${CYAN}zbpm install${NC} <paket> [paket2]...   Installieren"
+  echo -e "  ${CYAN}zbpm remove${NC}  <paket>               Entfernen"
+  echo -e "  ${CYAN}zbpm update${NC}                        Alle aktualisieren"
+  echo -e "  ${CYAN}zbpm list${NC}                          Installierte anzeigen"
+  echo -e "  ${CYAN}zbpm search${NC}  <suchbegriff>         Im Repo suchen"
+  echo -e "  ${CYAN}zbpm info${NC}    <paket>               Paketinfos"
+  echo -e ""
 }
 
-case "$1" in
+# ══════════════════════════════════════════════════════════════════════════════
+# EINSTIEGSPUNKT
+# ══════════════════════════════════════════════════════════════════════════════
+
+case "${1:-}" in
   install) shift; install_pkg "$@" ;;
-  remove)  remove_pkg "$2" ;;
+  remove)  remove_pkg "${2:-}" ;;
   update)  update_all ;;
   list)    list_installed ;;
-  search)  search_pkg "$2" ;;
-  info)    info_pkg "$2" ;;
+  search)  search_pkg "${2:-}" ;;
+  info)    info_pkg "${2:-}" ;;
   *)       usage ;;
 esac
