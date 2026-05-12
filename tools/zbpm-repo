@@ -120,6 +120,17 @@ Managed by tools/zbpm-repo. Do not hand-edit index.txt — run
 'zbpm-repo regen-index' instead.
 EOF
   fi
+  # Copy the public signing key into the repo root so clients can fetch it.
+  # The installer does:  curl <mirror>/zbpm.gpg -o /etc/zbpm/keys/zbpm.gpg
+  local keyring="$KEYS_DIR/zbpm.gpg"
+  if [ -f "$keyring" ]; then
+    install -m 0644 -- "$keyring" "$repo/zbpm.gpg"
+    note "installed signing key at $repo/zbpm.gpg"
+  else
+    note "warning: $keyring not found — run tools/zbpm-keygen first, then re-run init"
+    note "         The installer will not be able to auto-fetch the signing key."
+  fi
+
   note "initialised repo at $repo"
 }
 

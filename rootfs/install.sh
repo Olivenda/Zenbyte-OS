@@ -266,6 +266,15 @@ case "$KB" in
   *) KEYMAP="us" ;;
 esac
 
+# ---------- zbpm mirror ----------
+hdr "Package repository (zbpm)"
+echo "  Enter the URL of your zbpm mirror (the machine running 'tools/zbpm-repo serve')."
+echo "  Example: http://192.168.1.10:8765"
+echo "  Leave blank to configure later in /etc/zbpm/mirrors"
+echo
+read -r -p "Mirror URL [skip]: " ZBPM_MIRROR
+ZBPM_MIRROR="${ZBPM_MIRROR%/}"   # strip trailing slash
+
 # ---------- desktop ----------
 hdr "Desktop environment"
 echo "  ${GREEN}1)${NC} Terminal only (minimal)"
@@ -550,6 +559,36 @@ if [ "$DE_CHOICE" = "2" ]; then
   fi
 else
   say "[9/9] Skipping desktop"
+fi
+
+# 10. Configure zbpm mirror + signing key on the installed system
+say "[10/10] Configuring zbpm"
+install -d -m 0755 "$TARGET/etc/zbpm"
+install -d -m 0700 "$TARGET/etc/zbpm/keys"
+
+if [ -n "$ZBPM_MIRROR" ]; then
+  printf '%s\n' "$ZBPM_MIRROR" > "$TARGET/etc/zbpm/mirrors"
+  say "  Mirror: $ZBPM_MIRROR"
+
+  # Try to fetch the public signing key from <mirror>/zbpm.gpg
+  ZBPM_KEY_URL="$ZBPM_MIRROR/zbpm.gpg"
+  if command -v curl >/dev/null 2>&1; then
+    if curl -fsSL --max-time 10 "$ZBPM_KEY_URL" \
+         -o "$TARGET/etc/zbpm/keys/zbpm.gpg" 2>/dev/null; then
+      say "  Signing key installed from $ZBPM_KEY_URL"
+    else
+      warn "Could not fetch signing key from $ZBPM_KEY_URL"
+      warn "Copy tools/keys/zbpm.gpg to /etc/zbpm/keys/zbpm.gpg on the installed system before running zbpm."
+      # Leave ZBPM_REQUIRE_SIGNATURE=0 as a fallback so firstboot can still install packages
+      printf 'ZBPM_REQUIRE_SIGNATURE=0\n' >> "$TARGET/etc/zbpm/zbpm.conf"
+      warn "Signature verification disabled until key is installed."
+    fi
+  else
+    warn "curl not available — skipping key fetch. Install key manually after boot."
+  fi
+else
+  say "  No mirror set — configure /etc/zbpm/mirrors after first boot"
+  # Keep default mirrors file if it exists, otherwise leave empty
 fi
 
 # Cleanup partial state from running zbpm in the live env
