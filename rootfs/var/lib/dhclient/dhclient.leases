@@ -1,0 +1,19 @@
+lease {
+  interface "enp15s0";
+  fixed-address 192.168.178.70;
+  option subnet-mask 255.255.255.0;
+  option routers 192.168.178.1;
+  option dhcp-lease-time 864000;
+  option dhcp-message-type 5;
+  option domain-name-servers 192.168.178.1;
+  option dhcp-server-identifier 192.168.178.1;
+  option interface-mtu 1500;
+  option dhcp-renewal-time 432000;
+  option ntp-servers 192.168.178.1;
+  option broadcast-address 192.168.178.255;
+  option dhcp-rebinding-time 756000;
+  option domain-name "fritz.box";
+  renew 2 2026/04/28 17:10:30;
+  rebind 6 2026/05/02 14:21:44;
+  expire 0 2026/05/03 20:21:44;
+}

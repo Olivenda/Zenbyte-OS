@@ -1,0 +1,37 @@
+# RPM Requires -> zbpm package name mapping.
+# Format:  <rpm-require-name>  <zbpm-pkg-name>
+# Special: target "-" means "drop this requirement entirely".
+# Lines starting with # are ignored. Whitespace separated.
+#
+# zbpm-build consults this file when filtering an RPM's Requires list. Anything
+# not listed AND not a soname/rpmlib capability is passed through unchanged.
+
+# --- Drop these meta/policy capabilities entirely ---
+systemd                  -
+systemd-libs             -
+systemd-rpm-macros       -
+fedora-release           -
+fedora-release-common    -
+fedora-release-identity-basic -
+filesystem               -
+setup                    -
+basesystem               -
+glibc-common             -
+glibc-langpack-en        -
+glibc-langpack-de        -
+crypto-policies          -
+ca-certificates          -
+tzdata                   -
+shared-mime-info         -
+desktop-file-utils       -
+
+# --- Renames where Fedora's RPM name differs from our zbpm name ---
+xfce4-session            xfce4-desktop
+NetworkManager           networkmanager
+NetworkManager-libnm     networkmanager
+util-linux-core          util-linux
+coreutils-common         coreutils
+vim-minimal              vim
+vim-enhanced             vim
+glibc                    glibc
+bash                     bash

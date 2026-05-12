@@ -1,0 +1,10 @@
+[Unit]
+Description=Mark boot as successful after the user session has run 2 minutes
+ConditionUser=!@system
+ConditionVirtualization=!container
+
+[Timer]
+OnActiveSec=2min
+
+[Install]
+WantedBy=timers.target

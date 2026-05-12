@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# build-kernel-pkg — build the ZenbyteOS 'kernel' zbpm package.
+#
+# The kernel is a special case. Fedora ships several RPMs that together
+# make up a usable kernel install:
+#   kernel            — meta package (empty)
+#   kernel-core       — vmlinuz, /boot files, base modules
+#   kernel-modules    — most modules
+#   kernel-modules-core, kernel-modules-extra (optional, version dependent)
+#
+# We merge them into one zbpm tarball and ship our own postinst (which
+# repoints /boot/vmlinuz and regenerates the initramfs).
+#
+# Usage:
+#   tools/build-kernel-pkg                        # latest from dnf
+#   tools/build-kernel-pkg --kver 6.17.10-100.fc41.x86_64
+#   tools/build-kernel-pkg --out-dir build/pkgs
+
+set -euo pipefail
+
+OUT_DIR="${OUT_DIR:-$PWD/build/pkgs}"
+KVER=""
+SCRIPT_DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --kver)    KVER="$2"; shift 2 ;;
+    --out-dir) OUT_DIR="$2"; shift 2 ;;
+    -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
+mkdir -p "$OUT_DIR"
+OUT_DIR=$(cd "$OUT_DIR" && pwd)
+work=$(mktemp -d -t zbpm-kernel.XXXXXX)
+trap 'rm -rf "$work"' EXIT
+
+log() { echo "==> $*"; }
+
+# Decide which RPMs we need and pull them.
+if [ -z "$KVER" ]; then
+  log "downloading latest kernel-core, kernel-modules, kernel-modules-core (if present)"
+  ( cd "$work" && dnf download --quiet --resolve=false \
+        kernel-core kernel-modules kernel-modules-core kernel-modules-extra \
+        2>/dev/null || true )
+else
+  log "downloading kernel-* for $KVER"
+  ( cd "$work" && dnf download --quiet --resolve=false \
+        "kernel-core-$KVER" "kernel-modules-$KVER" \
+        "kernel-modules-core-$KVER" "kernel-modules-extra-$KVER" \
+        2>/dev/null || true )
+fi
+
+shopt -s nullglob
+rpms=("$work"/kernel-*.rpm)
+shopt -u nullglob
+if [ "${#rpms[@]}" -eq 0 ]; then
+  echo "no kernel RPMs downloaded" >&2
+  exit 1
+fi
+
+stage="$work/stage"
+mkdir -p "$stage"
+
+# Extract all RPMs into the same root.
+for rpm in "${rpms[@]}"; do
+  log "extracting $(basename "$rpm")"
+  ( cd "$stage" && rpm2cpio "$rpm" | cpio -idmu --quiet )
+done
+
+# Discover the kernel version we got.
+shopt -s nullglob
+kfiles=("$stage"/lib/modules/*/)
+shopt -u nullglob
+if [ "${#kfiles[@]}" -eq 0 ]; then
+  echo "no /lib/modules/* in extracted RPMs" >&2
+  exit 1
+fi
+KVER_REAL=$(basename "${kfiles[0]}")
+log "kernel version: $KVER_REAL"
+
+# Strip docs / locale / src — kernel ships big extras we never use.
+for p in usr/share/doc usr/share/man usr/share/info usr/share/locale \
+         usr/src lib/modules/*/build lib/modules/*/source ; do
+  rm -rf "$stage"/$p 2>/dev/null || true
+done
+
+# /lib is a symlink to /usr/lib on Fedora. Normalise so everything lives
+# under /usr/lib (zbpm's allow-list rejects paths under /lib).
+if [ -d "$stage/lib" ] && [ ! -L "$stage/lib" ]; then
+  mkdir -p "$stage/usr/lib"
+  cp -an "$stage/lib/." "$stage/usr/lib/" 2>/dev/null || true
+  rm -rf "$stage/lib"
+fi
+# Same for /lib64.
+if [ -d "$stage/lib64" ] && [ ! -L "$stage/lib64" ]; then
+  mkdir -p "$stage/usr/lib64"
+  cp -an "$stage/lib64/." "$stage/usr/lib64/" 2>/dev/null || true
+  rm -rf "$stage/lib64"
+fi
+
+# Ship our shipped kernel.post hook from the rootfs as the META/postinst.
+mkdir -p "$stage/META"
+cp "$ROOT_DIR/rootfs/var/lib/zbpm/scripts/kernel.post" "$stage/META/postinst"
+chmod 0755 "$stage/META/postinst"
+
+# Validate everything against zbpm's allow-list.
+allow="^/(usr|etc|opt|var/lib/zbpm/scripts)(/|$)|^/META(/|$)"
+bad=0
+while IFS= read -r f; do
+  if ! [[ "$f" =~ $allow ]]; then
+    echo "kernel: refusing path outside allow-list: $f" >&2
+    bad=1
+  fi
+done < <( cd "$stage" && find . -mindepth 1 -printf '/%P\n' )
+if [ "$bad" -ne 0 ]; then
+  echo "kernel: would ship files outside zbpm prefixes; aborting" >&2
+  exit 3
+fi
+
+# Stage the package output.
+ZBPM_NAME="kernel"
+ZVER="$KVER_REAL"
+dst="$OUT_DIR/$ZBPM_NAME"
+rm -rf "$dst"; mkdir -p "$dst"
+
+echo "$ZVER" > "$dst/$ZBPM_NAME.version"
+
+# Kernel deps: keep it minimal — at runtime the kernel only really wants
+# the userspace dracut/grub2 to be present to regenerate things. zbpm's
+# postinst is best-effort: it tolerates dracut/grub2 missing.
+{
+  echo "dracut"
+  echo "grub2"
+} > "$dst/$ZBPM_NAME.deps"
+
+{
+  echo "Name:        kernel"
+  echo "Version:     $ZVER"
+  echo "Summary:     ZenbyteOS Linux kernel + modules (Fedora-derived)"
+  echo "License:     GPL-2.0-only WITH Linux-syscall-note"
+  echo "Homepage:    https://kernel.org"
+  echo "Built by:    build-kernel-pkg"
+  echo
+  echo "Bundles kernel-core + kernel-modules (and modules-core/extra when"
+  echo "available). The post-install hook repoints /boot/vmlinuz and"
+  echo "regenerates the initramfs via dracut when present."
+} > "$dst/$ZBPM_NAME.info"
+
+mtime="${SOURCE_DATE_EPOCH:-1700000000}"
+log "tarballing -> $dst/$ZBPM_NAME.tar.gz"
+( cd "$stage" && \
+  find . -mindepth 1 -print0 \
+    | LC_ALL=C sort -z \
+    | tar --no-recursion --null --files-from=- \
+          --owner=0 --group=0 --numeric-owner \
+          --mtime="@$mtime" \
+          -czf "$dst/$ZBPM_NAME.tar.gz" \
+)
+
+count=$(tar -tzf "$dst/$ZBPM_NAME.tar.gz" | wc -l | tr -d ' ')
+size=$(du -h "$dst/$ZBPM_NAME.tar.gz" | cut -f1)
+log "kernel package: $count entries, $size"
+log "ready at $dst/"

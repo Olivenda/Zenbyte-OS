@@ -1,0 +1,304 @@
+#!/usr/bin/env bash
+# zbpm-build — convert one or more RPMs (downloaded via dnf) into a zbpm
+# package staging directory.
+#
+# Usage:
+#   tools/zbpm-build [options] <pkg-name> [<pkg-name> ...]
+#
+# Options:
+#   --out-dir DIR        staging output dir (default: ./build/pkgs)
+#   --zbpm-name NAME     rename the zbpm package (default: same as RPM name)
+#                        only meaningful with a single positional arg
+#   --release REL        release tag appended to version (default: 1.zb)
+#   --keep-deps          do not filter the dep list against zbpm-known names
+#   --rpm FILE           use this local .rpm file instead of dnf-downloading
+#   --no-postinst        ignore RPM scriptlets even if present
+#   --info-from FILE     custom info text (default: synthesised from RPM)
+#   --strip-paths PATH   colon-separated paths to drop from the tarball
+#                        (default: /usr/share/doc:/usr/share/man:/usr/share/info:/usr/share/locale)
+#   -h, --help
+#
+# Output (under <out-dir>/<zbpm-name>/):
+#   <zbpm-name>.tar.gz       gzip tarball, paths relative to /
+#   <zbpm-name>.deps         whitespace-separated zbpm dep names
+#   <zbpm-name>.info         human text
+#   <zbpm-name>.version      one-line version string
+#
+# This format is the contract consumed by tools/zbpm-repo.
+
+set -euo pipefail
+
+PROG=$(basename "$0")
+SCRIPT_DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+DEFAULT_OUT="$PWD/build/pkgs"
+
+OUT_DIR="$DEFAULT_OUT"
+ZBPM_NAME=""
+RELEASE="1.zb"
+KEEP_DEPS=0
+RPM_FILE=""
+NO_POSTINST=0
+INFO_FROM=""
+STRIP_PATHS="/usr/share/doc:/usr/share/man:/usr/share/info:/usr/share/locale"
+
+NAMES=()
+
+# ---- arg parse ----
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --out-dir)     OUT_DIR="$2"; shift 2 ;;
+    --zbpm-name)   ZBPM_NAME="$2"; shift 2 ;;
+    --release)     RELEASE="$2"; shift 2 ;;
+    --keep-deps)   KEEP_DEPS=1; shift ;;
+    --rpm)         RPM_FILE="$2"; shift 2 ;;
+    --no-postinst) NO_POSTINST=1; shift ;;
+    --info-from)   INFO_FROM="$2"; shift 2 ;;
+    --strip-paths) STRIP_PATHS="$2"; shift 2 ;;
+    -h|--help)     sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --)            shift; while [ $# -gt 0 ]; do NAMES+=("$1"); shift; done ;;
+    -*)            echo "$PROG: unknown option $1" >&2; exit 2 ;;
+    *)             NAMES+=("$1"); shift ;;
+  esac
+done
+
+if [ "${#NAMES[@]}" -eq 0 ] && [ -z "$RPM_FILE" ]; then
+  echo "$PROG: at least one package name (or --rpm FILE) required" >&2
+  exit 2
+fi
+
+if [ -n "$RPM_FILE" ] && [ "${#NAMES[@]}" -gt 1 ]; then
+  echo "$PROG: --rpm only valid with a single package" >&2
+  exit 2
+fi
+
+if [ -n "$ZBPM_NAME" ] && [ "${#NAMES[@]}" -gt 1 ]; then
+  echo "$PROG: --zbpm-name only valid with a single package" >&2
+  exit 2
+fi
+
+mkdir -p "$OUT_DIR"
+OUT_DIR=$(cd "$OUT_DIR" && pwd)
+
+# ---- helpers ----
+need() {
+  command -v "$1" >/dev/null 2>&1 || { echo "$PROG: missing required tool: $1" >&2; exit 1; }
+}
+
+valid_pkg_name() {
+  [[ "$1" =~ ^[A-Za-z0-9_+][A-Za-z0-9_.+-]{0,63}$ ]]
+}
+
+# Map an RPM Requires line (e.g. 'libfoo.so.1()(64bit)' or 'glibc >= 2.34')
+# to a zbpm package name. Returns empty string if the requirement is a
+# capability that we can't or shouldn't translate (sonames, rpmlib, etc.).
+DEP_MAP_FILE="$SCRIPT_DIR/dep-map.txt"
+
+zbpm_dep_name() {
+  local raw="$1" name
+  # Strip version constraint
+  name="${raw%% *}"
+  # Skip rpmlib/config capabilities, abs paths, and shared-object sonames.
+  if [[ "$name" == rpmlib\(* ]]; then return 1; fi
+  if [[ "$name" == config\(* ]]; then return 1; fi
+  if [[ "$name" == /* ]]; then return 1; fi
+  if [[ "$name" == *.so* ]]; then return 1; fi
+  if [[ "$name" == *\(*\)* ]]; then return 1; fi
+  # Apply user dep map if present
+  if [ -f "$DEP_MAP_FILE" ]; then
+    local mapped
+    mapped=$(awk -v n="$name" 'BEGIN{IGNORECASE=0}
+                                 /^[ \t]*#/ {next}
+                                 NF>=2 && $1==n { print $2; found=1; exit }
+                                 END { if (!found) print "" }' "$DEP_MAP_FILE")
+    if [ -n "$mapped" ]; then
+      [ "$mapped" = "-" ] && return 1   # explicit drop
+      name="$mapped"
+    fi
+  fi
+  if valid_pkg_name "$name"; then
+    printf '%s\n' "$name"
+    return 0
+  fi
+  return 1
+}
+
+# Comma-separated -> regex alternation for find -prune
+strip_paths_regex() {
+  local IFS=':' p out=""
+  for p in $STRIP_PATHS; do
+    p="${p%/}"
+    [ -z "$p" ] && continue
+    [ -n "$out" ] && out="$out|"
+    out="$out${p//\//\\/}"
+  done
+  printf '^(%s)(/|$)\n' "$out"
+}
+
+# ---- per-package builder ----
+build_one() {
+  local rpmname="$1" zbpm_name="${2:-$1}"
+  if ! valid_pkg_name "$zbpm_name"; then
+    echo "$PROG: invalid zbpm name: $zbpm_name" >&2
+    return 2
+  fi
+
+  local work
+  work=$(mktemp -d -t "zbpm-build.XXXXXX")
+  trap 'rm -rf "$work"' RETURN
+
+  local rpm
+  if [ -n "$RPM_FILE" ]; then
+    rpm="$RPM_FILE"
+  else
+    echo "==> [$zbpm_name] dnf download $rpmname"
+    need dnf
+    ( cd "$work" && dnf download --quiet --resolve=false "$rpmname" >/dev/null )
+    rpm=$(ls "$work"/*.rpm 2>/dev/null | head -1)
+    if [ -z "$rpm" ]; then
+      echo "$PROG: no RPM downloaded for $rpmname" >&2
+      return 1
+    fi
+  fi
+
+  need rpm
+  need rpm2cpio
+  need cpio
+
+  local ver rel arch
+  ver=$(rpm -qp --qf '%{VERSION}'  "$rpm" 2>/dev/null)
+  rel=$(rpm -qp --qf '%{RELEASE}'  "$rpm" 2>/dev/null)
+  arch=$(rpm -qp --qf '%{ARCH}'    "$rpm" 2>/dev/null)
+  local summary license url
+  summary=$(rpm -qp --qf '%{SUMMARY}' "$rpm" 2>/dev/null)
+  license=$(rpm -qp --qf '%{LICENSE}' "$rpm" 2>/dev/null)
+  url=$(rpm -qp --qf '%{URL}'        "$rpm" 2>/dev/null)
+  local zver="${ver}-${rel}-${RELEASE}"
+
+  echo "==> [$zbpm_name] $rpmname-$ver-$rel.$arch"
+
+  # Extract RPM payload to a clean root.
+  local stage="$work/stage"
+  mkdir -p "$stage"
+  ( cd "$stage" && rpm2cpio "$rpm" | cpio -idmu --quiet )
+
+  # Drop unwanted top-level paths.
+  local prune
+  prune=$(strip_paths_regex)
+  if [ -n "$prune" ]; then
+    while IFS= read -r -d '' f; do
+      rm -rf -- "$stage$f"
+    done < <(
+      cd "$stage" 2>/dev/null && find . -mindepth 1 -maxdepth 4 -printf '/%P\0' \
+        | awk -v RS='\0' -v ORS='\0' -v re="$prune" '$0 ~ re { print }'
+    )
+  fi
+
+  # Validate every staged path against the zbpm allow-list. zbpm itself
+  # also enforces this, but failing fast here gives a clearer error and
+  # avoids shipping a tarball that the manager will refuse to install.
+  local allow="^/(usr|etc|opt|var/lib/zbpm/scripts)(/|$)"
+  local bad=0
+  while IFS= read -r f; do
+    if ! [[ "$f" =~ $allow ]]; then
+      echo "$PROG: refusing path outside allow-list: $f" >&2
+      bad=1
+    fi
+  done < <( cd "$stage" && find . -mindepth 1 -path './META' -prune -o -printf '/%P\n' )
+  if [ "$bad" -ne 0 ]; then
+    echo "$PROG: $rpmname produces files outside zbpm install prefixes; either restrict --strip-paths or fix the upstream package." >&2
+    return 3
+  fi
+
+  # Convert RPM scriptlets to a META/postinst (best-effort).
+  if [ "$NO_POSTINST" -eq 0 ]; then
+    local post
+    post=$(rpm -qp --scripts "$rpm" 2>/dev/null \
+             | awk '/^postinstall scriptlet/{flag=1; next} /^pre.* scriptlet/{flag=0} /^post.* scriptlet/&&!/postinstall/{flag=0} /^trigger/{flag=0} flag' \
+             | sed '/^$/d')
+    if [ -n "$post" ]; then
+      mkdir -p "$stage/META"
+      {
+        echo '#!/bin/bash'
+        echo '# Translated from RPM postinstall scriptlet by zbpm-build.'
+        echo 'set -e'
+        echo
+        printf '%s\n' "$post"
+      } > "$stage/META/postinst"
+      chmod 0755 "$stage/META/postinst"
+    fi
+  fi
+
+  # Compute deps.
+  local deps_raw deps=""
+  deps_raw=$(rpm -qp --requires "$rpm" 2>/dev/null || true)
+  if [ "$KEEP_DEPS" -eq 1 ]; then
+    deps="$deps_raw"
+  else
+    while IFS= read -r line; do
+      [ -z "$line" ] && continue
+      d=$(zbpm_dep_name "$line") || continue
+      [ -n "$d" ] && deps+="$d"$'\n'
+    done <<< "$deps_raw"
+    # Dedupe + sort, never depend on yourself
+    deps=$(printf '%s' "$deps" | awk -v self="$zbpm_name" 'NF && $1!=self && !s[$1]++' | LC_ALL=C sort)
+  fi
+
+  # Write the staging dir.
+  local dst="$OUT_DIR/$zbpm_name"
+  rm -rf "$dst"
+  mkdir -p "$dst"
+
+  echo "$zver" > "$dst/$zbpm_name.version"
+
+  printf '%s\n' "$deps" > "$dst/$zbpm_name.deps"
+
+  if [ -n "$INFO_FROM" ] && [ -r "$INFO_FROM" ]; then
+    cp "$INFO_FROM" "$dst/$zbpm_name.info"
+  else
+    {
+      echo "Name:        $zbpm_name"
+      echo "Version:     $zver"
+      [ -n "$summary" ] && echo "Summary:     $summary"
+      [ -n "$license" ] && echo "License:     $license"
+      [ -n "$url" ]     && echo "Homepage:    $url"
+      echo "Source RPM:  $(basename "$rpm")"
+      echo "Built by:    zbpm-build"
+    } > "$dst/$zbpm_name.info"
+  fi
+
+  # Reproducible-ish tarball: deterministic order, no owner info, mtime fixed.
+  local mtime="${SOURCE_DATE_EPOCH:-1700000000}"
+  ( cd "$stage" && \
+    find . -mindepth 1 -print0 \
+      | LC_ALL=C sort -z \
+      | tar --no-recursion --null --files-from=- \
+            --owner=0 --group=0 --numeric-owner \
+            --mtime="@$mtime" \
+            -czf "$dst/$zbpm_name.tar.gz" \
+  )
+
+  # Quick integrity self-check: extract list and re-check allow list.
+  local count
+  count=$(tar -tzf "$dst/$zbpm_name.tar.gz" | wc -l | tr -d ' ')
+  echo "==> [$zbpm_name] $count entries, $(du -h "$dst/$zbpm_name.tar.gz" | cut -f1)"
+  echo "==> [$zbpm_name] -> $dst/"
+}
+
+# ---- main loop ----
+RC=0
+if [ "${#NAMES[@]}" -eq 0 ]; then
+  # --rpm without name: derive from RPM
+  derived=$(rpm -qp --qf '%{NAME}' "$RPM_FILE" 2>/dev/null) \
+    || { echo "$PROG: cannot read $RPM_FILE" >&2; exit 1; }
+  build_one "$derived" "${ZBPM_NAME:-$derived}" || RC=$?
+else
+  for n in "${NAMES[@]}"; do
+    rpmname="${n%% *}"
+    rename="${n#* }"
+    [ "$rename" = "$n" ] && rename=""
+    target="${ZBPM_NAME:-${rename:-$rpmname}}"
+    build_one "$rpmname" "$target" || RC=$?
+  done
+fi
+
+exit "$RC"

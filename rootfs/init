@@ -1,0 +1,119 @@
+#!/bin/bash
+# ZenbyteOS PID 1 init.
+# Mounts pseudo-filesystems, brings up one network interface with a timeout,
+# presents an interactive boot menu, and finally execs systemd (or installer).
+
+# Don't `set -e` in PID 1 — a single failure must not panic the kernel.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+panic_shell() {
+  echo
+  echo "==> $* — dropping to emergency shell."
+  exec /bin/bash || exec /bin/sh
+}
+
+mount_one() {
+  local type="$1" target="$2"
+  if mountpoint -q "$target" 2>/dev/null; then return 0; fi
+  mount -t "$type" none "$target" 2>/dev/null \
+    || mount -t "$type" "$type" "$target" 2>/dev/null \
+    || echo "warn: could not mount $type at $target"
+}
+
+mount_one proc     /proc
+mount_one sysfs    /sys
+mount_one devtmpfs /dev
+[ -d /dev/pts ] || mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts 2>/dev/null
+[ -d /run ] && mount -t tmpfs tmpfs /run 2>/dev/null
+
+# Bring up the first non-loopback interface and try DHCP with a short timeout.
+# Iterate the sysfs directory directly — never parse `ls` output.
+NET_OK=0
+for ifpath in /sys/class/net/*; do
+  [ -e "$ifpath" ] || continue
+  iface=$(basename "$ifpath")
+  [ "$iface" = "lo" ] && continue
+  ip link set "$iface" up 2>/dev/null
+  # Don't background DHCP — wait briefly; if it fails the menu still appears.
+  if command -v dhclient >/dev/null 2>&1; then
+    timeout 10 dhclient -1 "$iface" 2>/dev/null && NET_OK=1 && break
+  elif command -v dhcpcd >/dev/null 2>&1; then
+    timeout 10 dhcpcd -1 "$iface" 2>/dev/null && NET_OK=1 && break
+  fi
+done
+
+# Choose menu language from the kernel command line: lang=de or lang=en.
+MENU_LANG="en"
+if [ -r /proc/cmdline ]; then
+  read -r _cmdline < /proc/cmdline
+  case "$_cmdline" in
+    *lang=de*) MENU_LANG="de" ;;
+    *lang=en*) MENU_LANG="en" ;;
+  esac
+fi
+
+show_menu() {
+  clear
+  echo "================================"
+  if [ "$MENU_LANG" = "de" ]; then
+    echo "   Willkommen bei ZenbyteOS"
+    echo "================================"
+    echo "  Netzwerk: $([ "$NET_OK" = 1 ] && echo "verbunden" || echo "nicht verbunden")"
+    echo
+    echo "  1) System starten"
+    echo "  2) ZenbyteOS installieren"
+    echo "  3) Notfall-Shell"
+    echo
+  else
+    echo "   Welcome to ZenbyteOS"
+    echo "================================"
+    echo "  Network: $([ "$NET_OK" = 1 ] && echo "online" || echo "offline")"
+    echo
+    echo "  1) Boot system"
+    echo "  2) Install ZenbyteOS"
+    echo "  3) Emergency shell"
+    echo
+  fi
+}
+
+while :; do
+  show_menu
+  read -r -p "> " CHOICE
+  case "$CHOICE" in
+    1|"") break ;;
+    2)
+      if [ -x /install.sh ]; then
+        /install.sh
+        echo
+        read -r -p "Press Enter to reboot, or type 'shell' to drop to a shell: " a
+        if [ "$a" = "shell" ]; then
+          exec /bin/bash
+        fi
+        # systemctl reboot won't work yet (no systemd); use the kernel sysrq.
+        sync
+        echo b > /proc/sysrq-trigger 2>/dev/null
+        reboot -f
+      else
+        echo "installer not present"
+        sleep 2
+      fi
+      ;;
+    3)
+      read -r -p "Type 'emergency' to confirm root shell: " _emerg_confirm
+      if [ "$_emerg_confirm" = "emergency" ]; then
+        exec /bin/bash
+      fi
+      ;;
+
+    *) echo "invalid choice"; sleep 1 ;;
+  esac
+done
+
+if [ -x /usr/lib/systemd/systemd ]; then
+  clear
+  echo "Starting ZenbyteOS..."
+  exec /usr/lib/systemd/systemd
+fi
+panic_shell "no systemd binary at /usr/lib/systemd/systemd"

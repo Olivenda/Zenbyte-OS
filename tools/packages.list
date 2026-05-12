@@ -1,0 +1,25 @@
+# tools/packages.list
+# One package per line. Format:
+#   <dnf-pkg-name>
+#   <dnf-pkg-name> <zbpm-pkg-name>     # rename for the zbpm repo
+# Lines starting with '#' and blank lines are ignored.
+#
+# The companion tool tools/zbpm-build resolves <dnf-pkg-name> via the host
+# package manager, then emits a staging directory whose basename is the
+# zbpm package name (the second column, or the dnf name if absent).
+
+bash
+coreutils
+curl
+gpgv
+nano
+tar
+vim-minimal
+xfce4-session            xfce4-desktop
+xfce4-pulseaudio-plugin
+pipewire
+pipewire-pulse
+wireplumber
+alsa-utils
+alsa-firmware
+alsa-plugins-pulseaudio

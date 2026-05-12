@@ -1,0 +1,6 @@
+# /etc/zbpm/mirrors
+# One mirror URL per line. Lines starting with '#' are ignored.
+# Mirrors are tried top-to-bottom; the first one that responds wins.
+# HTTPS is strongly recommended — TLS validation is enforced.
+
+https://zbpm.cronodevelopment.com/pkgs

@@ -1,0 +1,2 @@
+SUBSYSTEM=="sound", GROUP="audio", MODE="0660"
+KERNEL=="controlC*", GROUP="audio", MODE="0660"

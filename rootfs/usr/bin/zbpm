@@ -1,0 +1,932 @@
+#!/bin/bash
+# zbpm — Zenbyte Package Manager
+# Bilingual (EN/DE), signature-verifying, transactional Bash package manager.
+
+set -o pipefail
+
+ZBPM_VERSION="2.0.0"
+
+# ---------- defaults (overridable via /etc/zbpm/zbpm.conf and env) ----------
+ZBPM_DB="${ZBPM_DB:-/var/lib/zbpm}"
+ZBPM_CACHE="${ZBPM_CACHE:-/var/cache/zbpm}"
+ZBPM_LOG="${ZBPM_LOG:-/var/log/zbpm.log}"
+ZBPM_KEYRING="${ZBPM_KEYRING:-/etc/zbpm/keys}"
+ZBPM_CONF="${ZBPM_CONF:-/etc/zbpm/zbpm.conf}"
+ZBPM_MIRRORS_FILE="${ZBPM_MIRRORS_FILE:-/etc/zbpm/mirrors}"
+ZBPM_LANG="${ZBPM_LANG:-${LANG%%.*}}"
+ZBPM_LANG="${ZBPM_LANG:-en_US}"
+ZBPM_REQUIRE_SIGNATURE="${ZBPM_REQUIRE_SIGNATURE:-1}"
+ZBPM_MAX_DEPS_DEPTH="${ZBPM_MAX_DEPS_DEPTH:-64}"
+ZBPM_HTTP_TIMEOUT="${ZBPM_HTTP_TIMEOUT:-30}"
+ZBPM_INSTALL_PREFIX_ALLOW="${ZBPM_INSTALL_PREFIX_ALLOW:-/usr/ /etc/ /opt/ /var/lib/zbpm/scripts/}"
+
+# Loaded after config, fallbacks if config missing.
+ZBPM_DEFAULT_MIRRORS=("https://zbpm.cronodevelopment.com/pkgs")
+
+[ -r "$ZBPM_CONF" ] && . "$ZBPM_CONF"
+
+INSTALLED="$ZBPM_DB/installed"
+MANIFESTS="$ZBPM_DB/manifests"
+SCRIPTS="$ZBPM_DB/scripts"
+HOLDS="$ZBPM_DB/holds"
+LOCKFILE="$ZBPM_DB/.lock"
+INDEX_CACHE="$ZBPM_CACHE/index.txt"
+
+# ---------- color / tty ----------
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'
+  CYAN=$'\033[0;36m'; BOLD=$'\033[1m'; NC=$'\033[0m'
+else
+  RED=""; GREEN=""; YELLOW=""; CYAN=""; BOLD=""; NC=""
+fi
+
+# ---------- i18n ----------
+case "$ZBPM_LANG" in
+  de*|DE*) L="de" ;;
+  *)       L="en" ;;
+esac
+t() {
+  local k="$1"
+  case "$L:$k" in
+    de:need_root)            echo "zbpm muss als root ausgeführt werden." ;;
+    en:need_root)            echo "zbpm must be run as root." ;;
+    de:bad_pkg_name)         echo "Ungültiger Paketname:" ;;
+    en:bad_pkg_name)         echo "Invalid package name:" ;;
+    de:not_in_repo)          echo "Paket nicht im Repo:" ;;
+    en:not_in_repo)          echo "Package not in repo:" ;;
+    de:already_installed)    echo "bereits installiert" ;;
+    en:already_installed)    echo "already installed" ;;
+    de:resolving)            echo "Löse Abhängigkeiten:" ;;
+    en:resolving)            echo "Resolving dependencies:" ;;
+    de:download)             echo "Lade herunter:" ;;
+    en:download)             echo "Downloading:" ;;
+    de:verifying)            echo "Verifiziere Signatur..." ;;
+    en:verifying)            echo "Verifying signature..." ;;
+    de:bad_sha)              echo "SHA256-Prüfsumme stimmt nicht." ;;
+    en:bad_sha)              echo "SHA256 checksum mismatch." ;;
+    de:bad_sig)              echo "GPG-Signatur ungültig." ;;
+    en:bad_sig)              echo "GPG signature invalid." ;;
+    de:no_sig)               echo "Keine Signatur gefunden, Abbruch (ZBPM_REQUIRE_SIGNATURE=1)." ;;
+    en:no_sig)               echo "No signature found, aborting (ZBPM_REQUIRE_SIGNATURE=1)." ;;
+    de:installing)           echo "Installiere" ;;
+    en:installing)           echo "Installing" ;;
+    de:installed_ok)         echo "installiert." ;;
+    en:installed_ok)         echo "installed." ;;
+    de:installs_planned)     echo "Folgende Pakete werden installiert:" ;;
+    en:installs_planned)     echo "The following packages will be installed:" ;;
+    de:proceed)              echo "Fortfahren? [j/N]: " ;;
+    en:proceed)              echo "Proceed? [y/N]: " ;;
+    de:aborted)              echo "Abgebrochen." ;;
+    en:aborted)              echo "Aborted." ;;
+    de:not_installed)        echo "ist nicht installiert." ;;
+    en:not_installed)        echo "is not installed." ;;
+    de:remove_warn)          echo "Wird entfernt:" ;;
+    en:remove_warn)          echo "Will be removed:" ;;
+    de:has_revdeps)          echo "Wird benötigt von:" ;;
+    en:has_revdeps)          echo "Required by:" ;;
+    de:checking_updates)     echo "Prüfe Updates..." ;;
+    en:checking_updates)     echo "Checking for updates..." ;;
+    de:no_repo)              echo "Kein Zugriff auf ein Repo (alle Mirrors fehlgeschlagen)." ;;
+    en:no_repo)              echo "No repo reachable (all mirrors failed)." ;;
+    de:up_to_date)           echo "System ist aktuell." ;;
+    en:up_to_date)           echo "System is up to date." ;;
+    de:available_updates)    echo "Verfügbare Updates:" ;;
+    en:available_updates)    echo "Available updates:" ;;
+    de:installed_pkgs)       echo "Installierte Pakete:" ;;
+    en:installed_pkgs)       echo "Installed packages:" ;;
+    de:no_info)              echo "Keine Info verfügbar." ;;
+    en:no_info)              echo "No info available." ;;
+    de:cycle)                echo "Zirkuläre Abhängigkeit erkannt:" ;;
+    en:cycle)                echo "Circular dependency detected:" ;;
+    de:depth)                echo "Maximale Abhängigkeitstiefe überschritten." ;;
+    en:depth)                echo "Maximum dependency depth exceeded." ;;
+    de:held)                 echo "wird zurückgehalten (hold)" ;;
+    en:held)                 echo "is on hold" ;;
+    de:cleaned)              echo "Cache geleert." ;;
+    en:cleaned)              echo "Cache cleaned." ;;
+    de:locked)               echo "zbpm läuft bereits (Lockdatei vorhanden):" ;;
+    en:locked)               echo "zbpm already running (lockfile present):" ;;
+    de:bad_member)           echo "Unsicherer Pfad im Tarball, Abbruch:" ;;
+    en:bad_member)           echo "Unsafe tarball member, aborting:" ;;
+    de:rollback)             echo "Rollback wird ausgeführt..." ;;
+    en:rollback)             echo "Rolling back..." ;;
+    *) echo "$k" ;;
+  esac
+}
+
+# ---------- logging ----------
+ts() { date '+%Y-%m-%dT%H:%M:%S%z'; }
+info()    { echo "${CYAN}[zbpm]${NC} $*"; logf "INFO  $*"; }
+success() { echo "${GREEN}[ok]${NC}   $*"; logf "OK    $*"; }
+warn()    { echo "${YELLOW}[warn]${NC} $*"; logf "WARN  $*"; }
+err()     { echo "${RED}[err]${NC}  $*" >&2; logf "ERROR $*"; }
+logf() {
+  [ -w "$(dirname "$ZBPM_LOG")" ] 2>/dev/null || return 0
+  printf '%s [pid=%d] %s\n' "$(ts)" "$$" "$1" >> "$ZBPM_LOG" 2>/dev/null || true
+}
+
+# ---------- safety helpers ----------
+require_root() {
+  if [ "$(id -u)" -ne 0 ]; then
+    err "$(t need_root)"
+    exit 1
+  fi
+}
+
+valid_pkg_name() {
+  # alnum, dot, underscore, plus, hyphen; 1..64 chars; no leading dot/hyphen
+  [[ "$1" =~ ^[A-Za-z0-9_+][A-Za-z0-9_.+-]{0,63}$ ]]
+}
+
+require_pkg_name() {
+  if ! valid_pkg_name "$1"; then
+    err "$(t bad_pkg_name) '$1'"
+    exit 2
+  fi
+}
+
+ensure_dirs() {
+  install -d -m 0755 "$ZBPM_DB" "$INSTALLED" "$MANIFESTS" "$HOLDS" || return 1
+  install -d -m 0700 "$SCRIPTS" "$ZBPM_KEYRING" || return 1
+  install -d -m 0700 "$ZBPM_CACHE" || return 1
+  install -d -m 0755 "$(dirname "$ZBPM_LOG")" 2>/dev/null || true
+  : >> "$ZBPM_LOG" 2>/dev/null || true
+  chmod 0640 "$ZBPM_LOG" 2>/dev/null || true
+  return 0
+}
+
+acquire_lock() {
+  if ! mkdir "$LOCKFILE" 2>/dev/null; then
+    local owner
+    owner=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
+    # If the PID in the lockfile is numeric and the process no longer exists,
+    # the lock is stale (left by a SIGKILL). Remove it and retry once.
+    if [[ "$owner" =~ ^[0-9]+$ ]] && ! kill -0 "$owner" 2>/dev/null; then
+      warn "removing stale lock (pid $owner no longer running)"
+      rm -rf "$LOCKFILE"
+      if ! mkdir "$LOCKFILE" 2>/dev/null; then
+        err "$(t locked) (could not acquire after stale removal)"
+        exit 11
+      fi
+    else
+      err "$(t locked) pid=${owner:-?}"
+      exit 11
+    fi
+  fi
+  echo "$$" > "$LOCKFILE/pid"
+  trap release_lock EXIT INT TERM
+}
+release_lock() {
+  rm -rf "$LOCKFILE" 2>/dev/null || true
+}
+
+# ---------- mirrors ----------
+load_mirrors() {
+  MIRRORS=()
+  if [ -r "$ZBPM_MIRRORS_FILE" ]; then
+    while IFS= read -r line; do
+      line="${line%%#*}"
+      line="${line//[$'\t\r ']/}"
+      [ -n "$line" ] && MIRRORS+=("$line")
+    done < "$ZBPM_MIRRORS_FILE"
+  fi
+  if [ "${#MIRRORS[@]}" -eq 0 ]; then
+    MIRRORS=("${ZBPM_DEFAULT_MIRRORS[@]}")
+  fi
+}
+
+# Try each mirror until one returns 0. Args: relative_path output_file
+fetch() {
+  local rel="$1" out="$2" m url rc
+  for m in "${MIRRORS[@]}"; do
+    url="${m%/}/$rel"
+    if curl -fsSL --proto '=https,http' --max-time "$ZBPM_HTTP_TIMEOUT" \
+            -o "$out" "$url"; then
+      return 0
+    fi
+    rc=$?
+    logf "fetch failed mirror=$m rel=$rel rc=$rc"
+  done
+  return 1
+}
+
+# Same as fetch but allows quiet 404 (e.g., optional .deps file)
+fetch_optional() {
+  local rel="$1" out="$2" m url
+  for m in "${MIRRORS[@]}"; do
+    url="${m%/}/$rel"
+    if curl -fsSL --proto '=https,http' --max-time "$ZBPM_HTTP_TIMEOUT" \
+            -o "$out" "$url" 2>/dev/null; then
+      return 0
+    fi
+  done
+  : > "$out"
+  return 1
+}
+
+# ---------- index cache ----------
+declare -A VER_CACHE
+
+refresh_index() {
+  if ! fetch "index.txt" "$INDEX_CACHE"; then
+    err "$(t no_repo)"
+    return 1
+  fi
+  # invalidate in-memory cache
+  VER_CACHE=()
+  return 0
+}
+
+ensure_index() {
+  [ -s "$INDEX_CACHE" ] && return 0
+  refresh_index
+}
+
+get_remote_version() {
+  local pkg="$1"
+  if [ -n "${VER_CACHE[$pkg]+set}" ]; then
+    printf '%s\n' "${VER_CACHE[$pkg]}"
+    return 0
+  fi
+  ensure_index || return 1
+  local v
+  v=$(awk -v p="$pkg" '$1==p { print $2; exit }' "$INDEX_CACHE")
+  VER_CACHE[$pkg]="$v"
+  printf '%s\n' "$v"
+}
+
+get_deps() {
+  local pkg="$1" tmp
+  tmp=$(mktemp -p "$ZBPM_CACHE" deps.XXXXXX)
+  if fetch_optional "$pkg.deps" "$tmp"; then
+    # one or more whitespace-separated names; ignore comments and blanks
+    awk '{ for (i=1;i<=NF;i++) { if ($i ~ /^#/) break; print $i } }' "$tmp"
+  fi
+  rm -f "$tmp"
+}
+
+# ---------- dependency resolution ----------
+declare -a INSTALL_LIST
+declare -A SEEN
+declare -A IN_STACK
+
+collect_pkgs() {
+  local pkg="$1" depth="${2:-0}" dep
+  require_pkg_name "$pkg"
+
+  if [ "$depth" -gt "$ZBPM_MAX_DEPS_DEPTH" ]; then
+    err "$(t depth) ($pkg)"
+    return 1
+  fi
+  if [ -n "${IN_STACK[$pkg]+set}" ]; then
+    err "$(t cycle) $pkg"
+    return 1
+  fi
+  if [ -n "${SEEN[$pkg]+set}" ]; then
+    return 0
+  fi
+
+  local ver
+  ver=$(get_remote_version "$pkg") || return 1
+  if [ -z "$ver" ]; then
+    err "$(t not_in_repo) $pkg"
+    return 1
+  fi
+
+  if [ -f "$INSTALLED/$pkg" ]; then
+    local local_ver
+    local_ver=$(cat "$INSTALLED/$pkg")
+    if [ "$local_ver" = "$ver" ]; then
+      SEEN[$pkg]=1
+      return 0
+    fi
+  fi
+
+  IN_STACK[$pkg]=1
+  while IFS= read -r dep; do
+    [ -z "$dep" ] && continue
+    valid_pkg_name "$dep" || { err "$(t bad_pkg_name) (dep) '$dep'"; unset "IN_STACK[$pkg]"; return 1; }
+    collect_pkgs "$dep" $((depth+1)) || { unset "IN_STACK[$pkg]"; return 1; }
+  done < <(get_deps "$pkg")
+  unset "IN_STACK[$pkg]"
+
+  INSTALL_LIST+=("$pkg")
+  SEEN[$pkg]=1
+}
+
+# ---------- tarball safety ----------
+# Verifies that all members are relative paths whose target falls inside the
+# install prefix allow-list. The reserved `META/` top-level directory is
+# allowed for out-of-band package metadata (postinst, etc.) and is not copied
+# into the live filesystem.
+validate_tarball() {
+  local tar="$1" member normalised prefix ok
+  while IFS= read -r member; do
+    [ -z "$member" ] && continue
+    if [[ "$member" == /* || "$member" == *..* || "$member" == ../* || "$member" == */.. ]]; then
+      err "$(t bad_member) $member"
+      return 1
+    fi
+    # Strip leading ./ if present
+    normalised="${member#./}"
+    # META/ metadata is allowed and handled separately.
+    if [[ "$normalised" == META/* || "$normalised" == "META" ]]; then
+      continue
+    fi
+    normalised="/$normalised"
+    ok=0
+    # Disable glob expansion while iterating the allow-list.
+    set -f
+    for prefix in $ZBPM_INSTALL_PREFIX_ALLOW; do
+      if [[ "$normalised" == "$prefix"* ]]; then
+        ok=1
+        break
+      fi
+    done
+    set +f
+    if [ "$ok" -eq 0 ]; then
+      err "$(t bad_member) $member"
+      return 1
+    fi
+  done < <(tar -tzf "$tar")
+}
+
+# ---------- signature verification ----------
+verify_pkg() {
+  local tar="$1" sha_file="$2" sig_file="$3" pkg="$4" expected actual
+  if [ -s "$sha_file" ]; then
+    expected=$(awk '{print $1}' "$sha_file")
+    actual=$(sha256sum "$tar" | awk '{print $1}')
+    if [ "$expected" != "$actual" ]; then
+      err "$(t bad_sha) ($pkg)"
+      return 1
+    fi
+  else
+    if [ "$ZBPM_REQUIRE_SIGNATURE" = "1" ]; then
+      err "$(t no_sig) ($pkg sha256)"
+      return 1
+    fi
+    warn "no sha256 for $pkg, continuing (ZBPM_REQUIRE_SIGNATURE=0)"
+  fi
+
+  if [ "$ZBPM_REQUIRE_SIGNATURE" = "1" ]; then
+    if ! command -v gpgv >/dev/null 2>&1; then
+      err "gpgv not installed but ZBPM_REQUIRE_SIGNATURE=1"
+      return 1
+    fi
+    if [ ! -s "$sig_file" ]; then
+      err "$(t no_sig) ($pkg .sig)"
+      return 1
+    fi
+    local kr="$ZBPM_KEYRING/zbpm.kbx"
+    [ -f "$kr" ] || kr="$ZBPM_KEYRING/zbpm.gpg"
+    if [ ! -f "$kr" ]; then
+      err "no zbpm keyring at $ZBPM_KEYRING/{zbpm.kbx,zbpm.gpg}"
+      return 1
+    fi
+    if ! gpgv --keyring "$kr" "$sig_file" "$tar" >/dev/null 2>&1; then
+      err "$(t bad_sig) ($pkg)"
+      return 1
+    fi
+  fi
+  return 0
+}
+
+# ---------- install / remove ----------
+do_install() {
+  local pkg="$1" reinstall="${2:-0}"
+  require_pkg_name "$pkg"
+
+  if [ -e "$HOLDS/$pkg" ] && [ "$reinstall" != "1" ]; then
+    warn "$pkg $(t held)"
+    return 0
+  fi
+
+  local ver
+  ver=$(get_remote_version "$pkg") || return 1
+  if [ -z "$ver" ]; then
+    err "$(t not_in_repo) $pkg"
+    return 1
+  fi
+
+  if [ "$reinstall" != "1" ] && [ -f "$INSTALLED/$pkg" ]; then
+    local local_ver
+    local_ver=$(cat "$INSTALLED/$pkg")
+    if [ "$local_ver" = "$ver" ]; then
+      warn "$pkg $(t already_installed) ($ver)"
+      return 0
+    fi
+  fi
+
+  local work tar sha sig stage
+  work=$(mktemp -d -p "$ZBPM_CACHE" "${pkg}.XXXXXX")
+  tar="$work/$pkg.tar.gz"
+  sha="$work/$pkg.sha256"
+  sig="$work/$pkg.sig"
+  stage="$work/stage"
+
+  info "$(t download) $pkg.tar.gz"
+  if ! fetch "$pkg.tar.gz" "$tar"; then
+    err "download failed: $pkg"
+    rm -rf "$work"
+    return 1
+  fi
+  fetch_optional "$pkg.tar.gz.sha256" "$sha"
+  fetch_optional "$pkg.tar.gz.sig"    "$sig"
+
+  info "$(t verifying)"
+  if ! verify_pkg "$tar" "$sha" "$sig" "$pkg"; then
+    rm -rf "$work"
+    return 1
+  fi
+
+  if ! validate_tarball "$tar"; then
+    rm -rf "$work"
+    return 1
+  fi
+
+  install -d -m 0755 "$stage"
+  if ! tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$tar" -C "$stage"; then
+    err "extract failed: $pkg"
+    rm -rf "$work"
+    return 1
+  fi
+
+  # Post-extraction: reject any symlink whose resolved target escapes the
+  # staging directory. This catches chained symlink attacks (e.g. a symlink
+  # pointing at / inside the tarball that a later member then writes through).
+  local link target_abs stage_real
+  stage_real=$(realpath "$stage")
+  while IFS= read -r link; do
+    target_abs=$(realpath -m "$link" 2>/dev/null || true)
+    if [ -n "$target_abs" ] && [[ "$target_abs" != "$stage_real"* ]]; then
+      err "$(t bad_member) symlink escapes staging dir: $link -> $target_abs"
+      rm -rf "$work"
+      return 1
+    fi
+  done < <(find "$stage" -type l)
+
+  # Build the manifest (paths relative to /, with leading slash) from the
+  # staged tree, excluding the META/ metadata directory.
+  local manifest_new="$work/manifest"
+  ( cd "$stage" && find . -mindepth 1 -not -type d -not -path './META' -not -path './META/*' \
+      -printf '/%P\n' | LC_ALL=C sort ) > "$manifest_new"
+
+  # Mark partial state so we can detect interrupted installs.
+  touch "$INSTALLED/$pkg.partial"
+
+  info "$(t installing) $pkg $ver..."
+  # Copy everything except META/ into the live filesystem.
+  if ! ( cd "$stage" && tar --no-same-owner --exclude='./META' --exclude='./META/*' \
+                            -cf - . | tar --no-same-owner --no-same-permissions \
+                            --no-overwrite-dir -C / -xf - ); then
+    err "install copy failed: $pkg"
+    rm -f "$INSTALLED/$pkg.partial"
+    rm -rf "$work"
+    return 1
+  fi
+
+  install -m 0644 "$manifest_new" "$MANIFESTS/$pkg"
+
+  # Optional post-install script shipped inside the tarball at META/postinst.
+  if [ -f "$stage/META/postinst" ]; then
+    install -m 0700 -D "$stage/META/postinst" "$SCRIPTS/$pkg.post"
+  fi
+  if [ -x "$SCRIPTS/$pkg.post" ]; then
+    info "running postinst: $pkg"
+    if ! "$SCRIPTS/$pkg.post"; then
+      warn "postinst returned non-zero for $pkg"
+    fi
+  fi
+
+  echo "$ver" > "$INSTALLED/$pkg"
+  rm -f "$INSTALLED/$pkg.partial"
+  rm -rf "$work"
+  success "$pkg $ver $(t installed_ok)"
+  return 0
+}
+
+confirm() {
+  local prompt="$1" ans
+  if [ "$YES" = "1" ] || [ ! -t 0 ]; then
+    return 0
+  fi
+  read -r -p "$prompt" ans
+  case "$ans" in
+    y|Y|yes|YES|j|J|ja|JA|Ja) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+cmd_install() {
+  local pkgs=("$@") reinstall=0
+  if [ "${1:-}" = "--reinstall" ]; then
+    reinstall=1
+    shift
+    pkgs=("$@")
+  fi
+  if [ "${#pkgs[@]}" -eq 0 ]; then
+    err "no package given"
+    return 2
+  fi
+
+  ensure_index || return 1
+
+  INSTALL_LIST=()
+  SEEN=()
+  IN_STACK=()
+
+  local p
+  for p in "${pkgs[@]}"; do
+    require_pkg_name "$p"
+    info "$(t resolving) $p"
+    collect_pkgs "$p" 0 || return 1
+  done
+
+  if [ "${#INSTALL_LIST[@]}" -eq 0 ]; then
+    success "$(t up_to_date)"
+    return 0
+  fi
+
+  echo
+  echo "${BOLD}$(t installs_planned)${NC}"
+  for p in "${INSTALL_LIST[@]}"; do
+    local v
+    v=$(get_remote_version "$p")
+    echo "  ${GREEN}•${NC} $p ${CYAN}$v${NC}"
+  done
+  echo
+
+  if ! confirm "${YELLOW}$(t proceed)${NC}"; then
+    info "$(t aborted)"
+    return 0
+  fi
+
+  local fail=0
+  for p in "${INSTALL_LIST[@]}"; do
+    do_install "$p" "$reinstall" || fail=1
+  done
+  return $fail
+}
+
+cmd_reinstall() {
+  if [ "${#@}" -eq 0 ]; then
+    err "no package given"
+    return 2
+  fi
+  cmd_install --reinstall "$@"
+}
+
+# Reverse-dependency lookup: which installed packages declare $1 as a dep?
+revdeps() {
+  local target="$1" pkg deps_tmp
+  for pkg in "$INSTALLED"/*; do
+    [ -f "$pkg" ] || continue
+    [[ "$pkg" == *.partial ]] && continue
+    pkg=$(basename "$pkg")
+    valid_pkg_name "$pkg" || continue
+    [ "$pkg" = "$target" ] && continue
+    deps_tmp=$(mktemp -p "$ZBPM_CACHE" rd.XXXXXX)
+    fetch_optional "$pkg.deps" "$deps_tmp" || true
+    if grep -qw "$target" "$deps_tmp" 2>/dev/null; then
+      printf '%s\n' "$pkg"
+    fi
+    rm -f "$deps_tmp"
+  done
+}
+
+cmd_remove() {
+  local force=0
+  if [ "${1:-}" = "--force" ]; then force=1; shift; fi
+  if [ "${#@}" -eq 0 ]; then
+    err "no package given"
+    return 2
+  fi
+  local pkg failed=0
+  for pkg in "$@"; do
+    require_pkg_name "$pkg"
+    if [ ! -f "$INSTALLED/$pkg" ]; then
+      err "$pkg $(t not_installed)"
+      failed=1
+      continue
+    fi
+
+    if [ "$force" -ne 1 ]; then
+      local rd
+      rd=$(revdeps "$pkg")
+      if [ -n "$rd" ]; then
+        err "$(t has_revdeps)"
+        echo "$rd" | sed 's/^/    /'
+        echo "  use --force to override"
+        failed=1
+        continue
+      fi
+    fi
+
+    local ver
+    ver=$(cat "$INSTALLED/$pkg")
+    echo
+    echo "${BOLD}$(t remove_warn)${NC}  ${RED}•${NC} $pkg $ver"
+    echo
+    if ! confirm "${YELLOW}$(t proceed)${NC}"; then
+      info "$(t aborted)"
+      continue
+    fi
+
+    if [ -f "$MANIFESTS/$pkg" ]; then
+      local count=0 file ok prefix
+      # Reverse sort so files are removed before their parent directories.
+      while IFS= read -r file; do
+        [ -z "$file" ] && continue
+        # Re-validate every manifest entry against allow-list before deleting.
+        ok=0
+        set -f
+        for prefix in $ZBPM_INSTALL_PREFIX_ALLOW; do
+          if [[ "$file" == "$prefix"* ]]; then ok=1; break; fi
+        done
+        set +f
+        if [ "$ok" -ne 1 ]; then
+          warn "skipping unsafe manifest entry: $file"
+          continue
+        fi
+        if [ -L "$file" ] || [ -f "$file" ]; then
+          rm -f "$file" && count=$((count+1))
+        fi
+      done < <(LC_ALL=C sort -r "$MANIFESTS/$pkg")
+      rm -f "$MANIFESTS/$pkg"
+      info "$count files removed"
+    else
+      warn "no manifest, only DB entry removed"
+    fi
+
+    rm -f "$INSTALLED/$pkg" "$INSTALLED/$pkg.partial"
+    success "$pkg removed"
+  done
+  return $failed
+}
+
+cmd_sync() {
+  refresh_index && success "index refreshed (${#MIRRORS[@]} mirror(s))"
+}
+
+cmd_upgrade() {
+  ensure_index || return 1
+  info "$(t checking_updates)"
+  local updates=()
+  local pkg local_ver remote_ver
+  for pkg in "$INSTALLED"/*; do
+    [ -f "$pkg" ] || continue
+    [[ "$pkg" == *.partial ]] && continue
+    pkg=$(basename "$pkg")
+    valid_pkg_name "$pkg" || continue
+    [ -e "$HOLDS/$pkg" ] && continue
+    remote_ver=$(get_remote_version "$pkg")
+    local_ver=$(cat "$INSTALLED/$pkg")
+    if [ -n "$remote_ver" ] && [ "$remote_ver" != "$local_ver" ]; then
+      updates+=("$pkg")
+    fi
+  done
+
+  if [ "${#updates[@]}" -eq 0 ]; then
+    success "$(t up_to_date)"
+    return 0
+  fi
+
+  echo
+  echo "${BOLD}$(t available_updates)${NC}"
+  for pkg in "${updates[@]}"; do
+    echo "  ${GREEN}•${NC} $pkg  ${RED}$(cat "$INSTALLED/$pkg")${NC} → ${GREEN}$(get_remote_version "$pkg")${NC}"
+  done
+  echo
+  if ! confirm "${YELLOW}$(t proceed)${NC}"; then
+    info "$(t aborted)"
+    return 0
+  fi
+
+  local fail=0
+  for pkg in "${updates[@]}"; do
+    do_install "$pkg" || fail=1
+  done
+  return $fail
+}
+
+cmd_update() {
+  cmd_sync || return 1
+  cmd_upgrade
+}
+
+cmd_list() {
+  echo
+  echo "${BOLD}$(t installed_pkgs)${NC}"
+  local p
+  for p in "$INSTALLED"/*; do
+    [ -f "$p" ] || continue
+    [[ "$p" == *.partial ]] && continue
+    local name v hold=""
+    name=$(basename "$p")
+    v=$(cat "$p")
+    [ -e "$HOLDS/$name" ] && hold=" ${YELLOW}[hold]${NC}"
+    echo "  ${GREEN}•${NC} $name ${CYAN}$v${NC}$hold"
+  done
+}
+
+cmd_search() {
+  ensure_index || return 1
+  local term="$1"
+  echo
+  info "search: $term"
+  awk -v t="$term" 'BEGIN{IGNORECASE=1} index($0,t){print "  • " $0}' "$INDEX_CACHE"
+}
+
+cmd_info() {
+  local pkg="$1" tmp
+  require_pkg_name "$pkg"
+  tmp=$(mktemp -p "$ZBPM_CACHE" info.XXXXXX)
+  if fetch_optional "$pkg.info" "$tmp" && [ -s "$tmp" ]; then
+    cat "$tmp"
+  else
+    err "$(t no_info)"
+  fi
+  rm -f "$tmp"
+}
+
+cmd_files() {
+  local pkg="$1"
+  require_pkg_name "$pkg"
+  if [ -f "$MANIFESTS/$pkg" ]; then
+    cat "$MANIFESTS/$pkg"
+  else
+    err "no manifest for $pkg"
+    return 1
+  fi
+}
+
+cmd_owns() {
+  local needle="$1" m hit=0
+  [ -n "$needle" ] || { err "no path given"; return 2; }
+  for m in "$MANIFESTS"/*; do
+    [ -f "$m" ] || continue
+    if grep -Fxq "$needle" "$m"; then
+      echo "$(basename "$m")"
+      hit=1
+    fi
+  done
+  [ "$hit" -eq 1 ] || return 1
+}
+
+cmd_depends() {
+  local pkg="$1"
+  require_pkg_name "$pkg"
+  ensure_index || return 1
+  get_deps "$pkg"
+}
+
+cmd_hold() {
+  local pkg
+  for pkg in "$@"; do
+    require_pkg_name "$pkg"
+    : > "$HOLDS/$pkg"
+    success "$pkg held"
+  done
+}
+
+cmd_unhold() {
+  local pkg
+  for pkg in "$@"; do
+    require_pkg_name "$pkg"
+    rm -f "$HOLDS/$pkg"
+    success "$pkg unheld"
+  done
+}
+
+cmd_clean() {
+  rm -rf "${ZBPM_CACHE:?}"/*
+  ensure_dirs
+  success "$(t cleaned)"
+}
+
+cmd_log() {
+  local n="${1:-50}"
+  [[ "$n" =~ ^[0-9]+$ ]] || n=50
+  if [ -r "$ZBPM_LOG" ]; then
+    tail -n "$n" "$ZBPM_LOG"
+  else
+    err "no log at $ZBPM_LOG"
+    return 1
+  fi
+}
+
+cmd_check() {
+  # Detect partial installs.
+  local p found=0
+  for p in "$INSTALLED"/*.partial; do
+    [ -e "$p" ] || continue
+    found=1
+    warn "partial install: $(basename "${p%.partial}")"
+  done
+  [ "$found" -eq 0 ] && success "no partial installs"
+}
+
+usage() {
+  cat <<EOF
+${BOLD}ZenbyteOS Package Manager (zbpm) v$ZBPM_VERSION${NC}
+
+USAGE
+  zbpm <command> [options] [args]
+
+COMMANDS
+  install [pkg ...]           Install packages and dependencies
+  reinstall <pkg ...>         Reinstall even if same version
+  remove [--force] <pkg ...>  Remove packages (refuses if revdeps exist)
+  sync                        Refresh package index
+  upgrade                     Upgrade installed packages (no sync)
+  update                      sync + upgrade
+  list                        List installed packages
+  search <term>               Search remote index
+  info <pkg>                  Show package info
+  files <pkg>                 List files installed by package
+  owns <path>                 Show package owning a file path
+  depends <pkg>               Show declared dependencies of package
+  hold <pkg ...>              Pin packages to current version
+  unhold <pkg ...>            Release a hold
+  clean                       Empty the package cache
+  log [N]                     Tail the zbpm log (default 50 lines)
+  check                       Verify DB consistency
+  version                     Print version
+  help                        Print this help
+
+OPTIONS
+  -y, --yes                   Assume "yes" to all prompts
+  --no-color                  Disable color output (or set NO_COLOR=1)
+  --no-verify                 Skip signature/checksum verification (DANGEROUS).
+                              Equivalent to ZBPM_REQUIRE_SIGNATURE=0.
+
+ENV / CONFIG
+  $ZBPM_CONF
+  $ZBPM_MIRRORS_FILE
+  ZBPM_REQUIRE_SIGNATURE=1    Refuse unsigned packages (default: on)
+  ZBPM_LANG=en|de             Message language
+  NO_COLOR=1                  Disable color
+EOF
+}
+
+# ---------- arg parsing ----------
+YES=0
+COMMAND=""
+ARGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -y|--yes)        YES=1 ;;
+    --no-color)      RED=""; GREEN=""; YELLOW=""; CYAN=""; BOLD=""; NC="" ;;
+    --no-verify)    ZBPM_REQUIRE_SIGNATURE=0 ;;
+    -V|--version|version) echo "zbpm $ZBPM_VERSION"; exit 0 ;;
+    -h|--help|help)  usage; exit 0 ;;
+    --)              shift; ARGS+=("$@"); break ;;
+    -*)              err "unknown option: $1"; usage; exit 2 ;;
+    *)
+      if [ -z "$COMMAND" ]; then
+        COMMAND="$1"
+      else
+        ARGS+=("$1")
+      fi
+      ;;
+  esac
+  shift
+done
+
+[ -z "$COMMAND" ] && { usage; exit 0; }
+
+# Read-only commands don't need root, lock, or directory creation.
+case "$COMMAND" in
+  version|help|search|info|owns|files|depends|log|list|check)
+    ensure_dirs 2>/dev/null || true
+    load_mirrors
+    ;;
+  *)
+    require_root
+    ensure_dirs || { err "cannot prepare $ZBPM_DB / $ZBPM_CACHE"; exit 1; }
+    load_mirrors
+    acquire_lock
+    ;;
+esac
+
+case "$COMMAND" in
+  install)    cmd_install   "${ARGS[@]}" ;;
+  reinstall)  cmd_reinstall "${ARGS[@]}" ;;
+  remove|rm)  cmd_remove    "${ARGS[@]}" ;;
+  sync)       cmd_sync ;;
+  upgrade)    cmd_upgrade ;;
+  update)     cmd_update ;;
+  list|ls)    cmd_list ;;
+  search)     cmd_search "${ARGS[0]:-}" ;;
+  info)       cmd_info   "${ARGS[0]:-}" ;;
+  files)      cmd_files  "${ARGS[0]:-}" ;;
+  owns)       cmd_owns   "${ARGS[0]:-}" ;;
+  depends)    cmd_depends "${ARGS[0]:-}" ;;
+  hold)       cmd_hold   "${ARGS[@]}" ;;
+  unhold)     cmd_unhold "${ARGS[@]}" ;;
+  clean)      cmd_clean ;;
+  log)        cmd_log    "${ARGS[0]:-50}" ;;
+  check)      cmd_check ;;
+  *)          err "unknown command: $COMMAND"; usage; exit 2 ;;
+esac
