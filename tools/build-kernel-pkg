@@ -39,6 +39,17 @@ trap 'rm -rf "$work"' EXIT
 
 log() { echo "==> $*"; }
 
+# Verify dnf + Fedora repos are available (works on both Fedora and Ubuntu after host-setup.sh).
+check_dnf() {
+  if ! command -v dnf >/dev/null 2>&1; then
+    echo "build-kernel-pkg: dnf not found. Run: sudo tools/host-setup.sh" >&2; exit 1
+  fi
+  if ! dnf repolist 2>/dev/null | grep -qi "fedora"; then
+    echo "build-kernel-pkg: no Fedora repo configured. Run: sudo tools/host-setup.sh" >&2; exit 1
+  fi
+}
+check_dnf
+
 # Decide which RPMs we need and pull them.
 if [ -z "$KVER" ]; then
   log "downloading latest kernel-core, kernel-modules, kernel-modules-core (if present)"
