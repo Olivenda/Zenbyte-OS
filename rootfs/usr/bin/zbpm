@@ -29,6 +29,8 @@ INSTALLED="$ZBPM_DB/installed"
 MANIFESTS="$ZBPM_DB/manifests"
 SCRIPTS="$ZBPM_DB/scripts"
 HOLDS="$ZBPM_DB/holds"
+REASONS="$ZBPM_DB/installed-reason"
+TRANSACTIONS_LOG="$ZBPM_DB/transactions.log"
 LOCKFILE="$ZBPM_DB/.lock"
 INDEX_CACHE="$ZBPM_CACHE/index.txt"
 
@@ -146,13 +148,37 @@ require_pkg_name() {
 }
 
 ensure_dirs() {
-  install -d -m 0755 "$ZBPM_DB" "$INSTALLED" "$MANIFESTS" "$HOLDS" || return 1
+  install -d -m 0755 "$ZBPM_DB" "$INSTALLED" "$MANIFESTS" "$HOLDS" "$REASONS" || return 1
   install -d -m 0700 "$SCRIPTS" "$ZBPM_KEYRING" || return 1
   install -d -m 0700 "$ZBPM_CACHE" || return 1
   install -d -m 0755 "$(dirname "$ZBPM_LOG")" 2>/dev/null || true
   : >> "$ZBPM_LOG" 2>/dev/null || true
   chmod 0640 "$ZBPM_LOG" 2>/dev/null || true
+  : >> "$TRANSACTIONS_LOG" 2>/dev/null || true
+  chmod 0640 "$TRANSACTIONS_LOG" 2>/dev/null || true
   return 0
+}
+
+# Append a transaction to the audit log. Args: action package version
+record_txn() {
+  local action="$1" pkg="$2" ver="${3:-}"
+  printf '%s\t%s\t%s\t%s\n' "$(ts)" "$action" "$pkg" "$ver" \
+    >> "$TRANSACTIONS_LOG" 2>/dev/null || true
+}
+
+# Set / get the install reason for a package ("explicit" or "dep").
+set_reason() {
+  local pkg="$1" reason="$2"
+  install -d -m 0755 "$REASONS" 2>/dev/null || true
+  printf '%s\n' "$reason" > "$REASONS/$pkg" 2>/dev/null || true
+}
+get_reason() {
+  local pkg="$1"
+  if [ -r "$REASONS/$pkg" ]; then
+    cat "$REASONS/$pkg"
+  else
+    echo "explicit"
+  fi
 }
 
 acquire_lock() {
@@ -502,6 +528,11 @@ do_install() {
   echo "$ver" > "$INSTALLED/$pkg"
   rm -f "$INSTALLED/$pkg.partial"
   rm -rf "$work"
+  # Record install reason if not already set; default = dep, explicit set by caller.
+  if [ ! -e "$REASONS/$pkg" ]; then
+    set_reason "$pkg" "dep"
+  fi
+  record_txn "install" "$pkg" "$ver"
   success "$pkg $ver $(t installed_ok)"
   return 0
 }
@@ -536,9 +567,12 @@ cmd_install() {
   SEEN=()
   IN_STACK=()
 
+  # Mark user-typed names as explicit so we can distinguish from pulled-in deps.
+  declare -A EXPLICIT=()
   local p
   for p in "${pkgs[@]}"; do
     require_pkg_name "$p"
+    EXPLICIT[$p]=1
     info "$(t resolving) $p"
     collect_pkgs "$p" 0 || return 1
   done
@@ -551,11 +585,17 @@ cmd_install() {
   echo
   echo "${BOLD}$(t installs_planned)${NC}"
   for p in "${INSTALL_LIST[@]}"; do
-    local v
+    local v tag=""
     v=$(get_remote_version "$p")
-    echo "  ${GREEN}•${NC} $p ${CYAN}$v${NC}"
+    [ -n "${EXPLICIT[$p]+set}" ] || tag=" ${YELLOW}(dep)${NC}"
+    echo "  ${GREEN}•${NC} $p ${CYAN}$v${NC}$tag"
   done
   echo
+
+  if [ "${DRY_RUN:-0}" = "1" ]; then
+    info "dry-run: no changes made"
+    return 0
+  fi
 
   if ! confirm "${YELLOW}$(t proceed)${NC}"; then
     info "$(t aborted)"
@@ -564,6 +604,12 @@ cmd_install() {
 
   local fail=0
   for p in "${INSTALL_LIST[@]}"; do
+    # Pre-mark reason so do_install knows if it's explicit or a dep.
+    if [ -n "${EXPLICIT[$p]+set}" ]; then
+      set_reason "$p" "explicit"
+    else
+      [ -e "$REASONS/$p" ] || set_reason "$p" "dep"
+    fi
     do_install "$p" "$reinstall" || fail=1
   done
   return $fail
@@ -628,6 +674,10 @@ cmd_remove() {
     echo
     echo "${BOLD}$(t remove_warn)${NC}  ${RED}•${NC} $pkg $ver"
     echo
+    if [ "${DRY_RUN:-0}" = "1" ]; then
+      info "dry-run: would remove $pkg $ver"
+      continue
+    fi
     if ! confirm "${YELLOW}$(t proceed)${NC}"; then
       info "$(t aborted)"
       continue
@@ -659,7 +709,8 @@ cmd_remove() {
       warn "no manifest, only DB entry removed"
     fi
 
-    rm -f "$INSTALLED/$pkg" "$INSTALLED/$pkg.partial"
+    rm -f "$INSTALLED/$pkg" "$INSTALLED/$pkg.partial" "$REASONS/$pkg"
+    record_txn "remove" "$pkg" "$ver"
     success "$pkg removed"
   done
   return $failed
@@ -698,6 +749,10 @@ cmd_upgrade() {
     echo "  ${GREEN}•${NC} $pkg  ${RED}$(cat "$INSTALLED/$pkg")${NC} → ${GREEN}$(get_remote_version "$pkg")${NC}"
   done
   echo
+  if [ "${DRY_RUN:-0}" = "1" ]; then
+    info "dry-run: no upgrades performed"
+    return 0
+  fi
   if ! confirm "${YELLOW}$(t proceed)${NC}"; then
     info "$(t aborted)"
     return 0
@@ -816,6 +871,100 @@ cmd_log() {
   fi
 }
 
+cmd_autoremove() {
+  # Find dep-marked packages with no remaining reverse dependencies and remove them.
+  local pkg reason rd candidates=() iter=0
+  # Iterate to a fixed point (removing pkg A may free pkg B).
+  while :; do
+    candidates=()
+    for pkg in "$INSTALLED"/*; do
+      [ -f "$pkg" ] || continue
+      [[ "$pkg" == *.partial ]] && continue
+      pkg=$(basename "$pkg")
+      valid_pkg_name "$pkg" || continue
+      reason=$(get_reason "$pkg")
+      [ "$reason" = "dep" ] || continue
+      [ -e "$HOLDS/$pkg" ] && continue
+      rd=$(revdeps "$pkg")
+      if [ -z "$rd" ]; then
+        candidates+=("$pkg")
+      fi
+    done
+    [ "${#candidates[@]}" -eq 0 ] && break
+    iter=$((iter+1))
+    if [ "$iter" -gt 32 ]; then
+      warn "autoremove: too many iterations, stopping"
+      break
+    fi
+    echo
+    echo "${BOLD}Orphan packages (installed as deps, no longer needed):${NC}"
+    for pkg in "${candidates[@]}"; do
+      echo "  ${RED}•${NC} $pkg ${CYAN}$(cat "$INSTALLED/$pkg")${NC}"
+    done
+    echo
+    if [ "${DRY_RUN:-0}" = "1" ]; then
+      info "dry-run: would remove ${#candidates[@]} package(s)"
+      return 0
+    fi
+    if ! confirm "${YELLOW}$(t proceed)${NC}"; then
+      info "$(t aborted)"
+      return 0
+    fi
+    # Force-remove in this batch; we already verified no revdeps in *this* iteration.
+    cmd_remove --force "${candidates[@]}" || return 1
+  done
+  success "no orphan packages"
+}
+
+cmd_download() {
+  local pkg="${1:-}" dest="${2:-.}"
+  if [ -z "$pkg" ]; then
+    err "usage: zbpm download <pkg> [dest-dir]"
+    return 2
+  fi
+  require_pkg_name "$pkg"
+  ensure_index || return 1
+  local ver
+  ver=$(get_remote_version "$pkg") || return 1
+  if [ -z "$ver" ]; then
+    err "$(t not_in_repo) $pkg"
+    return 1
+  fi
+  install -d -m 0755 "$dest" || { err "cannot create $dest"; return 1; }
+  local out_tar="$dest/$pkg.tar.gz"
+  local out_sha="$dest/$pkg.tar.gz.sha256"
+  local out_sig="$dest/$pkg.tar.gz.sig"
+  info "$(t download) $pkg $ver -> $dest"
+  if ! fetch "$pkg.tar.gz" "$out_tar"; then
+    err "download failed: $pkg"
+    return 1
+  fi
+  fetch_optional "$pkg.tar.gz.sha256" "$out_sha" || rm -f "$out_sha"
+  fetch_optional "$pkg.tar.gz.sig"    "$out_sig" || rm -f "$out_sig"
+  success "downloaded $out_tar"
+}
+
+cmd_history() {
+  local n="${1:-20}"
+  [[ "$n" =~ ^[0-9]+$ ]] || n=20
+  if [ ! -s "$TRANSACTIONS_LOG" ]; then
+    info "no transactions recorded yet"
+    return 0
+  fi
+  echo
+  echo "${BOLD}Recent zbpm transactions (last $n):${NC}"
+  printf '  %-25s %-10s %-30s %s\n' "TIMESTAMP" "ACTION" "PACKAGE" "VERSION"
+  tail -n "$n" "$TRANSACTIONS_LOG" | while IFS=$'\t' read -r when action pkg ver; do
+    local color=""
+    case "$action" in
+      install) color="$GREEN" ;;
+      remove)  color="$RED" ;;
+      *)       color="$CYAN" ;;
+    esac
+    printf '  %-25s %s%-10s%s %-30s %s\n' "$when" "$color" "$action" "$NC" "$pkg" "$ver"
+  done
+}
+
 cmd_check() {
   # Detect partial installs.
   local p found=0
@@ -838,6 +987,9 @@ COMMANDS
   install [pkg ...]           Install packages and dependencies
   reinstall <pkg ...>         Reinstall even if same version
   remove [--force] <pkg ...>  Remove packages (refuses if revdeps exist)
+  autoremove                  Remove orphan dep-only packages
+  download <pkg> [dest]       Download package to dest (no install)
+  history [N]                 Show recent install/remove transactions (default 20)
   sync                        Refresh package index
   upgrade                     Upgrade installed packages (no sync)
   update                      sync + upgrade
@@ -857,6 +1009,8 @@ COMMANDS
 
 OPTIONS
   -y, --yes                   Assume "yes" to all prompts
+  -n, --dry-run               Show what would happen, do not modify the system
+                              (applies to install / remove / upgrade / autoremove)
   --no-color                  Disable color output (or set NO_COLOR=1)
   --no-verify                 Skip signature/checksum verification (DANGEROUS).
                               Equivalent to ZBPM_REQUIRE_SIGNATURE=0.
