@@ -17,7 +17,7 @@ SHELL_FILES := $(ROOTFS)/init $(ROOTFS)/install.sh $(ROOTFS)/usr/bin/zbpm \
                $(ROOTFS)/var/lib/zbpm/scripts/xfce4-desktop.post \
                $(ROOTFS)/var/lib/zbpm/scripts/kernel.post
 
-.PHONY: all initramfs iso lint clean distclean help
+.PHONY: all initramfs iso lint clean distclean help $(INITRAMFS)
 
 all: initramfs
 
@@ -27,10 +27,13 @@ help:
 
 initramfs: $(INITRAMFS) ## Pack rootfs/ into init.cpio (gzip-compressed cpio)
 
-$(INITRAMFS): $(shell find $(ROOTFS) -type f -o -type l 2>/dev/null)
+# init.cpio is .PHONY — always repacked. Enumerating rootfs files as Make
+# dependencies fails for paths with commas/spaces (e.g. Broadcom firmware).
+# Repacking is fast (a few seconds) so unconditional rebuild is fine.
+$(INITRAMFS):
 	@echo "==> packing $(ROOTFS) -> $@"
-	cd $(ROOTFS) && find . -mindepth 1 \( -type f -o -type l -o -type d \) | \
-	  LC_ALL=C sort | cpio -o -H newc --quiet | gzip -9 > ../$(INITRAMFS).tmp
+	cd $(ROOTFS) && find . -mindepth 1 \( -type f -o -type l -o -type d \) -print0 | \
+	  LC_ALL=C sort -z | cpio -o -H newc --null --quiet | gzip -9 > ../$(INITRAMFS).tmp
 	mv $(INITRAMFS).tmp $(INITRAMFS)
 	@echo "==> $@: $$(du -h $@ | cut -f1)"
 
