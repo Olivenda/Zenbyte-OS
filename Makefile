@@ -53,7 +53,7 @@ $(ISO): $(KERNEL) $(INITRAMFS) $(ISO_DIR)/boot/grub/grub.cfg
 	cp $(ISO_DIR)/boot/grub/grub.cfg $(BUILD_DIR)/iso-stage/boot/grub/grub.cfg
 	@echo "==> $(GRUB_MKRESCUE) -> $@"
 	$(GRUB_MKRESCUE) -o $@ $(BUILD_DIR)/iso-stage \
-	  --product-name=ZenbyteOS --volid=ZenbyteOS
+	  --product-name=ZenbyteOS -- -volid ZenbyteOS
 
 lint: ## shellcheck all shipped Bash scripts
 	@command -v shellcheck >/dev/null 2>&1 || \
