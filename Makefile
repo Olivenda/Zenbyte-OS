@@ -34,6 +34,12 @@ initramfs: $(INITRAMFS) ## Pack rootfs/ into init.cpio (gzip-compressed cpio)
 # dependencies fails for paths with commas/spaces (e.g. Broadcom firmware).
 # Repacking is fast (a few seconds) so unconditional rebuild is fine.
 $(INITRAMFS):
+	@# Seed /dev nodes that git cannot store as character devices.
+	@# Silently skipped if mknod is unavailable or not run as root.
+	@install -d $(ROOTFS)/dev
+	@[ -c $(ROOTFS)/dev/console ] || mknod -m 600 $(ROOTFS)/dev/console c 5 1 2>/dev/null || true
+	@[ -c $(ROOTFS)/dev/null ]    || mknod -m 666 $(ROOTFS)/dev/null    c 1 3 2>/dev/null || true
+	@[ -c $(ROOTFS)/dev/zero ]    || mknod -m 666 $(ROOTFS)/dev/zero    c 1 5 2>/dev/null || true
 	@echo "==> packing $(ROOTFS) -> $@"
 	cd $(ROOTFS) && find . -mindepth 1 \( -type f -o -type l -o -type d \) -print0 | \
 	  LC_ALL=C sort -z | cpio -o -H newc --null --quiet | gzip -9 > ../$(INITRAMFS).tmp

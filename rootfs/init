@@ -7,6 +7,17 @@
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 
+# Git cannot store character device nodes, so create the essential ones here.
+# This runs before any mount, so /dev/null and /dev/console don't exist yet.
+[ -c /dev/console ] || mknod -m 600 /dev/console c 5 1
+[ -c /dev/null    ] || mknod -m 666 /dev/null    c 1 3
+[ -c /dev/zero    ] || mknod -m 666 /dev/zero    c 1 5
+# Ensure mount-point directories exist (git drops empty dirs without .gitkeep).
+for _d in /proc /sys /run /tmp; do
+  [ -d "$_d" ] || mkdir -p "$_d"
+done
+chmod 1777 /tmp
+
 panic_shell() {
   echo
   echo "==> $* — dropping to emergency shell."
