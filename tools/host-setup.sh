@@ -67,6 +67,8 @@ if is_ubuntu; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq
 
+  # grub2-common provides grub-mkrescue (the Ubuntu equivalent of grub2-mkrescue).
+  # Do NOT install the 'grub2' meta-package — it removes grub-efi-amd64.
   apt-get install -y \
     xorriso cpio gzip \
     rpm rpm2cpio \
