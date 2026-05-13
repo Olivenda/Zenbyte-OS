@@ -1,0 +1,259 @@
+version = "1.0"
+
+[packages]
+"NetworkManager-libnm.x86_64" = {reason = "Dependency"}
+"NetworkManager.x86_64" = {reason = "User"}
+"alternatives.x86_64" = {reason = "Dependency"}
+"amd-gpu-firmware.noarch" = {reason = "Weak Dependency"}
+"amd-ucode-firmware.noarch" = {reason = "Weak Dependency"}
+"atheros-firmware.noarch" = {reason = "Weak Dependency"}
+"audit-libs.x86_64" = {reason = "Dependency"}
+"authselect-libs.x86_64" = {reason = "Dependency"}
+"authselect.x86_64" = {reason = "Dependency"}
+"basesystem.noarch" = {reason = "User"}
+"bash.x86_64" = {reason = "User"}
+"brcmfmac-firmware.noarch" = {reason = "Weak Dependency"}
+"bzip2-libs.x86_64" = {reason = "Dependency"}
+"bzip2.x86_64" = {reason = "User"}
+"ca-certificates.noarch" = {reason = "Dependency"}
+"cirrus-audio-firmware.noarch" = {reason = "Weak Dependency"}
+"coreutils-common.x86_64" = {reason = "Dependency"}
+"coreutils.x86_64" = {reason = "User"}
+"cpio.x86_64" = {reason = "Dependency"}
+"cracklib-dicts.x86_64" = {reason = "Weak Dependency"}
+"cracklib.x86_64" = {reason = "Dependency"}
+"crypto-policies-scripts.noarch" = {reason = "Weak Dependency"}
+"crypto-policies.noarch" = {reason = "Dependency"}
+"cryptsetup-libs.x86_64" = {reason = "Dependency"}
+"curl.x86_64" = {reason = "User"}
+"cyrus-sasl-lib.x86_64" = {reason = "Dependency"}
+"dbus-broker.x86_64" = {reason = "Dependency"}
+"dbus-common.noarch" = {reason = "Dependency"}
+"dbus.x86_64" = {reason = "Dependency"}
+"device-mapper-libs.x86_64" = {reason = "Dependency"}
+"device-mapper.x86_64" = {reason = "Dependency"}
+"dhcp-client.x86_64" = {reason = "User"}
+"dhcp-common.noarch" = {reason = "Dependency"}
+"dmidecode.x86_64" = {reason = "User"}
+"dosfstools.x86_64" = {reason = "User"}
+"dracut.x86_64" = {reason = "Dependency"}
+"e2fsprogs-libs.x86_64" = {reason = "Dependency"}
+"e2fsprogs.x86_64" = {reason = "User"}
+"elfutils-default-yama-scope.noarch" = {reason = "Dependency"}
+"elfutils-libelf.x86_64" = {reason = "Dependency"}
+"elfutils-libs.x86_64" = {reason = "Dependency"}
+"expat.x86_64" = {reason = "Dependency"}
+"fastfetch.x86_64" = {reason = "User"}
+"fedora-gpg-keys.noarch" = {reason = "Dependency"}
+"fedora-release-common.noarch" = {reason = "Dependency"}
+"fedora-release-identity-basic.noarch" = {reason = "Dependency"}
+"fedora-release.noarch" = {reason = "Dependency"}
+"fedora-repos.noarch" = {reason = "Dependency"}
+"file-libs.x86_64" = {reason = "Dependency"}
+"file.x86_64" = {reason = "Dependency"}
+"filesystem.x86_64" = {reason = "Dependency"}
+"findutils.x86_64" = {reason = "Dependency"}
+"fonts-filesystem.noarch" = {reason = "Dependency"}
+"fuse3-libs.x86_64" = {reason = "Dependency"}
+"gawk-all-langpacks.x86_64" = {reason = "Weak Dependency"}
+"gawk.x86_64" = {reason = "Dependency"}
+"gdbm-libs.x86_64" = {reason = "Dependency"}
+"gdbm.x86_64" = {reason = "Dependency"}
+"geolite2-city.noarch" = {reason = "Weak Dependency"}
+"geolite2-country.noarch" = {reason = "Weak Dependency"}
+"gettext-envsubst.x86_64" = {reason = "Dependency"}
+"gettext-libs.x86_64" = {reason = "Dependency"}
+"gettext-runtime.x86_64" = {reason = "Dependency"}
+"glib2.x86_64" = {reason = "Dependency"}
+"glibc-common.x86_64" = {reason = "Dependency"}
+"glibc-gconv-extra.x86_64" = {reason = "Weak Dependency"}
+"glibc-minimal-langpack.x86_64" = {reason = "Dependency"}
+"glibc.x86_64" = {reason = "Dependency"}
+"gmp.x86_64" = {reason = "Dependency"}
+"gnupg2.x86_64" = {reason = "Dependency"}
+"gnutls-dane.x86_64" = {reason = "Dependency"}
+"gnutls.x86_64" = {reason = "Dependency"}
+"gpgme.x86_64" = {reason = "Dependency"}
+"grep.x86_64" = {reason = "Dependency"}
+"grub2-common.noarch" = {reason = "Dependency"}
+"grub2-pc-modules.noarch" = {reason = "Dependency"}
+"grub2-pc.x86_64" = {reason = "User"}
+"grub2-tools-minimal.x86_64" = {reason = "Dependency"}
+"grub2-tools.x86_64" = {reason = "Dependency"}
+"gzip.x86_64" = {reason = "Dependency"}
+"hdparm.x86_64" = {reason = "User"}
+"hiredis.x86_64" = {reason = "Dependency"}
+"hostname.x86_64" = {reason = "User"}
+"htop.x86_64" = {reason = "User"}
+"hwdata.noarch" = {reason = "Dependency"}
+"hwloc-libs.x86_64" = {reason = "Dependency"}
+"intel-audio-firmware.noarch" = {reason = "Weak Dependency"}
+"intel-gpu-firmware.noarch" = {reason = "Weak Dependency"}
+"ipcalc.x86_64" = {reason = "Dependency"}
+"iproute.x86_64" = {reason = "User"}
+"iputils.x86_64" = {reason = "User"}
+"json-c.x86_64" = {reason = "Dependency"}
+"kbd-legacy.noarch" = {reason = "Dependency"}
+"kbd-misc.noarch" = {reason = "Dependency"}
+"kbd.x86_64" = {reason = "Dependency"}
+"kernel-core.x86_64" = {reason = "Dependency"}
+"kernel-modules-core.x86_64" = {reason = "Dependency"}
+"kernel-modules.x86_64" = {reason = "Dependency"}
+"kernel.x86_64" = {reason = "User"}
+"keyutils-libs.x86_64" = {reason = "Dependency"}
+"kmod-libs.x86_64" = {reason = "Dependency"}
+"kmod.x86_64" = {reason = "Dependency"}
+"kpartx.x86_64" = {reason = "Weak Dependency"}
+"krb5-libs.x86_64" = {reason = "Dependency"}
+"libacl.x86_64" = {reason = "Dependency"}
+"libarchive.x86_64" = {reason = "Dependency"}
+"libassuan.x86_64" = {reason = "Dependency"}
+"libattr.x86_64" = {reason = "Dependency"}
+"libb2.x86_64" = {reason = "Dependency"}
+"libblkid.x86_64" = {reason = "Dependency"}
+"libbpf.x86_64" = {reason = "Dependency"}
+"libbrotli.x86_64" = {reason = "Dependency"}
+"libcap-ng.x86_64" = {reason = "Dependency"}
+"libcap.x86_64" = {reason = "Dependency"}
+"libcom_err.x86_64" = {reason = "Dependency"}
+"libcurl.x86_64" = {reason = "Dependency"}
+"libeconf.x86_64" = {reason = "Dependency"}
+"liberation-fonts-all.noarch" = {reason = "User"}
+"liberation-mono-fonts.noarch" = {reason = "Dependency"}
+"liberation-sans-fonts.noarch" = {reason = "Dependency"}
+"liberation-serif-fonts.noarch" = {reason = "Dependency"}
+"libevent.x86_64" = {reason = "Dependency"}
+"libfdisk.x86_64" = {reason = "Dependency"}
+"libffi.x86_64" = {reason = "Dependency"}
+"libgcc.x86_64" = {reason = "Dependency"}
+"libgcrypt.x86_64" = {reason = "Dependency"}
+"libgomp.x86_64" = {reason = "Dependency"}
+"libgpg-error.x86_64" = {reason = "Dependency"}
+"libidn2.x86_64" = {reason = "Dependency"}
+"libkcapi-hasher.x86_64" = {reason = "Dependency"}
+"libkcapi-hmaccalc.x86_64" = {reason = "Dependency"}
+"libkcapi.x86_64" = {reason = "Dependency"}
+"libksba.x86_64" = {reason = "Dependency"}
+"libmaxminddb.x86_64" = {reason = "Weak Dependency"}
+"libmnl.x86_64" = {reason = "Dependency"}
+"libmount.x86_64" = {reason = "Dependency"}
+"libndp.x86_64" = {reason = "Dependency"}
+"libnghttp2.x86_64" = {reason = "Dependency"}
+"libnl3.x86_64" = {reason = "Dependency"}
+"libnsl2.x86_64" = {reason = "Dependency"}
+"libpkgconf.x86_64" = {reason = "Dependency"}
+"libpsl.x86_64" = {reason = "Dependency"}
+"libpwquality.x86_64" = {reason = "Dependency"}
+"libseccomp.x86_64" = {reason = "Dependency"}
+"libselinux.x86_64" = {reason = "Dependency"}
+"libsemanage.x86_64" = {reason = "Dependency"}
+"libsepol.x86_64" = {reason = "Dependency"}
+"libsmartcols.x86_64" = {reason = "Dependency"}
+"libss.x86_64" = {reason = "Dependency"}
+"libssh-config.noarch" = {reason = "Dependency"}
+"libssh.x86_64" = {reason = "Dependency"}
+"libstdc++.x86_64" = {reason = "Dependency"}
+"libtasn1.x86_64" = {reason = "Dependency"}
+"libtextstyle.x86_64" = {reason = "Dependency"}
+"libtirpc.x86_64" = {reason = "Dependency"}
+"libtool-ltdl.x86_64" = {reason = "Dependency"}
+"libunistring.x86_64" = {reason = "Dependency"}
+"libusb1.x86_64" = {reason = "Dependency"}
+"libutempter.x86_64" = {reason = "Dependency"}
+"libuuid.x86_64" = {reason = "Dependency"}
+"libverto.x86_64" = {reason = "Dependency"}
+"libxcrypt.x86_64" = {reason = "Dependency"}
+"libxkbcommon.x86_64" = {reason = "Dependency"}
+"libxml2.x86_64" = {reason = "Dependency"}
+"libzstd.x86_64" = {reason = "Dependency"}
+"linux-firmware-whence.noarch" = {reason = "Dependency"}
+"linux-firmware.noarch" = {reason = "Weak Dependency"}
+"lshw.x86_64" = {reason = "User"}
+"lsscsi.x86_64" = {reason = "User"}
+"lz4-libs.x86_64" = {reason = "Dependency"}
+"memstrack.x86_64" = {reason = "Weak Dependency"}
+"mkpasswd.x86_64" = {reason = "Weak Dependency"}
+"mpdecimal.x86_64" = {reason = "Dependency"}
+"mpfr.x86_64" = {reason = "Dependency"}
+"mt7xxx-firmware.noarch" = {reason = "Weak Dependency"}
+"nano-default-editor.noarch" = {reason = "Weak Dependency"}
+"nano.x86_64" = {reason = "User"}
+"ncurses-base.noarch" = {reason = "Dependency"}
+"ncurses-libs.x86_64" = {reason = "Dependency"}
+"ncurses.x86_64" = {reason = "User"}
+"nettle.x86_64" = {reason = "Dependency"}
+"npth.x86_64" = {reason = "Dependency"}
+"ntfs-3g-libs.x86_64" = {reason = "Dependency"}
+"ntfs-3g-system-compression.x86_64" = {reason = "Weak Dependency"}
+"ntfs-3g.x86_64" = {reason = "User"}
+"nvidia-gpu-firmware.noarch" = {reason = "Weak Dependency"}
+"nxpwireless-firmware.noarch" = {reason = "Weak Dependency"}
+"openldap.x86_64" = {reason = "Dependency"}
+"openssh-server.x86_64" = {reason = "User"}
+"openssh.x86_64" = {reason = "Dependency"}
+"openssl-libs.x86_64" = {reason = "Dependency"}
+"os-prober.x86_64" = {reason = "Dependency"}
+"p11-kit-trust.x86_64" = {reason = "Dependency"}
+"p11-kit.x86_64" = {reason = "Dependency"}
+"pam-libs.x86_64" = {reason = "Dependency"}
+"pam.x86_64" = {reason = "Dependency"}
+"parted.x86_64" = {reason = "User"}
+"pciutils-libs.x86_64" = {reason = "Dependency"}
+"pciutils.x86_64" = {reason = "User"}
+"pcre2-syntax.noarch" = {reason = "Dependency"}
+"pcre2.x86_64" = {reason = "Dependency"}
+"pigz.x86_64" = {reason = "Weak Dependency"}
+"pkcs11-provider.x86_64" = {reason = "Weak Dependency"}
+"pkgconf-m4.noarch" = {reason = "Dependency"}
+"pkgconf-pkg-config.x86_64" = {reason = "Dependency"}
+"pkgconf.x86_64" = {reason = "Dependency"}
+"popt.x86_64" = {reason = "Dependency"}
+"procps-ng.x86_64" = {reason = "User"}
+"protobuf-c.x86_64" = {reason = "Dependency"}
+"psmisc.x86_64" = {reason = "Dependency"}
+"publicsuffix-list-dafsa.noarch" = {reason = "Dependency"}
+"python-pip-wheel.noarch" = {reason = "Dependency"}
+"python-unversioned-command.noarch" = {reason = "Weak Dependency"}
+"python3-libs.x86_64" = {reason = "Dependency"}
+"python3.x86_64" = {reason = "Dependency"}
+"qcom-wwan-firmware.noarch" = {reason = "Weak Dependency"}
+"readline.x86_64" = {reason = "Dependency"}
+"realtek-firmware.noarch" = {reason = "Weak Dependency"}
+"rsync.x86_64" = {reason = "User"}
+"screen.x86_64" = {reason = "User"}
+"sed.x86_64" = {reason = "Dependency"}
+"setup.noarch" = {reason = "Dependency"}
+"shadow-utils.x86_64" = {reason = "User"}
+"smartmontools.x86_64" = {reason = "User"}
+"sqlite-libs.x86_64" = {reason = "Dependency"}
+"sudo-python-plugin.x86_64" = {reason = "Weak Dependency"}
+"sudo.x86_64" = {reason = "User"}
+"systemd-libs.x86_64" = {reason = "Dependency"}
+"systemd-pam.x86_64" = {reason = "Dependency"}
+"systemd-udev.x86_64" = {reason = "User"}
+"systemd.x86_64" = {reason = "User"}
+"tar.x86_64" = {reason = "User"}
+"tiwilink-firmware.noarch" = {reason = "Weak Dependency"}
+"tmux.x86_64" = {reason = "User"}
+"tpm2-tools.x86_64" = {reason = "Weak Dependency"}
+"tpm2-tss-fapi.x86_64" = {reason = "Dependency"}
+"tpm2-tss.x86_64" = {reason = "Dependency"}
+"tzdata.noarch" = {reason = "Weak Dependency"}
+"unbound-libs.x86_64" = {reason = "Dependency"}
+"usbutils.x86_64" = {reason = "User"}
+"util-linux-core.x86_64" = {reason = "Dependency"}
+"util-linux.x86_64" = {reason = "User"}
+"vim-data.noarch" = {reason = "Dependency"}
+"vim-minimal.x86_64" = {reason = "User"}
+"wget2-libs.x86_64" = {reason = "Dependency"}
+"wget2-wget.x86_64" = {reason = "User"}
+"wget2.x86_64" = {reason = "Dependency"}
+"which.x86_64" = {reason = "Dependency"}
+"whois-nls.noarch" = {reason = "Dependency"}
+"xkeyboard-config.noarch" = {reason = "Dependency"}
+"xxhash-libs.x86_64" = {reason = "Dependency"}
+"xz-libs.x86_64" = {reason = "Dependency"}
+"xz.x86_64" = {reason = "Dependency"}
+"yyjson.x86_64" = {reason = "Dependency"}
+"zlib-ng-compat.x86_64" = {reason = "Dependency"}
+

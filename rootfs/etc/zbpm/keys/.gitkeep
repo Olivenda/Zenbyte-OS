@@ -1,0 +1,10 @@
+# Drop your zbpm signing keys here.
+#
+# zbpm looks for one of:
+#   /etc/zbpm/keys/zbpm.kbx   (modern GnuPG keybox)
+#   /etc/zbpm/keys/zbpm.gpg   (legacy keyring, accepted by gpgv)
+#
+# Generate a keybox from a public key with:
+#   gpg --no-default-keyring --keyring /etc/zbpm/keys/zbpm.gpg --import zbpm-pub.asc
+#
+# Permissions on this directory must be 0700, owned by root.

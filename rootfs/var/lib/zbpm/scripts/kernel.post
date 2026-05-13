@@ -1,0 +1,38 @@
+#!/bin/bash
+# Post-install hook for the kernel package.
+# Symlinks /boot/vmlinuz to the newest kernel image and refreshes the
+# generated GRUB stanza. The original installer-created stanza is preserved
+# (it uses UUIDs); we only update the kernel symlink target.
+
+set -e
+
+newest=$(ls -1v /boot/vmlinuz-* 2>/dev/null | tail -1)
+if [ -z "$newest" ]; then
+  echo "no /boot/vmlinuz-* found, skipping" >&2
+  exit 0
+fi
+
+ln -sfn "$newest" /boot/vmlinuz
+echo "-> /boot/vmlinuz -> $newest"
+
+# Try to regenerate the initramfs for the new kernel if dracut is present.
+KVER="${newest#/boot/vmlinuz-}"
+if command -v dracut >/dev/null 2>&1; then
+  dracut --force "/boot/initramfs-${KVER}.img" "$KVER" 2>/dev/null || true
+  if [ -f "/boot/initramfs-${KVER}.img" ]; then
+    ln -sfn "/boot/initramfs-${KVER}.img" /boot/initramfs.img
+  fi
+fi
+
+# If the system has a managed grub config, regenerate it. Otherwise leave
+# the installer-written /boot/grub2/grub.cfg alone — it already references
+# /boot/vmlinuz which we just repointed.
+if command -v grub2-mkconfig >/dev/null 2>&1; then
+  for cfg in /boot/grub2/grub.cfg /boot/grub/grub.cfg; do
+    if [ -L "$cfg" ] || head -n1 "$cfg" 2>/dev/null | grep -q 'DO NOT EDIT'; then
+      grub2-mkconfig -o "$cfg" 2>/dev/null || true
+    fi
+  done
+fi
+
+echo "-> kernel post-install done; reboot to apply"

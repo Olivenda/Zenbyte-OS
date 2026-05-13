@@ -1,0 +1,13 @@
+[Unit]
+Description=Bind-mount FIPS crypto-policy in FIPS mode
+ConditionKernelCommandLine=fips=1
+DefaultDependencies=no
+Requires=local-fs.target
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/fips-crypto-policy-overlay
+
+[Install]
+WantedBy=sysinit.target

@@ -1,0 +1,8 @@
+[global]
+override-mode = allowlist
+
+[overrides]
+min-verification-profile = very_weak
+
+[priorities]
+SYSTEM=NONE

@@ -1,0 +1,82 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+set -u
+
+policyfile=/etc/crypto-policies/config
+fipspolicyfile=/usr/share/crypto-policies/default-fips-config
+fipspolicyfilesuffix=/crypto-policies/default-fips-config
+backends=/etc/crypto-policies/back-ends
+fipsbackends=/usr/share/crypto-policies/back-ends/FIPS
+fipsbackendssuffix=/crypto-policies/back-ends/FIPS
+
+if ! mountpoint -q /proc; then
+        echo "/proc is not mounted" 1>&2
+        exit 1
+fi
+
+if ! [[ $(cat /proc/sys/crypto/fips_enabled) == 1 ]]; then
+        echo "FIPS mode is not enabled." 1>&2
+        exit 1
+fi
+
+if mountpoint -q "${policyfile}"; then
+        if grep -qF "${fipspolicyfilesuffix} ${policyfile} " /proc/self/mountinfo
+        then
+                echo "Some path ending in ${fipspolicyfilesuffix}" 1>&2
+                echo "is already mounted over ${policyfile}" 1>&2
+                exit 0
+        fi
+        echo "Warning: ${policyfile} is already mounted over." 1>&2
+fi
+
+if mountpoint -q "${backends}"; then
+        if grep -qF "${fipsbackendssuffix} ${backends} " /proc/self/mountinfo; then
+                echo "Some path ending in ${fipsbackendssuffix} " 1>&2
+                echo "is already mounted over ${backends}" 1>&2
+                exit 0
+        fi
+        echo "Warning: ${backends} is already mounted over." 1>&2
+fi
+
+# When in FIPS mode, check the active crypto policy by reading the
+# /etc/crypto-policies/config file. If it is not "FIPS", or does not start
+# with "FIPS:", automatically switch to the FIPS policy by creating
+# bind-mounts.
+
+if ! [ -f "${policyfile}" ]; then
+        echo "${policyfile} is missing." 1>&2
+        exit 1
+fi
+
+policy=$(cat "${policyfile}")
+
+if [[ "${policy}" == "FIPS" || "${policy}" =~ ^FIPS: ]]; then
+        echo "System-wide crypto-policy is already set to ${policy}." 1>&2
+        exit 0
+fi
+
+# Current crypto policy is not FIPS or FIPS-based, but the system is in FIPS
+# mode; this is an inconsistent configuration. Automatically bind-mount a FIPS
+# configuration over this.
+
+if ! mount -o bind,ro "${fipsbackends}" "${backends}"; then
+        echo -n "Failed to bind-mount FIPS policy over ${backends} " 1>&2
+        echo "(the system is in FIPS mode, but the crypto-policy is not)." 1>&2
+        exit 1
+fi
+
+# Also mount a file containing `FIPS\n` over /etc/crypto-policies/config.
+
+if [ ! -f "${fipspolicyfile}" ]; then
+        echo -n "${fipspolicyfile} is missing." 1>&2
+        exit 1
+fi
+
+if ! mount -o bind,ro "${fipspolicyfile}" "${policyfile}"
+then
+        echo -n "Failed to bind-mount FIPS crypto-policy state file " 1>&2
+        echo -n "over ${policyfile} " 1>&2
+        echo "(the system is in FIPS mode, but the crypto-policy is not)." 1>&2
+        exit 1
+fi

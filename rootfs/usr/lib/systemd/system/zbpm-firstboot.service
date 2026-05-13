@@ -1,0 +1,40 @@
+[Unit]
+Description=ZenbyteOS first-boot package install
+ConditionPathExists=!/var/lib/zbpm/.firstboot-done
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Run zbpm non-interactively. The script reads /etc/zbpm/firstboot.user
+# (written by the installer) and configures autologin for that user.
+ExecStart=/usr/bin/zbpm install -y xfce4-desktop
+ExecStartPost=/bin/touch /var/lib/zbpm/.firstboot-done
+ExecStartPost=/bin/systemctl disable zbpm-firstboot.service
+
+# Hardening — first boot is the most sensitive moment of the system's life.
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+PrivateTmp=yes
+# Make the filesystem read-only except for the paths zbpm actually writes.
+ProtectSystem=strict
+ReadWritePaths=/usr /etc /opt /var/lib/zbpm /var/cache/zbpm /var/log /run
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target

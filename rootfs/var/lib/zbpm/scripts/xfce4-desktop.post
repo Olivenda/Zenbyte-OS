@@ -1,0 +1,67 @@
+#!/bin/bash
+# Post-install hook for the xfce4-desktop package.
+#
+# Configures LightDM and XFCE without enabling unattended root login.
+# If /etc/zbpm/firstboot.user exists (written by the installer) and names
+# a real user, that user gets a passwordless autologin. Otherwise the
+# greeter is shown and authentication is required — never root.
+
+set -e
+
+USER_FILE="/etc/zbpm/firstboot.user"
+AUTO_USER=""
+
+if [ -r "$USER_FILE" ]; then
+  candidate=$(head -n1 "$USER_FILE" | tr -d '[:space:]')
+  if [[ "$candidate" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] \
+       && [ "$candidate" != "root" ] \
+       && id "$candidate" >/dev/null 2>&1; then
+    AUTO_USER="$candidate"
+  fi
+fi
+
+install -d -m 0755 /etc/lightdm
+
+{
+  echo "[Seat:*]"
+  echo "user-session=xfce"
+  echo "greeter-session=lightdm-gtk-greeter"
+  if [ -n "$AUTO_USER" ]; then
+    echo "autologin-user=$AUTO_USER"
+    echo "autologin-session=xfce"
+  fi
+} > /etc/lightdm/lightdm.conf
+chmod 0644 /etc/lightdm/lightdm.conf
+
+# Only seed an .xinitrc for the autologin user, if any.
+if [ -n "$AUTO_USER" ]; then
+  home=$(getent passwd "$AUTO_USER" | cut -d: -f6)
+  if [ -n "$home" ] && [ -d "$home" ]; then
+    echo "exec startxfce4" > "$home/.xinitrc"
+    chown "$AUTO_USER:$AUTO_USER" "$home/.xinitrc"
+    chmod 0644 "$home/.xinitrc"
+  fi
+
+  # Ensure the user is in the audio and video groups for hardware access.
+  usermod -aG audio,video "$AUTO_USER" 2>/dev/null || true
+
+  # Enable PipeWire user services for the autologin user.
+  # In a chroot/firstboot context D-Bus may not be running, so --now may fail;
+  # fall back to a plain enable so the units start on next login.
+  uid=$(id -u "$AUTO_USER" 2>/dev/null || true)
+  if [ -n "$uid" ] && command -v systemctl >/dev/null 2>&1; then
+    XDG_RUNTIME_DIR="/run/user/$uid" \
+      systemctl --user -M "${AUTO_USER}@" enable \
+        pipewire.service pipewire-pulse.service wireplumber.service \
+        2>/dev/null || \
+    systemctl enable --user \
+        pipewire.service pipewire-pulse.service wireplumber.service \
+        2>/dev/null || true
+  fi
+fi
+
+systemctl enable lightdm.service       2>/dev/null || true
+systemctl enable NetworkManager.service 2>/dev/null || true
+
+echo "-> XFCE configured."
+[ -n "$AUTO_USER" ] && echo "-> autologin: $AUTO_USER" || echo "-> greeter login required"

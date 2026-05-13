@@ -1,0 +1,199 @@
+#!/usr/bin/sh
+
+# dash shell does not have "{varname}>&1" feature that bash shell has
+# for auto-assignment of new filedescriptors.
+# It is cumbersome to write the 'eval' to use our own variables in redirections.
+# Therefore use fixed numbers.
+export fd_result=3  # file descriptor for external results
+export fd_logger=9  # file descriptor for input to logger
+
+. /usr/share/os-prober/common.sh
+
+set -e
+
+newns "$@"
+require_tmpdir
+ERR="n"
+
+tmpmnt=/var/lib/os-prober/mount
+if [ ! -d "$tmpmnt" ]; then
+	mkdir "$tmpmnt"
+fi
+
+mounted=
+bootmnt=
+bootsv=
+bootuuid=
+
+grep "^/dev/" /proc/mounts | parse_proc_mounts >"$OS_PROBER_TMP/mounted-map" || true
+
+( (
+if [ -z "$1" ]; then
+	ERR=y
+elif [ "$1" = btrfs -a -z "$2" ]; then
+	ERR=y
+elif [ "$1" = btrfs -a -z "$3" ]; then
+	ERR=y
+elif [ "$1" = btrfs ]; then
+	type=btrfs
+	echo "$2" | grep -q "^UUID=" || ERR=y
+	echo "$3" | grep -q "^subvol=" || ERR=y
+	export "$2"
+	export "$3"
+	partition=$(blkid | grep "$UUID" | cut -d ':' -f 1 | tr '\n' ' ' | cut -d ' ' -f 1)
+	debug "btrfs: partition=$partition, UUID=$UUID, subvol=$subvol"
+else
+	partition="$1"
+	type=other
+fi
+
+if [ "x$ERR" != xn ]; then
+	echo "usage: linux-boot-prober partition" >&2
+	echo "       linux-boot-prober btrfs UUID=<> subvol=<>" >&2
+	exit 1
+fi
+
+if [ "$type" = btrfs ]; then
+	# handle all of the btrfs stuff here
+	if [ ! -e "/proc/self/mountinfo" ]; then
+		warn "/proc/self/mountinfo does not exist, exiting"
+		umount "$tmpmnt" 2>/dev/null
+		rmdir "$tmpmnt" 2>/dev/null
+		exit 1
+	fi
+	mpoint=$(grep "btrfs" /proc/self/mountinfo | grep " /$subvol " | grep " $partition " | cut -d ' ' -f 5)
+	if [ "$mpoint" = "/" ]; then
+		warn "specifying active root not valid, exiting"
+		umount "$tmpmnt" 2>/dev/null
+		rmdir "$tmpmnt" 2>/dev/null
+		exit 1
+	fi
+	if [ "$mpoint" = "$tmpmnt" ]; then
+		warn "btrfs subvol=$subvool, UUID=$UUID, already mounted on $tmpmnt **ERROR**"
+		umount "$tmpmnt" 2>/dev/null
+		rmdir "$tmpmnt" 2>/dev/null
+		exit 1
+	fi
+	if [ -z "$mpoint" ]; then
+		# mount the btrfs root
+		if ! mount -o subvol=$subvol -t btrfs -U $UUID "$tmpmnt" 2>/dev/null; then
+			warn "error mounting btrfs subvol=$subvol UUID=$UUID"
+			umount "$tmpmnt/boot" 2>/dev/null
+			umount "$tmpmnt" 2>/dev/null
+			rmdir "$tmpmnt" 2>/dev/null
+			exit 1
+		fi
+	else
+		# bind-mount
+		if ! mount -o bind "$mpoint" "$tmpmnt" 2>/dev/null; then
+			warn "error mounting btrfs bindfrom=$mpoint subvol=$subvol UUID=$UUID"
+			umount "$tmpmnt/boot" 2>/dev/null
+			umount "$tmpmnt" 2>/dev/null
+			rmdir "$tmpmnt" 2>/dev/null
+			exit 1
+		fi
+	fi
+	debug "mounted btrfs $partition, subvol=$subvol on $tmpmnt"
+	if [ ! -e "$tmpmnt/etc/fstab" ]; then
+		warn "btrfs subvol=$subvol not root"
+		umount "$tmpmnt" 2>/dev/null
+		rmdir "$tmpmnt" 2>/dev/null
+		exit 1
+	fi
+	bootmnt=$(parsefstab < "$tmpmnt/etc/fstab" | grep " /boot ") || true
+	if [ -z "$bootmnt" ]; then
+		# /boot is part of the root
+		bootpart="$partition"
+		bootsv="$subvol"
+	elif echo "$bootmnt" | cut -d ' ' -f 3 | grep -q "btrfs"; then
+		# separate btrfs /boot subvolume
+		bootsv=$(echo "$bootmnt" | cut -d ' ' -f 4 | grep "^subvol=" | sed "s/subvol=//" )
+		bootuuid=$(echo "$bootmnt" | cut -d ' ' -f 1 | grep "^UUID=" | sed "s/UUID=//" )
+		debug "mounting btrfs $tmpmnt/boot UUID=$bootuuid subvol=$bootsv"
+		bindfrom=$(check_btrfs_mounted $bootsv $bootuuid)
+		if [ -n "$bindfrom" ]; then
+			# already mounted some place
+			if ! mount -o bind $bindfrom "$tmpmnt/boot" 2>/dev/null; then
+				warn "error bind mounting btrfs boot subvol=$bootsv, from=$bindfrom"
+				umount "$tmpmnt/boot" 2>/dev/null
+				umount "$tmpmnt" 2>/dev/null
+				rmdir "$tmpmnt" 2>/dev/null
+				exit 1
+			fi
+		elif ! mount -o subvol=$bootsv -t btrfs -U $bootuuid "$tmpmnt/boot" 2>/dev/null; then
+			warn "error mounting btrfs boot partition subvol=$bootsv, UUID=$bootuuid"
+			umount "$tmpmnt/boot" 2>/dev/null
+			umount "$tmpmnt" 2>/dev/null
+			rmdir "$tmpmnt" 2>/dev/null
+			exit 1
+		fi
+		bootpart=$(grep " btrfs " /proc/self/mountinfo | grep " /$bootsv " | cut -d ' ' -f 10)
+	else
+		# non-btrfs partition or logical volume
+		linux_mount_boot $partition $tmpmnt
+		bootpart="${mountboot%% *}"
+		bootsv=
+	fi
+
+	test="/usr/libexec/linux-boot-probes/mounted/40grub2"
+	if [ -f $test ] && [ -x $test ]; then
+		debug "running $test $partition $bootpart $tmpmnt $type $subvol $bootsv"
+		if $test "$partition" "$bootpart" "$tmpmnt" "$type" "$subvol" "$bootsv"; then
+			debug "$test succeeded"
+		fi
+	fi
+	umount "$tmpmnt/boot" 2>/dev/null || true
+	if ! umount "$tmpmnt" 2>/dev/null; then
+		warn "problem umount $tmpmnt"
+	fi
+	rmdir "$tmpmnt" 2>/dev/null || true
+
+	exit 0
+fi
+
+if ! mapped="$(mapdevfs "$partition")"; then
+	log "Device '$partition' does not exist; skipping"
+	continue
+fi
+
+if ! grep -q "^$mapped " "$OS_PROBER_TMP/mounted-map"; then
+	for test in /usr/libexec/linux-boot-probes/*; do
+		if [ -x $test ] && [ -f $test ]; then
+			debug "running $test"
+			if $test "$partition"; then
+				debug "linux detected by $test"
+				break
+			fi
+		fi
+	done
+else
+	mpoint=$(grep "^$mapped " "$OS_PROBER_TMP/mounted-map" | head -n1 | cut -d " " -f 2)
+	mpoint="$(unescape_mount "$mpoint")"
+	if [ "$mpoint" != "/target/boot" ] && [ "$mpoint" != "/target" ] && [ "$mpoint" != "/" ]; then
+		type=$(grep "^$mapped " "$OS_PROBER_TMP/mounted-map" | head -n1 | cut -d " " -f 3)
+		if ! grep -q " $mpoint/boot " "$OS_PROBER_TMP/mounted-map"; then
+			linux_mount_boot "$partition" "$mpoint"
+			bootpart="${mountboot%% *}"
+			bootmounted="${mountboot#* }"
+		else
+			bootpart="$(grep " $mpoint/boot " "$OS_PROBER_TMP/mounted-map" | head -n1 | cut -d " " -f 4)"
+			bootmounted=0
+		fi
+		for test in /usr/libexec/linux-boot-probes/mounted/*; do
+			if [ -f $test ] && [ -x $test ]; then
+				debug "running $test on mounted $partition"
+				if $test "$partition" "$bootpart" "$mpoint" "$type"; then
+					debug "$test succeeded"
+					break
+				fi
+			fi
+		done
+		if [ "$bootmounted" = 1 ]; then
+			if ! umount "$mpoint/boot"; then
+				warn "failed to umount $mpoint/boot"
+			fi
+		fi
+	fi
+fi
+) 9>&1 | logger 1>&-  # fd_logger
+) 3>&1  # fd_result

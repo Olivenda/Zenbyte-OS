@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# zbpm-keygen — generate a fresh RSA 4096 GPG signing key for a zbpm repo.
+#
+# Creates a *dedicated* GnuPG home under tools/keys/ so this never touches
+# the user's ~/.gnupg. Exports both an ASCII-armored public key
+# (tools/keys/zbpm-pub.asc) and a binary keyring file
+# (tools/keys/zbpm.gpg) suitable for `gpgv --keyring`.
+#
+# Companion to tools/zbpm-repo (which signs) and rootfs/usr/bin/zbpm
+# (which verifies via gpgv against /etc/zbpm/keys/zbpm.gpg).
+
+set -euo pipefail
+
+SCRIPT_NAME="${0##*/}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+KEYS_DIR="${ZBPM_KEYS_DIR:-$SCRIPT_DIR/keys}"
+
+NAME=""
+EMAIL=""
+COMMENT="zbpm repository signing key"
+EXPIRY="0"        # 0 = never; can be e.g. 2y
+FORCE=0
+BATCH=0
+
+die() {
+  printf '%s: error: %s\n' "$SCRIPT_NAME" "$*" >&2
+  exit 1
+}
+
+note() {
+  printf '%s: %s\n' "$SCRIPT_NAME" "$*"
+}
+
+usage() {
+  cat <<EOF
+$SCRIPT_NAME — generate a zbpm repository signing key
+
+USAGE
+  $SCRIPT_NAME [options]
+
+OPTIONS
+  --name <name>        Real name for the key uid (required unless interactive)
+  --email <addr>       Email for the key uid    (required unless interactive)
+  --comment <text>     Optional uid comment   (default: "$COMMENT")
+  --expiry <spec>      Key expiry, GnuPG syntax (default: 0 = never;
+                       examples: 2y, 18m, 365d)
+  --keys-dir <dir>     Override the GnuPG home + output dir
+                       (default: $KEYS_DIR)
+  --force              Overwrite an existing key in --keys-dir
+  -y, --yes            Non-interactive: do not prompt for missing fields
+  -h, --help           Show this help
+
+OUTPUTS
+  <keys-dir>/.gnupg/      Private/public keyring (mode 0700)
+  <keys-dir>/zbpm-pub.asc Armored public key (commit / share this)
+  <keys-dir>/zbpm.gpg     Binary keyring for gpgv verification
+
+INSTALLATION ON A TARGET SYSTEM
+  Copy <keys-dir>/zbpm.gpg to /etc/zbpm/keys/zbpm.gpg on the target rootfs:
+
+      install -d -m 0700 /etc/zbpm/keys
+      install -m 0644 tools/keys/zbpm.gpg /etc/zbpm/keys/zbpm.gpg
+
+  zbpm will then verify every package via:
+      gpgv --keyring /etc/zbpm/keys/zbpm.gpg <pkg>.tar.gz.sig <pkg>.tar.gz
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --name)      [ $# -ge 2 ] || die "--name needs an argument";    NAME="$2"; shift 2 ;;
+    --email)     [ $# -ge 2 ] || die "--email needs an argument";   EMAIL="$2"; shift 2 ;;
+    --comment)   [ $# -ge 2 ] || die "--comment needs an argument"; COMMENT="$2"; shift 2 ;;
+    --expiry)    [ $# -ge 2 ] || die "--expiry needs an argument";  EXPIRY="$2"; shift 2 ;;
+    --keys-dir)  [ $# -ge 2 ] || die "--keys-dir needs an argument"; KEYS_DIR="$2"; shift 2 ;;
+    --force)     FORCE=1; shift ;;
+    -y|--yes)    BATCH=1; shift ;;
+    -h|--help)   usage; exit 0 ;;
+    *)           die "unknown argument: $1" ;;
+  esac
+done
+
+command -v gpg >/dev/null 2>&1 || die "gpg is required but not installed"
+
+if [ -z "$NAME" ]; then
+  if [ "$BATCH" -eq 1 ] || [ ! -t 0 ]; then
+    die "missing --name (and not running interactively)"
+  fi
+  read -r -p "Real name for signing key: " NAME
+fi
+if [ -z "$EMAIL" ]; then
+  if [ "$BATCH" -eq 1 ] || [ ! -t 0 ]; then
+    die "missing --email (and not running interactively)"
+  fi
+  read -r -p "Email for signing key: " EMAIL
+fi
+
+# Light validation. Don't try to parse RFC 5322 — just block uid-breakers.
+[[ "$NAME"    == *$'\n'* ]] && die "name must not contain newlines"
+[[ "$EMAIL"   == *$'\n'* ]] && die "email must not contain newlines"
+[[ "$COMMENT" == *$'\n'* ]] && die "comment must not contain newlines"
+case "$EMAIL" in
+  *@*.*) : ;;
+  *)     die "email '$EMAIL' does not look like an address" ;;
+esac
+
+GNUPGHOME="$KEYS_DIR/.gnupg"
+PUB_ASC="$KEYS_DIR/zbpm-pub.asc"
+KEYRING_BIN="$KEYS_DIR/zbpm.gpg"
+
+if [ -d "$GNUPGHOME" ] || [ -f "$KEYRING_BIN" ] || [ -f "$PUB_ASC" ]; then
+  if [ "$FORCE" -ne 1 ]; then
+    die "key material already present at $KEYS_DIR (use --force to overwrite)"
+  fi
+  note "removing existing key material at $KEYS_DIR (--force)"
+  rm -rf -- "$GNUPGHOME" "$KEYRING_BIN" "$PUB_ASC"
+fi
+
+mkdir -p -- "$KEYS_DIR"
+install -d -m 0700 -- "$GNUPGHOME"
+
+export GNUPGHOME
+
+note "generating RSA 4096 signing key — this may take a minute"
+
+# Use a heredoc rather than a temp file so we never write the batch spec to disk.
+gpg --batch --pinentry-mode loopback --passphrase '' --quiet \
+    --gen-key <<EOF
+%no-protection
+Key-Type: RSA
+Key-Length: 4096
+Key-Usage: sign
+Name-Real: $NAME
+Name-Email: $EMAIL
+Name-Comment: $COMMENT
+Expire-Date: $EXPIRY
+%commit
+EOF
+
+# Find the fingerprint of the newly created key (the only secret key, if --force).
+FPR=$(gpg --batch --with-colons --list-secret-keys --fingerprint \
+        | awk -F: '$1=="fpr" {print $10; exit}')
+[ -n "$FPR" ] || die "could not determine new key fingerprint"
+
+note "fingerprint: $FPR"
+
+gpg --batch --yes --armor --export "$FPR"  > "$PUB_ASC"
+gpg --batch --yes --export        "$FPR"   > "$KEYRING_BIN"
+chmod 0644 "$PUB_ASC" "$KEYRING_BIN"
+
+# Sanity check: gpgv must be able to read what we just wrote.
+if command -v gpgv >/dev/null 2>&1; then
+  if ! gpgv --keyring "$KEYRING_BIN" --version >/dev/null 2>&1; then
+    die "wrote $KEYRING_BIN but gpgv cannot read it"
+  fi
+fi
+
+cat <<EOF
+
+Key generated successfully.
+
+  GnuPG home : $GNUPGHOME    (mode 0700, contains the SECRET key)
+  Public key : $PUB_ASC      (armored, safe to publish)
+  Keyring    : $KEYRING_BIN  (binary, for gpgv on target systems)
+  Fingerprint: $FPR
+
+Next steps
+  1. Install the public keyring on every target system:
+
+       install -d -m 0700 /etc/zbpm/keys
+       install -m 0644 $KEYRING_BIN /etc/zbpm/keys/zbpm.gpg
+
+  2. Sign packages with:
+
+       tools/zbpm-repo add <repo-dir> <pkg-staging-dir>
+
+     (zbpm-repo automatically uses GNUPGHOME=$GNUPGHOME)
+
+  3. Back up $GNUPGHOME — losing it means losing the ability to publish updates.
+
+EOF

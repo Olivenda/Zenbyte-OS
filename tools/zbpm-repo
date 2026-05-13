@@ -1,0 +1,474 @@
+#!/usr/bin/env bash
+# zbpm-repo — manage a local zbpm package repository.
+#
+# Subcommands:
+#   init <repo-dir>
+#   add <repo-dir> <pkg-staging-dir>
+#   remove <repo-dir> <pkgname>
+#   regen-index <repo-dir>
+#   sign-all <repo-dir>
+#   verify <repo-dir>
+#   serve <repo-dir> [port]
+#
+# A "pkg-staging-dir" is the directory produced by tools/zbpm-build:
+#
+#   <staging>/
+#     <pkg>.tar.gz       (gzip tarball, paths relative to /)
+#     <pkg>.deps         (whitespace-separated dep names; may be empty)
+#     <pkg>.info         (free-form text)
+#     <pkg>.version      (single line: the version string)
+#
+# The directory's basename is taken as the canonical package name.
+#
+# Signing uses the GnuPG home created by tools/zbpm-keygen
+# (default: tools/keys/.gnupg) and the binary keyring at tools/keys/zbpm.gpg
+# is used for verification — exactly the same way zbpm itself verifies on
+# the target system.
+
+set -euo pipefail
+
+SCRIPT_NAME="${0##*/}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+KEYS_DIR_DEFAULT="$SCRIPT_DIR/keys"
+KEYS_DIR="${ZBPM_KEYS_DIR:-$KEYS_DIR_DEFAULT}"
+GNUPGHOME_DEFAULT="$KEYS_DIR/.gnupg"
+KEYRING_DEFAULT="$KEYS_DIR/zbpm.gpg"
+
+# Same regex as rootfs/usr/bin/zbpm valid_pkg_name().
+PKG_NAME_RE='^[A-Za-z0-9_+][A-Za-z0-9_.+-]{0,63}$'
+
+die() {
+  printf '%s: error: %s\n' "$SCRIPT_NAME" "$*" >&2
+  exit 1
+}
+
+note() {
+  printf '%s: %s\n' "$SCRIPT_NAME" "$*"
+}
+
+warn() {
+  printf '%s: warn: %s\n' "$SCRIPT_NAME" "$*" >&2
+}
+
+# fail with file:line context for caller-facing errors.
+die_at() {
+  local where="$1"; shift
+  printf '%s: error: %s: %s\n' "$SCRIPT_NAME" "$where" "$*" >&2
+  exit 1
+}
+
+valid_pkg_name() {
+  [[ "$1" =~ $PKG_NAME_RE ]]
+}
+
+require_pkg_name() {
+  if ! valid_pkg_name "$1"; then
+    die "invalid package name: '$1' (must match $PKG_NAME_RE)"
+  fi
+}
+
+require_repo() {
+  local repo="$1"
+  [ -n "$repo" ] || die "repo directory not given"
+  [ -d "$repo" ] || die "repo directory does not exist: $repo (run 'init' first)"
+  [ -f "$repo/index.txt" ] || die "$repo/index.txt missing — not a zbpm repo (run 'init' first)"
+}
+
+require_keys() {
+  [ -d "$GNUPGHOME_DEFAULT" ] || die "no GnuPG home at $GNUPGHOME_DEFAULT (run tools/zbpm-keygen first)"
+  [ -f "$KEYRING_DEFAULT"   ] || die "no public keyring at $KEYRING_DEFAULT (run tools/zbpm-keygen first)"
+}
+
+# Pin GNUPGHOME so we never touch the user's keyring.
+gpg_signing() {
+  GNUPGHOME="$GNUPGHOME_DEFAULT" gpg --batch --yes --pinentry-mode loopback "$@"
+}
+
+# ---------------------------------------------------------------------------
+# init
+# ---------------------------------------------------------------------------
+sub_init() {
+  local repo="${1:-}"
+  [ -n "$repo" ] || die "usage: $SCRIPT_NAME init <repo-dir>"
+  if [ -e "$repo" ] && [ ! -d "$repo" ]; then
+    die "$repo exists and is not a directory"
+  fi
+  install -d -m 0755 -- "$repo"
+  if [ ! -e "$repo/index.txt" ]; then
+    : > "$repo/index.txt"
+  fi
+  if [ ! -e "$repo/README" ]; then
+    cat > "$repo/README" <<EOF
+zbpm package repository
+=======================
+
+This directory is the static root of a zbpm repository. Serve it over
+HTTPS (or any HTTP server for local testing) and point a target system at
+it via /etc/zbpm/mirrors.
+
+Layout:
+  index.txt              <pkg> <version>, one per line, LC_ALL=C sorted
+  <pkg>.tar.gz           gzip tarball
+  <pkg>.tar.gz.sha256    sha256sum format
+  <pkg>.tar.gz.sig       detached GPG signature (gpgv-verifiable)
+  <pkg>.deps             optional whitespace-separated deps
+  <pkg>.info             optional free-form text
+  <pkg>.version          internal sidecar; ignored by zbpm clients
+
+Managed by tools/zbpm-repo. Do not hand-edit index.txt — run
+'zbpm-repo regen-index' instead.
+EOF
+  fi
+  # Copy the public signing key into the repo root so clients can fetch it.
+  # The installer does:  curl <mirror>/zbpm.gpg -o /etc/zbpm/keys/zbpm.gpg
+  local keyring="$KEYS_DIR/zbpm.gpg"
+  if [ -f "$keyring" ]; then
+    install -m 0644 -- "$keyring" "$repo/zbpm.gpg"
+    note "installed signing key at $repo/zbpm.gpg"
+  else
+    note "warning: $keyring not found — run tools/zbpm-keygen first, then re-run init"
+    note "         The installer will not be able to auto-fetch the signing key."
+  fi
+
+  note "initialised repo at $repo"
+}
+
+# ---------------------------------------------------------------------------
+# regen-index
+# ---------------------------------------------------------------------------
+sub_regen_index() {
+  local repo="${1:-}"
+  require_repo "$repo"
+  local tmp pkg ver name
+  tmp="$(mktemp "$repo/.index.txt.XXXXXX")"
+  # We deliberately use *.version sidecars as the source of truth.
+  # An empty repo is fine — the loop simply produces no output.
+  shopt -s nullglob
+  for vf in "$repo"/*.version; do
+    name="${vf##*/}"
+    pkg="${name%.version}"
+    if ! valid_pkg_name "$pkg"; then
+      warn "skipping unsafe package name in repo: $pkg"
+      continue
+    fi
+    # version file: take the first non-empty, non-comment line.
+    ver="$(awk 'NF && $1 !~ /^#/ {print; exit}' "$vf" || true)"
+    if [ -z "$ver" ]; then
+      warn "empty version file: $vf — skipping"
+      continue
+    fi
+    # version must be one line, no whitespace.
+    case "$ver" in
+      *[[:space:]]*) warn "version for $pkg contains whitespace; using first field"
+                     ver="${ver%%[[:space:]]*}" ;;
+    esac
+    printf '%s %s\n' "$pkg" "$ver"
+  done | LC_ALL=C sort > "$tmp"
+  shopt -u nullglob
+  mv -f -- "$tmp" "$repo/index.txt"
+  local n
+  n=$(wc -l < "$repo/index.txt" | tr -d '[:space:]')
+  note "regenerated $repo/index.txt ($n entries)"
+}
+
+# ---------------------------------------------------------------------------
+# add
+# ---------------------------------------------------------------------------
+sub_add() {
+  local repo="${1:-}" stage="${2:-}"
+  [ -n "$repo" ] && [ -n "$stage" ] \
+    || die "usage: $SCRIPT_NAME add <repo-dir> <pkg-staging-dir>"
+  require_repo "$repo"
+  [ -d "$stage" ] || die "staging dir does not exist: $stage"
+  require_keys
+
+  local pkg
+  pkg="$(basename -- "$stage")"
+  require_pkg_name "$pkg"
+
+  local tar="$stage/$pkg.tar.gz"
+  local deps="$stage/$pkg.deps"
+  local info="$stage/$pkg.info"
+  local vfile="$stage/$pkg.version"
+
+  [ -f "$tar"   ] || die_at "$stage" "missing $pkg.tar.gz"
+  [ -f "$vfile" ] || die_at "$stage" "missing $pkg.version"
+
+  local ver
+  ver="$(awk 'NF && $1 !~ /^#/ {print; exit}' "$vfile" || true)"
+  [ -n "$ver" ] || die_at "$vfile" "version file is empty"
+  case "$ver" in
+    *[[:space:]]*) die_at "$vfile" "version must be a single token: '$ver'" ;;
+    *[!A-Za-z0-9._:+~-]*) die_at "$vfile" "version contains forbidden character: '$ver'" ;;
+  esac
+
+  # Idempotency: if all destination files already match byte-for-byte, skip.
+  local dest_tar="$repo/$pkg.tar.gz"
+  local dest_sha="$repo/$pkg.tar.gz.sha256"
+  local dest_sig="$repo/$pkg.tar.gz.sig"
+  local dest_deps="$repo/$pkg.deps"
+  local dest_info="$repo/$pkg.info"
+  local dest_ver="$repo/$pkg.version"
+
+  install -m 0644 -- "$tar" "$dest_tar"
+  if [ -f "$deps" ]; then
+    install -m 0644 -- "$deps" "$dest_deps"
+  else
+    : > "$dest_deps"
+    chmod 0644 "$dest_deps"
+  fi
+  if [ -f "$info" ]; then
+    install -m 0644 -- "$info" "$dest_info"
+  else
+    printf '%s\n' "$pkg $ver" > "$dest_info"
+    chmod 0644 "$dest_info"
+  fi
+  printf '%s\n' "$ver" > "$dest_ver"
+  chmod 0644 "$dest_ver"
+
+  # sha256: stored with bare filename so it matches the served URL layout.
+  ( cd -- "$repo" && sha256sum "$pkg.tar.gz" > "$pkg.tar.gz.sha256" )
+  chmod 0644 "$dest_sha"
+
+  # Signature: armored detached signature next to the tarball.
+  # We re-sign every time because the tarball bytes may have changed,
+  # which is still idempotent in effect (same input -> verifies the same).
+  rm -f -- "$dest_sig"
+  gpg_signing --output "$dest_sig" --detach-sign --armor "$dest_tar" \
+    || die "gpg signing failed for $pkg"
+
+  # Verify what we just wrote with gpgv — this is the same code path zbpm uses.
+  if command -v gpgv >/dev/null 2>&1; then
+    gpgv --keyring "$KEYRING_DEFAULT" "$dest_sig" "$dest_tar" >/dev/null 2>&1 \
+      || die "gpgv verification failed immediately after signing — keyring out of sync?"
+  else
+    warn "gpgv not installed; skipping post-sign verification"
+  fi
+
+  sub_regen_index "$repo"
+  note "added $pkg $ver"
+}
+
+# ---------------------------------------------------------------------------
+# remove
+# ---------------------------------------------------------------------------
+sub_remove() {
+  local repo="${1:-}" pkg="${2:-}"
+  [ -n "$repo" ] && [ -n "$pkg" ] \
+    || die "usage: $SCRIPT_NAME remove <repo-dir> <pkgname>"
+  require_repo "$repo"
+  require_pkg_name "$pkg"
+
+  local removed=0 f
+  for f in "$repo/$pkg.tar.gz"        \
+           "$repo/$pkg.tar.gz.sha256" \
+           "$repo/$pkg.tar.gz.sig"    \
+           "$repo/$pkg.deps"          \
+           "$repo/$pkg.info"          \
+           "$repo/$pkg.version"; do
+    if [ -e "$f" ]; then
+      rm -f -- "$f"
+      removed=$((removed+1))
+    fi
+  done
+
+  if [ "$removed" -eq 0 ]; then
+    warn "no files for '$pkg' found in $repo"
+  fi
+
+  sub_regen_index "$repo"
+  note "removed $pkg ($removed files)"
+}
+
+# ---------------------------------------------------------------------------
+# sign-all
+# ---------------------------------------------------------------------------
+sub_sign_all() {
+  local repo="${1:-}"
+  require_repo "$repo"
+  require_keys
+
+  local tar sig pkg name signed=0 skipped=0
+  shopt -s nullglob
+  for tar in "$repo"/*.tar.gz; do
+    name="${tar##*/}"
+    pkg="${name%.tar.gz}"
+    if ! valid_pkg_name "$pkg"; then
+      warn "skipping unsafe filename: $name"
+      continue
+    fi
+    sig="$tar.sig"
+    if [ -f "$sig" ] && [ "$sig" -nt "$tar" ]; then
+      skipped=$((skipped+1))
+      continue
+    fi
+    rm -f -- "$sig"
+    gpg_signing --output "$sig" --detach-sign --armor "$tar" \
+      || die "signing failed: $pkg"
+    # Rebuild sha256 too in case the tarball changed under us.
+    ( cd -- "$repo" && sha256sum "$name" > "$name.sha256" )
+    chmod 0644 "$sig" "$tar.sha256"
+    signed=$((signed+1))
+  done
+  shopt -u nullglob
+  note "sign-all: signed $signed, skipped $skipped (already up to date)"
+}
+
+# ---------------------------------------------------------------------------
+# verify
+# ---------------------------------------------------------------------------
+# Mirrors the logic in zbpm's verify_pkg(): sha256 first, then gpgv.
+sub_verify() {
+  local repo="${1:-}"
+  require_repo "$repo"
+  [ -f "$KEYRING_DEFAULT" ] \
+    || die "no public keyring at $KEYRING_DEFAULT (run tools/zbpm-keygen first)"
+  command -v gpgv      >/dev/null 2>&1 || die "gpgv is required for verify"
+  command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required for verify"
+
+  local fail=0 ok=0 tar name pkg sha sig expected actual
+  shopt -s nullglob
+  for tar in "$repo"/*.tar.gz; do
+    name="${tar##*/}"
+    pkg="${name%.tar.gz}"
+    sha="$tar.sha256"
+    sig="$tar.sig"
+
+    if ! valid_pkg_name "$pkg"; then
+      warn "$pkg: invalid name"
+      fail=$((fail+1)); continue
+    fi
+    if [ ! -f "$sha" ]; then
+      warn "$pkg: missing $name.sha256"
+      fail=$((fail+1)); continue
+    fi
+    if [ ! -f "$sig" ]; then
+      warn "$pkg: missing $name.sig"
+      fail=$((fail+1)); continue
+    fi
+    expected=$(awk '{print $1; exit}' "$sha")
+    actual=$(sha256sum "$tar" | awk '{print $1}')
+    if [ "$expected" != "$actual" ]; then
+      warn "$pkg: sha256 mismatch (expected $expected, got $actual)"
+      fail=$((fail+1)); continue
+    fi
+    if ! gpgv --keyring "$KEYRING_DEFAULT" "$sig" "$tar" >/dev/null 2>&1; then
+      warn "$pkg: gpg signature INVALID"
+      fail=$((fail+1)); continue
+    fi
+    ok=$((ok+1))
+  done
+  shopt -u nullglob
+
+  # Also sanity-check the index.
+  if [ -f "$repo/index.txt" ]; then
+    local line lpkg lver bad_idx=0
+    while IFS= read -r line; do
+      [ -z "$line" ] && continue
+      [[ "$line" == \#* ]] && continue
+      # shellcheck disable=SC2086
+      set -- $line
+      lpkg="${1:-}"; lver="${2:-}"
+      if ! valid_pkg_name "${lpkg:-_}"; then
+        warn "index: invalid package name '$lpkg'"
+        bad_idx=$((bad_idx+1)); continue
+      fi
+      if [ -z "$lver" ]; then
+        warn "index: missing version for $lpkg"
+        bad_idx=$((bad_idx+1)); continue
+      fi
+      if [ ! -f "$repo/$lpkg.tar.gz" ]; then
+        warn "index: $lpkg listed but $lpkg.tar.gz missing"
+        bad_idx=$((bad_idx+1)); continue
+      fi
+    done < "$repo/index.txt"
+    [ "$bad_idx" -gt 0 ] && fail=$((fail+bad_idx))
+  fi
+
+  if [ "$fail" -eq 0 ]; then
+    note "verify: $ok package(s) OK"
+    return 0
+  fi
+  printf '%s: verify FAILED: %d ok, %d bad\n' "$SCRIPT_NAME" "$ok" "$fail" >&2
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# serve
+# ---------------------------------------------------------------------------
+sub_serve() {
+  local repo="${1:-}" port="${2:-8080}"
+  require_repo "$repo"
+  command -v python3 >/dev/null 2>&1 || die "python3 is required for serve"
+  case "$port" in
+    ''|*[!0-9]*) die "port must be a number, got '$port'" ;;
+  esac
+  if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+    die "port out of range: $port"
+  fi
+  note "serving $repo on http://127.0.0.1:$port/  (Ctrl-C to stop)"
+  cd -- "$repo"
+  exec python3 -m http.server --bind 127.0.0.1 "$port"
+}
+
+# ---------------------------------------------------------------------------
+# help / dispatch
+# ---------------------------------------------------------------------------
+usage() {
+  cat <<EOF
+$SCRIPT_NAME — manage a zbpm package repository
+
+USAGE
+  $SCRIPT_NAME <subcommand> [args]
+
+SUBCOMMANDS
+  init        <repo-dir>
+      Create the directory layout and an empty index.txt + README.
+
+  add         <repo-dir> <pkg-staging-dir>
+      Ingest a package directory produced by tools/zbpm-build.
+      Generates sha256, signs the tarball, regenerates the index.
+      Idempotent.
+
+  remove      <repo-dir> <pkgname>
+      Remove all files for a package and update the index.
+
+  regen-index <repo-dir>
+      Rebuild index.txt from per-package .version sidecars.
+      LC_ALL=C sorted, one '<pkg> <version>' per line.
+
+  sign-all    <repo-dir>
+      Sign every .tar.gz that lacks a fresh .sig.
+
+  verify      <repo-dir>
+      sha256 + gpgv every package; same logic as zbpm itself.
+
+  serve       <repo-dir> [port]
+      Start python3 -m http.server bound to 127.0.0.1 (default port 8080).
+
+ENVIRONMENT
+  ZBPM_KEYS_DIR   Override the GnuPG home + public keyring location.
+                  Default: $KEYS_DIR_DEFAULT
+EOF
+}
+
+main() {
+  local sub="${1:-}"
+  [ $# -gt 0 ] && shift || true
+  case "$sub" in
+    init)         sub_init        "$@" ;;
+    add)          sub_add         "$@" ;;
+    remove|rm)    sub_remove      "$@" ;;
+    regen-index)  sub_regen_index "$@" ;;
+    sign-all)     sub_sign_all    "$@" ;;
+    verify)       sub_verify      "$@" ;;
+    serve)        sub_serve       "$@" ;;
+    -h|--help|help|'') usage; [ -z "$sub" ] && exit 0 || exit 0 ;;
+    *)            printf '%s: unknown subcommand: %s\n\n' "$SCRIPT_NAME" "$sub" >&2
+                  usage >&2
+                  exit 2 ;;
+  esac
+}
+
+main "$@"
