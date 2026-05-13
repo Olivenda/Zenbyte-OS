@@ -17,6 +17,9 @@ SHELL_FILES := $(ROOTFS)/init $(ROOTFS)/install.sh $(ROOTFS)/usr/bin/zbpm \
                $(ROOTFS)/var/lib/zbpm/scripts/xfce4-desktop.post \
                $(ROOTFS)/var/lib/zbpm/scripts/kernel.post
 
+# grub2-mkrescue on Fedora/RHEL; grub-mkrescue on Ubuntu/Debian
+GRUB_MKRESCUE := $(shell command -v grub2-mkrescue 2>/dev/null || command -v grub-mkrescue 2>/dev/null)
+
 .PHONY: all initramfs iso lint clean distclean help $(INITRAMFS)
 
 all: initramfs
@@ -40,16 +43,16 @@ $(INITRAMFS):
 iso: $(ISO) ## Build a bootable ISO
 
 $(ISO): $(KERNEL) $(INITRAMFS) $(ISO_DIR)/boot/grub/grub.cfg
-	@command -v grub2-mkrescue >/dev/null 2>&1 || \
-	  { echo "grub2-mkrescue is required for 'make iso'"; exit 1; }
+	@test -n "$(GRUB_MKRESCUE)" || \
+	  { echo "grub-mkrescue / grub2-mkrescue not found. On Ubuntu: sudo apt install grub2-common grub-pc-bin grub-efi-amd64-bin xorriso mtools"; exit 1; }
 	@echo "==> staging ISO tree"
 	rm -rf $(BUILD_DIR)/iso-stage
 	mkdir -p $(BUILD_DIR)/iso-stage/boot/grub
 	cp $(KERNEL)   $(BUILD_DIR)/iso-stage/boot/vmlinuz
 	cp $(INITRAMFS) $(BUILD_DIR)/iso-stage/boot/initramfs.img
 	cp $(ISO_DIR)/boot/grub/grub.cfg $(BUILD_DIR)/iso-stage/boot/grub/grub.cfg
-	@echo "==> grub2-mkrescue -> $@"
-	grub2-mkrescue -o $@ $(BUILD_DIR)/iso-stage \
+	@echo "==> $(GRUB_MKRESCUE) -> $@"
+	$(GRUB_MKRESCUE) -o $@ $(BUILD_DIR)/iso-stage \
 	  --product-name=ZenbyteOS --volid=ZenbyteOS
 
 lint: ## shellcheck all shipped Bash scripts
