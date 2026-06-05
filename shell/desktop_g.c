@@ -36,6 +36,13 @@
 extern void shell_run_line(const char *src);
 extern void vga_redirect(char *buf, u32 cap, u32 *len);
 
+/* Async shell (multitasking). */
+extern int  shell_run_async(const char *line);
+extern int  shell_async_is_done(void);
+extern const char *shell_async_get_output(u32 *len);
+extern void shell_async_kill(void);
+extern int  shell_async_busy(void);
+
 /* PTY declarations */
 extern int pty_initialized;
 extern int pty_alloc(void);
@@ -1249,99 +1256,47 @@ static int is_fullscreen_cmd(const char *name) {
             strcmp(name, "flash") == 0);
 }
 
-/* Run a fullscreen app: set up viewport inside terminal, run app,
- * capture output into scrollback. The app renders inside the terminal's
- * content area via the VGA viewport system. We yield periodically so
- * the desktop keeps responding to mouse/keyboard. */
+/* Terminal command execution state. */
+static int term_cmd_running;     /* 1 while a background command executes */
+static int term_cmd_fullscreen;  /* 1 if the running cmd is fullscreen */
+
+/* Run a fullscreen app: still blocks (needs mode switch), but we yield
+ * so the desktop at least processes input between yields. */
 static void term_run_fullscreen(const char *line) {
-    /* Try to run inline using PTY if available */
-    extern int pty_initialized;
-    extern int pty_alloc(void);
-    extern void pty_putc(int id, char ch);
-    extern void pty_puts(int id, const char *s);
-    extern u16 *pty_get_screen(int id);
-    extern int pty_get_cursor_row(int id);
-    extern int pty_get_cursor_col(int id);
-    extern void pty_clear(int id);
-    
-    if (pty_initialized) {
-        int pty_id = pty_alloc();
-        if (pty_id >= 0) {
-            /* Use PTY for inline execution */
-            term_append_str("[running inline]\n");
-            
-            /* Clear PTY screen */
-            pty_clear(pty_id);
-            
-            /* Run command with output to PTY */
-            extern void vga_redirect(char *buf, u32 cap, u32 *len);
-            static char capture[4096];
-            u32 cap_len = 0;
-            
-            /* Redirect output to capture buffer */
-            vga_redirect(capture, sizeof capture, &cap_len);
-            shell_run_line(line);
-            vga_redirect(NULL, 0, NULL);
-            
-            /* Send captured output to PTY */
-            for (u32 i = 0; i < cap_len; i++) {
-                pty_putc(pty_id, capture[i]);
-            }
-            
-            /* Copy PTY screen to terminal output */
-            u16 *screen = pty_get_screen(pty_id);
-            if (screen) {
-                extern int pty_cols;
-                extern int pty_rows;
-                int cols = 80;  /* PTY_COLS */
-                int rows = 25;  /* PTY_ROWS */
-                
-                for (int r = 0; r < rows; r++) {
-                    for (int c = 0; c < cols; c++) {
-                        u16 cell = screen[r * cols + c];
-                        char ch = (char)(cell & 0xFF);
-                        if (ch != ' ') {
-                            /* Convert to terminal output with color info */
-                            u8 fg = (cell >> 8) & 0x0F;
-                            u8 bg = (cell >> 12) & 0x0F;
-                            if (fg != 7 || bg != 0) {
-                                /* Add color escape sequence */
-                                char esc[32];
-                                ksnprintf(esc, sizeof esc, "\033[%d;%dm", fg + 30, bg + 40);
-                                term_append_str(esc);
-                            }
-                            term_append_char(ch);
-                            if (fg != 7 || bg != 0) {
-                                term_append_str("\033[0m");
-                            }
-                        }
-                    }
-                    term_append_char('\n');
-                }
-            }
-            
-            pty_free(pty_id);
-            term_append_str("[app exited]\n");
-            return;
-        }
-    }
-    
-    /* Fallback: run synchronously (blocks desktop) */
-    term_append_str("[running fullscreen - desktop paused]\n");
+    term_cmd_running    = 1;
+    term_cmd_fullscreen = 1;
+    /* Run synchronously -- fullscreen apps need text mode. */
     shell_run_line(line);
-    term_append_str("\n");
+    term_cmd_running    = 0;
+    term_cmd_fullscreen = 0;
 }
 
-/* Run a normal command with output capture. */
+/* Run a normal command asynchronously in a background process. */
 static void term_run_captured(const char *line) {
-    static char capture[4096];
+    if (shell_run_async(line) < 0) {
+        term_append_str("[error: could not start process]\n");
+        return;
+    }
+    term_cmd_running    = 1;
+    term_cmd_fullscreen = 0;
+    /* The actual output is collected in paint_term() when shell_async_is_done(). */
+}
+
+/* Poll the async shell: if the command finished, collect output. */
+static void term_poll_async(void) {
+    if (!term_cmd_running) return;
+    if (!shell_async_is_done()) return;
+    /* Command finished -- grab output. */
     u32 cap_len = 0;
-    vga_redirect(capture, sizeof capture, &cap_len);
-    shell_run_line(line);
-    vga_redirect(NULL, 0, NULL);
-    for (u32 i = 0; i < cap_len; i++) term_append_char(capture[i]);
-    if (cap_len == 0 || (cap_len > 0 && capture[cap_len - 1] != '\n'))
+    const char *cap = shell_async_get_output(&cap_len);
+    for (u32 i = 0; i < cap_len; i++) term_append_char(cap[i]);
+    if (cap_len == 0 || (cap_len > 0 && cap[cap_len - 1] != '\n'))
         term_append_char('\n');
+    term_cmd_running = 0;
+    /* Show prompt. */
+    char prompt[128];
+    term_build_prompt(prompt, sizeof prompt);
+    term_append_str(prompt);
 }
 
 static void term_run(const char *line) {
@@ -1395,16 +1350,30 @@ static void term_run(const char *line) {
     /* Run the command */
     if (is_fullscreen_cmd(cmd_name)) {
         term_run_fullscreen(line);
-        term_append_str("\n[app exited]\n");
+        term_append_str("[app exited]\n");
+        char prompt[128];
+        term_build_prompt(prompt, sizeof prompt);
+        term_append_str(prompt);
     } else {
         term_run_captured(line);
+        /* Prompt will be shown by term_poll_async() when command finishes. */
     }
-    term_build_prompt(prompt, sizeof prompt);
-    term_append_str(prompt);
 }
 
 static void term_key(int k) {
     if (!term_initted) term_init();
+    /* While a background command is running, only allow Ctrl+C. */
+    if (term_cmd_running) {
+        if (k == 0x03) {   /* Ctrl+C */
+            shell_async_kill();
+            term_append_str("^C\n");
+            term_cmd_running = 0;
+            char prompt[128];
+            term_build_prompt(prompt, sizeof prompt);
+            term_append_str(prompt);
+        }
+        return;
+    }
     if (k == 10 || k == 13) {
         term_in[term_in_len] = 0;
         if (term_in_len > 0) {
@@ -1442,6 +1411,8 @@ static void term_key(int k) {
 
 static void paint_term(struct gwin *w) {
     if (!term_initted) term_init();
+    /* Poll for async command completion. */
+    term_poll_async();
     int bx = w->x + 4, by = w->y + TITLE_H + 4;
     int bw = w->w - 8, bh = w->h - TITLE_H - 8;
     fb_fill_rect(bx, by, bw, bh, ZB_PANEL);
@@ -1503,11 +1474,16 @@ static void paint_term(struct gwin *w) {
     term_build_prompt(prompt, sizeof prompt);
     int prompt_len = (int)strlen(prompt);
     int py = sy + sh - 18;
-    fb_draw_text(sx + 4, py, prompt, ZB_ACCENT, FB_TRANSPARENT);
-    fb_draw_text(sx + 4 + prompt_len * 8, py, term_in, 0x9CE89C, FB_TRANSPARENT);
-    /* Cursor block */
-    int caret_x = sx + 4 + (prompt_len + term_in_len) * 8;
-    fb_fill_rect(caret_x, py, 7, 14, 0x9CE89C);
+    if (term_cmd_running) {
+        /* Show running indicator instead of editable prompt. */
+        fb_draw_text(sx + 4, py, "[running...]  Ctrl+C to cancel", 0xFF8844, FB_TRANSPARENT);
+    } else {
+        fb_draw_text(sx + 4, py, prompt, ZB_ACCENT, FB_TRANSPARENT);
+        fb_draw_text(sx + 4 + prompt_len * 8, py, term_in, 0x9CE89C, FB_TRANSPARENT);
+        /* Cursor block */
+        int caret_x = sx + 4 + (prompt_len + term_in_len) * 8;
+        fb_fill_rect(caret_x, py, 7, 14, 0x9CE89C);
+    }
 }
 
 /* === Pixel app: digital Clock ======================================= */
@@ -1610,6 +1586,87 @@ static void paint_sysmon(struct gwin *w) {
     fb_draw_text(bx + 12, by + bh - 18,
                  "Live 1s sampling of RAM usage",
                  0x70808A, FB_TRANSPARENT);
+}
+
+/* === Activity Monitor ==================================================
+ * Shows all running processes with PID, name, state, priority, CPU
+ * usage.  Keyboard: Up/Down = select, K = kill, +/- = priority. */
+#include "proc.h"
+static int actmon_sel;      /* selected row */
+static void paint_activity(struct gwin *w) {
+    int bx = w->x + 4, by = w->y + TITLE_H + 4;
+    int bw = w->w - 8, bh = w->h - TITLE_H - 8;
+    fb_fill_rect(bx, by, bw, bh, 0x12202E);
+    fb_draw_text(bx + 12, by + 10, "Activity Monitor", 0xFFFFFF, FB_TRANSPARENT);
+
+    struct proc_info info[PROC_MAX];
+    int count = proc_enumerate(info, PROC_MAX);
+
+    /* Column header. */
+    int lx = bx + 12, ly = by + 28;
+    fb_draw_text(lx, ly, "PID   Name              State      Pri  CPU Ticks", 0x70808A, FB_TRANSPARENT);
+    ly += 16;
+
+    static const char *state_names[] = { "free", "ready", "running", "sleep", "zombie", "killed" };
+    static const u32   state_cols[]  = { 0x808080, 0x4FB37A, 0x47A6D4, 0xFFA831, 0xE85A8C, 0xD44747 };
+
+    for (int i = 0; i < count && ly < by + bh - 30; i++) {
+        int is_sel = (i == actmon_sel);
+        u32 bg = is_sel ? 0x2C2152 : FB_TRANSPARENT;
+        u32 fg = is_sel ? 0xFFFFFF : 0xC8D4E0;
+        if (is_sel) fb_fill_rect(bx + 8, ly - 2, bw - 16, 16, bg);
+
+        char line[80];
+        const char *sn = (info[i].state <= 5) ? state_names[info[i].state] : "?";
+        u32 sc = (info[i].state <= 5) ? state_cols[info[i].state] : 0x808080;
+        ksnprintf(line, sizeof line, "%-5u %-18s", info[i].pid, info[i].name);
+        fb_draw_text(lx, ly, line, fg, FB_TRANSPARENT);
+        /* State coloured. */
+        int state_x = lx + (5 + 18) * 8;
+        fb_draw_text(state_x, ly, sn, sc, FB_TRANSPARENT);
+        /* Priority. */
+        static const char *prio_names[] = { "low", "normal", "high", "rt" };
+        const char *pn = (info[i].priority <= 3) ? prio_names[info[i].priority] : "?";
+        char pbuf[12]; ksnprintf(pbuf, sizeof pbuf, "%-7s", pn);
+        fb_draw_text(state_x + 7 * 8, ly, pbuf, 0xC8D4E0, FB_TRANSPARENT);
+        /* CPU ticks. */
+        char tbuf[12]; ksnprintf(tbuf, sizeof tbuf, "%u", info[i].cpu_ticks);
+        fb_draw_text(state_x + 14 * 8, ly, tbuf, 0x9CE89C, FB_TRANSPARENT);
+        ly += 16;
+    }
+    if (count == 0)
+        fb_draw_text(lx, ly, "(no processes)", 0x70808A, FB_TRANSPARENT);
+
+    /* Status bar. */
+    fb_draw_text(bx + 12, by + bh - 16,
+                 "K=Kill  +/-=Priority  Up/Down=Select",
+                 0x70808A, FB_TRANSPARENT);
+}
+
+static void activity_key(int k) {
+    struct proc_info info[PROC_MAX];
+    int count = proc_enumerate(info, PROC_MAX);
+    if (count == 0) return;
+    if (k == KB_UP)   actmon_sel = (actmon_sel > 0) ? actmon_sel - 1 : count - 1;
+    if (k == KB_DOWN) actmon_sel = (actmon_sel < count - 1) ? actmon_sel + 1 : 0;
+    if (k == 'k' || k == 'K') {
+        /* Kill selected process (never PID 0 = desktop). */
+        if (actmon_sel < count && info[actmon_sel].pid != 0)
+            proc_kill(info[actmon_sel].pid);
+        actmon_sel = 0;
+    }
+    if (k == '+' || k == '=') {
+        if (actmon_sel < count && info[actmon_sel].pid != 0) {
+            u32 p = info[actmon_sel].priority;
+            if (p < PRIO_REALTIME) proc_set_priority(info[actmon_sel].pid, p + 1);
+        }
+    }
+    if (k == '-' || k == '_') {
+        if (actmon_sel < count && info[actmon_sel].pid != 0) {
+            u32 p = info[actmon_sel].priority;
+            if (p > PRIO_LOW) proc_set_priority(info[actmon_sel].pid, p - 1);
+        }
+    }
 }
 
 /* === Pixel app: Settings ============================================ */
@@ -3190,6 +3247,7 @@ static const char *start_items[] = {
     "Analog Clock",
     "Network",
     "Disks",
+    "Activity Monitor",
     "Minesweeper",
     "Tetris",
     "Snake",
@@ -3201,7 +3259,7 @@ static const char *start_items[] = {
 #define START_ITEM_COUNT (int)(sizeof start_items / sizeof start_items[0])
 
 /* Start-menu item -> small icon colour. Index matches start_items. */
-static const u32 start_item_colors[14] = {
+static const u32 start_item_colors[15] = {
     0x2C2152,   /* About */
     0x6447B0,   /* Welcome */
     0x4FB37A,   /* Calculator */
@@ -3209,6 +3267,7 @@ static const u32 start_item_colors[14] = {
     0xE85A8C,   /* Analog Clock */
     0x47A6D4,   /* Network */
     0x8A93A6,   /* Disks */
+    0xD44747,   /* Activity Monitor */
     0x4FB37A,   /* Minesweeper */
     0x4FB37A,   /* Tetris */
     0x4FB37A,   /* Snake */
@@ -4311,6 +4370,10 @@ int g_desktop_main(int argc, char **argv) {
                     has_anim = 1;
                 }
                 prev_had_notif = now_notif;
+                /* Terminal needs continuous repaint while a command runs
+                 * so the "[running...]" indicator and eventual output
+                 * appear without requiring user input. */
+                if (term_cmd_running) has_anim = 1;
                 if (has_anim) {
                     cursor_restore();
                     repaint_all();
@@ -4319,6 +4382,9 @@ int g_desktop_main(int argc, char **argv) {
                 last_frame = now;
             }
         }
+        /* Yield to let background shell processes execute. */
+        extern void proc_yield(void);
+        proc_yield();
         /* Cursor-visibility guard: if a modal popup wiped the cursor
          * out and no mouse motion has happened since, draw it at the
          * current mouse position so it never just vanishes. */

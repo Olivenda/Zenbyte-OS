@@ -64,7 +64,7 @@ KERNEL_C_SRC := $(wildcard kernel/*.c) \
 
 # New driver directories picked up automatically by the wildcards above.
 
-KERNEL_S_SRC := kernel/entry.asm kernel/isr.asm kernel/boot_blobs.asm
+KERNEL_S_SRC := kernel/entry.asm kernel/isr.asm kernel/boot_blobs.asm kernel/ctxsw.asm
 
 KERNEL_OBJ := $(patsubst %.c,$(BUILD)/%.o,$(KERNEL_C_SRC)) \
               $(patsubst %.asm,$(BUILD)/%.o,$(KERNEL_S_SRC))

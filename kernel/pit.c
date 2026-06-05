@@ -8,6 +8,8 @@ static volatile u32 ticks;
 
 static void on_tick(void) {
     ticks++;
+    extern void proc_tick_account(void);
+    proc_tick_account();
 }
 
 u32 pit_ticks(void) { return ticks; }

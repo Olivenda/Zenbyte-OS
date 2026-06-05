@@ -1457,6 +1457,10 @@ static int call_function(const char *name, int *args, int argn) {
 
 static int eval(int idx) {
     if (idx < 0 || had_error) return 0;
+    /* Yield to the desktop every 256 eval calls so the UI stays
+     * responsive during long-running interpreted programs. */
+    { static int eval_yield; if (++eval_yield >= 256) { eval_yield = 0;
+      extern void proc_yield(void); proc_yield(); } }
     struct node *n = &nodes[idx];
     switch (n->kind) {
     case N_NUM: return n->ival;

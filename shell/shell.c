@@ -151,6 +151,78 @@ void shell_run_line(const char *src) {
         kprintf("Bad command or filename: %s\n", argv[0]);
 }
 
+/* ── Async shell execution (for graphical terminal multitasking) ────── */
+
+#include "proc.h"
+
+#define SHELL_ASYNC_CAP 8192
+
+static char  shell_async_cmd[LINE_MAX];   /* pending command line */
+static char  shell_async_cap[SHELL_ASYNC_CAP]; /* captured output */
+static u32   shell_async_cap_len;
+static int   shell_async_pid  = -1;       /* PID of running shell process, -1=none */
+static int   shell_async_done = 0;        /* set to 1 when process finishes */
+static int   shell_async_exit = 0;        /* exit code */
+
+/* Internal entry point executed in a separate process context. */
+static void shell_async_entry(void) {
+    /* Redirect kprintf/kputs output to our capture buffer. */
+    extern void vga_redirect(char *buf, u32 cap, u32 *len);
+    vga_redirect(shell_async_cap, SHELL_ASYNC_CAP, &shell_async_cap_len);
+    shell_run_line(shell_async_cmd);
+    vga_redirect(NULL, 0, NULL);
+    shell_async_exit = 0;
+    shell_async_done = 1;
+    shell_async_pid  = -1;
+    /* Mark ourselves ZOMBIE so the desktop notices. */
+    extern struct proc procs[];
+    extern int current_pid;
+    procs[current_pid].state = PROC_ZOMBIE;
+    proc_yield();
+    for (;;) __asm__ volatile("cli; hlt");
+}
+
+/* Start a shell command in a background process.
+ * Returns the PID, or -1 on failure. The terminal should then
+ * call proc_yield() in its paint loop so the command executes
+ * concurrently with the desktop event loop. */
+int shell_run_async(const char *line) {
+    if (shell_async_pid >= 0) return -1;  /* already running */
+    strncpy(shell_async_cmd, line, LINE_MAX - 1);
+    shell_async_cmd[LINE_MAX - 1] = '\0';
+    shell_async_cap_len = 0;
+    shell_async_cap[0]  = '\0';
+    shell_async_done = 0;
+    shell_async_exit = 0;
+    int pid = proc_create("shell-cmd", shell_async_entry, PRIO_NORMAL);
+    if (pid < 0) return -1;
+    shell_async_pid = pid;
+    return pid;
+}
+
+/* Non-blocking check: has the async command finished? */
+int shell_async_is_done(void) { return shell_async_done; }
+
+/* Get the captured output string (valid until next shell_run_async). */
+const char *shell_async_get_output(u32 *len) {
+    if (len) *len = shell_async_cap_len;
+    return shell_async_cap;
+}
+
+/* Kill the running background command (e.g. user pressed Ctrl+C). */
+void shell_async_kill(void) {
+    if (shell_async_pid >= 0) {
+        extern void proc_kill(u32 pid);
+        proc_kill((u32)shell_async_pid);
+        shell_async_pid = -1;
+    }
+    vga_redirect(NULL, 0, NULL);
+    shell_async_done = 1;
+}
+
+/* Is a background command currently running? */
+int shell_async_busy(void) { return shell_async_pid >= 0; }
+
 void shell_prompt(void) {
     vga_set_colour(VGA_LIGHT_GREY, VGA_BLACK);
     char p[64];
