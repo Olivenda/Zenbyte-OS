@@ -4,7 +4,7 @@
 #include "types.h"
 #include "boot.h"
 
-#define ZENBITE_VERSION "3.1"
+#define ZENBITE_VERSION "2.0 Alpha"
 #define ZENBITE_NAME    "Zenbite"
 
 void gdt_init(void);
