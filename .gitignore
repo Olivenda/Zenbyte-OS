@@ -1,0 +1,24 @@
+# Build artifacts
+build/
+*.o
+*.bin
+*.elf
+*.img
+*.iso
+*.map
+*.d
+
+# Editor / OS
+*.swp
+*.swo
+.DS_Store
+.vscode/
+.idea/
+
+# Toolchain (built locally, never committed)
+tools/build/
+tools/cross/
+
+# Claude Code internal
+.claude/
+CLAUDE.MD
