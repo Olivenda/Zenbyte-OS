@@ -97,11 +97,14 @@ void proc_sleep(u32 ms) {
 /* ── Process creation ───────────────────────────────────────────────── */
 
 /* Entry trampoline: wraps a user entry function and marks the process
- * as ZOMBIE when it returns, then yields so the parent notices. */
+ * as ZOMBIE when it returns, then yields so the parent notices.
+ * The entry pointer is read from proc_entry_fn_table[current_pid]. */
 typedef void (*proc_entry_fn)(void);
+static proc_entry_fn proc_entry_fn_table[PROC_MAX];
+
 static void proc_trampoline(void) {
     int my = current_pid;
-    proc_entry_fn fn = (proc_entry_fn)procs[my].stack[0]; /* stored in stack[0] */
+    proc_entry_fn fn = proc_entry_fn_table[my];
     fn();
     /* Command finished. Mark zombie and yield. */
     procs[my].state = PROC_ZOMBIE;
@@ -130,24 +133,39 @@ int proc_create(const char *name, void (*entry)(void), u32 priority) {
     strncpy(procs[slot].name, name, PROC_NAME_MAX - 1);
     procs[slot].name[PROC_NAME_MAX - 1] = '\0';
 
-    /* Build a fake interrupt frame on the process stack.
-     * Layout (low addr -> high):
-     *   EAX ECX EDX EBX ESP(discard) EBP ESI EDI EFLAGS EIP(return)  */
-    u32 *sp = &procs[slot].stack[PROC_STACK_SIZE / 4];
-    /* Store the real entry pointer in stack[0] for the trampoline,
-     * and set the return address to the trampoline. */
-    sp--; *sp = (u32)entry;          /* will be read by trampoline via stack[0] */
-    sp--; *sp = (u32)proc_trampoline; /* return address for popa+ret */
-    sp--; *sp = 0x200;               /* EFLAGS (IF=1) */
-    sp--; *sp = 0;                   /* EDI */
-    sp--; *sp = 0;                   /* ESI */
-    sp--; *sp = 0;                   /* EBP */
-    sp--; *sp = 0;                   /* ESP (discarded by popa) */
-    sp--; *sp = 0;                   /* EBX */
-    sp--; *sp = 0;                   /* EDX */
-    sp--; *sp = 0;                   /* ECX */
-    sp--; *sp = 0;                   /* EAX */
-    procs[slot].esp = (u32)sp;
+    /* Save entry pointer for the trampoline. */
+    proc_entry_fn_table[slot] = (proc_entry_fn)entry;
+
+    /* Build a fake context-switch frame on the process stack.
+     *
+     * ctx_switch does: popa (8 regs) -> popfd -> ret.
+     * popa pops EAX ECX EDX EBX _(skip)_ EBP ESI EDI in ascending
+     * address order.  So ESP must point to the EAX slot and the
+     * registers must be laid out at consecutive ascending addresses.
+     *
+     * Frame layout starting at procs[slot].esp:
+     *   [esp +  0] = EAX              (stack[slot*1024 + 0])
+     *   [esp +  4] = ECX              (stack[slot*1024 + 1])
+     *   [esp +  8] = EDX              (stack[slot*1024 + 2])
+     *   [esp + 12] = EBX              (stack[slot*1024 + 3])
+     *   [esp + 16] = ESP (discarded)  (stack[slot*1024 + 4])
+     *   [esp + 20] = EBP              (stack[slot*1024 + 5])
+     *   [esp + 24] = ESI              (stack[slot*1024 + 6])
+     *   [esp + 28] = EDI              (stack[slot*1024 + 7])
+     *   [esp + 32] = EFLAGS           (stack[slot*1024 + 8])
+     *   [esp + 36] = return address   (stack[slot*1024 + 9]) -> proc_trampoline
+     */
+    procs[slot].stack[0]  = 0;                    /* EAX */
+    procs[slot].stack[1]  = 0;                    /* ECX */
+    procs[slot].stack[2]  = 0;                    /* EDX */
+    procs[slot].stack[3]  = 0;                    /* EBX */
+    procs[slot].stack[4]  = 0;                    /* ESP (discarded by popa) */
+    procs[slot].stack[5]  = 0;                    /* EBP */
+    procs[slot].stack[6]  = 0;                    /* ESI */
+    procs[slot].stack[7]  = 0;                    /* EDI */
+    procs[slot].stack[8]  = 0x200;                /* EFLAGS (IF=1) */
+    procs[slot].stack[9]  = (u32)proc_trampoline; /* return address for ret */
+    procs[slot].esp = (u32)&procs[slot].stack[0];
 
     return procs[slot].pid;
 }

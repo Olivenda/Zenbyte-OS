@@ -246,7 +246,7 @@ static int ip_send(ip4_addr_t dst, u8 proto, const void *payload, u32 len) {
     while (!arp_find(next_hop, mac) && tries-- > 0) {
         arp_request(next_hop);
         u32 t0 = pit_ticks();
-        while (pit_ticks() - t0 < 500) net_poll();
+        while (pit_ticks() - t0 < 500) { net_poll(); extern void proc_yield(void); proc_yield(); }
     }
     if (!arp_find(next_hop, mac)) return -1;
 
@@ -341,6 +341,8 @@ int udp_recv(u16 sport, void *buf, u32 max, ip4_addr_t *src, u16 *src_port,
             udp_listen_port = 0;
             return (int)n;
         }
+        extern void proc_yield(void);
+        proc_yield();
     }
     udp_listen_port = 0;
     return -1;
@@ -484,6 +486,8 @@ int tcp_connect(ip4_addr_t dst, u16 dport) {
         net_poll();
         if (tcp.state == TCP_S_ESTABLISHED) return 0;
         if (tcp.state == TCP_S_CLOSED) return -1;
+        extern void proc_yield(void);
+        proc_yield();
     }
     tcp.state = TCP_S_CLOSED;
     return -1;
@@ -501,7 +505,7 @@ int tcp_send(const void *buf, u32 len) {
         sent += n;
         /* Tiny wait so we don't fill the line. */
         u32 t = pit_ticks();
-        while (pit_ticks() - t < 20) net_poll();
+        while (pit_ticks() - t < 20) { net_poll(); extern void proc_yield(void); proc_yield(); }
     }
     return (int)sent;
 }
@@ -521,6 +525,8 @@ int tcp_recv(void *buf, u32 max, u32 timeout_ticks) {
             return 0;
         }
         if (pit_ticks() - t0 > timeout_ticks) return -1;
+        extern void proc_yield(void);
+        proc_yield();
     }
     return (int)got;
 }
@@ -530,7 +536,7 @@ void tcp_close(void) {
         tcp_emit(TCP_FIN | TCP_ACK, NULL, 0);
         tcp.snd_nxt++;
         u32 t0 = pit_ticks();
-        while (pit_ticks() - t0 < 1000) net_poll();
+        while (pit_ticks() - t0 < 1000) { net_poll(); extern void proc_yield(void); proc_yield(); }
     }
     tcp.state = TCP_S_CLOSED;
 }

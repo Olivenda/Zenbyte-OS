@@ -601,3 +601,5 @@ int tty_has_input(int id) {
     if (id < 0 || id >= TTY_COUNT) return 0;
     return ttys[id].in_count > 0;
 }
+
+int tty_is_initialized(void) { return tty_initialized; }

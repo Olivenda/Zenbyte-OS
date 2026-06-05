@@ -162,6 +162,7 @@ struct gwin {
 #define GWK_TETRIS   13
 #define GWK_NETWORK  14
 #define GWK_DISKS    15
+#define GWK_BROWSER  16
 static struct gwin g_wins[G_MAX_WIN];
 static int g_next_z = 1;
 
@@ -226,6 +227,8 @@ static void paint_mines   (struct gwin *w);
 static void paint_tetris  (struct gwin *w);
 static void paint_network (struct gwin *w);
 static void paint_disks   (struct gwin *w);
+static void paint_browser (struct gwin *w);
+static void paint_activity(struct gwin *w);
 
 static void draw_window_chrome(struct gwin *w) {
     int x = w->x, y = w->y, ww = w->w, hh = w->h;
@@ -347,6 +350,8 @@ static void draw_taskbar(void) {
         else if (g_wins[i].paint == paint_clock || g_wins[i].paint == paint_aclock)
                                                   tile = 0xE85A8C;
         else if (g_wins[i].paint == paint_sysmon) tile = 0x47A6D4;
+        else if (g_wins[i].paint == paint_activity) tile = 0xD44747;
+        else if (g_wins[i].paint == paint_browser)  tile = 0x47A6D4;
         else if (g_wins[i].paint == paint_settings) tile = 0x8A93A6;
         else if (g_wins[i].paint == paint_mines || g_wins[i].paint == paint_tetris ||
                  g_wins[i].paint == paint_snake) tile = 0x4FB37A;
@@ -3051,6 +3056,196 @@ static void paint_tetris(struct gwin *w) {
     }
 }
 
+/* === Pixel app: Web Browser =============================================
+ * A minimal HTTP browser.  The URL bar accepts http://A.B.C.D/path URLs.
+ * http_get fetches the response body to a temp file; we read it back and
+ * render it as plain text in the content area.  The fetch runs through
+ * shell_run_async so the desktop stays responsive. */
+#define BR_URL_MAX  128
+#define BR_BODY_MAX 8192
+static char  br_url[BR_URL_MAX] = "http://10.0.2.2/";
+static int   br_url_len = 16;        /* cursor position in URL bar */
+static int   br_url_focus = 1;       /* 1 = URL bar has focus */
+static char  br_body[BR_BODY_MAX];
+static int   br_body_len;
+static int   br_scroll;
+static int   br_loading;             /* 0=idle, 1=fetching */
+static int   br_status_code;         /* HTTP status from last fetch */
+
+/* Temp file for http_get output. */
+#define BR_TMP_PATH "\\SYSTEM\\BROWSER.TMP"
+
+/* bg_* helpers for async fetch (runs in a background process). */
+static int   br_bg_pid = -1;
+static char  br_bg_url[BR_URL_MAX];
+
+static void br_bg_entry(void) {
+    extern void vga_redirect(char *buf, u32 cap, u32 *len);
+    vga_redirect(NULL, 0, NULL);   /* don't capture kernel prints */
+    /* Fetch the URL to a temp file. */
+    br_status_code = http_get(br_bg_url, BR_TMP_PATH);
+    /* Read the response body back. */
+    int h = fs_open(BR_TMP_PATH);
+    br_body_len = 0;
+    if (h >= 0) {
+        int n;
+        while (br_body_len < BR_BODY_MAX - 1 &&
+               (n = fs_read(h, br_body + br_body_len, BR_BODY_MAX - 1 - br_body_len)) > 0)
+            br_body_len += n;
+        fs_close(h);
+    }
+    br_body[br_body_len] = '\0';
+    br_scroll = 0;
+    br_loading = 0;
+    /* Mark ourselves zombie. */
+    extern struct proc procs[];
+    extern int current_pid;
+    procs[current_pid].state = PROC_ZOMBIE;
+    extern void proc_yield(void);
+    proc_yield();
+    for (;;) __asm__ volatile("cli; hlt");
+}
+
+static void br_start_fetch(void) {
+    if (br_loading) return;
+    br_loading = 1;
+    br_body_len = 0;
+    br_body[0] = '\0';
+    br_status_code = 0;
+    strncpy(br_bg_url, br_url, BR_URL_MAX - 1);
+    br_bg_url[BR_URL_MAX - 1] = '\0';
+    /* Use the shell async mechanism: just shell_run_async a fetch command. */
+    /* Simpler: spawn our own process. */
+    extern int proc_create(const char *name, void (*entry)(void), u32 prio);
+    br_bg_pid = proc_create("br-fetch", br_bg_entry, 1 /* PRIO_NORMAL */);
+}
+
+static void paint_browser(struct gwin *w) {
+    int bx = w->x + 4, by = w->y + TITLE_H + 4;
+    int bw = w->w - 8, bh = w->h - TITLE_H - 8;
+    fb_fill_rect(bx, by, bw, bh, 0xF0F2F6);
+
+    /* URL bar. */
+    int url_y = by + 8;
+    fb_fill_rect(bx + 8, url_y, bw - 80, 22, 0xFFFFFF);
+    fb_bevel_sunken(bx + 8, url_y, bw - 80, 22, 0xC4C8CC, ZB_BLACK);
+    fb_draw_text(bx + 12, url_y + 5, br_url, ZB_BLACK, FB_TRANSPARENT);
+    /* Cursor in URL bar. */
+    if (br_url_focus) {
+        int cx = bx + 12 + br_url_len * 8;
+        fb_fill_rect(cx, url_y + 4, 2, 14, ZB_BLACK);
+    }
+    /* Go button. */
+    int go_x = bx + bw - 64, go_y = url_y;
+    fb_fill_rect(go_x, go_y, 56, 22, br_loading ? 0x8A93A6 : ZB_TITLE_LEFT);
+    fb_bevel_raised(go_x, go_y, 56, 22, ZB_PANEL_LIGHT, ZB_PANEL_DARKER);
+    fb_draw_text(go_x + 16, go_y + 5, "GO!", br_loading ? 0xC8C8C8 : 0xFFFFFF, FB_TRANSPARENT);
+
+    /* Status bar. */
+    int st_y = by + bh - 20;
+    fb_fill_rect(bx + 4, st_y, bw - 8, 16, 0xE0E4EA);
+    fb_bevel_sunken(bx + 4, st_y, bw - 8, 16, 0xC4C8CC, ZB_BLACK);
+    char status[80];
+    if (br_loading)
+        ksnprintf(status, sizeof status, "Fetching %s ...", br_url);
+    else if (br_status_code)
+        ksnprintf(status, sizeof status, "%s  (%d bytes)  [scroll: Up/Down]",
+                  br_status_code >= 0 ? "Done" : "Error",
+                  br_body_len);
+    else
+        ksnprintf(status, sizeof status, "Enter a URL and press GO or Enter");
+    fb_draw_text(bx + 10, st_y + 3, status, 0x1E2A38, FB_TRANSPARENT);
+
+    /* Content area. */
+    int cx = bx + 4, cy = url_y + 28;
+    int cw = bw - 8, ch = st_y - cy - 4;
+    fb_fill_rect(cx, cy, cw, ch, 0xFFFFFF);
+    fb_bevel_sunken(cx, cy, cw, ch, 0xC4C8CC, ZB_BLACK);
+
+    if (br_body_len == 0 && !br_loading) {
+        fb_draw_text(cx + 12, cy + 12,
+                     "Web Browser - Zenbite v" ZENBITE_VERSION,
+                     0x70808A, FB_TRANSPARENT);
+        fb_draw_text(cx + 12, cy + 32,
+                     "Enter an http:// URL above and press GO.",
+                     0x70808A, FB_TRANSPARENT);
+        fb_draw_text(cx + 12, cy + 52,
+                     "Note: Only plain-text display (no HTML rendering).",
+                     0x9AA0AA, FB_TRANSPARENT);
+        fb_draw_text(cx + 12, cy + 72,
+                     "Try: http://10.0.2.2/  (QEMU host)",
+                     0x9AA0AA, FB_TRANSPARENT);
+    } else if (br_body_len > 0) {
+        /* Render body as plain text, line by line, with scrolling. */
+        int line_h = 14;
+        int visible = ch / line_h;
+        /* Count total lines. */
+        int total_lines = 1;
+        for (int i = 0; i < br_body_len; i++)
+            if (br_body[i] == '\n') total_lines++;
+        if (br_scroll > total_lines - visible) br_scroll = total_lines - visible;
+        if (br_scroll < 0) br_scroll = 0;
+        int row = 0, line_start = 0;
+        for (int i = 0; i <= br_body_len && row - br_scroll < visible; i++) {
+            if (i == br_body_len || br_body[i] == '\n' || br_body[i] == '\r') {
+                if (row >= br_scroll && row - br_scroll < visible) {
+                    int disp_y = cy + 4 + (row - br_scroll) * line_h;
+                    /* Truncate long lines to fit content width. */
+                    int chars = i - line_start;
+                    int max_chars = (cw - 16) / 8;
+                    if (chars > max_chars) chars = max_chars;
+                    char tmp[128];
+                    if (chars > (int)sizeof tmp - 1) chars = (int)sizeof tmp - 1;
+                    for (int j = 0; j < chars; j++)
+                        tmp[j] = br_body[line_start + j];
+                    tmp[chars] = '\0';
+                    fb_draw_text(cx + 8, disp_y, tmp, ZB_BLACK, FB_TRANSPARENT);
+                }
+                row++;
+                if (br_body[i] == '\r' && i + 1 < br_body_len && br_body[i + 1] == '\n')
+                    i++;
+                line_start = i + 1;
+            }
+        }
+        /* Scroll indicator. */
+        if (total_lines > visible) {
+            char scrl[24];
+            ksnprintf(scrl, sizeof scrl, "%d/%d", br_scroll + 1, total_lines);
+            fb_draw_text(cx + cw - 60, cy + 4, scrl, 0x70808A, FB_TRANSPARENT);
+        }
+    }
+}
+
+/* Browser key handler -- called when the browser window is focused. */
+static void browser_key(struct gwin *w, int key) {
+    if (br_url_focus) {
+        if (key == '\n' || key == '\r') {
+            br_start_fetch();
+        } else if (key == '\b') {
+            if (br_url_len > 0) { br_url_len--; br_url[br_url_len] = '\0'; }
+        } else if (key == '\t') {
+            br_url_focus = 0;   /* toggle to content scroll */
+        } else if (key >= 32 && key < 127 && br_url_len < BR_URL_MAX - 1) {
+            br_url[br_url_len++] = (char)key;
+            br_url[br_url_len] = '\0';
+        }
+    } else {
+        /* Content scroll mode. */
+        if (key == '\t' || key == 27) {
+            br_url_focus = 1;   /* back to URL bar */
+        } else if (key == KB_UP || key == 'k') {
+            br_scroll--;
+        } else if (key == KB_DOWN || key == 'j') {
+            br_scroll++;
+        } else if (key == ' ') {
+            br_scroll += 10;
+        } else if (key == '\n' || key == '\r') {
+            br_start_fetch();
+        }
+    }
+    (void)w;
+}
+
 /* === Pixel app: Network (ifconfig + ARP-known peers) ================== */
 static void paint_network(struct gwin *w) {
     int bx = w->x + 4, by = w->y + TITLE_H + 4;
@@ -3197,6 +3392,7 @@ static int paint_to_kind(void (*p)(struct gwin *)) {
     if (p == paint_tetris)   return GWK_TETRIS;
     if (p == paint_network)  return GWK_NETWORK;
     if (p == paint_disks)    return GWK_DISKS;
+    if (p == paint_browser)  return GWK_BROWSER;
     return GWK_WELCOME;
 }
 
@@ -3247,6 +3443,7 @@ static const char *start_items[] = {
     "Analog Clock",
     "Network",
     "Disks",
+    "Web Browser",
     "Activity Monitor",
     "Minesweeper",
     "Tetris",
@@ -3259,7 +3456,7 @@ static const char *start_items[] = {
 #define START_ITEM_COUNT (int)(sizeof start_items / sizeof start_items[0])
 
 /* Start-menu item -> small icon colour. Index matches start_items. */
-static const u32 start_item_colors[15] = {
+static const u32 start_item_colors[16] = {
     0x2C2152,   /* About */
     0x6447B0,   /* Welcome */
     0x4FB37A,   /* Calculator */
@@ -3267,6 +3464,7 @@ static const u32 start_item_colors[15] = {
     0xE85A8C,   /* Analog Clock */
     0x47A6D4,   /* Network */
     0x8A93A6,   /* Disks */
+    0x47A6D4,   /* Web Browser */
     0xD44747,   /* Activity Monitor */
     0x4FB37A,   /* Minesweeper */
     0x4FB37A,   /* Tetris */
@@ -3306,7 +3504,7 @@ static int show_start_menu(int x, int y) {
             u32 fg = (i == sel) ? ZB_ACCENT     : ZB_BLACK;
             fb_fill_rect(x + strip_w + 4, iy, w - strip_w - 8, ih, bg);
             /* Item icon: little coloured square. */
-            u32 ic = (i < 14) ? start_item_colors[i] : 0x6447B0;
+            u32 ic = (i < 16) ? start_item_colors[i] : 0x6447B0;
             fb_fill_rect(x + strip_w + 8, iy + 4, 14, 14, ic);
             fb_bevel_raised(x + strip_w + 8, iy + 4, 14, 14,
                             ZB_PANEL_LIGHT, ZB_BLACK);
@@ -3730,6 +3928,8 @@ static int gwin_spawn_kind(int kind, int x, int y, int w, int h) {
         idx = gwin_spawn(x, y, w, h, "Network", paint_network); break;
     case GWK_DISKS:
         idx = gwin_spawn(x, y, w, h, "Disks", paint_disks); break;
+    case GWK_BROWSER:
+        idx = gwin_spawn(x, y, w, h, "Web Browser", paint_browser); break;
     }
     return idx;
 }
@@ -4000,13 +4200,15 @@ int g_desktop_main(int argc, char **argv) {
                 case 4:  gwin_spawn(180,90,520,440,"Analog Clock",paint_aclock); break;
                 case 5:  gwin_spawn(180,120,560,320,"Network",paint_network); break;
                 case 6:  gwin_spawn(120,90,800,440,"Disks",paint_disks); break;
-                case 7:  ms_reset();    gwin_spawn(120,90,720,460,"Minesweeper",paint_mines); break;
-                case 8:  tt_reset();    gwin_spawn(160,40,540,560,"Tetris",paint_tetris); break;
-                case 9:  snk_len = 0;   gwin_spawn(140,90,600,380,"Snake",paint_snake); break;
-                case 10: lock_run(); mark_wallpaper_dirty(); repaint_all(); break;
-                case 11: save_layout(); cursor_restore(); vga_set_text_mode(25); return 0;
-                case 12: { extern void reboot(void); reboot(); } break;
-                case 13: { extern void shutdown(void); shutdown(); } break;
+                case 7:  gwin_spawn(100,80,700,480,"Web Browser",paint_browser); break;
+                case 8:  gwin_spawn(100,80,680,440,"Activity Monitor",paint_activity); break;
+                case 9:  ms_reset();    gwin_spawn(120,90,720,460,"Minesweeper",paint_mines); break;
+                case 10: tt_reset();    gwin_spawn(160,40,540,560,"Tetris",paint_tetris); break;
+                case 11: snk_len = 0;   gwin_spawn(140,90,600,380,"Snake",paint_snake); break;
+                case 12: lock_run(); mark_wallpaper_dirty(); repaint_all(); break;
+                case 13: save_layout(); cursor_restore(); vga_set_text_mode(25); return 0;
+                case 14: { extern void reboot(void); reboot(); } break;
+                case 15: { extern void shutdown(void); shutdown(); } break;
                 }
                 mark_wallpaper_dirty();   /* start menu painted over WP */
                 repaint_all();
@@ -4217,13 +4419,15 @@ int g_desktop_main(int argc, char **argv) {
                 case 4:  gwin_spawn(180,90,520,440,"Analog Clock",paint_aclock); break;
                 case 5:  gwin_spawn(180,120,560,320,"Network",paint_network); break;
                 case 6:  gwin_spawn(120,90,800,440,"Disks",paint_disks); break;
-                case 7:  ms_reset();   gwin_spawn(120,90,720,460,"Minesweeper",paint_mines); break;
-                case 8:  tt_reset();   gwin_spawn(160,40,540,560,"Tetris",paint_tetris); break;
-                case 9:  snk_len = 0;  gwin_spawn(140,90,600,380,"Snake",paint_snake); break;
-                case 10: lock_run(); break;
-                case 11: save_layout(); vga_set_text_mode(25); return 0;
-                case 12: { extern void reboot(void); reboot(); } break;
-                case 13: { extern void shutdown(void); shutdown(); } break;
+                case 7:  gwin_spawn(100,80,700,480,"Web Browser",paint_browser); break;
+                case 8:  gwin_spawn(100,80,680,440,"Activity Monitor",paint_activity); break;
+                case 9:  ms_reset();   gwin_spawn(120,90,720,460,"Minesweeper",paint_mines); break;
+                case 10: tt_reset();   gwin_spawn(160,40,540,560,"Tetris",paint_tetris); break;
+                case 11: snk_len = 0;  gwin_spawn(140,90,600,380,"Snake",paint_snake); break;
+                case 12: lock_run(); break;
+                case 13: save_layout(); vga_set_text_mode(25); return 0;
+                case 14: { extern void reboot(void); reboot(); } break;
+                case 15: { extern void shutdown(void); shutdown(); } break;
                 }
                 mark_wallpaper_dirty();   /* start menu painted over WP */
                 repaint_all();
@@ -4306,6 +4510,8 @@ int g_desktop_main(int argc, char **argv) {
                 else if (p == paint_calendar) { cal_key(k); handled = 1; }
                 else if (p == paint_mines)    { ms_key(k); handled = 1; }
                 else if (p == paint_tetris)   { tt_key(k); handled = 1; }
+                else if (p == paint_browser)  { browser_key(&g_wins[focused], k); handled = 1; }
+                else if (p == paint_activity) { activity_key(k); handled = 1; }
             }
             if (handled) {
                 /* Keystroke handled by the focused app -- only its

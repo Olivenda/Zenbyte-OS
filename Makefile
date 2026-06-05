@@ -59,6 +59,7 @@ KERNEL_C_SRC := $(wildcard kernel/*.c) \
                 $(wildcard kernel/fs/*.c) \
                 $(wildcard kernel/drv/*.c) \
                 $(wildcard kernel/net/*.c) \
+                $(wildcard kernel/lib/*.c) \
                 $(wildcard shell/*.c) \
                 $(wildcard libk/*.c)
 
